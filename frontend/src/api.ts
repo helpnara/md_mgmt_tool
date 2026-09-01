@@ -1,4 +1,4 @@
-import type { Entry, Meta, Project } from "./types";
+import type { Entry, Meta, Project, SearchResults } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,5 +41,6 @@ export const api = {
       `/api/projects/${projectId}/attachments`,
     ),
   deleteAttachment: (id: number) => request<void>(`/api/attachments/${id}`, { method: "DELETE" }),
+  search: (query: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),
   reindex: () => request<{ indexed: number }>("/api/reindex", { method: "POST" }),
 };

@@ -29,9 +29,20 @@ _REF_PATTERN = re.compile(r"\]\(\s*(assets/[^)\s]+)")
 
 
 def safe_filename(name: str) -> str:
-    """경로 구분자와 제어문자를 제거한다. 한글과 공백은 유지한다."""
+    """경로 구분자와 제어문자를 제거한다. 한글과 공백은 유지한다.
+
+    윈도우에서도 그대로 쓸 수 있도록 금지 문자·예약어·길이까지 함께 정리한다.
+    """
     name = unicodedata.normalize("NFC", name or "")
     name = _UNSAFE.sub("", name).strip().lstrip(".")
+    name = paths.windows_safe_filename(name)
+    if len(name) > paths.MAX_FILENAME_LEN:
+        stem, dot, suffix = name.rpartition(".")
+        if dot and len(suffix) <= 10:
+            keep = paths.MAX_FILENAME_LEN - len(suffix) - 1
+            name = f"{stem[:keep].rstrip(' .')}.{suffix}"
+        else:
+            name = name[: paths.MAX_FILENAME_LEN].rstrip(" .")
     return name or "attachment"
 
 

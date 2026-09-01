@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ..config import STATUS_KEYS, get_settings
 from ..deps import get_db
 from ..services import projects as svc
+from ..services import search as search_svc
 from ..schemas import ProjectCreate, ProjectUpdate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -46,12 +47,23 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     }
 
 
+# 마감 기준 빠른 필터: 값 → (SQL 조건, 파라미터 생성기)
+DUE_FILTERS = {
+    "overdue": "p.due_date IS NOT NULL AND p.due_date < DATE('now', 'localtime')",
+    "7": "p.due_date IS NOT NULL AND p.due_date <= DATE('now', 'localtime', '+7 day')",
+    "14": "p.due_date IS NOT NULL AND p.due_date <= DATE('now', 'localtime', '+14 day')",
+    "30": "p.due_date IS NOT NULL AND p.due_date <= DATE('now', 'localtime', '+30 day')",
+}
+
+
 @router.get("")
 def list_projects(
     conn: sqlite3.Connection = Depends(get_db),
     status: str | None = None,
     group: str | None = None,
     tag: str | None = None,
+    q: str | None = None,
+    due: str | None = None,
     sort: str = Query("updated"),
 ) -> list[dict]:
     where, params = [], []
@@ -66,6 +78,15 @@ def list_projects(
             "p.id IN (SELECT pt.project_id FROM project_tag pt JOIN tag t ON t.id = pt.tag_id WHERE t.name = ?)"
         )
         params.append(tag)
+    if due in DUE_FILTERS:
+        where.append(DUE_FILTERS[due])
+    if q and q.strip():
+        # 과제 본문뿐 아니라 진행일지·첨부 파일명에 걸려도 그 과제를 남긴다.
+        matched = search_svc.project_ids_matching(conn, q.strip())
+        if not matched:
+            return []
+        where.append(f"p.id IN ({','.join('?' * len(matched))})")
+        params.extend(matched)
 
     clause = f"WHERE {' AND '.join(where)}" if where else ""
     order = SORTS.get(sort, SORTS["updated"])

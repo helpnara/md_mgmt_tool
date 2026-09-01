@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import deps
-from .api import attachments, entries, meta, projects
+from .api import attachments, entries, meta, projects, search
 from .config import REPO_ROOT, get_settings
 from .vault.paths import safe_join
 from .vault.indexer import reindex_all
@@ -42,6 +42,7 @@ app.include_router(meta.router)
 app.include_router(projects.router)
 app.include_router(entries.router)
 app.include_router(attachments.router)
+app.include_router(search.router)
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

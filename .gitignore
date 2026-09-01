@@ -14,7 +14,6 @@ venv/
 
 # Node
 node_modules/
-dist/
 .vite/
 
 # OS / 편집기
@@ -22,5 +21,4 @@ dist/
 .idea/
 .vscode/
 
-# 프론트엔드 빌드 결과
-frontend/dist/
+# 프론트엔드 빌드 결과는 커밋한다 (윈도우에서 Node.js 없이 실행하기 위함)

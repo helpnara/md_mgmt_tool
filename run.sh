@@ -23,4 +23,4 @@ if [ ! -d frontend/dist ]; then
 fi
 
 echo "http://127.0.0.1:${PORT} 에서 실행합니다. (Ctrl+C로 종료)"
-exec "$PYTHON" -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port "$PORT"
+exec "$PYTHON" run.py --port "$PORT" --no-browser

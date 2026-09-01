@@ -188,3 +188,42 @@ button.small { padding: 3px 9px; font-size: 12px; }
 
 /* 타임라인에서 큰 이미지가 화면을 다 차지하지 않도록 높이를 제한한다. */
 .markdown img { max-height: 420px; object-fit: contain; object-position: left; border-radius: 6px; border: 1px solid var(--border); }
+
+/* ── 헤더 검색 ────────────────────────────────────── */
+.app-header { gap: 16px; }
+.search-box { display: flex; gap: 6px; flex: 1; max-width: 480px; margin: 0 auto; }
+.search-box input { min-width: 0; }
+.search-title { font-size: 18px; margin: 4px 0 14px; }
+.result-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.result-list li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd; }
+.result-list a { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); flex-wrap: wrap; }
+.result-list a:hover strong { color: var(--accent); }
+.result-list .project-id { display: inline; }
+.snippet { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+mark { background: #fef08a; color: inherit; padding: 0 1px; border-radius: 2px; }
+
+/* ── 보드 뷰 ──────────────────────────────────────── */
+.view-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.view-switch button { border-radius: 0; border: none; }
+.view-switch button.ghost { background: var(--surface); color: var(--muted); }
+.view-switch button.active { background: var(--accent); color: #fff; }
+
+.board { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
+.board-column { flex: 1 0 240px; background: #eef0f3; border-radius: var(--radius); padding: 10px; }
+.board-column.collapsed { flex: 0 0 auto; }
+.board-column header { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 4px 8px; }
+.board-column header .count { color: var(--muted); font-size: 12px; }
+.board-cards { display: flex; flex-direction: column; gap: 8px; }
+.board-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.board-card:hover { border-color: var(--accent); }
+.board-card h3 { margin: 2px 0 6px; font-size: 14px; }
+.board-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.board-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.board-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 10px 0; margin: 0; }
+
+/* 잘린 버튼 라벨과 좁은 화면에서의 보드 폭 보정 */
+button { white-space: nowrap; }
+.search-box { max-width: 420px; }
+.board-column { flex: 1 1 200px; min-width: 180px; }
+.due, .board-foot .muted { white-space: nowrap; }
+.board-foot { flex-wrap: wrap; row-gap: 4px; }

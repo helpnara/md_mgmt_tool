@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, Project } from "../types";
 import { dueLabel, formatDate } from "../util";
+import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
 import StatusBadge from "./StatusBadge";
 
@@ -12,7 +13,10 @@ interface Props {
 
 export default function ProjectList({ meta, onMetaChange }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [filters, setFilters] = useState({ status: "", group: "", tag: "", sort: "updated" });
+  const [filters, setFilters] = useState({ status: "", group: "", tag: "", due: "", sort: "updated" });
+  const [view, setView] = useState<"table" | "board">(
+    () => (localStorage.getItem("md-mgmt:view") === "board" ? "board" : "table"),
+  );
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +60,13 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
               </option>
             ))}
           </select>
+          <select value={filters.due} onChange={(event) => setFilter("due", event.target.value)}>
+            <option value="">마감 전체</option>
+            <option value="overdue">기한 초과</option>
+            <option value="7">7일 이내</option>
+            <option value="14">14일 이내</option>
+            <option value="30">30일 이내</option>
+          </select>
           <select value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)}>
             <option value="updated">최근 업데이트순</option>
             <option value="due">마감일순</option>
@@ -64,6 +75,20 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           </select>
         </div>
         <div className="toolbar-actions">
+          <div className="view-switch">
+            {(["table", "board"] as const).map((option) => (
+              <button
+                key={option}
+                className={view === option ? "active" : "ghost"}
+                onClick={() => {
+                  setView(option);
+                  localStorage.setItem("md-mgmt:view", option);
+                }}
+              >
+                {option === "table" ? "표" : "보드"}
+              </button>
+            ))}
+          </div>
           <button
             className="ghost"
             onClick={() => api.reindex().then(load).then(onMetaChange)}
@@ -94,6 +119,9 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
 
       {error && <p className="form-error">{error}</p>}
 
+      {view === "board" && <ProjectBoard meta={meta} projects={projects} />}
+
+      {view === "table" && (
       <table className="grid">
         <thead>
           <tr>
@@ -144,6 +172,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           )}
         </tbody>
       </table>
+      )}
     </section>
   );
 }

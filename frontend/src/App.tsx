@@ -2,20 +2,39 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
 import ProjectDetail from "./components/ProjectDetail";
 import ProjectList from "./components/ProjectList";
+import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
 
-function readRoute(): string | null {
+type Route =
+  | { name: "list" }
+  | { name: "project"; id: string }
+  | { name: "search"; query: string };
+
+function readRoute(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
-  return hash.startsWith("projects/") ? hash.slice("projects/".length) : null;
+  if (hash.startsWith("projects/")) return { name: "project", id: hash.slice("projects/".length) };
+  if (hash.startsWith("search")) {
+    const query = new URLSearchParams(hash.split("?")[1] ?? "").get("q") ?? "";
+    return { name: "search", query };
+  }
+  return { name: "list" };
 }
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [route, setRoute] = useState<string | null>(readRoute());
+  const [route, setRoute] = useState<Route>(readRoute());
+  const [term, setTerm] = useState(() => {
+    const initial = readRoute();
+    return initial.name === "search" ? initial.query : "";
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const onHashChange = () => setRoute(readRoute());
+    const onHashChange = () => {
+      const next = readRoute();
+      setRoute(next);
+      if (next.name === "search") setTerm(next.query);
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
@@ -35,16 +54,35 @@ export default function App() {
         <a className="brand" href="#/">
           과제 이력 관리
         </a>
+        <form
+          className="search-box"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const query = term.trim();
+            window.location.hash = query ? `#/search?q=${encodeURIComponent(query)}` : "#/";
+          }}
+        >
+          <input
+            type="search"
+            value={term}
+            onChange={(event) => setTerm(event.target.value)}
+            placeholder="과제·진행일지·첨부 파일명 검색"
+            aria-label="검색"
+          />
+          <button type="submit" className="ghost">
+            검색
+          </button>
+        </form>
         <span className="vault-path" title="데이터 위치">
           {meta.vault}
         </span>
       </header>
       <main>
-        {route ? (
-          <ProjectDetail projectId={route} meta={meta} onMetaChange={loadMeta} />
-        ) : (
-          <ProjectList meta={meta} onMetaChange={loadMeta} />
+        {route.name === "project" && (
+          <ProjectDetail projectId={route.id} meta={meta} onMetaChange={loadMeta} />
         )}
+        {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
+        {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} />}
       </main>
     </div>
   );

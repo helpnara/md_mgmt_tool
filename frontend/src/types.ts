@@ -41,3 +41,32 @@ export interface Entry {
   updated_at: string | null;
   tags: string[];
 }
+
+export interface SearchResults {
+  query: string;
+  projects: {
+    id: string;
+    title: string;
+    status: string;
+    group: string | null;
+    updated_at: string | null;
+    snippet: string;
+  }[];
+  entries: {
+    id: number;
+    project_id: string;
+    project_title: string;
+    date: string;
+    title: string;
+    snippet: string;
+  }[];
+  attachments: {
+    id: number;
+    project_id: string;
+    project_title: string;
+    orig_name: string;
+    rel_path: string;
+    size_bytes: number | null;
+  }[];
+  total: number;
+}
