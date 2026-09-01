@@ -1,0 +1,23 @@
+# 데이터
+vault/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# OS / 편집기
+.DS_Store
+.idea/
+.vscode/
