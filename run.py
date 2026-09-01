@@ -39,7 +39,8 @@ def check_dependencies() -> None:
     missing = []
     for module, package in (("fastapi", "fastapi"), ("uvicorn", "uvicorn[standard]"),
                             ("frontmatter", "python-frontmatter"), ("PIL", "Pillow"),
-                            ("multipart", "python-multipart")):
+                            ("multipart", "python-multipart"), ("openpyxl", "openpyxl"),
+                            ("markdown_it", "markdown-it-py")):
         try:
             __import__(module)
         except ImportError:

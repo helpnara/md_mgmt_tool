@@ -7,6 +7,7 @@ import { formatBytes } from "../upload";
 import { dueLabel, formatDate } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
+import ExportMenu from "./ExportMenu";
 import ReportEditor from "./ReportEditor";
 import ProjectForm from "./ProjectForm";
 import StatusBadge from "./StatusBadge";
@@ -92,6 +93,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
             </div>
           </div>
           <div className="detail-actions">
+            <ExportMenu projectId={project.id} />
             <button className="ghost" onClick={() => setEditingProject((value) => !value)}>
               {editingProject ? "닫기" : "과제 정보 수정"}
             </button>
