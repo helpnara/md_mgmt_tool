@@ -9,6 +9,20 @@
 
 ---
 
+## 사내 PC(윈도우)에서 테스트하기
+
+Python 3.10 이상이 필요하다. ([python.org](https://www.python.org/downloads/) — 설치 화면에서
+**“Add python.exe to PATH”** 를 반드시 체크할 것)
+
+받는 방법은 둘 중 하나다.
+
+* **GitHub에서** — 저장소의 `claude/team-task-management-tool-3d91g8` 브랜치에서
+  `Code ▸ Download ZIP`
+* **배포본 ZIP** — 필요한 파이썬 패키지를 `vendor/` 폴더에 함께 담은 압축본.
+  사내망에서 외부 접속(PyPI)이 막혀 있어도 설치된다 (Python 3.12 기준).
+
+압축을 푼 뒤 `setup.bat` → `run.bat` 순서로 더블클릭하면 된다.
+
 ## 윈도우에서 시작하기
 
 Python 3.10 이상이 필요하다. ([python.org](https://www.python.org/downloads/) — 설치 화면에서
@@ -16,6 +30,7 @@ Python 3.10 이상이 필요하다. ([python.org](https://www.python.org/downloa
 
 1. 이 저장소를 받아 압축을 푼다.
 2. **`setup.bat`** 을 더블클릭한다 → 가상환경(`.venv`)을 만들고 필요한 패키지를 설치한다.
+   인터넷이 막혀 있어도 `vendor/` 폴더가 함께 있으면 그것으로 설치한다.
 3. **`run.bat`** 을 더블클릭한다 → 브라우저가 열리고 도구가 뜬다.
 
 두 번째 실행부터는 `run.bat` 만 누르면 된다. 종료는 검은 창에서 `Ctrl+C`.
