@@ -1,4 +1,5 @@
 import type { Entry, Meta, Project } from "./types";
+import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -33,5 +34,12 @@ export const api = {
   updateEntry: (id: number, payload: Partial<Entry>) =>
     request<Entry>(`/api/entries/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteEntry: (id: number) => request<void>(`/api/entries/${id}`, { method: "DELETE" }),
+  listEntryAttachments: (entryId: number) =>
+    request<Attachment[]>(`/api/entries/${entryId}/attachments`),
+  projectAttachments: (projectId: string) =>
+    request<{ items: Attachment[]; total_bytes: number; orphan_count: number }>(
+      `/api/projects/${projectId}/attachments`,
+    ),
+  deleteAttachment: (id: number) => request<void>(`/api/attachments/${id}`, { method: "DELETE" }),
   reindex: () => request<{ indexed: number }>("/api/reindex", { method: "POST" }),
 };

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import { renderMarkdown } from "../markdown";
+import { filesBase, renderMarkdown } from "../markdown";
 import type { Entry, Meta, Project } from "../types";
+import type { Attachment } from "../upload";
+import { formatBytes } from "../upload";
 import { dueLabel, formatDate } from "../util";
+import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import ProjectForm from "./ProjectForm";
 import StatusBadge from "./StatusBadge";
@@ -20,14 +23,25 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
   const [editingOverview, setEditingOverview] = useState(false);
   const [overviewDraft, setOverviewDraft] = useState("");
   const [creatingEntry, setCreatingEntry] = useState(false);
+  // 첨부 때문에 편집 도중 먼저 만들어진 기록. 편집기 아래 타임라인에 중복 표시하지 않는다.
+  const [draftEntryId, setDraftEntryId] = useState<number | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<{ items: Attachment[]; total_bytes: number; orphan_count: number }>(
+    { items: [], total_bytes: 0, orphan_count: 0 },
+  );
+  const [showFiles, setShowFiles] = useState(false);
 
   const load = useCallback(() => {
-    Promise.all([api.getProject(projectId), api.listEntries(projectId)])
-      .then(([loadedProject, loadedEntries]) => {
+    Promise.all([
+      api.getProject(projectId),
+      api.listEntries(projectId),
+      api.projectAttachments(projectId),
+    ])
+      .then(([loadedProject, loadedEntries, loadedFiles]) => {
         setProject(loadedProject);
         setEntries(loadedEntries);
+        setFiles(loadedFiles);
       })
       .catch((err: Error) => setError(err.message));
   }, [projectId]);
@@ -38,6 +52,8 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
   if (!project) return <div className="app-loading">불러오는 중…</div>;
 
   const due = dueLabel(project.due_date);
+  const base = filesBase(project.dir_name);
+  const visibleEntries = entries.filter((entry) => entry.id !== draftEntryId);
 
   return (
     <section className="project-detail">
@@ -122,7 +138,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
               />
               <div
                 className="preview markdown"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(overviewDraft) }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(overviewDraft, base) }}
               />
             </div>
             <div className="form-actions">
@@ -140,7 +156,31 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
         ) : (
           <div
             className="markdown"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(project.body ?? "") }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(project.body ?? "", base) }}
+          />
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h2>
+            첨부 자료 {files.items.length}건 · {formatBytes(files.total_bytes)}
+            {files.orphan_count > 0 && (
+              <span className="orphan-tag">본문에서 쓰지 않는 파일 {files.orphan_count}건</span>
+            )}
+          </h2>
+          <button className="ghost" onClick={() => setShowFiles((value) => !value)}>
+            {showFiles ? "접기" : "펼치기"}
+          </button>
+        </div>
+        {showFiles && (
+          <AttachmentList
+            attachments={files.items}
+            onDelete={async (attachment) => {
+              if (!window.confirm(`${attachment.orig_name} 을(를) 보관함으로 옮길까요?`)) return;
+              await api.deleteAttachment(attachment.id);
+              load();
+            }}
           />
         )}
       </div>
@@ -152,10 +192,20 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
 
       {creatingEntry && (
         <EntryEditor
-          onCancel={() => setCreatingEntry(false)}
-          onSave={async (payload) => {
-            await api.createEntry(project.id, payload);
+          projectId={project.id}
+          dirName={project.dir_name}
+          onCancel={() => {
             setCreatingEntry(false);
+            setDraftEntryId(null);
+            load();
+          }}
+          onSaved={(entry, options) => {
+            if (options.close) {
+              setCreatingEntry(false);
+              setDraftEntryId(null);
+            } else {
+              setDraftEntryId(entry.id);
+            }
             load();
             onMetaChange();
           }}
@@ -163,15 +213,19 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
       )}
 
       <ol className="timeline">
-        {entries.map((entry) =>
+        {visibleEntries.map((entry) =>
           editingEntryId === entry.id ? (
             <li key={entry.id}>
               <EntryEditor
+                projectId={project.id}
+                dirName={project.dir_name}
                 initial={entry}
-                onCancel={() => setEditingEntryId(null)}
-                onSave={async (payload) => {
-                  await api.updateEntry(entry.id, payload);
+                onCancel={() => {
                   setEditingEntryId(null);
+                  load();
+                }}
+                onSaved={(_saved, options) => {
+                  if (options.close) setEditingEntryId(null);
                   load();
                   onMetaChange();
                 }}
@@ -207,12 +261,12 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
               </div>
               <div
                 className="markdown"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.body ?? "") }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.body ?? "", base) }}
               />
             </li>
           ),
         )}
-        {entries.length === 0 && !creatingEntry && (
+        {visibleEntries.length === 0 && !creatingEntry && (
           <li className="empty card">아직 기록이 없습니다. [기록 추가]로 첫 진행 내용을 남겨 보세요.</li>
         )}
       </ol>

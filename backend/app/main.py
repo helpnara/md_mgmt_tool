@@ -9,8 +9,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import deps
-from .api import entries, meta, projects
+from .api import attachments, entries, meta, projects
 from .config import REPO_ROOT, get_settings
+from .vault.paths import safe_join
 from .vault.indexer import reindex_all
 
 FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
@@ -40,13 +41,18 @@ app.add_middleware(
 app.include_router(meta.router)
 app.include_router(projects.router)
 app.include_router(entries.router)
+app.include_router(attachments.router)
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
     def spa(full_path: str) -> FileResponse:
-        candidate = FRONTEND_DIST / full_path
-        if full_path and candidate.is_file():
+        # 빌드 결과 밖을 가리키는 경로는 무시하고 SPA 진입점을 돌려준다.
+        try:
+            candidate = safe_join(FRONTEND_DIST, full_path) if full_path else None
+        except ValueError:
+            candidate = None
+        if candidate is not None and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(FRONTEND_DIST / "index.html")
