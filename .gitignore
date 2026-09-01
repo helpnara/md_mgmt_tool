@@ -1,5 +1,6 @@
-# 데이터
-vault/
+# 데이터 (저장소 최상위의 vault 폴더만 — 앞의 / 가 없으면 backend/app/vault 같은
+# 소스 폴더까지 무시해 버린다)
+/vault/
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
@@ -7,21 +8,20 @@ vault/
 # Python
 __pycache__/
 *.py[cod]
-.venv/
-venv/
+/.venv/
+/venv/
 .pytest_cache/
 .ruff_cache/
 
 # Node
-node_modules/
-.vite/
+/frontend/node_modules/
+/frontend/.vite/
+/frontend/tsconfig.tsbuildinfo
 
 # OS / 편집기
 .DS_Store
 .idea/
 .vscode/
 
-# 프론트엔드 빌드 결과는 커밋한다 (윈도우에서 Node.js 없이 실행하기 위함)
-
-# 타입스크립트 빌드 캐시
-frontend/tsconfig.tsbuildinfo
+# 프론트엔드 빌드 결과(frontend/dist)는 커밋한다
+# — 윈도우에서 Node.js 없이 실행하기 위함
