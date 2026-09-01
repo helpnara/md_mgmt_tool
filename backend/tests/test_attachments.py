@@ -33,7 +33,8 @@ def test_upload_saves_relative_path_next_to_the_entry(client, vault_dir):
     saved = response.json()
 
     assert saved["rel_path"] == "assets/2026-09-03/001-측정그래프.png"
-    assert saved["markdown"] == "![측정그래프.png](assets/2026-09-03/001-측정그래프.png)"
+    # 진행일지는 logs/ 안에 있으므로 링크는 ../ 로 시작해야 외부 뷰어에서도 열린다.
+    assert saved["markdown"] == "![측정그래프.png](../assets/2026-09-03/001-측정그래프.png)"
     assert saved["is_image"] is True
     assert (vault_dir / "projects" / f"{project_id}-리튬전지-수명평가" / saved["rel_path"]).exists()
 
@@ -69,7 +70,7 @@ def test_non_image_attachment_gets_link_markdown(client):
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ).json()
     assert saved["is_image"] is False
-    assert saved["markdown"] == "[원시데이터.xlsx](assets/2026-09-03/001-원시데이터.xlsx)"
+    assert saved["markdown"] == "[원시데이터.xlsx](../assets/2026-09-03/001-원시데이터.xlsx)"
     assert saved["thumb_url"] is None
 
 

@@ -70,3 +70,38 @@ export interface SearchResults {
   }[];
   total: number;
 }
+
+export interface Report {
+  id: number;
+  project_id: string;
+  report_date: string;
+  title: string;
+  rel_path: string;
+  doc_dir: string;
+  covers_from: string | null;
+  covers_to: string | null;
+  frozen_at: string | null;
+  frozen: boolean;
+  entry_count: number;
+  body?: string;
+}
+
+export interface ReportCandidate {
+  id: string;
+  title: string;
+  status: string;
+  group: string | null;
+  due_date: string | null;
+  last_reported_at: string | null;
+  days_since_report: number | null;
+  unreported_entries: number;
+  latest_entry_date: string | null;
+  score: number;
+  never_reported: boolean;
+}
+
+export interface SpreadsheetPreview {
+  orig_name: string;
+  sheets: { name: string; rows: string[][]; images: string[] }[];
+  truncated: boolean;
+}

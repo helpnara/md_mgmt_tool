@@ -1,6 +1,8 @@
 export interface Attachment {
   id: number;
   entry_id: number | null;
+  report_id: number | null;
+  preview_url: string | null;
   rel_path: string;
   orig_name: string;
   mime: string | null;
@@ -23,7 +25,7 @@ export interface UploadHandle {
  * fetch는 업로드 진행률을 주지 않아 XHR을 쓴다.
  */
 export function uploadAttachment(
-  entryId: number,
+  endpoint: string,
   file: File,
   onProgress: (loaded: number, total: number) => void,
 ): UploadHandle {
@@ -51,7 +53,7 @@ export function uploadAttachment(
     xhr.addEventListener("error", () => reject(new Error("네트워크 오류로 업로드하지 못했습니다.")));
     xhr.addEventListener("abort", () => reject(new Error("업로드를 취소했습니다.")));
 
-    xhr.open("POST", `/api/entries/${entryId}/attachments`);
+    xhr.open("POST", endpoint);
     xhr.send(form);
   });
 

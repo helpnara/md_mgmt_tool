@@ -14,12 +14,13 @@ from ..vault import paths
 router = APIRouter(tags=["attachments"])
 
 
-def _serialize(row: dict, dir_name: str) -> dict:
+def _serialize(row: dict, dir_name: str, doc_dir: str = svc.ENTRY_DOC_DIR) -> dict:
     url = f"/files/{quote(dir_name)}/{quote(row['rel_path'])}"
     image = svc.is_image(row["mime"])
     return {
         "id": row["id"],
         "entry_id": row["entry_id"],
+        "report_id": row["report_id"],
         "rel_path": row["rel_path"],
         "orig_name": row["orig_name"],
         "mime": row["mime"],
@@ -27,7 +28,9 @@ def _serialize(row: dict, dir_name: str) -> dict:
         "is_image": image,
         "url": url,
         "thumb_url": f"/api/attachments/{row['id']}/thumb" if image else None,
-        "markdown": f"{'!' if image else ''}[{row['orig_name']}]({row['rel_path']})",
+        "preview_url": f"/api/attachments/{row['id']}/preview" if svc.is_spreadsheet(row["mime"]) else None,
+        # 링크는 이 첨부를 넣을 문서 위치 기준으로 만든다 (외부 뷰어 호환).
+        "markdown": svc.markdown_link(row["rel_path"], row["orig_name"], doc_dir, image),
         "orphan": row.get("orphan", False),
         "deduplicated": row.get("deduplicated", False),
     }
@@ -51,10 +54,11 @@ def upload_to_entry(
         saved = svc.save_attachment(
             conn,
             project_id=entry["project_id"],
-            entry_id=entry_id,
-            entry_date=entry["date"],
             filename=file.filename or "attachment",
             source=file.file,
+            bucket_rel=f"assets/{entry['date']}",
+            doc_dir=svc.ENTRY_DOC_DIR,
+            entry_id=entry_id,
             content_type=file.content_type,
         )
     except OSError as exc:
@@ -77,12 +81,27 @@ def list_entry_attachments(entry_id: int, conn: sqlite3.Connection = Depends(get
 @router.get("/api/projects/{project_id}/attachments")
 def list_project_attachments(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     dir_name = _dir_name(conn, project_id)
-    items = [_serialize(row, dir_name) for row in svc.list_attachments(conn, project_id)]
+    # 과제 전체 목록은 개요 문서(과제 폴더) 기준 링크로 보여 준다.
+    items = [
+        _serialize(row, dir_name, svc.PROJECT_DOC_DIR)
+        for row in svc.list_attachments(conn, project_id)
+    ]
     return {
         "items": items,
         "total_bytes": sum(item["size_bytes"] or 0 for item in items),
         "orphan_count": sum(1 for item in items if item["orphan"]),
     }
+
+
+@router.get("/api/attachments/{attachment_id}/preview")
+def preview_spreadsheet(attachment_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """엑셀 보고 자료를 브라우저에서 바로 훑어볼 수 있게 표/이미지를 뽑아 준다."""
+    try:
+        return svc.spreadsheet_preview(conn, attachment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="첨부를 찾을 수 없습니다.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/attachments/{attachment_id}/thumb")

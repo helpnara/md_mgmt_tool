@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import mimetypes
 import os
+import posixpath
 import re
 import shutil
 import sqlite3
@@ -22,10 +23,13 @@ from ..vault import paths
 from .projects import now_iso, project_dir
 
 CHUNK_SIZE = 1024 * 1024  # 1MB
+# 문서가 놓인 폴더(과제 폴더 기준 상대 경로). 링크는 이 위치를 기준으로 만든다.
+ENTRY_DOC_DIR = "logs"
+PROJECT_DOC_DIR = ""
 MIN_FREE_BYTES = 200 * 1024 * 1024  # 여유 공간이 이보다 적으면 중단한다
 THUMB_MAX = 480
 _UNSAFE = re.compile(r"[\\/:*?\"<>|\x00-\x1f]+")
-_REF_PATTERN = re.compile(r"\]\(\s*(assets/[^)\s]+)")
+_REF_PATTERN = re.compile(r"\]\(\s*([^)\s]+)")
 
 
 def safe_filename(name: str) -> str:
@@ -83,15 +87,20 @@ def _stream_to_temp(source: BinaryIO, directory: Path) -> tuple[Path, str, int]:
 def save_attachment(
     conn: sqlite3.Connection,
     project_id: str,
-    entry_id: int | None,
-    entry_date: str,
     filename: str,
     source: BinaryIO,
-    content_type: str | None = None,
+    bucket_rel: str,
+    doc_dir: str,
+    entry_id: int | None = None,
     report_id: int | None = None,
+    content_type: str | None = None,
 ) -> dict:
+    """첨부를 bucket_rel(과제 폴더 기준) 아래에 저장한다.
+
+    doc_dir는 이 첨부를 링크할 문서가 놓인 폴더로, 마크다운 링크를 만드는 데 쓴다.
+    """
     directory = project_dir(conn, project_id)
-    bucket = paths.safe_join(directory, "assets", entry_date)
+    bucket = paths.safe_join(directory, *bucket_rel.split("/"))
     tmp_path, sha256, size = _stream_to_temp(source, bucket)
 
     # 같은 과제에 동일한 파일이 이미 있으면 다시 저장하지 않는다.
@@ -100,7 +109,7 @@ def save_attachment(
     ).fetchone()
     if existing and (directory / existing["rel_path"]).exists():
         tmp_path.unlink(missing_ok=True)
-        return dict(existing) | {"deduplicated": True}
+        return dict(existing) | {"deduplicated": True, "doc_dir": doc_dir}
 
     clean_name = safe_filename(filename)
     target = bucket / f"{paths.next_sequence_prefix(bucket)}-{clean_name}"
@@ -131,31 +140,46 @@ def save_attachment(
         ),
     )
     conn.commit()
-    sync_entry_meta(conn, entry_id)
+    sync_doc_meta(conn, entry_id=entry_id, report_id=report_id)
     row = conn.execute(
         "SELECT * FROM attachment WHERE project_id = ? AND rel_path = ?", (project_id, rel_path)
     ).fetchone()
-    return dict(row) | {"deduplicated": False}
+    return dict(row) | {"deduplicated": False, "doc_dir": doc_dir}
 
 
-def sync_entry_meta(conn: sqlite3.Connection, entry_id: int | None) -> None:
-    """진행일지 front matter의 attachments 목록을 실제 첨부와 맞춘다.
+def sync_doc_meta(
+    conn: sqlite3.Connection, entry_id: int | None = None, report_id: int | None = None
+) -> None:
+    """문서 front matter의 attachments 목록을 실제 첨부와 맞춘다.
 
     본문에서 참조하지 않는 자료도 md 파일만 보고 알 수 있게 하기 위함이다.
+    경로는 과제 폴더 기준으로 적어 어디서 읽어도 가리키는 대상이 분명하다.
     """
-    if entry_id is None:
-        return
     from ..vault import markdown as md
-    from .entries import entry_path
 
-    try:
-        _, path = entry_path(conn, entry_id)
-    except KeyError:
+    if entry_id is not None:
+        from .entries import entry_path
+
+        try:
+            _, path = entry_path(conn, entry_id)
+        except KeyError:
+            return
+        column, owner_id = "entry_id", entry_id
+    elif report_id is not None:
+        from .reports import report_path
+
+        try:
+            _, path = report_path(conn, report_id)
+        except KeyError:
+            return
+        column, owner_id = "report_id", report_id
+    else:
         return
+
     rel_paths = [
         row["rel_path"]
         for row in conn.execute(
-            "SELECT rel_path FROM attachment WHERE entry_id = ? ORDER BY rel_path", (entry_id,)
+            f"SELECT rel_path FROM attachment WHERE {column} = ? ORDER BY rel_path", (owner_id,)
         )
     ]
     doc = md.load(path)
@@ -171,6 +195,62 @@ def attachment_file(conn: sqlite3.Connection, attachment_id: int) -> tuple[sqlit
         raise KeyError(attachment_id)
     directory = project_dir(conn, row["project_id"])
     return row, paths.safe_join(directory, row["rel_path"])
+
+
+SPREADSHEET_MIMES = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+}
+PREVIEW_MAX_ROWS = 60
+PREVIEW_MAX_COLS = 12
+
+
+def is_spreadsheet(mime: str | None) -> bool:
+    return mime in SPREADSHEET_MIMES
+
+
+def spreadsheet_preview(conn: sqlite3.Connection, attachment_id: int) -> dict:
+    """엑셀 파일에서 표와 삽입 이미지를 뽑아낸다.
+
+    서식까지 재현하지는 않는다. "그때 무엇을 보고했는지" 확인이 목적이고,
+    원본이 필요하면 다운로드 링크를 쓰면 된다.
+    """
+    row, path = attachment_file(conn, attachment_id)
+    if not is_spreadsheet(row["mime"]):
+        raise ValueError("엑셀 파일이 아닙니다.")
+
+    import base64
+
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(path, data_only=True)
+    sheets = []
+    for worksheet in workbook.worksheets:
+        rows = []
+        for cells in worksheet.iter_rows(
+            max_row=PREVIEW_MAX_ROWS, max_col=PREVIEW_MAX_COLS, values_only=True
+        ):
+            values = ["" if cell is None else str(cell) for cell in cells]
+            if any(value.strip() for value in values):
+                rows.append(values)
+
+        images = []
+        for image in getattr(worksheet, "_images", []):  # openpyxl 공개 API가 없다
+            try:
+                data = image._data()
+                images.append("data:image/png;base64," + base64.b64encode(data).decode())
+            except Exception:
+                continue
+
+        if rows or images:
+            sheets.append({"name": worksheet.title, "rows": rows, "images": images})
+
+    workbook.close()
+    return {
+        "orig_name": row["orig_name"],
+        "sheets": sheets,
+        "truncated": any(len(sheet["rows"]) >= PREVIEW_MAX_ROWS for sheet in sheets),
+    }
 
 
 def thumbnail(conn: sqlite3.Connection, attachment_id: int) -> Path:
@@ -194,22 +274,50 @@ def thumbnail(conn: sqlite3.Connection, attachment_id: int) -> Path:
     return cached
 
 
-def referenced_paths(bodies: Iterable[str]) -> set[str]:
+def markdown_link(rel_path: str, orig_name: str, doc_dir: str, image: bool) -> str:
+    """문서가 놓인 폴더에서 본 상대 링크를 만든다.
+
+    logs/2026-09-03-x.md 에서 assets/… 를 가리키려면 `../assets/…` 여야
+    VS Code·GitHub·옵시디언 등 외부 뷰어에서도 파일을 찾는다.
+    """
+    link = posixpath.relpath(rel_path, doc_dir) if doc_dir else rel_path
+    return f"{'!' if image else ''}[{orig_name}]({link})"
+
+
+def resolve_link(link: str, doc_dir: str) -> str | None:
+    """문서 기준 상대 링크를 과제 폴더 기준 경로로 되돌린다."""
+    if not link or "://" in link or link.startswith(("/", "#")):
+        return None
+    resolved = posixpath.normpath(posixpath.join(doc_dir, link)) if doc_dir else posixpath.normpath(link)
+    return None if resolved.startswith("..") else resolved
+
+
+def referenced_paths(documents: Iterable[tuple[str, str]]) -> set[str]:
+    """(본문, 문서 폴더) 목록에서 참조하는 첨부 경로를 과제 폴더 기준으로 모은다."""
     found: set[str] = set()
-    for body in bodies:
-        found.update(_REF_PATTERN.findall(body or ""))
+    for body, doc_dir in documents:
+        for link in _REF_PATTERN.findall(body or ""):
+            resolved = resolve_link(link, doc_dir)
+            if resolved:
+                found.add(resolved)
     return found
 
 
 def list_attachments(conn: sqlite3.Connection, project_id: str) -> list[dict]:
     """과제의 첨부 목록. 본문에서 참조되지 않는 파일은 orphan으로 표시만 한다."""
-    bodies = [row["body"] or "" for row in conn.execute(
-        "SELECT body FROM entry WHERE project_id = ?", (project_id,)
-    )]
-    bodies += [row["body"] or "" for row in conn.execute(
-        "SELECT body FROM project WHERE id = ?", (project_id,)
-    )]
-    referenced = referenced_paths(bodies)
+    documents: list[tuple[str, str]] = [
+        (row["body"] or "", ENTRY_DOC_DIR)
+        for row in conn.execute("SELECT body FROM entry WHERE project_id = ?", (project_id,))
+    ]
+    documents += [
+        (row["body"] or "", PROJECT_DOC_DIR)
+        for row in conn.execute("SELECT body FROM project WHERE id = ?", (project_id,))
+    ]
+    documents += [
+        (row["body"] or "", posixpath.dirname(row["rel_path"]))
+        for row in conn.execute("SELECT body, rel_path FROM report WHERE project_id = ?", (project_id,))
+    ]
+    referenced = referenced_paths(documents)
     rows = conn.execute(
         "SELECT * FROM attachment WHERE project_id = ? ORDER BY rel_path", (project_id,)
     ).fetchall()
@@ -227,4 +335,4 @@ def delete_attachment(conn: sqlite3.Connection, attachment_id: int) -> None:
         shutil.move(str(path), str(target))
     conn.execute("DELETE FROM attachment WHERE id = ?", (attachment_id,))
     conn.commit()
-    sync_entry_meta(conn, row["entry_id"])
+    sync_doc_meta(conn, entry_id=row["entry_id"], report_id=row["report_id"])

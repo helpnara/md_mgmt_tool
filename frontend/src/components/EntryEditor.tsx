@@ -54,7 +54,8 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
   const stateRef = useRef({ entryId, date, title, body, tags });
   stateRef.current = { entryId, date, title, body, tags };
 
-  const base = filesBase(dirName);
+  // 진행일지는 logs/ 안에 있으므로 첨부 링크(../assets/…)의 기준도 logs/ 다.
+  const base = filesBase(dirName, "logs");
 
   const refreshAttachments = useCallback((id: number) => {
     api.listEntryAttachments(id).then(setAttachments).catch(() => undefined);
@@ -183,7 +184,7 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
       const placeholder = `⏳ 업로드 중: ${file.name}`;
       insertAtCursor(placeholder);
 
-      const handle = uploadAttachment(targetId, file, (loaded, total) => {
+      const handle = uploadAttachment(`/api/entries/${targetId}/attachments`, file, (loaded, total) => {
         setUploads((prev) =>
           prev.map((item) => (item.key === key ? { ...item, loaded, total } : item)),
         );

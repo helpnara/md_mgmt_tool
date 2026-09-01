@@ -227,3 +227,48 @@ button { white-space: nowrap; }
 .board-column { flex: 1 1 200px; min-width: 180px; }
 .due, .board-foot .muted { white-space: nowrap; }
 .board-foot { flex-wrap: wrap; row-gap: 4px; }
+
+/* ── 보고 ─────────────────────────────────────────── */
+.nav { display: flex; gap: 4px; }
+.nav a { padding: 5px 12px; border-radius: 8px; color: var(--muted); text-decoration: none; font-size: 13px; }
+.nav a:hover { background: var(--accent-soft); color: var(--accent); }
+.nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.report-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.report-list li { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px 4px 4px; background: #fcfcfd; }
+.report-list li.frozen { border-left: 3px solid #64748b; }
+.report-list li.draft { border-left: 3px solid var(--warn); }
+.report-open { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--text); text-align: left; padding: 6px 8px; }
+.report-open:hover { background: var(--accent-soft); border-radius: 6px; }
+.report-date { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.report-title { font-weight: 600; }
+.frozen-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 11px; }
+.draft-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 11px; }
+
+.report-editor { border-left: 3px solid var(--accent); }
+.report-editor.frozen { border-left-color: #64748b; background: #fbfbfc; }
+.snapshot { border: 1px dashed var(--border); border-radius: 8px; padding: 14px 18px; background: var(--surface); }
+.notice { color: #166534; }
+
+/* ── 보고 대상 후보 ──────────────────────────────── */
+.page-head { align-items: flex-start; margin-bottom: 14px; }
+.page-head h1 { font-size: 20px; margin: 0 0 4px; }
+.candidate-controls { display: flex; gap: 14px; align-items: flex-end; }
+.candidate-controls input[type="date"] { width: auto; }
+.pick-col { width: 48px; text-align: center; }
+.pick-col input { width: auto; }
+.picked-row { background: var(--accent-soft); }
+.picked-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.picked-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.picked-list a { color: var(--text); text-decoration: none; font-weight: 600; }
+.never { color: var(--warn); font-size: 12px; }
+.plain-link { text-decoration: none; color: inherit; display: block; }
+
+/* ── 엑셀 미리보기 ───────────────────────────────── */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: grid; place-items: center; padding: 24px; z-index: 20; }
+.modal { background: var(--surface); border-radius: var(--radius); padding: 18px 20px; max-width: 1000px; width: 100%; max-height: 85vh; overflow: auto; }
+.sheet h3 { font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+.sheet-scroll { overflow-x: auto; }
+.sheet-cell { white-space: pre-wrap; vertical-align: top; max-width: 380px; font-size: 13px; }
+.sheet-image { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; }
+.button-like { display: inline-block; padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text); font-size: 14px; }

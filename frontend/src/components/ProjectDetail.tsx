@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
-import type { Entry, Meta, Project } from "../types";
+import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes } from "../upload";
 import { dueLabel, formatDate } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
+import ReportEditor from "./ReportEditor";
 import ProjectForm from "./ProjectForm";
 import StatusBadge from "./StatusBadge";
 
@@ -14,9 +15,11 @@ interface Props {
   projectId: string;
   meta: Meta;
   onMetaChange: () => void;
+  /** 보고 대상 화면에서 초안을 만들고 넘어온 경우 그 보고를 바로 연다. */
+  openReportId?: number;
 }
 
-export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) {
+export default function ProjectDetail({ projectId, meta, onMetaChange, openReportId }: Props) {
   const [project, setProject] = useState<Project | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [editingProject, setEditingProject] = useState(false);
@@ -31,22 +34,28 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
     { items: [], total_bytes: 0, orphan_count: 0 },
   );
   const [showFiles, setShowFiles] = useState(false);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [openReport, setOpenReport] = useState<number | null>(openReportId ?? null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     Promise.all([
       api.getProject(projectId),
       api.listEntries(projectId),
       api.projectAttachments(projectId),
+      api.listReports(projectId),
     ])
-      .then(([loadedProject, loadedEntries, loadedFiles]) => {
+      .then(([loadedProject, loadedEntries, loadedFiles, loadedReports]) => {
         setProject(loadedProject);
         setEntries(loadedEntries);
         setFiles(loadedFiles);
+        setReports(loadedReports);
       })
       .catch((err: Error) => setError(err.message));
   }, [projectId]);
 
   useEffect(load, [load]);
+  useEffect(() => setOpenReport(openReportId ?? null), [openReportId]);
 
   if (error) return <p className="form-error">{error}</p>;
   if (!project) return <div className="app-loading">불러오는 중…</div>;
@@ -161,6 +170,70 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
         )}
       </div>
 
+      <div className="card reports-card">
+        <div className="card-head">
+          <h2>
+            보고 이력 {reports.length}건
+            {project.last_reported_at && (
+              <span className="muted"> · 마지막 보고 {formatDate(project.last_reported_at)}</span>
+            )}
+          </h2>
+          <button
+            onClick={async () => {
+              setReportError(null);
+              try {
+                const draft = await api.createDraft(project.id);
+                setOpenReport(draft.id);
+                load();
+              } catch (err) {
+                setReportError((err as Error).message);
+              }
+            }}
+          >
+            보고 초안 만들기
+          </button>
+        </div>
+        {reportError && <p className="form-error">{reportError}</p>}
+        {reports.length === 0 ? (
+          <p className="hint">아직 보고 이력이 없습니다. 마지막 보고 이후의 진행일지로 초안을 만들 수 있습니다.</p>
+        ) : (
+          <ul className="report-list">
+            {reports.map((report) => (
+              <li key={report.id} className={report.frozen ? "frozen" : "draft"}>
+                <button className="report-open" onClick={() => setOpenReport(report.id === openReport ? null : report.id)}>
+                  <span className="report-date">{report.report_date}</span>
+                  <span className="report-title">{report.title}</span>
+                  <span className={report.frozen ? "frozen-tag" : "draft-tag"}>
+                    {report.frozen ? "확정" : "작성 중"}
+                  </span>
+                  <span className="muted">진행일지 {report.entry_count}건</span>
+                </button>
+                <button
+                  className="ghost small danger"
+                  onClick={async () => {
+                    if (!window.confirm(`${report.report_date} 보고를 보관함으로 옮길까요?`)) return;
+                    await api.deleteReport(report.id);
+                    setOpenReport(null);
+                    load();
+                  }}
+                >
+                  삭제
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {openReport !== null && reports.some((report) => report.id === openReport) && (
+        <ReportEditorLoader
+          reportId={openReport}
+          dirName={project.dir_name}
+          onChanged={load}
+          onClose={() => setOpenReport(null)}
+        />
+      )}
+
       <div className="card">
         <div className="card-head">
           <h2>
@@ -271,5 +344,39 @@ export default function ProjectDetail({ projectId, meta, onMetaChange }: Props) 
         )}
       </ol>
     </section>
+  );
+}
+
+
+function ReportEditorLoader({
+  reportId,
+  dirName,
+  onChanged,
+  onClose,
+}: {
+  reportId: number;
+  dirName?: string;
+  onChanged: () => void;
+  onClose: () => void;
+}) {
+  const [report, setReport] = useState<Report | null>(null);
+
+  const reload = useCallback(() => {
+    api.getReport(reportId).then(setReport).catch(() => undefined);
+  }, [reportId]);
+
+  useEffect(reload, [reload]);
+
+  if (!report) return null;
+  return (
+    <ReportEditor
+      report={report}
+      dirName={dirName}
+      onChanged={() => {
+        reload();
+        onChanged();
+      }}
+      onClose={onClose}
+    />
   );
 }

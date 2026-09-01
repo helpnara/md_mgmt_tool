@@ -5,9 +5,10 @@ interface Props {
   attachments: Attachment[];
   onInsert?: (attachment: Attachment) => void;
   onDelete?: (attachment: Attachment) => void;
+  onPreview?: (attachment: Attachment) => void;
 }
 
-export default function AttachmentList({ attachments, onInsert, onDelete }: Props) {
+export default function AttachmentList({ attachments, onInsert, onDelete, onPreview }: Props) {
   if (attachments.length === 0) return <p className="hint">첨부된 파일이 없습니다.</p>;
 
   return (
@@ -31,6 +32,11 @@ export default function AttachmentList({ attachments, onInsert, onDelete }: Prop
             </span>
           </div>
           <div className="attachment-actions">
+            {onPreview && attachment.preview_url && (
+              <button className="ghost small" onClick={() => onPreview(attachment)}>
+                내용 보기
+              </button>
+            )}
             {onInsert && (
               <button className="ghost small" onClick={() => onInsert(attachment)}>
                 본문에 삽입

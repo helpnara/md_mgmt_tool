@@ -1,4 +1,4 @@
-import type { Entry, Meta, Project, SearchResults } from "./types";
+import type { Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,6 +41,25 @@ export const api = {
       `/api/projects/${projectId}/attachments`,
     ),
   deleteAttachment: (id: number) => request<void>(`/api/attachments/${id}`, { method: "DELETE" }),
+  listReports: (projectId: string) => request<Report[]>(`/api/projects/${projectId}/reports`),
+  createDraft: (projectId: string, reportDate?: string) =>
+    request<Report>(`/api/projects/${projectId}/reports/draft`, {
+      method: "POST",
+      body: JSON.stringify({ report_date: reportDate ?? null }),
+    }),
+  getReport: (id: number) => request<Report>(`/api/reports/${id}`),
+  updateReport: (id: number, payload: { title?: string; body?: string }) =>
+    request<Report>(`/api/reports/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  freezeReport: (id: number) => request<Report>(`/api/reports/${id}/freeze`, { method: "POST" }),
+  unfreezeReport: (id: number) => request<Report>(`/api/reports/${id}/unfreeze`, { method: "POST" }),
+  deleteReport: (id: number) => request<void>(`/api/reports/${id}`, { method: "DELETE" }),
+  listReportAttachments: (id: number) => request<Attachment[]>(`/api/reports/${id}/attachments`),
+  reportCandidates: (includeInactive = false) =>
+    request<{ cycle_days: number; default_report_date: string; items: ReportCandidate[] }>(
+      `/api/report-candidates?include_inactive=${includeInactive}`,
+    ),
+  spreadsheetPreview: (attachmentId: number) =>
+    request<SpreadsheetPreview>(`/api/attachments/${attachmentId}/preview`),
   search: (query: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),
   reindex: () => request<{ indexed: number }>("/api/reindex", { method: "POST" }),
 };

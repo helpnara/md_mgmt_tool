@@ -34,6 +34,12 @@ export function renderMarkdown(text: string, base?: string): string {
   return renderer.render(text ?? "", { base });
 }
 
-export function filesBase(dirName: string | undefined): string | undefined {
-  return dirName ? `/files/${encodeURIComponent(dirName)}` : undefined;
+/**
+ * 마크다운 안의 상대 링크를 풀 기준 경로.
+ * 문서가 놓인 폴더(logs, reports/<날짜> 등)까지 포함해야 ../ 링크가 맞게 풀린다.
+ */
+export function filesBase(dirName: string | undefined, docDir = ""): string | undefined {
+  if (!dirName) return undefined;
+  const base = `/files/${encodeURIComponent(dirName)}`;
+  return docDir ? `${base}/${docDir.split("/").map(encodeURIComponent).join("/")}` : base;
 }

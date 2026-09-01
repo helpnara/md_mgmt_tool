@@ -2,21 +2,31 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
 import ProjectDetail from "./components/ProjectDetail";
 import ProjectList from "./components/ProjectList";
+import ReportCandidates from "./components/ReportCandidates";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
 
 type Route =
   | { name: "list" }
-  | { name: "project"; id: string }
-  | { name: "search"; query: string };
+  | { name: "project"; id: string; reportId?: number }
+  | { name: "search"; query: string }
+  | { name: "reports" };
 
 function readRoute(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
-  if (hash.startsWith("projects/")) return { name: "project", id: hash.slice("projects/".length) };
-  if (hash.startsWith("search")) {
-    const query = new URLSearchParams(hash.split("?")[1] ?? "").get("q") ?? "";
-    return { name: "search", query };
+  const [path, queryString] = hash.split("?");
+  const params = new URLSearchParams(queryString ?? "");
+
+  if (path.startsWith("projects/")) {
+    const reportId = params.get("report");
+    return {
+      name: "project",
+      id: path.slice("projects/".length),
+      reportId: reportId ? Number(reportId) : undefined,
+    };
   }
+  if (path.startsWith("search")) return { name: "search", query: params.get("q") ?? "" };
+  if (path.startsWith("reports")) return { name: "reports" };
   return { name: "list" };
 }
 
@@ -54,6 +64,14 @@ export default function App() {
         <a className="brand" href="#/">
           과제 이력 관리
         </a>
+        <nav className="nav">
+          <a href="#/" className={route.name === "list" ? "active" : undefined}>
+            과제
+          </a>
+          <a href="#/reports" className={route.name === "reports" ? "active" : undefined}>
+            보고 대상
+          </a>
+        </nav>
         <form
           className="search-box"
           onSubmit={(event) => {
@@ -79,8 +97,14 @@ export default function App() {
       </header>
       <main>
         {route.name === "project" && (
-          <ProjectDetail projectId={route.id} meta={meta} onMetaChange={loadMeta} />
+          <ProjectDetail
+            projectId={route.id}
+            meta={meta}
+            onMetaChange={loadMeta}
+            openReportId={route.reportId}
+          />
         )}
+        {route.name === "reports" && <ReportCandidates meta={meta} />}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} />}
       </main>
