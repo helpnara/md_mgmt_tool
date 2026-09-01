@@ -26,6 +26,10 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         )
     ]
     tags = [row["name"] for row in conn.execute("SELECT name FROM tag ORDER BY name")]
+    owners = [
+        row["name"]
+        for row in conn.execute("SELECT DISTINCT name FROM project_owner ORDER BY name")
+    ]
     return {
         "statuses": [
             {"key": key, "label": label, "candidate": candidate, "collapsed": key in COLLAPSED_STATUSES}
@@ -33,6 +37,7 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         ],
         "groups": groups,
         "tags": tags,
+        "owners": owners,
         "vault": str(get_settings().vault_dir),
         "report_cycle_days": get_settings().report_cycle_days,
     }
@@ -40,4 +45,9 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
 
 @router.post("/reindex")
 def reindex(conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    return {"indexed": reindex_all(conn)}
+    indexed, problems = reindex_all(conn)
+    return {
+        "indexed": indexed,
+        # 읽지 못한 파일은 조용히 넘기지 않고 화면에 알린다.
+        "problems": [{"path": item.rel_path, "reason": item.reason} for item in problems],
+    }

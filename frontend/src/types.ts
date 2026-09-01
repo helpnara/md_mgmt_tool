@@ -9,6 +9,7 @@ export interface Meta {
   statuses: StatusInfo[];
   groups: string[];
   tags: string[];
+  owners: string[];
   vault: string;
   report_cycle_days: number;
 }
@@ -18,7 +19,7 @@ export interface Project {
   title: string;
   status: string;
   group: string | null;
-  owner: string | null;
+  owners: string[];
   start_date: string | null;
   due_date: string | null;
   created_at: string | null;

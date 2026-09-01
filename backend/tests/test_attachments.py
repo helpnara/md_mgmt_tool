@@ -147,3 +147,21 @@ def test_entry_frontmatter_lists_attachments(client, vault_dir):
     saved = client.get(f"/api/entries/{entry_id}/attachments").json()
     client.delete(f"/api/attachments/{saved[0]['id']}")
     assert "001-그래프.png" not in path.read_text(encoding="utf-8")
+
+
+def test_same_content_with_different_names_stays_separate(client):
+    """빈 파일처럼 내용이 같아도 이름이 다르면 별개 자료다."""
+    _, entry_id = setup_entry(client)
+    first = upload(client, entry_id, "빈파일.txt", b"", "text/plain").json()
+    second = upload(client, entry_id, "다른이름.xlsx", b"", "application/octet-stream").json()
+
+    assert first["rel_path"] != second["rel_path"]
+    assert second["deduplicated"] is False
+    assert second["orig_name"] == "다른이름.xlsx"
+
+
+def test_office_extensions_are_recognized_even_when_browser_sends_octet_stream(client):
+    _, entry_id = setup_entry(client)
+    saved = upload(client, entry_id, "보고서.xlsx", b"PK\x03\x04", "application/octet-stream").json()
+    assert saved["mime"].endswith("spreadsheetml.sheet")
+    assert saved["preview_url"] is not None

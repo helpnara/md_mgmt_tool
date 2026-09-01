@@ -50,6 +50,9 @@ export default function ProjectBoard({ meta, projects }: Props) {
                       <h3>{project.title}</h3>
                       <div className="board-meta">
                         {project.group && <span className="chip">{project.group}</span>}
+                        {project.owners.length > 0 && (
+                          <span className="owner-chip">{project.owners.join(", ")}</span>
+                        )}
                         {project.tags.map((tag) => (
                           <span key={tag} className="tag">
                             {tag}

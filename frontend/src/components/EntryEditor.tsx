@@ -341,7 +341,22 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
       </div>
 
       {restored && <p className="hint restored">저장하지 않은 작성 중 내용을 복구했습니다.</p>}
-      {error && <p className="form-error">{error}</p>}
+      {error && (
+        <p className="form-error">
+          {error}
+          {error.includes("다시 읽기") && (
+            <button
+              className="ghost small"
+              onClick={async () => {
+                await api.reindex();
+                window.location.reload();
+              }}
+            >
+              지금 다시 읽기
+            </button>
+          )}
+        </p>
+      )}
 
       <div className="editor-footer">
         <label className="toggle">

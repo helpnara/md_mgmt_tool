@@ -39,3 +39,23 @@ def test_decomposed_hangul_is_normalized():
     decomposed = "한글"  # '한글'의 자모 분리 형태
     assert paths.slugify(decomposed) == "한글"
     assert safe_filename(f"{decomposed}.png") == "한글.png"
+
+
+def test_locked_file_gives_a_clear_message(tmp_path, monkeypatch):
+    """윈도우에서 엑셀이 파일을 잡고 있으면 이동이 실패한다 — 500이 아니라 안내여야 한다."""
+    import shutil
+
+    import pytest
+
+    source = tmp_path / "열려있는파일.xlsx"
+    source.write_bytes(b"data")
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(32, "The process cannot access the file")
+
+    monkeypatch.setattr(shutil, "move", refuse)
+    with pytest.raises(paths.FileInUseError) as caught:
+        paths.move(source, tmp_path / "옮긴파일.xlsx")
+
+    assert "열려있는파일.xlsx" in str(caught.value)
+    assert "닫고 다시 시도" in str(caught.value)

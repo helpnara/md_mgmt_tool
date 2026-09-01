@@ -23,7 +23,12 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     conn = deps.setup()
     # 외부 편집기로 바뀐 내용을 기동 시점에 반영한다.
-    reindex_all(conn)
+    indexed, problems = reindex_all(conn)
+    if problems:
+        print(f"\n  [주의] 읽지 못한 파일 {len(problems)}건 — front matter를 확인하세요:")
+        for item in problems[:10]:
+            print(f"    - {item.rel_path}: {item.reason}")
+    print(f"  과제 {indexed}건을 읽었습니다.")
     yield
     deps.teardown()
 

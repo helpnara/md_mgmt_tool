@@ -13,12 +13,13 @@ interface Props {
 
 export default function ProjectList({ meta, onMetaChange }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [filters, setFilters] = useState({ status: "", group: "", tag: "", due: "", sort: "updated" });
+  const [filters, setFilters] = useState({ status: "", group: "", tag: "", owner: "", due: "", sort: "updated" });
   const [view, setView] = useState<"table" | "board">(
     () => (localStorage.getItem("md-mgmt:view") === "board" ? "board" : "table"),
   );
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [problems, setProblems] = useState<{ path: string; reason: string }[]>([]);
 
   const load = useCallback(() => {
     api
@@ -60,6 +61,14 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
               </option>
             ))}
           </select>
+          <select value={filters.owner} onChange={(event) => setFilter("owner", event.target.value)}>
+            <option value="">담당자 전체</option>
+            {meta.owners.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
           <select value={filters.due} onChange={(event) => setFilter("due", event.target.value)}>
             <option value="">마감 전체</option>
             <option value="overdue">기한 초과</option>
@@ -91,7 +100,12 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           </div>
           <button
             className="ghost"
-            onClick={() => api.reindex().then(load).then(onMetaChange)}
+            onClick={async () => {
+              const result = await api.reindex();
+              setProblems(result.problems);
+              load();
+              onMetaChange();
+            }}
             title="폴더를 직접 수정했을 때 다시 읽어들입니다"
           >
             다시 읽기
@@ -119,6 +133,29 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
 
       {error && <p className="form-error">{error}</p>}
 
+      {problems.length > 0 && (
+        <div className="card problems">
+          <div className="card-head">
+            <h2>읽지 못한 파일 {problems.length}건</h2>
+            <button className="ghost small" onClick={() => setProblems([])}>
+              닫기
+            </button>
+          </div>
+          <p className="hint">
+            md 파일 맨 위의 설정(front matter) 형식이 어긋났습니다. 아래 파일을 열어 고친 뒤 다시 읽어 주세요.
+            나머지 과제는 정상적으로 표시됩니다.
+          </p>
+          <ul className="problem-list">
+            {problems.map((problem) => (
+              <li key={problem.path}>
+                <code>{problem.path}</code>
+                <span className="muted">{problem.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {view === "board" && <ProjectBoard meta={meta} projects={projects} />}
 
       {view === "table" && (
@@ -128,6 +165,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
             <th>과제</th>
             <th>상태</th>
             <th>그룹</th>
+            <th>담당자</th>
             <th>태그</th>
             <th>마감</th>
             <th>기록</th>
@@ -147,6 +185,9 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
                   <StatusBadge status={project.status} meta={meta} />
                 </td>
                 <td>{project.group ?? "—"}</td>
+                <td className="owners">
+                  {project.owners.length > 0 ? project.owners.join(", ") : "—"}
+                </td>
                 <td className="tags">
                   {project.tags.map((tag) => (
                     <span key={tag} className="tag">
@@ -165,7 +206,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           })}
           {projects.length === 0 && (
             <tr>
-              <td colSpan={7} className="empty">
+              <td colSpan={8} className="empty">
                 과제가 없습니다. [과제 추가]로 시작하세요.
               </td>
             </tr>

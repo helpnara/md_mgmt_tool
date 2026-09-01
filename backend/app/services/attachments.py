@@ -103,15 +103,18 @@ def save_attachment(
     bucket = paths.safe_join(directory, *bucket_rel.split("/"))
     tmp_path, sha256, size = _stream_to_temp(source, bucket)
 
-    # 같은 과제에 동일한 파일이 이미 있으면 다시 저장하지 않는다.
+    clean_name = safe_filename(filename)
+    # 같은 과제에 내용도 이름도 같은 파일이 이미 있으면 다시 저장하지 않는다.
+    # 내용만 같고 이름이 다르면 별개 파일로 둔다 — 빈 파일이나 같은 템플릿에서
+    # 파생된 서로 다른 자료가 한 파일로 합쳐지면 이름과 확장자가 어긋난다.
     existing = conn.execute(
-        "SELECT * FROM attachment WHERE project_id = ? AND sha256 = ?", (project_id, sha256)
+        "SELECT * FROM attachment WHERE project_id = ? AND sha256 = ? AND orig_name = ?",
+        (project_id, sha256, clean_name),
     ).fetchone()
     if existing and (directory / existing["rel_path"]).exists():
         tmp_path.unlink(missing_ok=True)
         return dict(existing) | {"deduplicated": True, "doc_dir": doc_dir}
 
-    clean_name = safe_filename(filename)
     target = bucket / f"{paths.next_sequence_prefix(bucket)}-{clean_name}"
     if target.exists():
         target = paths.unique_path(bucket, target.stem, target.suffix)
@@ -187,6 +190,12 @@ def sync_doc_meta(
         return
     doc.meta = md.merge_meta(doc.meta, {"attachments": rel_paths})
     md.save(path, doc)
+    # 도구가 스스로 쓴 변경이므로, 외부 편집 감지가 오탐하지 않도록 기준 시각을 갱신한다.
+    table = "entry" if entry_id is not None else "report"
+    conn.execute(
+        f"UPDATE {table} SET file_mtime = ? WHERE id = ?", (path.stat().st_mtime, owner_id)
+    )
+    conn.commit()
 
 
 def attachment_file(conn: sqlite3.Connection, attachment_id: int) -> tuple[sqlite3.Row, Path]:
@@ -332,7 +341,7 @@ def delete_attachment(conn: sqlite3.Connection, attachment_id: int) -> None:
         target = paths.unique_path(
             trash, f"{row['project_id']}-{datetime.now():%Y%m%d%H%M%S}-{path.stem}", path.suffix
         )
-        shutil.move(str(path), str(target))
+        paths.move(path, target)
     conn.execute("DELETE FROM attachment WHERE id = ?", (attachment_id,))
     conn.commit()
     sync_doc_meta(conn, entry_id=row["entry_id"], report_id=row["report_id"])

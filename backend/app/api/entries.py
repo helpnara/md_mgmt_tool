@@ -5,6 +5,8 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..deps import get_db
+from ..vault.markdown import ExternalChangeError
+from ..vault.paths import FileInUseError, InvalidDateError
 from ..schemas import EntryCreate, EntryUpdate
 from ..services import entries as svc
 
@@ -51,6 +53,8 @@ def create_entry(
         entry_id = svc.create_entry(conn, project_id, payload.model_dump())
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+    except InvalidDateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = conn.execute("SELECT * FROM entry WHERE id = ?", (entry_id,)).fetchone()
     return _serialize(conn, row)
 
@@ -71,6 +75,10 @@ def update_entry(
         svc.update_entry(conn, entry_id, payload.changes())
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="진행일지를 찾을 수 없습니다.") from exc
+    except ExternalChangeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except InvalidDateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = conn.execute("SELECT * FROM entry WHERE id = ?", (entry_id,)).fetchone()
     return _serialize(conn, row)
 
@@ -81,3 +89,5 @@ def delete_entry(entry_id: int, conn: sqlite3.Connection = Depends(get_db)) -> N
         svc.delete_entry(conn, entry_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="진행일지를 찾을 수 없습니다.") from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc

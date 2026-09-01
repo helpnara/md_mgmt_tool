@@ -61,5 +61,8 @@ export const api = {
   spreadsheetPreview: (attachmentId: number) =>
     request<SpreadsheetPreview>(`/api/attachments/${attachmentId}/preview`),
   search: (query: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),
-  reindex: () => request<{ indexed: number }>("/api/reindex", { method: "POST" }),
+  reindex: () =>
+    request<{ indexed: number; problems: { path: string; reason: string }[] }>("/api/reindex", {
+      method: "POST",
+    }),
 };

@@ -88,7 +88,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
             <div className="meta-line muted">
               기간 {formatDate(project.start_date)} ~ {formatDate(project.due_date)}
               {due && <span className={`due due-${due.tone}`}>{due.text}</span>}
-              {project.owner && <span>담당 {project.owner}</span>}
+              {project.owners.length > 0 && <span>담당 {project.owners.join(", ")}</span>}
               <span>최근 업데이트 {formatDate(project.updated_at)}</span>
             </div>
           </div>

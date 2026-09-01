@@ -10,6 +10,7 @@ from ..config import get_settings
 from ..deps import get_db
 from ..services import attachments as svc
 from ..vault import paths
+from ..vault.paths import FileInUseError
 
 router = APIRouter(tags=["attachments"])
 
@@ -120,6 +121,8 @@ def delete_attachment(attachment_id: int, conn: sqlite3.Connection = Depends(get
         svc.delete_attachment(conn, attachment_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="첨부를 찾을 수 없습니다.") from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
 
 
 @router.get("/files/{dir_name}/{rel_path:path}")

@@ -14,7 +14,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
     title: initial?.title ?? "",
     status: initial?.status ?? "in_progress",
     group: initial?.group ?? "",
-    owner: initial?.owner ?? "",
+    owners: (initial?.owners ?? []).join(", "),
     start_date: initial?.start_date ?? "",
     due_date: initial?.due_date ?? "",
     tags: (initial?.tags ?? []).join(", "),
@@ -33,7 +33,10 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
         title: form.title.trim(),
         status: form.status,
         group: form.group.trim() || null,
-        owner: form.owner.trim() || null,
+        owners: form.owners
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean),
         start_date: form.start_date || null,
         due_date: form.due_date || null,
         tags: form.tags
@@ -85,8 +88,18 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           </datalist>
         </label>
         <label>
-          담당
-          <input value={form.owner ?? ""} onChange={(event) => update("owner", event.target.value)} />
+          담당자 (여러 명은 쉼표로)
+          <input
+            list="owner-options"
+            value={form.owners}
+            onChange={(event) => update("owners", event.target.value)}
+            placeholder="예: 권경락, 홍길동"
+          />
+          <datalist id="owner-options">
+            {meta.owners.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </label>
       </div>
       <div className="form-row">

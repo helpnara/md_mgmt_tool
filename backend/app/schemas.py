@@ -9,7 +9,7 @@ class ProjectCreate(BaseModel):
     title: str
     status: str | None = None
     group: str | None = None
-    owner: str | None = None
+    owners: list[str] = Field(default_factory=list)
     start_date: str | None = None
     due_date: str | None = None
     tags: list[str] = Field(default_factory=list)
@@ -20,7 +20,7 @@ class ProjectUpdate(BaseModel):
     title: str | None = None
     status: str | None = None
     group: str | None = None
-    owner: str | None = None
+    owners: list[str] | None = None
     start_date: str | None = None
     due_date: str | None = None
     tags: list[str] | None = None

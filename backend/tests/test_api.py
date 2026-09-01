@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 
 def create_project(client, **kwargs):
     payload = {"title": "리튬전지 수명평가", "status": "in_progress", "group": "차세대전지", "tags": ["수명평가"]}
@@ -140,3 +142,49 @@ def test_project_filters(client):
     assert len(client.get("/api/projects", params={"group": "차세대전지"}).json()) == 1
     assert len(client.get("/api/projects", params={"tag": "소재"}).json()) == 1
     assert len(client.get("/api/projects").json()) == 2
+
+
+def test_saving_over_an_external_edit_is_refused(client, vault_dir):
+    """옵시디언·탐색기로 고친 내용을 말없이 덮어쓰면 안 된다."""
+    project = create_project(client)
+    entry = client.post(
+        f"/api/projects/{project['id']}/entries", json={"title": "기록", "body": "웹에서 쓴 내용"}
+    ).json()
+    path = vault_dir / "projects" / f"{project['id']}-리튬전지-수명평가" / entry["rel_path"]
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("웹에서 쓴 내용", "탐색기에서 고친 내용"),
+        encoding="utf-8",
+    )
+    os.utime(path, (path.stat().st_atime, path.stat().st_mtime + 10))
+
+    blocked = client.patch(f"/api/entries/{entry['id']}", json={"body": "웹에서 덮어쓰기"})
+    assert blocked.status_code == 409
+    assert "다시 읽기" in blocked.json()["detail"]
+    assert "탐색기에서 고친 내용" in path.read_text(encoding="utf-8")
+
+    # 다시 읽은 뒤에는 정상적으로 저장된다.
+    client.post("/api/reindex")
+    assert client.patch(f"/api/entries/{entry['id']}", json={"body": "이제 저장"}).status_code == 200
+
+
+def test_project_overview_is_also_protected_from_silent_overwrite(client, vault_dir):
+    project = create_project(client)
+    path = vault_dir / "projects" / f"{project['id']}-리튬전지-수명평가" / "index.md"
+    path.write_text(path.read_text(encoding="utf-8") + "\n외부에서 추가한 줄\n", encoding="utf-8")
+    os.utime(path, (path.stat().st_atime, path.stat().st_mtime + 10))
+
+    blocked = client.patch(f"/api/projects/{project['id']}", json={"body": "덮어쓰기"})
+    assert blocked.status_code == 409
+
+
+def test_attachment_upload_does_not_trigger_a_false_conflict(client):
+    """도구가 스스로 front matter를 고친 뒤에도 저장이 막히면 안 된다."""
+    project = create_project(client)
+    entry = client.post(
+        f"/api/projects/{project['id']}/entries", json={"date": "2026-09-03", "title": "기록"}
+    ).json()
+    client.post(
+        f"/api/entries/{entry['id']}/attachments",
+        files={"file": ("자료.xlsx", b"PK\x03\x04", "application/octet-stream")},
+    )
+    assert client.patch(f"/api/entries/{entry['id']}", json={"body": "첨부 후 저장"}).status_code == 200

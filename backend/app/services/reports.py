@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import posixpath
 import re
-import shutil
 import sqlite3
 from datetime import date as date_cls
 from datetime import datetime, timedelta
@@ -86,7 +85,7 @@ def create_draft(
     conn: sqlite3.Connection, project_id: str, report_date: str | None = None
 ) -> int:
     directory = project_dir(conn, project_id)
-    report_date = report_date or default_report_date()
+    report_date = paths.validate_date(report_date, default_report_date())
     folder = paths.safe_join(directory, "reports", report_date)
     if (folder / "report.md").exists():
         raise ValueError(f"{report_date} 보고 문서가 이미 있습니다.")
@@ -133,6 +132,7 @@ def update_report(conn: sqlite3.Connection, report_id: int, updates: dict[str, A
     if row["frozen_at"]:
         raise PermissionError("확정된 보고 문서는 수정할 수 없습니다. 먼저 확정을 해제하세요.")
 
+    md.ensure_unchanged(path, row["file_mtime"])
     doc = md.load(path)
     body = updates.pop("body", None)
     meta = md.merge_meta(doc.meta, {k: v for k, v in updates.items() if k in {"title", "report_type", "audience"}})
@@ -179,7 +179,7 @@ def delete_report(conn: sqlite3.Connection, report_id: int) -> None:
     target = paths.unique_path(
         trash, f"{row['project_id']}-report-{row['report_date']}-{datetime.now():%Y%m%d%H%M%S}", ""
     )
-    shutil.move(str(folder), str(target))
+    paths.move(folder, target)
     index_project(conn, project_dir(conn, row["project_id"]))
     conn.commit()
 

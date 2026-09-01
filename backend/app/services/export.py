@@ -217,7 +217,8 @@ def export_html(conn: sqlite3.Connection, project_id: str, include_reports_full:
     from markdown_it import MarkdownIt
 
     filename, text, _ = merged_markdown(conn, project_id, "inline", include_reports_full)
-    renderer = MarkdownIt("commonmark", {"breaks": True, "linkify": True}).enable("table")
+    # 앱 화면과 같은 규칙: 본문에 섞인 raw HTML은 실행하지 않고 글자로 보여 준다.
+    renderer = MarkdownIt("commonmark", {"breaks": True, "linkify": True, "html": False}).enable("table")
     project = _project_row(conn, project_id)
     return f"{filename[:-3]}.html", HTML_TEMPLATE.format(
         title=project["title"], body=renderer.render(text)

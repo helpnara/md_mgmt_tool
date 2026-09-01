@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..config import STATUS_KEYS, get_settings
 from ..deps import get_db
+from ..vault.markdown import ExternalChangeError
+from ..vault.paths import FileInUseError
 from ..services import projects as svc
 from ..services import search as search_svc
 from ..schemas import ProjectCreate, ProjectUpdate
@@ -28,13 +30,23 @@ def _tags(conn: sqlite3.Connection, project_id: str) -> list[str]:
     return [row["name"] for row in rows]
 
 
+def _owners(conn: sqlite3.Connection, project_id: str) -> list[str]:
+    return [
+        row["name"]
+        for row in conn.execute(
+            "SELECT name FROM project_owner WHERE project_id = ? ORDER BY position, name",
+            (project_id,),
+        )
+    ]
+
+
 def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     return {
         "id": row["id"],
         "title": row["title"],
         "status": row["status"],
         "group": row["grp"],
-        "owner": row["owner"],
+        "owners": _owners(conn, row["id"]),
         "start_date": row["start_date"],
         "due_date": row["due_date"],
         "created_at": row["created_at"],
@@ -62,6 +74,7 @@ def list_projects(
     status: str | None = None,
     group: str | None = None,
     tag: str | None = None,
+    owner: str | None = None,
     q: str | None = None,
     due: str | None = None,
     sort: str = Query("updated"),
@@ -78,6 +91,9 @@ def list_projects(
             "p.id IN (SELECT pt.project_id FROM project_tag pt JOIN tag t ON t.id = pt.tag_id WHERE t.name = ?)"
         )
         params.append(tag)
+    if owner:
+        where.append("p.id IN (SELECT po.project_id FROM project_owner po WHERE po.name = ?)")
+        params.append(owner)
     if due in DUE_FILTERS:
         where.append(DUE_FILTERS[due])
     if q and q.strip():
@@ -123,6 +139,10 @@ def update_project(
         svc.update_project(conn, project_id, payload.changes())
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+    except ExternalChangeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return get_project(project_id, conn)
@@ -134,3 +154,5 @@ def archive_project(project_id: str, conn: sqlite3.Connection = Depends(get_db))
         svc.archive_project(conn, project_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc

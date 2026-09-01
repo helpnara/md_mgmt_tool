@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ..deps import get_db
+from ..vault.markdown import ExternalChangeError
 from ..services import attachments as attach_svc
 from ..services import reports as svc
+from ..vault import paths
 
 router = APIRouter(tags=["reports"])
 
@@ -62,6 +64,8 @@ def create_draft(
         report_id = svc.create_draft(conn, project_id, payload.report_date)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+    except paths.InvalidDateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _serialize(conn, svc.report_row(conn, report_id))
@@ -83,7 +87,7 @@ def update_report(
         svc.update_report(conn, report_id, payload.changes())
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="보고 문서를 찾을 수 없습니다.") from exc
-    except PermissionError as exc:
+    except (PermissionError, ExternalChangeError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _serialize(conn, svc.report_row(conn, report_id))
 
@@ -112,6 +116,8 @@ def delete_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) ->
         svc.delete_report(conn, report_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="보고 문서를 찾을 수 없습니다.") from exc
+    except paths.FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
 
 
 @router.get("/api/reports/{report_id}/attachments")
