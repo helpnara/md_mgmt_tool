@@ -21,3 +21,6 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# 프론트엔드 빌드 결과
+frontend/dist/
