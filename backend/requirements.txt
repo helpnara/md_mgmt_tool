@@ -1,5 +1,5 @@
 fastapi>=0.115
-uvicorn[standard]>=0.30
+uvicorn>=0.30  # [standard] 부가 패키지는 로컬 단독 실행에 불필요하고 윈도우 설치만 복잡해진다
 python-frontmatter>=1.1
 python-multipart>=0.0.9
 markdown-it-py>=3.0
