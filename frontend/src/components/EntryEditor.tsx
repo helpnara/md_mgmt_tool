@@ -6,6 +6,7 @@ import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
 import { todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
+import PreviewToggle, { usePreview } from "./PreviewToggle";
 
 const AUTOSAVE_DELAY_MS = 10_000;
 const AUTOSAVE_PREF_KEY = "md-mgmt:autosave";
@@ -48,6 +49,7 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
+  const [preview, togglePreview] = usePreview();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -276,7 +278,9 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
         </label>
       </div>
 
-      <div className="split">
+      <PreviewToggle on={preview} onToggle={togglePreview} />
+
+      <div className={preview ? "split" : "split solo"}>
         <textarea
           ref={textareaRef}
           value={body}
@@ -294,10 +298,12 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
           placeholder="진행 내용을 마크다운으로 작성합니다. 이미지는 Ctrl+V로 바로 붙여넣을 수 있습니다."
           spellCheck={false}
         />
-        <div
-          className="preview markdown"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }}
-        />
+        {preview && (
+          <div
+            className="preview markdown"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }}
+          />
+        )}
       </div>
 
       {uploads.length > 0 && (

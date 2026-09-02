@@ -1,4 +1,4 @@
-import type { AppSettings, Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview } from "./types";
+import type { AppSettings, Dashboard, Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -15,6 +15,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   meta: () => request<Meta>("/api/meta"),
+  dashboard: () => request<Dashboard>("/api/dashboard"),
   listProjects: (params: Record<string, string>) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
     return request<Project[]>(`/api/projects?${query.toString()}`);

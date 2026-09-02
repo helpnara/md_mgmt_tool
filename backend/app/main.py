@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import deps
-from .api import attachments, entries, export, meta, projects, reports, search, settings
+from .api import attachments, dashboard, entries, export, meta, projects, reports, search, settings
 from .config import REPO_ROOT, get_settings
 from .vault.paths import safe_join
 from .vault.indexer import reindex_all
@@ -47,6 +47,7 @@ app.add_middleware(
 )
 
 app.include_router(meta.router)
+app.include_router(dashboard.router)
 app.include_router(projects.router)
 app.include_router(entries.router)
 app.include_router(attachments.router)

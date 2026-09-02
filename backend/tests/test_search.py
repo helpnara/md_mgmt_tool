@@ -71,12 +71,32 @@ def test_project_list_filters_by_search_including_entries(client):
 
 def test_project_list_due_filters(client):
     """마감이 지난 과제와 곧 닥치는 과제를 오늘 기준으로 골라낸다."""
+    from datetime import date, timedelta
+
     first, second = seed(client)
     client.patch(f"/api/projects/{first['id']}", json={"due_date": "2020-01-01"})
+    soon_date = (date.today() + timedelta(days=10)).isoformat()
+    third = client.post("/api/projects", json={"title": "곧 마감", "due_date": soon_date}).json()
 
     overdue = [item["id"] for item in client.get("/api/projects", params={"due": "overdue"}).json()]
     assert overdue == [first["id"]]
 
-    # 2030년 마감인 과제는 30일 이내 필터에 걸리지 않는다.
+    # '30일 이내'는 앞으로 30일이라는 뜻이다. 이미 지난 과제는 여기 섞이지 않는다
+    # (그쪽은 '기한 초과'가 따로 맡는다). 대시보드가 세는 수와 어긋나면 안 되기 때문.
     soon = [item["id"] for item in client.get("/api/projects", params={"due": "30"}).json()]
-    assert soon == [first["id"]]
+    assert soon == [third["id"]]
+
+    # 2030년 마감인 과제는 어느 쪽에도 걸리지 않는다.
+    assert second["id"] not in overdue + soon
+
+
+def test_finished_projects_drop_out_of_due_filters(client):
+    """끝난 과제는 마감이 지났어도 경고 대상이 아니다."""
+    late = client.post(
+        "/api/projects", json={"title": "늦은 과제", "status": "in_progress", "due_date": "2020-01-01"}
+    ).json()
+    client.post("/api/projects", json={"title": "끝난 과제", "status": "done", "due_date": "2020-01-01"})
+    client.post("/api/projects", json={"title": "중단한 과제", "status": "dropped", "due_date": "2020-01-01"})
+
+    overdue = [item["id"] for item in client.get("/api/projects", params={"due": "overdue"}).json()]
+    assert overdue == [late["id"]]

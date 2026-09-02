@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, Project } from "../types";
 import { dueLabel, formatDate } from "../util";
+import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
@@ -22,6 +23,8 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [problems, setProblems] = useState<{ path: string; reason: string }[]>([]);
+  // 과제가 늘거나 다시 읽었을 때 대시보드도 같이 갱신한다.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const load = useCallback(() => {
     api
@@ -37,6 +40,12 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
 
   return (
     <section className="project-list">
+      <Dashboard
+        refreshKey={refreshKey}
+        filters={filters}
+        onFilter={(key, value) => setFilter(key, value)}
+      />
+
       <div className="toolbar">
         <div className="filters">
           <select value={filters.status} onChange={(event) => setFilter("status", event.target.value)}>
@@ -49,6 +58,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           </select>
           <select value={filters.type} onChange={(event) => setFilter("type", event.target.value)}>
             <option value="">속성 전체</option>
+            <option value="none">미지정</option>
             {meta.types.map((type) => (
               <option key={type.key} value={type.key}>
                 {type.label}
@@ -116,6 +126,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
               setProblems(result.problems);
               load();
               onMetaChange();
+              setRefreshKey((value) => value + 1);
             }}
             title="폴더를 직접 수정했을 때 다시 읽어들입니다"
           >
@@ -136,6 +147,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
               const created = await api.createProject(payload);
               setCreating(false);
               onMetaChange();
+              setRefreshKey((value) => value + 1);
               // 만들면 대개 곧바로 개요나 첫 기록을 쓴다. 상세로 데려간다.
               window.location.hash = `#/projects/${created.id}`;
             }}

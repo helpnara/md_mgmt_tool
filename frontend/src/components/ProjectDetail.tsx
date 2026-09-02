@@ -9,6 +9,7 @@ import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import ExportMenu from "./ExportMenu";
 import ReportEditor from "./ReportEditor";
+import PreviewToggle, { usePreview } from "./PreviewToggle";
 import ProjectForm from "./ProjectForm";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
 
@@ -33,6 +34,7 @@ export default function ProjectDetail({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [editingProject, setEditingProject] = useState(false);
   const [editingOverview, setEditingOverview] = useState(false);
+  const [preview, togglePreview] = usePreview();
   const [overviewDraft, setOverviewDraft] = useState("");
   const [creatingEntry, setCreatingEntry] = useState(false);
   // 첨부 때문에 편집 도중 먼저 만들어진 기록. 편집기 아래 타임라인에 중복 표시하지 않는다.
@@ -89,7 +91,17 @@ export default function ProjectDetail({
   if (!project) return <div className="app-loading">불러오는 중…</div>;
 
   const due = dueLabel(project.due_date, project.status);
+  // 개요(index.md)는 과제 폴더 바로 아래에 있어 첨부 링크가 assets/… 이고,
+  // 진행일지는 logs/ 안에 있어 ../assets/… 이다. 기준 경로가 서로 다르다.
   const base = filesBase(project.dir_name);
+  const entryBase = filesBase(project.dir_name, "logs");
+  // 편집기를 연 동안에는 2단을 잠시 1단으로 돌려 전체 폭을 쓴다.
+  const editingSide: "left" | "right" | null =
+    creatingEntry || editingEntryId !== null
+      ? "right"
+      : editingOverview || openReport !== null
+        ? "left"
+        : null;
   // 마지막 보고로부터 며칠 지났는지 (요약 바에 표시)
   const sinceLastReport = project.last_reported_at
     ? Math.max(0, -(daysUntil(project.last_reported_at) ?? 0))
@@ -207,7 +219,7 @@ export default function ProjectDetail({
         )}
       </div>
 
-      <div className="detail-columns">
+      <div className={`detail-columns${editingSide ? ` editing editing-${editingSide}` : ""}`}>
       <div className="detail-left">
 
       <div className="card">
@@ -225,16 +237,19 @@ export default function ProjectDetail({
         </div>
         {editingOverview ? (
           <>
-            <div className="split">
+            <PreviewToggle on={preview} onToggle={togglePreview} />
+            <div className={preview ? "split" : "split solo"}>
               <textarea
                 value={overviewDraft}
                 onChange={(event) => setOverviewDraft(event.target.value)}
                 spellCheck={false}
               />
-              <div
-                className="preview markdown"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(overviewDraft, base) }}
-              />
+              {preview && (
+                <div
+                  className="preview markdown"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(overviewDraft, base) }}
+                />
+              )}
             </div>
             <div className="form-actions">
               <button
@@ -459,7 +474,7 @@ export default function ProjectDetail({
               {isOpen(entry, index) && (
                 <div
                   className="markdown"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.body ?? "", base) }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.body ?? "", entryBase) }}
                 />
               )}
               {isOpen(entry, index) && (filesByEntry.get(entry.id) ?? []).length > 0 && (

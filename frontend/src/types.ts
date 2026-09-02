@@ -129,3 +129,21 @@ export interface AppSettings {
   /** 지금은 설정에서 정한 사용자, 나중에는 로그인한 사용자가 된다. */
   author: string;
 }
+
+export interface DashboardCount {
+  key: string;
+  label: string;
+  count: number;
+}
+
+/** 메인 상단 대시보드. 지금 무엇을 봐야 하는지만 담는다. */
+export interface Dashboard {
+  total: number;
+  statuses: DashboardCount[];
+  types: DashboardCount[];
+  due_soon: number;
+  due_soon_days: number;
+  overdue: number;
+  report_date: string;
+  candidates: ReportCandidate[];
+}

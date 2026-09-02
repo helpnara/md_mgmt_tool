@@ -128,6 +128,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px; }
 .hint { color: var(--muted); font-size: 12px; }
 
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+/* 미리보기를 접으면 입력 칸이 두 배가 된다 */
+.split.solo { grid-template-columns: 1fr; }
+.split-head { display: flex; justify-content: flex-end; margin-top: 10px; margin-bottom: -6px; }
 .preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; overflow: auto; background: #fcfcfd; }
 
 .markdown { font-size: 14px; }
@@ -141,6 +144,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px; }
 .markdown table { border-collapse: collapse; }
 .markdown th, .markdown td { border: 1px solid var(--border); padding: 5px 9px; }
 .markdown img { max-width: 100%; }
+/* 열이 많은 표가 좁은 칸을 뚫고 나가지 않게, 표만 가로로 스크롤된다 */
+.table-scroll { overflow-x: auto; margin: 8px 0; }
+.table-scroll > table { margin: 0; }
 
 .back { display: inline-block; margin-bottom: 12px; color: var(--muted); text-decoration: none; font-size: 13px; }
 .back:hover { color: var(--accent); }
@@ -349,6 +355,10 @@ button { white-space: nowrap; }
 @media (min-width: 1440px) {
   .detail-columns { grid-template-columns: minmax(340px, min(45%, 700px)) minmax(520px, 1fr); }
 }
+/* 편집기를 연 동안에는 2단을 잠시 1단으로 — 쓸 때는 넓게, 볼 때는 2단.
+   편집 중인 칸을 위로 올려 스크롤 없이 바로 보이게 한다. */
+.detail-columns.editing { grid-template-columns: 1fr; }
+.detail-columns.editing-right .detail-right { order: -1; }
 
 /* ── 진행일지 접기 · 검색 강조 ───────────────────── */
 .timeline-actions { display: flex; gap: 8px; align-items: center; }
@@ -368,3 +378,61 @@ button { white-space: nowrap; }
 
 /* 개요의 안내 문구(인용문)는 실제 내용과 구분되게 흐리게 */
 .markdown blockquote { margin: 6px 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--border); color: var(--muted); font-size: 13px; }
+
+/* ── 메인 상단 대시보드 ──────────────────────────── */
+/* 슬림하게. 목록 위에 얹히는 한 뼘이지 또 하나의 화면이 아니다. */
+.dashboard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dashboard.closed { padding: 6px 14px; }
+.dash-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.dash-fold {
+  flex: 0 0 auto; background: none; border: none; padding: 2px 4px;
+  font-weight: 700; font-size: 13px; color: var(--text); cursor: pointer;
+}
+.dash-fold:hover { color: var(--accent); }
+.dash-label { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
+.dash-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.dash-chip {
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+  background: #fcfcfd; font-size: 12px; color: var(--text); cursor: pointer;
+}
+.dash-chip b { font-weight: 700; margin-left: 2px; }
+.dash-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.dash-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dash-chip.type { background: #f8fafc; }
+
+/* 마감 경고는 작게. 있을 때만 눈에 띄면 된다. */
+.dash-warn { display: flex; gap: 6px; margin-left: auto; flex: 0 0 auto; }
+.dash-mini {
+  padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  border: 1px solid transparent; cursor: pointer;
+}
+.dash-mini.warn { background: #fef3c7; color: #92400e; }
+.dash-mini.danger { background: #fee2e2; color: #991b1b; }
+.dash-mini.on { outline: 2px solid currentColor; outline-offset: -2px; }
+
+.dash-candidates { border-top: 1px solid var(--border); padding-top: 8px; }
+.dash-more { margin-left: auto; font-size: 12px; color: var(--accent); text-decoration: none; }
+.dash-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.dash-list li { min-width: 0; }
+.dash-list a {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 4px 8px; border-radius: 6px; text-decoration: none; color: var(--text); font-size: 13px;
+}
+.dash-list a:hover { background: var(--accent-soft); }
+.dash-title { flex: 0 1 auto; min-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.dash-reason { flex: 0 0 auto; margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.dash-reason .accent { color: var(--accent); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .dash-warn { margin-left: 0; }
+  .dash-reason { margin-left: 0; }
+}

@@ -239,6 +239,7 @@ def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list
                 "id": project["id"],
                 "title": project["title"],
                 "status": project["status"],
+                "type": project["type"],
                 "group": project["grp"],
                 "due_date": project["due_date"],
                 "last_reported_at": last_reported,

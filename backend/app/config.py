@@ -23,6 +23,9 @@ STATUS_LABELS: dict[str, str] = {key: label for key, label, _ in STATUSES}
 DEFAULT_STATUS = "in_progress"
 # 보드에서 기본 접어 두는 상태
 COLLAPSED_STATUSES = {"done", "dropped"}
+# 끝난 과제 — 마감이 지났다고 경고하지 않는다.
+# (보류는 멈춰 있을 뿐 끝난 것이 아니라서 그대로 경고한다. util.ts 의 FINISHED_STATUSES 와 같은 뜻)
+FINISHED_STATUSES: tuple[str, ...] = ("done", "dropped")
 
 # 과제 속성 — 과제의 '성격'. 상태와 달리 시간이 지나도 잘 바뀌지 않는다.
 # 과제당 하나만 지정한다.

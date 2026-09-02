@@ -29,6 +29,10 @@ renderer.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   return renderLink(tokens, idx, options, env, self);
 };
 
+// 열이 많은 표는 좁은 칸을 그대로 뚫고 나간다. 표만 가로로 스크롤되게 감싼다.
+renderer.renderer.rules.table_open = () => '<div class="table-scroll"><table>';
+renderer.renderer.rules.table_close = () => "</table></div>";
+
 /** base를 주면 첨부 링크가 실제 파일을 가리키도록 렌더링한다. */
 export function renderMarkdown(text: string, base?: string): string {
   return renderer.render(text ?? "", { base });

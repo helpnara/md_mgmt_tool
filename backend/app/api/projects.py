@@ -4,7 +4,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..config import STATUS_KEYS, get_settings
+from ..config import FINISHED_STATUSES, STATUS_KEYS, get_settings
 from ..deps import get_db
 from ..vault.markdown import ExternalChangeError
 from ..vault.paths import FileInUseError
@@ -62,12 +62,16 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     }
 
 
-# 마감 기준 빠른 필터: 값 → (SQL 조건, 파라미터 생성기)
+# 마감 기준 빠른 필터.
+# 끝난 과제(완료·중단)는 빼 둔다 — 마감이 지났다고 경고할 이유가 없고,
+# 무엇보다 대시보드가 세는 수와 이 필터가 거르는 수가 어긋나면 안 된다.
+_NOT_FINISHED = f"p.status NOT IN ({','.join(repr(s) for s in FINISHED_STATUSES)})"
+_UPCOMING = f"p.due_date IS NOT NULL AND p.due_date >= DATE('now', 'localtime') AND {_NOT_FINISHED}"
 DUE_FILTERS = {
-    "overdue": "p.due_date IS NOT NULL AND p.due_date < DATE('now', 'localtime')",
-    "7": "p.due_date IS NOT NULL AND p.due_date <= DATE('now', 'localtime', '+7 day')",
-    "14": "p.due_date IS NOT NULL AND p.due_date <= DATE('now', 'localtime', '+14 day')",
-    "30": "p.due_date IS NOT NULL AND p.due_date <= DATE('now', 'localtime', '+30 day')",
+    "overdue": f"p.due_date IS NOT NULL AND p.due_date < DATE('now', 'localtime') AND {_NOT_FINISHED}",
+    "7": f"{_UPCOMING} AND p.due_date <= DATE('now', 'localtime', '+7 day')",
+    "14": f"{_UPCOMING} AND p.due_date <= DATE('now', 'localtime', '+14 day')",
+    "30": f"{_UPCOMING} AND p.due_date <= DATE('now', 'localtime', '+30 day')",
 }
 
 
@@ -87,7 +91,10 @@ def list_projects(
     if status:
         where.append("p.status = ?")
         params.append(status)
-    if type:
+    if type == "none":
+        # 속성을 아직 안 정한 과제만. 대시보드의 '미지정' 칸이 이 값을 쓴다.
+        where.append("(p.type IS NULL OR p.type = '')")
+    elif type:
         where.append("p.type = ?")
         params.append(type)
     if group:

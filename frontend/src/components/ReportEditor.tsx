@@ -7,6 +7,7 @@ import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
 import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
+import PreviewToggle, { usePreview } from "./PreviewToggle";
 
 interface UploadState {
   key: string;
@@ -33,6 +34,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploads, setUploads] = useState<UploadState[]>([]);
   const [previewing, setPreviewing] = useState<Attachment | null>(null);
+  const [preview, togglePreview] = usePreview();
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -201,7 +203,9 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       {frozen ? (
         <div className="markdown snapshot" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />
       ) : (
-        <div className="split">
+        <>
+        <PreviewToggle on={preview} onToggle={togglePreview} />
+        <div className={preview ? "split" : "split solo"}>
           <textarea
             ref={textareaRef}
             value={body}
@@ -218,8 +222,11 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             }}
             spellCheck={false}
           />
-          <div className="preview markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />
+          {preview && (
+            <div className="preview markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />
+          )}
         </div>
+        </>
       )}
 
       {uploads.length > 0 && (
