@@ -133,8 +133,12 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           />
         </label>
         <label>
-          태그 (쉼표 구분)
-          <input value={form.tags} onChange={(event) => update("tags", event.target.value)} />
+          태그(예 : 공정, 쉼표 구분)
+          <input
+            value={form.tags}
+            onChange={(event) => update("tags", event.target.value)}
+            placeholder="예: 공정, 수명평가"
+          />
         </label>
       </div>
       {error && <p className="form-error">{error}</p>}
