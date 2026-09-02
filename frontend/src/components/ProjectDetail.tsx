@@ -289,12 +289,14 @@ export default function ProjectDetail({
                 <button className="report-open" onClick={() => setOpenReport(report.id === openReport ? null : report.id)}>
                   <span className="report-date">{report.report_date}</span>
                   {report.audience ? (
-                    <span className="report-audience">{report.audience}</span>
+                    <span className="report-audience" title={report.audience}>{report.audience}</span>
                   ) : (
                     <span className="report-audience missing">(피보고자 미입력)</span>
                   )}
                   {report.frozen ? (
-                    <span className="report-done">보고 완료({formatDateTime(report.frozen_at)})</span>
+                    <span className="report-done" title={`보고 완료(${formatDateTime(report.frozen_at)})`}>
+                      보고 완료({formatDateTime(report.frozen_at)})
+                    </span>
                   ) : (
                     <span className="draft-tag">작성 중</span>
                   )}

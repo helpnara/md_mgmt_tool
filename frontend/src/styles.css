@@ -64,6 +64,11 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color:
 .vault-path { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
 
 main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px; }
+/* 넓은 화면에서는 본문을 넓게 쓴다 (좌우 여백 낭비 방지) */
+@media (min-width: 1440px) {
+  main { max-width: 1720px; }
+  .author-notice { max-width: 1720px; }
+}
 
 .app-loading, .app-error { padding: 40px; color: var(--muted); }
 .app-error { color: var(--danger); }
@@ -235,15 +240,16 @@ button { white-space: nowrap; }
 .nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 .report-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.report-list li { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px 4px 4px; background: #fcfcfd; }
+.report-list li { display: flex; align-items: center; gap: 8px; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px 4px 4px; background: #fcfcfd; }
+.report-list li > .ghost { flex: 0 0 auto; margin-left: auto; }
 .report-list li.frozen { border-left: 3px solid #64748b; }
 .report-list li.draft { border-left: 3px solid var(--warn); }
-.report-open { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--text); text-align: left; padding: 6px 8px; }
+.report-open { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; background: none; border: none; color: var(--text); text-align: left; padding: 6px 8px; }
 .report-open:hover { background: var(--accent-soft); border-radius: 6px; }
-.report-date { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.report-date { flex: 0 0 auto; font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
 .report-title { font-weight: 600; }
 .frozen-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 11px; }
-.draft-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 11px; }
+.draft-tag { flex: 0 0 auto; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 11px; }
 
 .report-editor { border-left: 3px solid var(--accent); }
 .report-editor.frozen { border-left-color: #64748b; background: #fbfbfc; }
@@ -311,9 +317,12 @@ button { white-space: nowrap; }
 
 /* ── 작성자 · 피보고자 표시 ──────────────────────── */
 .entry-author { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 11px; font-family: inherit; }
-.report-audience { font-weight: 600; }
+/* 칸이 좁아지면 피보고자 이름이 먼저 줄어든다 (보고 일시는 끝까지 남긴다) */
+.report-audience { font-weight: 600; flex: 0 1 auto; min-width: 6em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .report-audience.missing { font-weight: 400; color: #9aa3ad; }
-.report-done { color: #475569; font-size: 12px; }
+.report-done { flex: 0 0 auto; color: #475569; font-size: 12px; white-space: nowrap; }
+.report-open .muted { flex: 0 0 auto; white-space: nowrap; }
 .report-meta { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .report-meta label { max-width: 260px; }
 .report-meta .hint { padding-bottom: 6px; }
@@ -335,6 +344,10 @@ button { white-space: nowrap; }
 .detail-right .timeline-head { margin-top: 0; }
 @media (max-width: 1200px) {
   .detail-columns { grid-template-columns: 1fr; }
+}
+/* 넓은 화면에서 늘어난 폭은 수행 이력 쪽에 더 준다 */
+@media (min-width: 1440px) {
+  .detail-columns { grid-template-columns: minmax(340px, min(45%, 700px)) minmax(520px, 1fr); }
 }
 
 /* ── 진행일지 접기 · 검색 강조 ───────────────────── */
