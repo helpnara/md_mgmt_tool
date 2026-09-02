@@ -5,6 +5,7 @@ import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import type { Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
+import { scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
@@ -39,7 +40,12 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 보고 문서를 열면 좌측 칸이 맨 위로 올라온다. 문서가 있는 자리로 데려간다.
+  useEffect(() => scrollEditorIntoView(rootRef.current), []);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const base = filesBase(dirName, report.doc_dir);
@@ -117,6 +123,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
 
   return (
     <div
+      ref={rootRef}
       className={`report-editor card${frozen ? " frozen" : ""}`}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {

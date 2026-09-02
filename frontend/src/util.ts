@@ -54,3 +54,26 @@ export function todayIso(): string {
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   return now.toISOString().slice(0, 10);
 }
+
+/**
+ * 방금 연 편집기를 화면 안으로 데려온다.
+ *
+ * 편집기를 열면 2단이 1단으로 바뀌면서 화면 배치가 통째로 달라진다.
+ * 스크롤 위치는 그대로 남으므로, 목록 아래쪽 항목을 고치려고 [수정]을 누르면
+ * 편집기가 화면 밖으로 밀려 다시 찾아 내려가야 한다. 그 수고를 없앤다.
+ *
+ * 배치가 다시 그려진 뒤에 움직여야 엉뚱한 위치로 가지 않으므로 한 프레임 기다린다.
+ * 상단 고정 헤더에 가리지 않는 것은 CSS 의 scroll-margin-top 이 맡는다.
+ *
+ * 편집을 닫고 원래 자리로 되돌아갈 때는 block="center" 를 쓴다. 닫으면서 목록을
+ * 다시 읽어 오므로 높이가 조금 달라지는데, 가운데로 두면 그 정도 어긋남은 묻힌다.
+ */
+export function scrollEditorIntoView(
+  el: HTMLElement | null,
+  block: ScrollLogicalPosition = "start",
+): void {
+  if (!el) return;
+  requestAnimationFrame(() => {
+    el.scrollIntoView({ behavior: "smooth", block });
+  });
+}

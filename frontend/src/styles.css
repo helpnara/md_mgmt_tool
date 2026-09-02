@@ -359,6 +359,12 @@ button { white-space: nowrap; }
    편집 중인 칸을 위로 올려 스크롤 없이 바로 보이게 한다. */
 .detail-columns.editing { grid-template-columns: 1fr; }
 .detail-columns.editing-right .detail-right { order: -1; }
+/* 편집기를 열거나 닫으면 그 자리로 화면을 옮긴다(util.ts).
+   헤더는 화면이 좁아지면 두세 줄로 접혀 67px에서 183px까지 자라므로,
+   App.tsx 가 실제 높이를 --header-h 로 알려 준다. 그 아래에 세운다. */
+.entry-editor, .report-editor, .timeline .entry, .detail-left > .card {
+  scroll-margin-top: calc(var(--header-h, 67px) + 10px);
+}
 
 /* ── 진행일지 접기 · 검색 강조 ───────────────────── */
 .timeline-actions { display: flex; gap: 8px; align-items: center; }

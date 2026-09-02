@@ -4,7 +4,7 @@ import { filesBase, renderMarkdown } from "../markdown";
 import type { Entry } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
-import { todayIso } from "../util";
+import { scrollEditorIntoView, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 
@@ -51,7 +51,12 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
   const [restored, setRestored] = useState(false);
   const [preview, togglePreview] = usePreview();
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 열리자마자 그 자리로 데려간다 (1단으로 바뀌며 위치가 달라지기 때문).
+  useEffect(() => scrollEditorIntoView(rootRef.current), []);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   // 자동 저장 타이머가 항상 최신 값을 보게 한다.
   const stateRef = useRef({ entryId, date, title, body, tags });
@@ -228,6 +233,7 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
 
   return (
     <div
+      ref={rootRef}
       className="entry-editor card"
       onKeyDown={(event) => {
         // 문서 편집기 습관대로 Ctrl+S 로 저장한다 (브라우저 저장 창은 막는다).

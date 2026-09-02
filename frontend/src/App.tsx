@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import ProjectDetail from "./components/ProjectDetail";
 import ProjectList from "./components/ProjectList";
@@ -45,6 +45,23 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [author, setAuthor] = useState<string | null>(null);
   const [authorNoticeClosed, setAuthorNoticeClosed] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+
+  // 상단 헤더는 화면이 좁아지면 두세 줄로 접혀 67px에서 183px까지 자란다.
+  // 편집기로 화면을 옮길 때(util.ts) 제목이 헤더에 가리지 않도록 실제 높이를 CSS에 알려 준다.
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const publish = () =>
+      document.documentElement.style.setProperty(
+        "--header-h",
+        `${Math.round(header.getBoundingClientRect().height)}px`,
+      );
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(header);
+    return () => observer.disconnect();
+  });
 
   useEffect(() => {
     const onHashChange = () => {
@@ -69,7 +86,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
+      <header className="app-header" ref={headerRef}>
         <a className="brand" href="#/">
           과제 이력 관리
         </a>

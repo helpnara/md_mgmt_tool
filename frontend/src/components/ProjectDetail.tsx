@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
 import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes } from "../upload";
-import { daysUntil, dueLabel, formatDate, formatDateTime, periodText } from "../util";
+import { daysUntil, dueLabel, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import ExportMenu from "./ExportMenu";
@@ -35,11 +35,14 @@ export default function ProjectDetail({
   const [editingProject, setEditingProject] = useState(false);
   const [editingOverview, setEditingOverview] = useState(false);
   const [preview, togglePreview] = usePreview();
+  const overviewRef = useRef<HTMLDivElement>(null);
   const [overviewDraft, setOverviewDraft] = useState("");
   const [creatingEntry, setCreatingEntry] = useState(false);
   // 첨부 때문에 편집 도중 먼저 만들어진 기록. 편집기 아래 타임라인에 중복 표시하지 않는다.
   const [draftEntryId, setDraftEntryId] = useState<number | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
+  // 편집을 닫으면 배치가 다시 2단으로 돌아가므로, 고치던 기록 자리로 되돌려 놓는다.
+  const lastEditedEntry = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<{ items: Attachment[]; total_bytes: number; orphan_count: number }>(
     { items: [], total_bytes: 0, orphan_count: 0 },
@@ -86,6 +89,24 @@ export default function ProjectDetail({
       window.clearTimeout(clear);
     };
   }, [openEntryId, entries.length]);
+
+  // 개요 편집을 열면 그 카드로 데려간다 (좌측 칸이 맨 위로 올라오기 때문).
+  useEffect(() => {
+    if (editingOverview) scrollEditorIntoView(overviewRef.current);
+  }, [editingOverview]);
+
+  // 진행일지 편집을 닫으면 2단으로 되돌아가면서 그 기록이 다시 아래로 내려간다.
+  // 방금 고치던 자리로 데려다 놓는다.
+  useEffect(() => {
+    if (editingEntryId !== null) {
+      lastEditedEntry.current = editingEntryId;
+      return;
+    }
+    const entryId = lastEditedEntry.current;
+    if (entryId === null) return;
+    lastEditedEntry.current = null;
+    scrollEditorIntoView(document.getElementById(`entry-${entryId}`), "center");
+  }, [editingEntryId]);
 
   if (error) return <p className="form-error">{error}</p>;
   if (!project) return <div className="app-loading">불러오는 중…</div>;
@@ -222,7 +243,7 @@ export default function ProjectDetail({
       <div className={`detail-columns${editingSide ? ` editing editing-${editingSide}` : ""}`}>
       <div className="detail-left">
 
-      <div className="card">
+      <div className="card" ref={overviewRef}>
         <div className="card-head">
           <h2>과제 개요</h2>
           <button
