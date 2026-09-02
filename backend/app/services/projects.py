@@ -6,23 +6,32 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..config import DEFAULT_STATUS, STATUS_KEYS, get_settings
+from ..config import DEFAULT_STATUS, STATUS_KEYS, TYPE_KEYS, get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
 
 # 카드 제목이 "과제 개요"이므로 본문은 같은 제목을 반복하지 않는다.
+# 각 항목이 무엇을 적는 자리인지 괄호로 안내하고, 사용자는 그 줄을 지우고 쓰면 된다.
 INDEX_TEMPLATE = """## 배경
+
+(왜 이 과제를 하는지 — 문제 상황, 요청 배경)
 
 ## 목표
 
+(무엇을 달성하면 끝인지 — 가능하면 수치로)
+
 ## 산출물
 
+(과제가 끝났을 때 남기는 결과물 — 예: 평가 보고서, 시제품, 측정 데이터, 특허 초안)
+
 ## 관련 링크
+
+(참고할 사내 위키·공유 폴더 주소, 관련 과제 번호 등)
 """
 
 META_ORDER = [
-    "id", "title", "status", "group", "tags", "owners",
+    "id", "title", "status", "type", "group", "tags", "owners",
     "start_date", "due_date", "created_at", "updated_at",
 ]
 
@@ -77,6 +86,10 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     if status not in STATUS_KEYS:
         raise ValueError(f"알 수 없는 상태: {status}")
 
+    project_type = data.get("type") or None
+    if project_type and project_type not in TYPE_KEYS:
+        raise ValueError(f"알 수 없는 속성: {project_type}")
+
     project_id = next_project_id()
     dir_name = paths.project_dir_name(project_id, title)
     directory = paths.safe_join(settings.projects_dir, dir_name)
@@ -89,6 +102,7 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "id": project_id,
         "title": title,
         "status": status,
+        "type": project_type,
         "group": data.get("group") or None,
         "tags": data.get("tags") or [],
         "owners": normalize_owners(data.get("owners") or data.get("owner")),
@@ -112,6 +126,8 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
 
     if "status" in updates and updates["status"] not in STATUS_KEYS:
         raise ValueError(f"알 수 없는 상태: {updates['status']}")
+    if updates.get("type") and updates["type"] not in TYPE_KEYS:
+        raise ValueError(f"알 수 없는 속성: {updates['type']}")
 
     body = updates.pop("body", None)
     if "owners" in updates or "owner" in updates:

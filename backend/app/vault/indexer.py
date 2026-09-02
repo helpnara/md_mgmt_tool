@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from ..config import DEFAULT_STATUS, STATUS_KEYS, get_settings
+from ..config import TYPE_KEYS, get_settings, normalize_status
 from . import markdown as md
 
 
@@ -153,19 +153,21 @@ def index_project(
     project_id = _as_str(doc.meta.get("id")) or project_id_from_dir_name(project_dir.name)
     # owners(복수)가 우선이고, 예전 문서의 owner(단수)도 그대로 읽는다.
     owners = _as_list(doc.meta.get("owners")) or _as_list(doc.meta.get("owner"))
-    status = _as_str(doc.meta.get("status")) or DEFAULT_STATUS
-    if status not in STATUS_KEYS:
-        status = DEFAULT_STATUS
+    # 예전에 상태로 쓰이던 '기획보고' 같은 값은 상태+속성으로 나눠 읽는다.
+    status, implied_type = normalize_status(_as_str(doc.meta.get("status")))
+    project_type = _as_str(doc.meta.get("type")) or implied_type
+    if project_type not in TYPE_KEYS:
+        project_type = None
     updated_at = _as_str(doc.meta.get("updated_at"))
 
     conn.execute(
         """
-        INSERT INTO project(id, dir_name, title, status, grp, owner, start_date, due_date,
+        INSERT INTO project(id, dir_name, title, status, type, grp, owner, start_date, due_date,
                             created_at, updated_at, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
-          grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
+          type=excluded.type, grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
           due_date=excluded.due_date, created_at=excluded.created_at,
           updated_at=excluded.updated_at, body=excluded.body, file_mtime=excluded.file_mtime
         """,
@@ -174,6 +176,7 @@ def index_project(
             project_dir.name,
             _as_str(doc.meta.get("title")) or project_dir.name,
             status,
+            project_type,
             _as_str(doc.meta.get("group")),
             ", ".join(owners) or None,
             _as_str(doc.meta.get("start_date")),

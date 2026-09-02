@@ -13,6 +13,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   const [form, setForm] = useState({
     title: initial?.title ?? "",
     status: initial?.status ?? "in_progress",
+    type: initial?.type ?? "",
     group: initial?.group ?? "",
     owners: (initial?.owners ?? []).join(", "),
     start_date: initial?.start_date ?? "",
@@ -32,6 +33,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
       await onSubmit({
         title: form.title.trim(),
         status: form.status,
+        type: form.type || null,
         group: form.group.trim() || null,
         owners: form.owners
           .split(",")
@@ -69,6 +71,17 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             {meta.statuses.map((status) => (
               <option key={status.key} value={status.key}>
                 {status.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          속성
+          <select value={form.type ?? ""} onChange={(event) => update("type", event.target.value)}>
+            <option value="">선택 안 함</option>
+            {meta.types.map((type) => (
+              <option key={type.key} value={type.key}>
+                {type.label}
               </option>
             ))}
           </select>

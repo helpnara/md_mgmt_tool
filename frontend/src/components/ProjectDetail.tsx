@@ -10,7 +10,7 @@ import EntryEditor from "./EntryEditor";
 import ExportMenu from "./ExportMenu";
 import ReportEditor from "./ReportEditor";
 import ProjectForm from "./ProjectForm";
-import StatusBadge from "./StatusBadge";
+import StatusBadge, { TypeBadge } from "./StatusBadge";
 
 interface Props {
   projectId: string;
@@ -64,6 +64,14 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
   const due = dueLabel(project.due_date);
   const base = filesBase(project.dir_name);
   const visibleEntries = entries.filter((entry) => entry.id !== draftEntryId);
+  // 기록마다 붙은 첨부를 타임라인에서 바로 확인할 수 있게 묶어 둔다.
+  const filesByEntry = new Map<number, Attachment[]>();
+  for (const file of files.items) {
+    if (file.entry_id === null) continue;
+    const list = filesByEntry.get(file.entry_id) ?? [];
+    list.push(file);
+    filesByEntry.set(file.entry_id, list);
+  }
 
   return (
     <section className="project-detail">
@@ -78,6 +86,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
             <h1>{project.title}</h1>
             <div className="meta-line">
               <StatusBadge status={project.status} meta={meta} />
+              {project.type && <TypeBadge type={project.type} meta={meta} />}
               {project.group && <span className="chip">{project.group}</span>}
               {project.tags.map((tag) => (
                 <span key={tag} className="tag">
@@ -338,6 +347,17 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
                 className="markdown"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.body ?? "", base) }}
               />
+              {(filesByEntry.get(entry.id) ?? []).length > 0 && (
+                <div className="entry-files">
+                  <span className="muted">첨부</span>
+                  {(filesByEntry.get(entry.id) ?? []).map((file) => (
+                    <a key={file.id} href={file.url} target="_blank" rel="noreferrer" className="file-chip">
+                      {file.is_image ? "🖼" : "📄"} {file.orig_name}
+                      <span className="muted">{formatBytes(file.size_bytes)}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
             </li>
           ),
         )}

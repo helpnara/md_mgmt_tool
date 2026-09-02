@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS project (
   dir_name         TEXT NOT NULL UNIQUE,
   title            TEXT NOT NULL,
   status           TEXT NOT NULL,
+  type             TEXT,
   grp              TEXT,
   owner            TEXT,
   start_date       TEXT,

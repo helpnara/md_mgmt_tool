@@ -13,7 +13,7 @@ import sqlite3
 import zipfile
 from pathlib import Path
 
-from ..config import STATUS_LABELS
+from ..config import STATUS_LABELS, TYPE_LABELS
 from .attachments import ENTRY_DOC_DIR, PROJECT_DOC_DIR, resolve_link
 from .projects import project_dir
 from .reports import report_doc_dir
@@ -108,6 +108,7 @@ def merged_markdown(
                 None,
                 [
                     f"상태: {STATUS_LABELS.get(project['status'], project['status'])}",
+                    f"속성: {TYPE_LABELS[project['type']]}" if project["type"] in TYPE_LABELS else None,
                     f"기간: {project['start_date'] or '—'} ~ {project['due_date'] or '—'}",
                     f"그룹: {project['grp']}" if project["grp"] else None,
                     f"태그: {', '.join(tags)}" if tags else None,

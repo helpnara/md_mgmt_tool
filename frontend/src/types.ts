@@ -5,8 +5,14 @@ export interface StatusInfo {
   collapsed: boolean;
 }
 
+export interface TypeInfo {
+  key: string;
+  label: string;
+}
+
 export interface Meta {
   statuses: StatusInfo[];
+  types: TypeInfo[];
   groups: string[];
   tags: string[];
   owners: string[];
@@ -18,6 +24,7 @@ export interface Project {
   id: string;
   title: string;
   status: string;
+  type: string | null;
   group: string | null;
   owners: string[];
   start_date: string | null;
@@ -91,6 +98,7 @@ export interface ReportCandidate {
   id: string;
   title: string;
   status: string;
+  type: string | null;
   group: string | null;
   due_date: string | null;
   last_reported_at: string | null;

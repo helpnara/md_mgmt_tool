@@ -45,6 +45,7 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "id": row["id"],
         "title": row["title"],
         "status": row["status"],
+        "type": row["type"],
         "group": row["grp"],
         "owners": _owners(conn, row["id"]),
         "start_date": row["start_date"],
@@ -72,6 +73,7 @@ DUE_FILTERS = {
 def list_projects(
     conn: sqlite3.Connection = Depends(get_db),
     status: str | None = None,
+    type: str | None = None,
     group: str | None = None,
     tag: str | None = None,
     owner: str | None = None,
@@ -83,6 +85,9 @@ def list_projects(
     if status:
         where.append("p.status = ?")
         params.append(status)
+    if type:
+        where.append("p.type = ?")
+        params.append(type)
     if group:
         where.append("p.grp = ?")
         params.append(group)

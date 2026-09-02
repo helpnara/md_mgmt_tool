@@ -4,7 +4,7 @@ import type { Meta, Project } from "../types";
 import { dueLabel, formatDate } from "../util";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
-import StatusBadge from "./StatusBadge";
+import StatusBadge, { TypeBadge } from "./StatusBadge";
 
 interface Props {
   meta: Meta;
@@ -13,7 +13,9 @@ interface Props {
 
 export default function ProjectList({ meta, onMetaChange }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [filters, setFilters] = useState({ status: "", group: "", tag: "", owner: "", due: "", sort: "updated" });
+  const [filters, setFilters] = useState({
+    status: "", type: "", group: "", tag: "", owner: "", due: "", sort: "updated",
+  });
   const [view, setView] = useState<"table" | "board">(
     () => (localStorage.getItem("md-mgmt:view") === "board" ? "board" : "table"),
   );
@@ -42,6 +44,14 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
             {meta.statuses.map((status) => (
               <option key={status.key} value={status.key}>
                 {status.label}
+              </option>
+            ))}
+          </select>
+          <select value={filters.type} onChange={(event) => setFilter("type", event.target.value)}>
+            <option value="">속성 전체</option>
+            {meta.types.map((type) => (
+              <option key={type.key} value={type.key}>
+                {type.label}
               </option>
             ))}
           </select>
@@ -164,6 +174,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           <tr>
             <th>과제</th>
             <th>상태</th>
+            <th>속성</th>
             <th>그룹</th>
             <th>담당자</th>
             <th>태그</th>
@@ -183,6 +194,9 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
                 </td>
                 <td>
                   <StatusBadge status={project.status} meta={meta} />
+                </td>
+                <td>
+                  <TypeBadge type={project.type} meta={meta} />
                 </td>
                 <td>{project.group ?? "—"}</td>
                 <td className="owners">
@@ -206,7 +220,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           })}
           {projects.length === 0 && (
             <tr>
-              <td colSpan={8} className="empty">
+              <td colSpan={9} className="empty">
                 과제가 없습니다. [과제 추가]로 시작하세요.
               </td>
             </tr>

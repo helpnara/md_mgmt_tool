@@ -35,6 +35,7 @@ export default function ReportEditor({ report, dirName, onChanged, onClose }: Pr
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const base = filesBase(dirName, report.doc_dir);
   const frozen = report.frozen;
@@ -192,7 +193,24 @@ export default function ReportEditor({ report, dirName, onChanged, onClose }: Pr
       <div className="attachment-panel">
         <div className="card-head">
           <h3>보고 자료 ({attachments.length})</h3>
-          {!frozen && <span className="hint">보고에 사용한 엑셀·이미지를 끌어다 놓으세요.</span>}
+          {!frozen && (
+            <div className="attach-actions">
+              <span className="hint">엑셀·이미지를 끌어다 놓아도 됩니다.</span>
+              <button className="attach-button" onClick={() => fileInputRef.current?.click()}>
+                📎 파일 첨부
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(event) => {
+                  void handleFiles(Array.from(event.target.files ?? []));
+                  event.target.value = "";
+                }}
+              />
+            </div>
+          )}
         </div>
         <AttachmentList
           attachments={attachments}

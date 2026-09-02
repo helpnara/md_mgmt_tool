@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ProjectCreate(BaseModel):
     title: str
     status: str | None = None
+    type: str | None = None
     group: str | None = None
     owners: list[str] = Field(default_factory=list)
     start_date: str | None = None
@@ -19,6 +20,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     title: str | None = None
     status: str | None = None
+    type: str | None = None
     group: str | None = None
     owners: list[str] | None = None
     start_date: str | None = None

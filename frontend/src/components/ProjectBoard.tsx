@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Meta, Project } from "../types";
 import { dueLabel, formatDate } from "../util";
+import { TypeBadge } from "./StatusBadge";
 
 interface Props {
   meta: Meta;
@@ -49,6 +50,7 @@ export default function ProjectBoard({ meta, projects }: Props) {
                       <span className="project-id">{project.id}</span>
                       <h3>{project.title}</h3>
                       <div className="board-meta">
+                        {project.type && <TypeBadge type={project.type} meta={meta} />}
                         {project.group && <span className="chip">{project.group}</span>}
                         {project.owners.length > 0 && (
                           <span className="owner-chip">{project.owners.join(", ")}</span>

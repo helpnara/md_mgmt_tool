@@ -127,18 +127,22 @@ def test_archive_moves_project_to_trash(client, vault_dir):
     assert list((vault_dir / ".trash").iterdir())
 
 
-def test_meta_exposes_seven_statuses_in_order(client):
-    statuses = client.get("/api/meta").json()["statuses"]
-    assert [item["label"] for item in statuses] == [
-        "기획보고", "제안", "검토", "진행중", "보류", "완료", "중단",
+def test_meta_exposes_statuses_and_types_separately(client):
+    """상태는 진행 단계만, 과제의 성격은 속성으로 분리한다."""
+    meta = client.get("/api/meta").json()
+    assert [item["label"] for item in meta["statuses"]] == [
+        "예정", "검토중", "진행중", "보류", "완료", "중단",
+    ]
+    assert [item["label"] for item in meta["types"]] == [
+        "스마트과제", "R&D", "투자", "기획보고", "국책과제",
     ]
 
 
 def test_project_filters(client):
     create_project(client)
-    create_project(client, title="양극재 개발", group="소재", status="review", tags=["소재"])
+    create_project(client, title="양극재 개발", group="소재", status="reviewing", tags=["소재"])
 
-    assert len(client.get("/api/projects", params={"status": "review"}).json()) == 1
+    assert len(client.get("/api/projects", params={"status": "reviewing"}).json()) == 1
     assert len(client.get("/api/projects", params={"group": "차세대전지"}).json()) == 1
     assert len(client.get("/api/projects", params={"tag": "소재"}).json()) == 1
     assert len(client.get("/api/projects").json()) == 2

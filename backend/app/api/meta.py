@@ -4,7 +4,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends
 
-from ..config import COLLAPSED_STATUSES, STATUSES, get_settings
+from ..config import COLLAPSED_STATUSES, PROJECT_TYPES, STATUSES, get_settings
 from ..deps import get_db
 from ..vault.indexer import reindex_all
 
@@ -35,6 +35,7 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
             {"key": key, "label": label, "candidate": candidate, "collapsed": key in COLLAPSED_STATUSES}
             for key, label, candidate in STATUSES
         ],
+        "types": [{"key": key, "label": label} for key, label in PROJECT_TYPES],
         "groups": groups,
         "tags": tags,
         "owners": owners,

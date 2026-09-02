@@ -50,6 +50,7 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
   const [restored, setRestored] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // 자동 저장 타이머가 항상 최신 값을 보게 한다.
   const stateRef = useRef({ entryId, date, title, body, tags });
   stateRef.current = { entryId, date, title, body, tags };
@@ -178,11 +179,16 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
       return;
     }
 
-    for (const file of files) {
-      const key = `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      // 이미지 문법으로 두면 미리보기에 깨진 이미지가 보이므로 평문으로 표시한다.
-      const placeholder = `⏳ 업로드 중: ${file.name}`;
-      insertAtCursor(placeholder);
+    // 자리표시자는 한 번에 넣는다. 파일마다 커서 위치를 다시 읽으면, 앞 파일이
+    // 업로드되는 동안 본문이 길어져 두 번째 첨부가 첫 번째 링크 한가운데 끼어든다.
+    const placeholders = files.map((file, index) =>
+      files.length > 1 ? `⏳ 업로드 중: ${file.name} (${index + 1})` : `⏳ 업로드 중: ${file.name}`,
+    );
+    insertAtCursor(placeholders.join("\n"));
+
+    for (const [index, file] of files.entries()) {
+      const key = `${file.name}-${Date.now()}-${index}`;
+      const placeholder = placeholders[index];
 
       const handle = uploadAttachment(`/api/entries/${targetId}/attachments`, file, (loaded, total) => {
         setUploads((prev) =>
@@ -327,7 +333,22 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
       <div className="attachment-panel">
         <div className="card-head">
           <h3>첨부 ({attachments.length})</h3>
-          <span className="hint">이미지는 Ctrl+V, 그 밖의 파일은 끌어다 놓으면 첨부됩니다.</span>
+          <div className="attach-actions">
+            <span className="hint">이미지는 Ctrl+V, 파일은 끌어다 놓아도 됩니다.</span>
+            <button className="attach-button" onClick={() => fileInputRef.current?.click()}>
+              📎 파일 첨부
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(event) => {
+                void handleFiles(Array.from(event.target.files ?? []));
+                event.target.value = "";  // 같은 파일을 다시 골라도 반응하도록 비운다
+              }}
+            />
+          </div>
         </div>
         <AttachmentList
           attachments={attachments}

@@ -287,3 +287,24 @@ button { white-space: nowrap; }
 .problem-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .problem-list li { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .problem-list code { background: #fef3c7; color: #92400e; }
+
+/* ── 첨부 버튼과 기록별 첨부 표시 ─────────────────── */
+.attach-actions { display: flex; align-items: center; gap: 10px; }
+.attach-button { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); font-weight: 600; }
+.attach-button:hover { background: var(--accent-soft); filter: none; }
+.entry-files { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: #fcfcfd; color: var(--text); text-decoration: none; font-size: 12px; }
+.file-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── 과제 속성(성격) ─────────────────────────────── */
+.type-badge { display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; white-space: nowrap; }
+.type-smart { background: #ecfeff; color: #0e7490; border-color: #a5f3fc; }
+.type-rnd { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+.type-investment { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.type-plan_report { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+.type-national { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+
+/* 새 상태 값 색 */
+.status-planned { background: #f1f5f9; color: #475569; }
+.status-reviewing { background: #fef3c7; color: #92400e; }
