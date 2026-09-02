@@ -125,6 +125,8 @@ vault/projects/2026-001-리튬전지-장수명-셀-설계/
 ## 문서
 
 - [설계 문서](docs/DESIGN.md)
+- [TODO — 다음 버전에 반영할 개선 사항](docs/TODO.md)
+- [개발 로드맵 — 방향은 정해졌으나 나중에 만들 것](docs/ROADMAP.md)
 
 ## 개발
 
