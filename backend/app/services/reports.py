@@ -16,6 +16,7 @@ from ..config import get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
+from . import settings as settings_service
 from .projects import now_iso, project_dir
 
 # 진행일지 본문의 첨부 링크(../assets/…)를 보고 문서 위치에서 본 경로로 바꾼다.
@@ -82,13 +83,17 @@ def _draft_body(entries: list[sqlite3.Row]) -> str:
 
 
 def create_draft(
-    conn: sqlite3.Connection, project_id: str, report_date: str | None = None
+    conn: sqlite3.Connection,
+    project_id: str,
+    report_date: str | None = None,
+    author: str | None = None,
+    audience: str | None = None,
 ) -> int:
     directory = project_dir(conn, project_id)
     report_date = paths.validate_date(report_date, default_report_date())
-    folder = paths.safe_join(directory, "reports", report_date)
-    if (folder / "report.md").exists():
-        raise ValueError(f"{report_date} 보고 문서가 이미 있습니다.")
+    # 같은 날짜에 중간·완료 보고를 각각 남길 수 있어야 한다.
+    # 첫 건은 reports/2026-09-08/, 다음부터 -2, -3 … 을 붙인다.
+    folder = paths.unique_path(directory / "reports", report_date, "")
     (folder / "assets").mkdir(parents=True, exist_ok=True)
 
     entries = unreported_entries(conn, project_id)
@@ -98,20 +103,23 @@ def create_draft(
         "covers_from": entries[0]["date"] if entries else None,
         "covers_to": entries[-1]["date"] if entries else None,
         "covered_entries": [row["rel_path"] for row in entries],
+        "author": settings_service.current_author(author) or None,
         "attachments": [],
         "frozen_at": None,
         "report_type": None,  # 예약 필드 — 필요해지면 UI에 노출한다
-        "audience": None,
+        "audience": (audience or "").strip() or None,
         "created_at": now_iso(),
     }
     md.save(folder / "report.md", md.MarkdownDoc(meta, _draft_body(entries)))
     index_project(conn, directory)
     conn.commit()
 
+    rel_path = (folder / "report.md").relative_to(directory).as_posix()
     row = conn.execute(
-        "SELECT id FROM report WHERE project_id = ? AND rel_path = ?",
-        (project_id, f"reports/{report_date}/report.md"),
+        "SELECT id FROM report WHERE project_id = ? AND rel_path = ?", (project_id, rel_path)
     ).fetchone()
+    if row is None:
+        raise RuntimeError(f"보고 문서를 인덱싱하지 못했습니다: {rel_path}")
     return int(row["id"])
 
 
@@ -127,15 +135,26 @@ def report_path(conn: sqlite3.Connection, report_id: int):
     return row, paths.safe_join(project_dir(conn, row["project_id"]), row["rel_path"])
 
 
+# 확정 뒤에도 고칠 수 있는 항목. 보고 '내용'이 아니라 꼬리표에 해당한다.
+EDITABLE_WHEN_FROZEN = {"audience", "title", "report_type"}
+META_FIELDS = {"title", "report_type", "audience"}
+
+
 def update_report(conn: sqlite3.Connection, report_id: int, updates: dict[str, Any]) -> None:
     row, path = report_path(conn, report_id)
     if row["frozen_at"]:
-        raise PermissionError("확정된 보고 문서는 수정할 수 없습니다. 먼저 확정을 해제하세요.")
+        # 피보고자를 잘못 적었다고 확정을 풀었다 다시 걸 이유는 없다.
+        # 다만 본문은 그대로 잠근다 — 그 시점의 기록이어야 하기 때문이다.
+        if set(updates) - EDITABLE_WHEN_FROZEN:
+            raise PermissionError(
+                "확정된 보고의 본문은 수정할 수 없습니다. "
+                "피보고자·제목만 고칠 수 있고, 내용을 고치려면 먼저 확정을 해제하세요."
+            )
 
     md.ensure_unchanged(path, row["file_mtime"])
     doc = md.load(path)
     body = updates.pop("body", None)
-    meta = md.merge_meta(doc.meta, {k: v for k, v in updates.items() if k in {"title", "report_type", "audience"}})
+    meta = md.merge_meta(doc.meta, {k: v for k, v in updates.items() if k in META_FIELDS})
     md.save(path, md.MarkdownDoc(meta, body if body is not None else doc.body))
     index_project(conn, project_dir(conn, row["project_id"]))
     conn.commit()

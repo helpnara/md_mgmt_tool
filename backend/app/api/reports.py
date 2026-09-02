@@ -17,11 +17,13 @@ router = APIRouter(tags=["reports"])
 
 class ReportCreate(BaseModel):
     report_date: str | None = None
+    audience: str | None = None
 
 
 class ReportUpdate(BaseModel):
     title: str | None = None
     body: str | None = None
+    audience: str | None = None  # 피보고자 또는 회의체명
 
     def changes(self) -> dict:
         return {k: v for k, v in self.model_dump().items() if v is not None}
@@ -33,6 +35,8 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, with_body: bool = Tru
         "project_id": row["project_id"],
         "report_date": row["report_date"],
         "title": row["title"],
+        "author": row["author"],
+        "audience": row["audience"],
         "rel_path": row["rel_path"],
         "doc_dir": svc.report_doc_dir(row["rel_path"]),
         "covers_from": row["covers_from"],
@@ -61,7 +65,7 @@ def create_draft(
     project_id: str, payload: ReportCreate, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     try:
-        report_id = svc.create_draft(conn, project_id, payload.report_date)
+        report_id = svc.create_draft(conn, project_id, payload.report_date, audience=payload.audience)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
     except paths.InvalidDateError as exc:

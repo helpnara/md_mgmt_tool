@@ -21,12 +21,15 @@ interface UploadState {
 interface Props {
   report: Report;
   dirName?: string;
+  /** 피보고자 자동완성 목록 */
+  audiences: string[];
   onChanged: () => void;
   onClose: () => void;
 }
 
-export default function ReportEditor({ report, dirName, onChanged, onClose }: Props) {
+export default function ReportEditor({ report, dirName, audiences, onChanged, onClose }: Props) {
   const [body, setBody] = useState(report.body ?? "");
+  const [audience, setAudience] = useState(report.audience ?? "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploads, setUploads] = useState<UploadState[]>([]);
   const [previewing, setPreviewing] = useState<Attachment | null>(null);
@@ -46,11 +49,27 @@ export default function ReportEditor({ report, dirName, onChanged, onClose }: Pr
 
   useEffect(refresh, [refresh]);
   useEffect(() => setBody(report.body ?? ""), [report.id, report.body]);
+  useEffect(() => setAudience(report.audience ?? ""), [report.id, report.audience]);
 
   async function save(): Promise<void> {
-    await api.updateReport(report.id, { body });
+    await api.updateReport(report.id, { body, audience });
     setDirty(false);
     onChanged();
+  }
+
+  /** 초안에 딸려 온 "진행 내용"만 지우고 보고서 뼈대는 남긴다. */
+  function clearProgressSection() {
+    if (!window.confirm("초안에 붙어 온 '진행 내용'을 지울까요? 요약·특이사항·다음 계획은 남습니다.")) {
+      return;
+    }
+    setBody((prev) => {
+      const start = prev.indexOf("## 진행 내용");
+      if (start < 0) return prev;
+      const rest = prev.slice(start + 1);
+      const nextHeading = rest.indexOf("\n## ");
+      return nextHeading < 0 ? prev.slice(0, start).trimEnd() + "\n" : prev.slice(0, start) + rest.slice(nextHeading + 1);
+    });
+    setDirty(true);
   }
 
   function insertAtCursor(snippet: string) {
@@ -117,6 +136,11 @@ export default function ReportEditor({ report, dirName, onChanged, onClose }: Pr
           )}
         </h2>
         <div className="form-actions" style={{ margin: 0 }}>
+          {!frozen && body.includes("## 진행 내용") && (
+            <button className="ghost" onClick={clearProgressSection}>
+              진행 내용 지우기
+            </button>
+          )}
           <button className="ghost" onClick={() => copy("excel")}>
             엑셀 셀로 복사
           </button>
@@ -129,11 +153,44 @@ export default function ReportEditor({ report, dirName, onChanged, onClose }: Pr
         </div>
       </div>
 
-      <p className="hint">
-        {report.covers_from
-          ? `포함 기간 ${report.covers_from} ~ ${report.covers_to} · 진행일지 ${report.entry_count}건`
-          : "포함된 진행일지가 없습니다."}
-      </p>
+      <div className="report-meta">
+        <label>
+          피보고자 · 회의체
+          <input
+            list="audience-options"
+            value={audience}
+            onChange={(event) => {
+              setAudience(event.target.value);
+              setDirty(true);
+            }}
+            placeholder="예: 팀장, 주간회의체"
+          />
+          <datalist id="audience-options">
+            {audiences.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        </label>
+        {frozen && (
+          <button
+            className="ghost small"
+            disabled={audience === (report.audience ?? "")}
+            onClick={async () => {
+              await api.updateReport(report.id, { audience });
+              setDirty(false);
+              onChanged();
+            }}
+          >
+            피보고자만 저장
+          </button>
+        )}
+        <span className="hint">
+          {report.covers_from
+            ? `포함 기간 ${report.covers_from} ~ ${report.covers_to} · 진행일지 ${report.entry_count}건`
+            : "포함된 진행일지가 없습니다."}
+          {report.author && ` · 작성 ${report.author}`}
+        </span>
+      </div>
 
       {frozen ? (
         <div className="markdown snapshot" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />

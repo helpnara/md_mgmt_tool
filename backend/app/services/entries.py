@@ -11,9 +11,10 @@ from ..config import get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
+from . import settings as settings_service
 from .projects import now_iso, project_dir
 
-META_ORDER = ["date", "title", "tags", "attachments", "created_at", "updated_at"]
+META_ORDER = ["date", "title", "author", "tags", "attachments", "created_at", "updated_at"]
 
 
 def _entry_row(conn: sqlite3.Connection, entry_id: int) -> sqlite3.Row:
@@ -42,9 +43,13 @@ def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]
     paths.safe_join(logs_dir, target.name)  # 최종 확인
 
     stamp = now_iso()
+    # 작성자는 설정에 정해 둔 사용자를 쓴다. 나중에 로그인이 생기면
+    # data["author"] 자리에 로그인 사용자가 들어온다.
+    author = settings_service.current_author(data.get("author"))
     meta = {
         "date": entry_date,
         "title": title,
+        "author": author or None,
         "tags": data.get("tags") or [],
         "attachments": [],
         "created_at": stamp,

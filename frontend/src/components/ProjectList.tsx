@@ -185,7 +185,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
         </thead>
         <tbody>
           {projects.map((project) => {
-            const due = dueLabel(project.due_date);
+            const due = dueLabel(project.due_date, project.status);
             return (
               <tr key={project.id} onClick={() => (window.location.hash = `#/projects/${project.id}`)}>
                 <td>
@@ -210,7 +210,8 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
                   ))}
                 </td>
                 <td>
-                  {due ? <span className={`due due-${due.tone}`}>{due.text}</span> : "—"}
+                  {/* 끝난 과제는 남은 날짜 없이 마감일만 보여 준다 */}
+                  {due && <span className={`due due-${due.tone}`}>{due.text}</span>}
                   <span className="due-date">{formatDate(project.due_date)}</span>
                 </td>
                 <td>{project.entry_count}건</td>

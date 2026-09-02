@@ -92,10 +92,11 @@ def _index_entries(
         updated_at = _as_str(doc.meta.get("updated_at"))
         conn.execute(
             """
-            INSERT INTO entry(project_id, rel_path, date, title, body, created_at, updated_at, file_mtime)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO entry(project_id, rel_path, date, title, author, body,
+                              created_at, updated_at, file_mtime)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(project_id, rel_path) DO UPDATE SET
-              date=excluded.date, title=excluded.title, body=excluded.body,
+              date=excluded.date, title=excluded.title, author=excluded.author, body=excluded.body,
               created_at=excluded.created_at, updated_at=excluded.updated_at,
               file_mtime=excluded.file_mtime
             """,
@@ -104,6 +105,7 @@ def _index_entries(
                 rel_path,
                 entry_date,
                 title,
+                _as_str(doc.meta.get("author")),
                 doc.body,
                 _as_str(doc.meta.get("created_at")),
                 updated_at,
@@ -219,11 +221,12 @@ def _index_reports(
         conn.execute(
             """
             INSERT INTO report(project_id, report_date, title, rel_path, covers_from, covers_to,
-                               body, frozen_at, report_type, audience, file_mtime)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               author, body, frozen_at, report_type, audience, file_mtime)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(project_id, rel_path) DO UPDATE SET
               report_date=excluded.report_date, title=excluded.title,
               covers_from=excluded.covers_from, covers_to=excluded.covers_to,
+              author=excluded.author,
               body=excluded.body, frozen_at=excluded.frozen_at,
               report_type=excluded.report_type, audience=excluded.audience,
               file_mtime=excluded.file_mtime
@@ -235,6 +238,7 @@ def _index_reports(
                 rel_path,
                 _as_str(doc.meta.get("covers_from")),
                 _as_str(doc.meta.get("covers_to")),
+                _as_str(doc.meta.get("author")),
                 doc.body,
                 _as_str(doc.meta.get("frozen_at")),
                 _as_str(doc.meta.get("report_type")),

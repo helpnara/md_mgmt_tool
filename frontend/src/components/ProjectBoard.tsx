@@ -40,7 +40,7 @@ export default function ProjectBoard({ meta, projects }: Props) {
             {!isCollapsed && (
               <div className="board-cards">
                 {items.map((project) => {
-                  const due = dueLabel(project.due_date);
+                  const due = dueLabel(project.due_date, project.status);
                   return (
                     <article
                       key={project.id}

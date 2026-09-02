@@ -108,13 +108,59 @@ def test_unfreeze_allows_correction_and_records_it(client, vault_dir):
     assert "unfrozen_at:" in path.read_text(encoding="utf-8")
 
 
-def test_duplicate_report_date_is_rejected(client):
+def test_several_reports_can_share_one_date(client, vault_dir):
+    """중간 보고와 완료 보고를 같은 날 각각 남길 수 있어야 한다."""
     project = make_project(client)
-    client.post(f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-08"})
-    again = client.post(
-        f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-08"}
+    add_entry(client, project["id"], "2026-09-01", "기록")
+
+    first = client.post(
+        f"/api/projects/{project['id']}/reports/draft",
+        json={"report_date": "2026-09-08", "audience": "팀장"},
     )
-    assert again.status_code == 409
+    second = client.post(
+        f"/api/projects/{project['id']}/reports/draft",
+        json={"report_date": "2026-09-08", "audience": "연구소장"},
+    )
+    assert first.status_code == 201 and second.status_code == 201
+
+    assert first.json()["rel_path"] == "reports/2026-09-08/report.md"
+    assert second.json()["rel_path"] == "reports/2026-09-08-2/report.md"
+    assert second.json()["report_date"] == "2026-09-08"  # 날짜는 그대로다
+    listed = client.get(f"/api/projects/{project['id']}/reports").json()
+    assert sorted(item["audience"] for item in listed) == ["연구소장", "팀장"]
+
+    folders = sorted(
+        path.name for path in (vault_dir / "projects" / f"{project['id']}-리튬전지-수명평가" / "reports").iterdir()
+    )
+    assert folders == ["2026-09-08", "2026-09-08-2"]
+
+
+def test_audience_can_be_fixed_after_freezing_but_body_cannot(client):
+    """피보고자를 잘못 적었다고 확정을 풀 이유는 없다. 본문은 그대로 잠근다."""
+    project = make_project(client)
+    add_entry(client, project["id"], "2026-09-01", "기록")
+    report = client.post(
+        f"/api/projects/{project['id']}/reports/draft",
+        json={"report_date": "2026-09-08", "audience": "팀정"},
+    ).json()
+    client.post(f"/api/reports/{report['id']}/freeze")
+
+    fixed = client.patch(f"/api/reports/{report['id']}", json={"audience": "팀장"})
+    assert fixed.status_code == 200
+    assert fixed.json()["audience"] == "팀장"
+
+    blocked = client.patch(f"/api/reports/{report['id']}", json={"body": "내용 수정"})
+    assert blocked.status_code == 409
+
+
+def test_audience_list_is_offered_for_autocomplete(client):
+    project = make_project(client)
+    for date, audience in (("2026-09-08", "팀장"), ("2026-09-15", "주간회의체")):
+        client.post(
+            f"/api/projects/{project['id']}/reports/draft",
+            json={"report_date": date, "audience": audience},
+        )
+    assert client.get("/api/meta").json()["audiences"] == ["주간회의체", "팀장"]
 
 
 def test_candidates_rank_by_elapsed_time_and_backlog(client):

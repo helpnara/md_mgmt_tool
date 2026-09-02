@@ -3,6 +3,7 @@ import { api } from "./api";
 import ProjectDetail from "./components/ProjectDetail";
 import ProjectList from "./components/ProjectList";
 import ReportCandidates from "./components/ReportCandidates";
+import Settings from "./components/Settings";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
 
@@ -10,7 +11,8 @@ type Route =
   | { name: "list" }
   | { name: "project"; id: string; reportId?: number }
   | { name: "search"; query: string }
-  | { name: "reports" };
+  | { name: "reports" }
+  | { name: "settings" };
 
 function readRoute(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
@@ -27,6 +29,7 @@ function readRoute(): Route {
   }
   if (path.startsWith("search")) return { name: "search", query: params.get("q") ?? "" };
   if (path.startsWith("reports")) return { name: "reports" };
+  if (path.startsWith("settings")) return { name: "settings" };
   return { name: "list" };
 }
 
@@ -71,6 +74,9 @@ export default function App() {
           <a href="#/reports" className={route.name === "reports" ? "active" : undefined}>
             보고 대상
           </a>
+          <a href="#/settings" className={route.name === "settings" ? "active" : undefined}>
+            설정
+          </a>
         </nav>
         <form
           className="search-box"
@@ -105,6 +111,7 @@ export default function App() {
           />
         )}
         {route.name === "reports" && <ReportCandidates meta={meta} />}
+        {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} />}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} />}
       </main>

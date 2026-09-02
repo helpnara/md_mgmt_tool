@@ -30,6 +30,13 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         row["name"]
         for row in conn.execute("SELECT DISTINCT name FROM project_owner ORDER BY name")
     ]
+    audiences = [
+        row["audience"]
+        for row in conn.execute(
+            "SELECT DISTINCT audience FROM report WHERE audience IS NOT NULL AND audience <> ''"
+            " ORDER BY audience"
+        )
+    ]
     return {
         "statuses": [
             {"key": key, "label": label, "candidate": candidate, "collapsed": key in COLLAPSED_STATUSES}
@@ -39,6 +46,7 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "groups": groups,
         "tags": tags,
         "owners": owners,
+        "audiences": audiences,
         "vault": str(get_settings().vault_dir),
         "report_cycle_days": get_settings().report_cycle_days,
     }

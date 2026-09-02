@@ -28,6 +28,7 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, with_body: bool = Tru
         "rel_path": row["rel_path"],
         "date": row["date"],
         "title": row["title"],
+        "author": row["author"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "tags": _tags(conn, row["id"]),

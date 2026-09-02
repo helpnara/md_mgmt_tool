@@ -16,6 +16,7 @@ export interface Meta {
   groups: string[];
   tags: string[];
   owners: string[];
+  audiences: string[];
   vault: string;
   report_cycle_days: number;
 }
@@ -44,6 +45,7 @@ export interface Entry {
   rel_path: string;
   date: string;
   title: string;
+  author: string | null;
   body?: string;
   created_at: string | null;
   updated_at: string | null;
@@ -84,6 +86,8 @@ export interface Report {
   project_id: string;
   report_date: string;
   title: string;
+  author: string | null;
+  audience: string | null;
   rel_path: string;
   doc_dir: string;
   covers_from: string | null;
@@ -113,4 +117,10 @@ export interface SpreadsheetPreview {
   orig_name: string;
   sheets: { name: string; rows: string[][]; images: string[] }[];
   truncated: boolean;
+}
+
+
+export interface AppSettings {
+  /** 지금은 설정에서 정한 사용자, 나중에는 로그인한 사용자가 된다. */
+  author: string;
 }

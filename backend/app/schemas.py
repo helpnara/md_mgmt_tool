@@ -36,6 +36,7 @@ class EntryCreate(BaseModel):
     date: str | None = None
     title: str | None = None
     body: str | None = None
+    author: str | None = None  # 비우면 설정의 작성자를 쓴다
     tags: list[str] = Field(default_factory=list)
 
 

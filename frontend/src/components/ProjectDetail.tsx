@@ -4,7 +4,7 @@ import { filesBase, renderMarkdown } from "../markdown";
 import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes } from "../upload";
-import { dueLabel, formatDate } from "../util";
+import { dueLabel, formatDate, formatDateTime } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import ExportMenu from "./ExportMenu";
@@ -61,7 +61,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
   if (error) return <p className="form-error">{error}</p>;
   if (!project) return <div className="app-loading">불러오는 중…</div>;
 
-  const due = dueLabel(project.due_date);
+  const due = dueLabel(project.due_date, project.status);
   const base = filesBase(project.dir_name);
   const visibleEntries = entries.filter((entry) => entry.id !== draftEntryId);
   // 기록마다 붙은 첨부를 타임라인에서 바로 확인할 수 있게 묶어 둔다.
@@ -213,10 +213,16 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
               <li key={report.id} className={report.frozen ? "frozen" : "draft"}>
                 <button className="report-open" onClick={() => setOpenReport(report.id === openReport ? null : report.id)}>
                   <span className="report-date">{report.report_date}</span>
-                  <span className="report-title">{report.title}</span>
-                  <span className={report.frozen ? "frozen-tag" : "draft-tag"}>
-                    {report.frozen ? "확정" : "작성 중"}
-                  </span>
+                  {report.audience ? (
+                    <span className="report-audience">{report.audience}</span>
+                  ) : (
+                    <span className="report-audience missing">(피보고자 미입력)</span>
+                  )}
+                  {report.frozen ? (
+                    <span className="report-done">보고 완료({formatDateTime(report.frozen_at)})</span>
+                  ) : (
+                    <span className="draft-tag">작성 중</span>
+                  )}
                   <span className="muted">진행일지 {report.entry_count}건</span>
                 </button>
                 <button
@@ -240,6 +246,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
         <ReportEditorLoader
           reportId={openReport}
           dirName={project.dir_name}
+          audiences={meta.audiences}
           onChanged={load}
           onClose={() => setOpenReport(null)}
         />
@@ -319,7 +326,10 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
             <li key={entry.id} className="card entry">
               <div className="entry-head">
                 <div>
-                  <span className="entry-date">{entry.date}</span>
+                  <span className="entry-date">
+                    {entry.date}
+                    {entry.author && <span className="entry-author">{entry.author}</span>}
+                  </span>
                   <h3>{entry.title}</h3>
                   {entry.tags.map((tag) => (
                     <span key={tag} className="tag">
@@ -373,11 +383,13 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
 function ReportEditorLoader({
   reportId,
   dirName,
+  audiences,
   onChanged,
   onClose,
 }: {
   reportId: number;
   dirName?: string;
+  audiences: string[];
   onChanged: () => void;
   onClose: () => void;
 }) {
@@ -394,6 +406,7 @@ function ReportEditorLoader({
     <ReportEditor
       report={report}
       dirName={dirName}
+      audiences={audiences}
       onChanged={() => {
         reload();
         onChanged();

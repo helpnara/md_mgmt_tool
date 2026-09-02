@@ -1,4 +1,4 @@
-import type { Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview } from "./types";
+import type { AppSettings, Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,14 +41,17 @@ export const api = {
       `/api/projects/${projectId}/attachments`,
     ),
   deleteAttachment: (id: number) => request<void>(`/api/attachments/${id}`, { method: "DELETE" }),
+  settings: () => request<AppSettings>("/api/settings"),
+  saveSettings: (payload: Partial<AppSettings>) =>
+    request<AppSettings>("/api/settings", { method: "PUT", body: JSON.stringify(payload) }),
   listReports: (projectId: string) => request<Report[]>(`/api/projects/${projectId}/reports`),
-  createDraft: (projectId: string, reportDate?: string) =>
+  createDraft: (projectId: string, reportDate?: string, audience?: string) =>
     request<Report>(`/api/projects/${projectId}/reports/draft`, {
       method: "POST",
-      body: JSON.stringify({ report_date: reportDate ?? null }),
+      body: JSON.stringify({ report_date: reportDate ?? null, audience: audience ?? null }),
     }),
   getReport: (id: number) => request<Report>(`/api/reports/${id}`),
-  updateReport: (id: number, payload: { title?: string; body?: string }) =>
+  updateReport: (id: number, payload: { title?: string; body?: string; audience?: string }) =>
     request<Report>(`/api/reports/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   freezeReport: (id: number) => request<Report>(`/api/reports/${id}/freeze`, { method: "POST" }),
   unfreezeReport: (id: number) => request<Report>(`/api/reports/${id}/unfreeze`, { method: "POST" }),
