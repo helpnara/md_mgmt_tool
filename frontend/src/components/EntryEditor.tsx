@@ -227,6 +227,13 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
   return (
     <div
       className="entry-editor card"
+      onKeyDown={(event) => {
+        // 문서 편집기 습관대로 Ctrl+S 로 저장한다 (브라우저 저장 창은 막는다).
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+          event.preventDefault();
+          void save({ close: false }).catch((err: Error) => setError(err.message));
+        }
+      }}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();

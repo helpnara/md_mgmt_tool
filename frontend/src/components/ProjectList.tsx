@@ -89,6 +89,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           <select value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)}>
             <option value="updated">최근 업데이트순</option>
             <option value="due">마감일순</option>
+            <option value="reported">보고 경과일순</option>
             <option value="created">생성순</option>
             <option value="title">이름순</option>
           </select>
@@ -132,10 +133,11 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
             submitLabel="만들기"
             onCancel={() => setCreating(false)}
             onSubmit={async (payload) => {
-              await api.createProject(payload);
+              const created = await api.createProject(payload);
               setCreating(false);
-              load();
               onMetaChange();
+              // 만들면 대개 곧바로 개요나 첫 기록을 쓴다. 상세로 데려간다.
+              window.location.hash = `#/projects/${created.id}`;
             }}
           />
         </div>

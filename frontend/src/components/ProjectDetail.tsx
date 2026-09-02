@@ -4,7 +4,7 @@ import { filesBase, renderMarkdown } from "../markdown";
 import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes } from "../upload";
-import { dueLabel, formatDate, formatDateTime } from "../util";
+import { daysUntil, dueLabel, formatDate, formatDateTime, periodText } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import ExportMenu from "./ExportMenu";
@@ -18,9 +18,17 @@ interface Props {
   onMetaChange: () => void;
   /** 보고 대상 화면에서 초안을 만들고 넘어온 경우 그 보고를 바로 연다. */
   openReportId?: number;
+  /** 검색 결과에서 넘어온 경우 그 진행일지로 이동해 잠깐 강조한다. */
+  openEntryId?: number;
 }
 
-export default function ProjectDetail({ projectId, meta, onMetaChange, openReportId }: Props) {
+export default function ProjectDetail({
+  projectId,
+  meta,
+  onMetaChange,
+  openReportId,
+  openEntryId,
+}: Props) {
   const [project, setProject] = useState<Project | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [editingProject, setEditingProject] = useState(false);
@@ -38,6 +46,10 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
   const [reports, setReports] = useState<Report[]>([]);
   const [openReport, setOpenReport] = useState<number | null>(openReportId ?? null);
   const [reportError, setReportError] = useState<string | null>(null);
+  // 기록이 쌓이면 전부 펼쳐져 스크롤이 길어진다. 최근 것만 펼쳐 둔다.
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [expandAll, setExpandAll] = useState(false);
+  const [highlightEntryId, setHighlightEntryId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     Promise.all([
@@ -58,12 +70,35 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
   useEffect(load, [load]);
   useEffect(() => setOpenReport(openReportId ?? null), [openReportId]);
 
+  // 검색 결과에서 넘어왔다면 그 기록을 펼치고 화면에 보이게 한다.
+  useEffect(() => {
+    if (!openEntryId || entries.length === 0) return;
+    setExpandedIds((prev) => new Set(prev).add(openEntryId));
+    setHighlightEntryId(openEntryId);
+    const timer = window.setTimeout(() => {
+      document.getElementById(`entry-${openEntryId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    const clear = window.setTimeout(() => setHighlightEntryId(null), 2600);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(clear);
+    };
+  }, [openEntryId, entries.length]);
+
   if (error) return <p className="form-error">{error}</p>;
   if (!project) return <div className="app-loading">불러오는 중…</div>;
 
   const due = dueLabel(project.due_date, project.status);
   const base = filesBase(project.dir_name);
+  // 마지막 보고로부터 며칠 지났는지 (요약 바에 표시)
+  const sinceLastReport = project.last_reported_at
+    ? Math.max(0, -(daysUntil(project.last_reported_at) ?? 0))
+    : null;
   const visibleEntries = entries.filter((entry) => entry.id !== draftEntryId);
+  const AUTO_OPEN = 5;
+  const isOpen = (entry: Entry, index: number) =>
+    expandAll || index < AUTO_OPEN || expandedIds.has(entry.id);
+  const collapsedCount = Math.max(0, visibleEntries.length - AUTO_OPEN);
   // 기록마다 붙은 첨부를 타임라인에서 바로 확인할 수 있게 묶어 둔다.
   const filesByEntry = new Map<number, Attachment[]>();
   for (const file of files.items) {
@@ -79,7 +114,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
         ← 과제 목록
       </a>
 
-      <div className="card">
+      <div className="card detail-header">
         <div className="detail-head">
           <div>
             <span className="project-id">{project.id}</span>
@@ -95,7 +130,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
               ))}
             </div>
             <div className="meta-line muted">
-              기간 {formatDate(project.start_date)} ~ {formatDate(project.due_date)}
+              <span>{periodText(project.start_date, project.due_date)}</span>
               {due && <span className={`due due-${due.tone}`}>{due.text}</span>}
               {project.owners.length > 0 && <span>담당 {project.owners.join(", ")}</span>}
               <span>최근 업데이트 {formatDate(project.updated_at)}</span>
@@ -119,6 +154,43 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
           </div>
         </div>
 
+        <dl className="summary-bar">
+          <div>
+            <dt>수행 이력</dt>
+            <dd>{project.entry_count}건</dd>
+          </div>
+          <div>
+            <dt>미보고</dt>
+            <dd className={(project.unreported_entries ?? 0) > 0 ? "accent" : undefined}>
+              {project.unreported_entries ?? 0}건
+            </dd>
+          </div>
+          <div>
+            <dt>보고 이력</dt>
+            <dd>{project.report_count ?? 0}건</dd>
+          </div>
+          <div>
+            <dt>마지막 보고</dt>
+            <dd>
+              {project.last_reported_at ? (
+                <>
+                  {formatDate(project.last_reported_at)}
+                  {sinceLastReport !== null && <span className="muted"> · D+{sinceLastReport}</span>}
+                </>
+              ) : (
+                <span className="muted">없음</span>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>첨부</dt>
+            <dd>
+              {project.attachment_count ?? 0}건
+              <span className="muted"> · {formatBytes(project.attachment_bytes ?? 0)}</span>
+            </dd>
+          </div>
+        </dl>
+
         {editingProject && (
           <ProjectForm
             meta={meta}
@@ -134,6 +206,9 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
           />
         )}
       </div>
+
+      <div className="detail-columns">
+      <div className="detail-left">
 
       <div className="card">
         <div className="card-head">
@@ -276,9 +351,19 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
         )}
       </div>
 
+      </div>
+      <div className="detail-right">
+
       <div className="card-head timeline-head">
         <h2>수행 이력 ({entries.length}건)</h2>
-        <button onClick={() => setCreatingEntry(true)}>기록 추가</button>
+        <div className="timeline-actions">
+          {collapsedCount > 0 && (
+            <button className="ghost small" onClick={() => setExpandAll((value) => !value)}>
+              {expandAll ? `최근 ${AUTO_OPEN}건만 보기` : `모두 펼치기 (+${collapsedCount})`}
+            </button>
+          )}
+          <button onClick={() => setCreatingEntry(true)}>기록 추가</button>
+        </div>
       </div>
 
       {creatingEntry && (
@@ -304,7 +389,7 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
       )}
 
       <ol className="timeline">
-        {visibleEntries.map((entry) =>
+        {visibleEntries.map((entry, index) =>
           editingEntryId === entry.id ? (
             <li key={entry.id}>
               <EntryEditor
@@ -323,8 +408,24 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
               />
             </li>
           ) : (
-            <li key={entry.id} className="card entry">
-              <div className="entry-head">
+            <li
+              key={entry.id}
+              id={`entry-${entry.id}`}
+              className={`card entry${isOpen(entry, index) ? "" : " collapsed"}${
+                highlightEntryId === entry.id ? " highlight" : ""
+              }`}
+            >
+              <div
+                className="entry-head"
+                onClick={() =>
+                  setExpandedIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(entry.id)) next.delete(entry.id);
+                    else next.add(entry.id);
+                    return next;
+                  })
+                }
+              >
                 <div>
                   <span className="entry-date">
                     {entry.date}
@@ -353,11 +454,13 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
                   </button>
                 </div>
               </div>
-              <div
-                className="markdown"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.body ?? "", base) }}
-              />
-              {(filesByEntry.get(entry.id) ?? []).length > 0 && (
+              {isOpen(entry, index) && (
+                <div
+                  className="markdown"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.body ?? "", base) }}
+                />
+              )}
+              {isOpen(entry, index) && (filesByEntry.get(entry.id) ?? []).length > 0 && (
                 <div className="entry-files">
                   <span className="muted">첨부</span>
                   {(filesByEntry.get(entry.id) ?? []).map((file) => (
@@ -375,6 +478,9 @@ export default function ProjectDetail({ projectId, meta, onMetaChange, openRepor
           <li className="empty card">아직 기록이 없습니다. [기록 추가]로 첫 진행 내용을 남겨 보세요.</li>
         )}
       </ol>
+
+      </div>
+      </div>
     </section>
   );
 }

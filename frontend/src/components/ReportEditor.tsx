@@ -116,6 +116,12 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   return (
     <div
       className={`report-editor card${frozen ? " frozen" : ""}`}
+      onKeyDown={(event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+          event.preventDefault();
+          if (!frozen) void save().catch((err: Error) => setError(err.message));
+        }
+      }}
       onDragOver={frozen ? undefined : (event) => event.preventDefault()}
       onDrop={
         frozen

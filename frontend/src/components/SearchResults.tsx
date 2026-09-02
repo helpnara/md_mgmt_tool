@@ -71,7 +71,7 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
           <ul className="result-list">
             {results.entries.map((entry) => (
               <li key={entry.id}>
-                <a href={`#/projects/${entry.project_id}`}>
+                <a href={`#/projects/${entry.project_id}?entry=${entry.id}`}>
                   <span className="project-id">
                     {entry.date} · {entry.project_title}
                   </span>

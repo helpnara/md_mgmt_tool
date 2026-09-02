@@ -41,6 +41,14 @@ export function formatDateTime(value: string | null | undefined): string {
   return time ? `${date} ${time.slice(0, 5)}` : date;
 }
 
+/** 시작·마감이 비어 있을 때 "— ~ —" 로 보이지 않게 한다. */
+export function periodText(start: string | null | undefined, due: string | null | undefined): string {
+  if (start && due) return `기간 ${formatDate(start)} ~ ${formatDate(due)}`;
+  if (start) return `시작 ${formatDate(start)}`;
+  if (due) return `마감 ${formatDate(due)}`;
+  return "기간 미정";
+}
+
 export function todayIso(): string {
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());

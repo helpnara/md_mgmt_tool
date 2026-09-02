@@ -153,3 +153,49 @@ def test_backup_export_keeps_original_folder_structure(client):
 
 def test_export_of_missing_project_is_404(client):
     assert client.get("/api/projects/9999-999/export").status_code == 404
+
+
+def test_backup_covers_the_whole_vault_without_the_index(client, vault_dir):
+    """설정 화면에서 내려받는 전체 백업 — 원본만 담고 다시 만들 수 있는 것은 뺀다."""
+    import io as _io
+    import zipfile as _zip
+
+    build_project(client)
+    client.post("/api/projects", json={"title": "두 번째 과제"})
+
+    response = client.get("/api/backup")
+    assert response.status_code == 200
+    names = _zip.ZipFile(_io.BytesIO(response.content)).namelist()
+
+    assert any("리튬전지-수명평가/index.md" in name for name in names)
+    assert any("두-번째-과제/index.md" in name for name in names)
+    assert any("assets/" in name for name in names)
+    # 색인과 휴지통은 백업에 넣지 않는다 (파일에서 다시 만들어진다)
+    assert not any(name.startswith(".index/") for name in names)
+    assert not any(name.startswith(".trash/") for name in names)
+
+
+def test_project_detail_carries_summary_numbers(client):
+    """상단 요약에 쓸 수치가 상세 응답에 함께 온다."""
+    project = build_project(client)
+    detail = client.get(f"/api/projects/{project['id']}").json()
+
+    assert detail["entry_count"] == 2
+    assert detail["unreported_entries"] == 2
+    assert detail["attachment_count"] == 1
+    assert detail["attachment_bytes"] > 0
+    assert detail["report_count"] == 0
+
+
+def test_projects_can_be_sorted_by_time_since_last_report(client):
+    """마지막 보고가 오래된 과제부터. 보고한 적 없는 과제가 맨 앞."""
+    reported = client.post("/api/projects", json={"title": "보고한 과제"}).json()
+    client.post(f"/api/projects/{reported['id']}/entries", json={"title": "기록"})
+    report = client.post(
+        f"/api/projects/{reported['id']}/reports/draft", json={"report_date": "2026-09-08"}
+    ).json()
+    client.post(f"/api/reports/{report['id']}/freeze")
+    never = client.post("/api/projects", json={"title": "보고한 적 없는 과제"}).json()
+
+    order = [item["id"] for item in client.get("/api/projects", params={"sort": "reported"}).json()]
+    assert order.index(never["id"]) < order.index(reported["id"])

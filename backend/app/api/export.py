@@ -22,6 +22,13 @@ def _attachment(content: bytes | str, filename: str, media_type: str) -> Respons
     return Response(content=body, media_type=media_type, headers={"Content-Disposition": disposition})
 
 
+@router.get("/backup")
+def backup_everything(conn: sqlite3.Connection = Depends(get_db)) -> Response:
+    """vault 전체 백업. 설정 화면에서 내려받는다."""
+    filename, content = svc.backup_all(conn)
+    return _attachment(content, filename, "application/zip")
+
+
 @router.get("/projects/{project_id}/export")
 def export_project(
     project_id: str,

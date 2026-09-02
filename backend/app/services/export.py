@@ -197,6 +197,26 @@ def backup_zip(conn: sqlite3.Connection, project_id: str) -> tuple[str, bytes]:
     return f"{directory.name}-백업.zip", buffer.getvalue()
 
 
+def backup_all(conn: sqlite3.Connection) -> tuple[str, bytes]:
+    """vault 전체를 한 번에 내려받는다. 색인·임시 파일은 빼고 원본만 담는다."""
+    from datetime import datetime
+
+    from ..config import get_settings
+
+    settings = get_settings()
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(settings.vault_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(settings.vault_dir)
+            # 색인(.index)과 휴지통(.trash)은 다시 만들 수 있거나 버린 것이라 뺀다.
+            if rel.parts and rel.parts[0] in {".index", ".trash"}:
+                continue
+            archive.write(path, rel.as_posix())
+    return f"과제이력-전체백업-{datetime.now():%Y%m%d}.zip", buffer.getvalue()
+
+
 HTML_TEMPLATE = """<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><title>{title}</title>
 <style>

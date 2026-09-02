@@ -94,6 +94,19 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
       </div>
 
       <div className="card">
+        <h2>전체 백업</h2>
+        <p className="hint">
+          모든 과제의 문서와 첨부를 zip 하나로 내려받습니다. 검색 색인처럼 다시 만들 수 있는 것은 빼고
+          원본만 담습니다.
+        </p>
+        <div className="form-actions">
+          <a className="button-like primary-link" href="/api/backup">
+            전체 백업 내려받기
+          </a>
+        </div>
+      </div>
+
+      <div className="card">
         <h2>보고 기준</h2>
         <p className="hint">
           보고 대상 후보의 점수를 계산할 때 쓰는 기준 주기는 <strong>{meta.report_cycle_days}일</strong>입니다.

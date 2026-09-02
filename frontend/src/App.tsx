@@ -9,7 +9,7 @@ import type { Meta } from "./types";
 
 type Route =
   | { name: "list" }
-  | { name: "project"; id: string; reportId?: number }
+  | { name: "project"; id: string; reportId?: number; entryId?: number }
   | { name: "search"; query: string }
   | { name: "reports" }
   | { name: "settings" };
@@ -21,10 +21,12 @@ function readRoute(): Route {
 
   if (path.startsWith("projects/")) {
     const reportId = params.get("report");
+    const entryId = params.get("entry");
     return {
       name: "project",
       id: path.slice("projects/".length),
       reportId: reportId ? Number(reportId) : undefined,
+      entryId: entryId ? Number(entryId) : undefined,
     };
   }
   if (path.startsWith("search")) return { name: "search", query: params.get("q") ?? "" };
@@ -41,6 +43,8 @@ export default function App() {
     return initial.name === "search" ? initial.query : "";
   });
   const [error, setError] = useState<string | null>(null);
+  const [author, setAuthor] = useState<string | null>(null);
+  const [authorNoticeClosed, setAuthorNoticeClosed] = useState(false);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -54,6 +58,8 @@ export default function App() {
 
   const loadMeta = useCallback(() => {
     api.meta().then(setMeta).catch((err: Error) => setError(err.message));
+    // 작성자를 정하지 않으면 기록에 작성자가 비어 쌓인다. 한 번 알려 준다.
+    api.settings().then((settings) => setAuthor(settings.author)).catch(() => setAuthor(null));
   }, []);
 
   useEffect(loadMeta, [loadMeta]);
@@ -101,6 +107,18 @@ export default function App() {
           {meta.vault}
         </span>
       </header>
+      {author === "" && !authorNoticeClosed && route.name !== "settings" && (
+        <div className="author-notice">
+          <span>
+            <strong>작성자가 아직 정해지지 않았습니다.</strong> 지금 정해 두면 앞으로 쓰는 진행일지와
+            보고에 작성자가 함께 기록됩니다.
+          </span>
+          <a href="#/settings">설정에서 지정</a>
+          <button className="ghost small" onClick={() => setAuthorNoticeClosed(true)}>
+            나중에
+          </button>
+        </div>
+      )}
       <main>
         {route.name === "project" && (
           <ProjectDetail
@@ -108,6 +126,7 @@ export default function App() {
             meta={meta}
             onMetaChange={loadMeta}
             openReportId={route.reportId}
+            openEntryId={route.entryId}
           />
         )}
         {route.name === "reports" && <ReportCandidates meta={meta} />}

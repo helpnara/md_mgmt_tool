@@ -16,6 +16,8 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 SORTS = {
     "updated": "p.updated_at DESC",
+    # 마지막 보고가 오래된 과제부터. 보고한 적 없는 과제가 맨 앞에 온다.
+    "reported": "CASE WHEN p.last_reported_at IS NULL THEN 0 ELSE 1 END, p.last_reported_at ASC",
     "due": "CASE WHEN p.due_date IS NULL THEN 1 ELSE 0 END, p.due_date ASC",
     "title": "p.title ASC",
     "created": "p.created_at DESC",
@@ -133,6 +135,19 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     data = _serialize(conn, row)
     data["body"] = row["body"]
     data["dir_name"] = row["dir_name"]
+    # 상단 요약에 쓸 값 — 펼쳐 보지 않아도 상태를 알 수 있게 한다.
+    from ..services.reports import unreported_entries
+
+    data["unreported_entries"] = len(unreported_entries(conn, project_id))
+    data["report_count"] = conn.execute(
+        "SELECT COUNT(*) AS n FROM report WHERE project_id = ?", (project_id,)
+    ).fetchone()["n"]
+    files = conn.execute(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS bytes FROM attachment WHERE project_id = ?",
+        (project_id,),
+    ).fetchone()
+    data["attachment_count"] = files["n"]
+    data["attachment_bytes"] = files["bytes"]
     return data
 
 

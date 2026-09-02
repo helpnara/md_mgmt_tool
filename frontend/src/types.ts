@@ -37,6 +37,11 @@ export interface Project {
   entry_count: number;
   body?: string;
   dir_name?: string;
+  /** 상세 조회에서만 채워지는 요약용 수치 */
+  unreported_entries?: number;
+  report_count?: number;
+  attachment_count?: number;
+  attachment_bytes?: number;
 }
 
 export interface Entry {
