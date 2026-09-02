@@ -21,7 +21,10 @@ FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
 async def lifespan(app: FastAPI):
     settings = get_settings()
     settings.ensure_dirs()
-    conn = deps.setup()
+    conn, rebuilt = deps.setup()
+    if rebuilt:
+        print("\n  프로그램이 새 버전으로 바뀌어 검색 색인을 다시 만듭니다.")
+        print("  (색인은 md 파일에서 다시 만들어지므로 작성한 내용은 그대로입니다)")
     # 외부 편집기로 바뀐 내용을 기동 시점에 반영한다.
     indexed, problems = reindex_all(conn)
     if problems:

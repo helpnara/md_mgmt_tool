@@ -4,16 +4,16 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 
-from .db import connect, init_schema
+from .db import open_index
 
 _conn: sqlite3.Connection | None = None
 
 
-def setup() -> sqlite3.Connection:
+def setup() -> tuple[sqlite3.Connection, bool]:
+    """(커넥션, 인덱스를 새로 만들었는지) 를 돌려준다."""
     global _conn
-    _conn = connect()
-    init_schema(_conn)
-    return _conn
+    _conn, rebuilt = open_index()
+    return _conn, rebuilt
 
 
 def teardown() -> None:
