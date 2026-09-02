@@ -1,0 +1,3 @@
+# 윈도우 cmd는 LF만 있는 배치 파일에서 goto/라벨을 잘못 해석한다
+*.bat text eol=crlf
+*.py text eol=lf

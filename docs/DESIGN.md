@@ -607,7 +607,8 @@ md_mgmt_tool/
 | 경로 길이 | 260자 제한을 감안해 슬러그 60자, 첨부 파일명 90자로 제한 |
 | 한글 정규화 | NFD로 들어온 이름을 NFC로 합쳐 저장 (맥에서 복사해 온 파일 대비) |
 | 인코딩 | 모든 파일 입출력에 `encoding="utf-8"` 명시, 콘솔은 `PYTHONUTF8=1` / `chcp 65001` |
-| 실행 | `run.py`(공통) + `run.bat`·`setup.bat`(더블클릭용). Node.js 없이 돌도록 `frontend/dist`를 저장소에 포함 |
+| 실행 | `run.py`·`setup.py`(공통, 한글 안내 담당) + `run.bat`·`setup.bat`(더블클릭용) |
+| 배치 파일 | **순수 ASCII + CRLF.** cmd는 `.bat`을 cp949로 읽어 UTF-8 한글이 들어가면 파싱이 깨지고, LF만 있는 파일에서는 `goto`/라벨을 잘못 해석한다. 한글 안내는 전부 파이썬이 출력하고, `.gitattributes`로 `*.bat`을 CRLF로 고정한다 |
 | 파이썬 버전 | 3.10 미만이면 실행 시점에 안내하고 중단 |
 
 ## 8. 개발 마일스톤

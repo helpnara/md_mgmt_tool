@@ -1,14 +1,28 @@
 @echo off
-chcp 65001 > nul
-setlocal
+rem ASCII only - see the comment in setup.bat for the reason.
+cd /d "%~dp0"
 
-rem 가상환경이 있으면 그 파이썬을, 없으면 시스템 파이썬을 쓴다.
-if exist "%~dp0.venv\Scripts\python.exe" (
-    set "PY=%~dp0.venv\Scripts\python.exe"
-) else (
-    set "PY=py"
-)
+if exist ".venv\Scripts\python.exe" goto use_venv
 
-"%PY%" "%~dp0run.py" %*
-if errorlevel 1 pause
-endlocal
+where py >nul 2>&1
+if errorlevel 1 goto try_python
+py -3 run.py %*
+goto end
+
+:try_python
+where python >nul 2>&1
+if errorlevel 1 goto no_python
+python run.py %*
+goto end
+
+:use_venv
+".venv\Scripts\python.exe" run.py %*
+goto end
+
+:no_python
+echo.
+echo [ERROR] Python was not found. Run setup.bat first.
+echo.
+pause
+
+:end

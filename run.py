@@ -22,6 +22,15 @@ DIST = FRONTEND / "dist"
 REQUIREMENTS = ROOT / "backend" / "requirements.txt"
 
 
+def _safe_console() -> None:
+    """콘솔 코드페이지(윈도우 cp949)가 못 그리는 글자에서 멈추지 않게 한다."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def fail(message: str) -> None:
     print(f"\n[오류] {message}\n")
     sys.exit(1)
@@ -71,6 +80,7 @@ def build_frontend_if_needed() -> None:
 
 
 def main() -> None:
+    _safe_console()
     parser = argparse.ArgumentParser(description="과제 이력 관리 도구")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
