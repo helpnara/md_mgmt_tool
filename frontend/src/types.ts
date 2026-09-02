@@ -33,6 +33,9 @@ export interface Project {
   created_at: string | null;
   updated_at: string | null;
   last_reported_at: string | null;
+  /** 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다. */
+  effect_expected: number | null;
+  effect_verified: number | null;
   tags: string[];
   entry_count: number;
   body?: string;

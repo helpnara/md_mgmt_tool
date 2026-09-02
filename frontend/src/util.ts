@@ -77,3 +77,27 @@ export function scrollEditorIntoView(
     el.scrollIntoView({ behavior: "smooth", block });
   });
 }
+
+/** 과제 효과 금액의 단위. 사내에서 쓰는 표기를 그대로 따른다 (backend/app/config.py 와 같은 값). */
+export const EFFECT_UNIT = "억원/년";
+
+/**
+ * 효과 금액 한 줄 표기.
+ *
+ * 기대효과와 실증효과는 시점이 다른 별개의 값이다. 둘 다 있으면 `1.2 → 1.4` 로 나란히
+ * 보여 "예상은 얼마였고 실제로 얼마였나"가 한눈에 들어오게 한다.
+ * 아무것도 안 적힌 과제는 null 을 돌려주고, 화면에서는 아예 그리지 않는다 —
+ * "0"으로 적으면 실제로 효과가 0인 과제와 구분되지 않는다.
+ */
+export function effectText(
+  expected: number | null | undefined,
+  verified: number | null | undefined,
+): { text: string; verified: boolean } | null {
+  const num = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+  if (expected != null && verified != null) {
+    return { text: `${num(expected)} → ${num(verified)}`, verified: true };
+  }
+  if (verified != null) return { text: num(verified), verified: true };
+  if (expected != null) return { text: num(expected), verified: false };
+  return null;
+}

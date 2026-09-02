@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, Project } from "../types";
-import { dueLabel, formatDate } from "../util";
+import { dueLabel, effectText, EFFECT_UNIT, formatDate } from "../util";
 import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
@@ -101,6 +101,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
             <option value="updated">최근 업데이트순</option>
             <option value="due">마감일순</option>
             <option value="reported">보고 경과일순</option>
+            <option value="effect">효과 큰 순</option>
             <option value="created">생성순</option>
             <option value="title">이름순</option>
           </select>
@@ -194,6 +195,9 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
             <th>담당자</th>
             <th>태그</th>
             <th>마감</th>
+            <th className="effect-col" title={`기대효과 → 실증효과 (${EFFECT_UNIT})`}>
+              효과<span className="th-unit">{EFFECT_UNIT}</span>
+            </th>
             <th>기록</th>
             <th>최근 업데이트</th>
           </tr>
@@ -229,6 +233,24 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
                   {due && <span className={`due due-${due.tone}`}>{due.text}</span>}
                   <span className="due-date">{formatDate(project.due_date)}</span>
                 </td>
+                <td className="effect-col">
+                  {(() => {
+                    const effect = effectText(project.effect_expected, project.effect_verified);
+                    if (!effect) return <span className="muted">—</span>;
+                    return (
+                      <span
+                        className={`effect${effect.verified ? " verified" : ""}`}
+                        title={
+                          effect.verified
+                            ? `실증효과 확인됨 (${EFFECT_UNIT})`
+                            : `기대효과 — 아직 실증 전 (${EFFECT_UNIT})`
+                        }
+                      >
+                        {effect.text}
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td>{project.entry_count}건</td>
                 <td>{formatDate(project.updated_at)}</td>
               </tr>
@@ -236,7 +258,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           })}
           {projects.length === 0 && (
             <tr>
-              <td colSpan={9} className="empty">
+              <td colSpan={10} className="empty">
                 과제가 없습니다. [과제 추가]로 시작하세요.
               </td>
             </tr>

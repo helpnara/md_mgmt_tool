@@ -3,8 +3,8 @@ import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
 import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
-import { formatBytes } from "../upload";
-import { daysUntil, dueLabel, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
+import { formatBytes, uploadAttachment } from "../upload";
+import { daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import ExportMenu from "./ExportMenu";
@@ -36,6 +36,10 @@ export default function ProjectDetail({
   const [editingOverview, setEditingOverview] = useState(false);
   const [preview, togglePreview] = usePreview();
   const overviewRef = useRef<HTMLDivElement>(null);
+  // 개요에 직접 붙이는 첨부 — 효과 산출 근거(엑셀·PPT)를 위한 자리다.
+  const overviewFileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [overviewDraft, setOverviewDraft] = useState("");
   const [creatingEntry, setCreatingEntry] = useState(false);
   // 첨부 때문에 편집 도중 먼저 만들어진 기록. 편집기 아래 타임라인에 중복 표시하지 않는다.
@@ -89,6 +93,34 @@ export default function ProjectDetail({
       window.clearTimeout(clear);
     };
   }, [openEntryId, entries.length]);
+
+  // 개요에 파일을 붙이고, 링크를 개요 본문 끝에 이어 붙인다.
+  const attachToOverview = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0 || !project) return;
+      setUploadError(null);
+      const links: string[] = [];
+      try {
+        for (const file of files) {
+          setUploading(file.name);
+          const saved = await uploadAttachment(
+            `/api/projects/${project.id}/attachments`,
+            file,
+            () => undefined,
+          ).promise;
+          links.push(saved.markdown);
+        }
+        const body = `${(project.body ?? "").replace(/\s*$/, "")}\n\n${links.join("\n")}\n`;
+        await api.updateProject(project.id, { body });
+        load();
+      } catch (err) {
+        setUploadError((err as Error).message);
+      } finally {
+        setUploading(null);
+      }
+    },
+    [project, load],
+  );
 
   // 개요 편집을 열면 그 카드로 데려간다 (좌측 칸이 맨 위로 올라오기 때문).
   useEffect(() => {
@@ -216,6 +248,21 @@ export default function ProjectDetail({
             </dd>
           </div>
           <div>
+            <dt>효과 <span className="muted">{EFFECT_UNIT}</span></dt>
+            <dd>
+              {(() => {
+                const effect = effectText(project.effect_expected, project.effect_verified);
+                if (!effect) return <span className="muted">미입력</span>;
+                return (
+                  <span className={effect.verified ? "accent" : undefined}>
+                    {effect.text}
+                    {!effect.verified && <span className="muted"> · 기대</span>}
+                  </span>
+                );
+              })()}
+            </dd>
+          </div>
+          <div>
             <dt>첨부</dt>
             <dd>
               {project.attachment_count ?? 0}건
@@ -243,19 +290,48 @@ export default function ProjectDetail({
       <div className={`detail-columns${editingSide ? ` editing editing-${editingSide}` : ""}`}>
       <div className="detail-left">
 
-      <div className="card" ref={overviewRef}>
+      <div
+        className="card"
+        ref={overviewRef}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          void attachToOverview(Array.from(event.dataTransfer.files));
+        }}
+      >
         <div className="card-head">
           <h2>과제 개요</h2>
-          <button
-            className="ghost"
-            onClick={() => {
-              setOverviewDraft(project.body ?? "");
-              setEditingOverview((value) => !value);
-            }}
-          >
-            {editingOverview ? "취소" : "수정"}
-          </button>
+          <div className="overview-actions">
+            <input
+              ref={overviewFileRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(event) => {
+                void attachToOverview(Array.from(event.target.files ?? []));
+                event.target.value = "";
+              }}
+            />
+            <button
+              className="attach-button"
+              disabled={uploading !== null}
+              onClick={() => overviewFileRef.current?.click()}
+              title="효과 산출 근거 등 과제에 딸린 자료를 붙입니다 (엑셀·PPT·PDF·이미지)"
+            >
+              {uploading ? `올리는 중… ${uploading}` : "📎 파일 첨부"}
+            </button>
+            <button
+              className="ghost"
+              onClick={() => {
+                setOverviewDraft(project.body ?? "");
+                setEditingOverview((value) => !value);
+              }}
+            >
+              {editingOverview ? "취소" : "수정"}
+            </button>
+          </div>
         </div>
+        {uploadError && <p className="form-error">{uploadError}</p>}
         {editingOverview ? (
           <>
             <PreviewToggle on={preview} onToggle={togglePreview} />

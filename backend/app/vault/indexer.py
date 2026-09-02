@@ -50,6 +50,17 @@ def _as_list(value: Any) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def _as_effect(value: object) -> float | None:
+    """효과 금액(억원/년). 손으로 고친 파일에 숫자가 아닌 값이 들어와도 색인을 멈추지 않는다."""
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None
+
+
 def _sync_tags(conn: sqlite3.Connection, table: str, column: str, owner_id: Any, tags: list[str]) -> None:
     conn.execute(f"DELETE FROM {table} WHERE {column} = ?", (owner_id,))
     for name in tags:
@@ -165,12 +176,15 @@ def index_project(
     conn.execute(
         """
         INSERT INTO project(id, dir_name, title, status, type, grp, owner, start_date, due_date,
+                            effect_expected, effect_verified,
                             created_at, updated_at, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
           type=excluded.type, grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
-          due_date=excluded.due_date, created_at=excluded.created_at,
+          due_date=excluded.due_date,
+          effect_expected=excluded.effect_expected, effect_verified=excluded.effect_verified,
+          created_at=excluded.created_at,
           updated_at=excluded.updated_at, body=excluded.body, file_mtime=excluded.file_mtime
         """,
         (
@@ -183,6 +197,8 @@ def index_project(
             ", ".join(owners) or None,
             _as_str(doc.meta.get("start_date")),
             _as_str(doc.meta.get("due_date")),
+            _as_effect(doc.meta.get("effect_expected")),
+            _as_effect(doc.meta.get("effect_verified")),
             _as_str(doc.meta.get("created_at")),
             updated_at,
             doc.body,

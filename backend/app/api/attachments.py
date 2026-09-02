@@ -79,6 +79,31 @@ def list_entry_attachments(entry_id: int, conn: sqlite3.Connection = Depends(get
     return [_serialize(dict(row), dir_name) for row in rows]
 
 
+@router.post("/api/projects/{project_id}/attachments", status_code=201)
+def upload_to_project(
+    project_id: str, file: UploadFile = File(...), conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
+    """과제 개요에 직접 붙이는 첨부.
+
+    효과 산출 근거(엑셀·PPT)처럼 특정 진행일지가 아니라 **과제 자체에 딸린 자료**를 위한 것이다.
+    진행일지·보고 첨부와 같은 폴더 체계를 쓰되, 날짜가 아니라 `assets/과제` 아래에 모은다.
+    """
+    dir_name = _dir_name(conn, project_id)  # 없는 과제면 여기서 404
+    try:
+        saved = svc.save_attachment(
+            conn,
+            project_id=project_id,
+            filename=file.filename or "attachment",
+            source=file.file,
+            bucket_rel="assets/과제",
+            doc_dir=svc.PROJECT_DOC_DIR,
+            content_type=file.content_type,
+        )
+    except OSError as exc:
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+    return _serialize(saved, dir_name, svc.PROJECT_DOC_DIR)
+
+
 @router.get("/api/projects/{project_id}/attachments")
 def list_project_attachments(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     dir_name = _dir_name(conn, project_id)

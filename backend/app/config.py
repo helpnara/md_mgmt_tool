@@ -21,6 +21,13 @@ STATUSES: list[tuple[str, str, bool]] = [
 STATUS_KEYS: list[str] = [key for key, _, _ in STATUSES]
 STATUS_LABELS: dict[str, str] = {key: label for key, label, _ in STATUSES}
 DEFAULT_STATUS = "in_progress"
+
+# 과제 효과 금액의 단위. 사내에서 쓰는 표기를 그대로 따른다.
+# 값은 이 단위의 숫자로만 저장하고(예: 1.2), 화면에서 단위를 붙여 보여 준다.
+EFFECT_UNIT = "억원/년"
+# 기대효과(착수 시 예상) / 실증효과(끝난 뒤 확인). 둘은 반드시 나눠 둔다 —
+# 한 칸에 담으면 "예상은 얼마였고 실제로 얼마였나"를 되짚을 수 없다.
+EFFECT_FIELDS = ("effect_expected", "effect_verified")
 # 보드에서 기본 접어 두는 상태
 COLLAPSED_STATUSES = {"done", "dropped"}
 # 끝난 과제 — 마감이 지났다고 경고하지 않는다.

@@ -27,6 +27,16 @@ INDEX_TEMPLATE = """## 배경
 
 > 과제가 끝났을 때 남기는 결과물 — 예: 평가 보고서, 시제품, 측정 데이터, 특허 초안
 
+## 정성적 효과
+
+> 숫자로 표현하기 어려운 효과 — 품질 향상, 리스크 저감, 기술 확보, 대응 속도 등
+> 근거 자료(엑셀·PPT)는 아래 [파일 첨부]로 붙이고 여기에 링크하면 된다
+
+## 효과 산출 근거
+
+> 위 기대효과 금액이 어떤 계산에서 나왔는지 — 단가 × 물량 × 개선율, 가정, 출처
+> 근거 없는 숫자는 보고 자리에서 방어하지 못한다
+
 ## 관련 링크
 
 > 참고할 사내 위키·공유 폴더 주소, 관련 과제 번호 등
@@ -34,8 +44,25 @@ INDEX_TEMPLATE = """## 배경
 
 META_ORDER = [
     "id", "title", "status", "type", "group", "tags", "owners",
-    "start_date", "due_date", "created_at", "updated_at",
+    "start_date", "due_date", "effect_expected", "effect_verified",
+    "created_at", "updated_at",
 ]
+
+
+def normalize_effect(value: object) -> float | None:
+    """효과 금액(억원/년)을 숫자로 맞춘다. 비우는 것은 정상이다.
+
+    실증효과는 과제가 끝나야 나오므로 진행 중에는 대부분 비어 있다.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"효과 금액은 숫자여야 합니다: {value!r}") from exc
+    if number < 0:
+        raise ValueError("효과 금액은 0보다 작을 수 없습니다.")
+    return number
 
 
 def normalize_owners(value: object) -> list[str]:
@@ -110,6 +137,8 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "owners": normalize_owners(data.get("owners") or data.get("owner")),
         "start_date": data.get("start_date") or None,
         "due_date": data.get("due_date") or None,
+        "effect_expected": normalize_effect(data.get("effect_expected")),
+        "effect_verified": normalize_effect(data.get("effect_verified")),
         "created_at": stamp,
         "updated_at": stamp,
     }
@@ -132,6 +161,9 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         raise ValueError(f"알 수 없는 속성: {updates['type']}")
 
     body = updates.pop("body", None)
+    for field in ("effect_expected", "effect_verified"):
+        if field in updates:
+            updates[field] = normalize_effect(updates[field])
     if "owners" in updates or "owner" in updates:
         updates["owners"] = normalize_owners(updates.pop("owners", None) or updates.pop("owner", None))
     changes = {k: v for k, v in updates.items() if k in META_ORDER or k == "group"}

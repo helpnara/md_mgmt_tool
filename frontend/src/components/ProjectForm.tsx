@@ -18,12 +18,17 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
     owners: (initial?.owners ?? []).join(", "),
     start_date: initial?.start_date ?? "",
     due_date: initial?.due_date ?? "",
+    effect_expected: initial?.effect_expected?.toString() ?? "",
+    effect_verified: initial?.effect_verified?.toString() ?? "",
     tags: (initial?.tags ?? []).join(", "),
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const update = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  // 비우면 null 로 보낸다 — "아직 안 정했다"와 "0원"은 다른 뜻이다.
+  const effect = (value: string): number | null => (value.trim() === "" ? null : Number(value));
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -41,6 +46,8 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           .filter(Boolean),
         start_date: form.start_date || null,
         due_date: form.due_date || null,
+        effect_expected: effect(form.effect_expected),
+        effect_verified: effect(form.effect_verified),
         tags: form.tags
           .split(",")
           .map((tag) => tag.trim())
@@ -140,6 +147,34 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             placeholder="예: 공정, 수명평가"
           />
         </label>
+      </div>
+      <div className="form-row">
+        <label>
+          기대효과 (억원/년)
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            value={form.effect_expected}
+            onChange={(event) => update("effect_expected", event.target.value)}
+            placeholder="예: 1.2"
+          />
+        </label>
+        <label>
+          실증효과 (억원/년)
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            value={form.effect_verified}
+            onChange={(event) => update("effect_verified", event.target.value)}
+            placeholder="과제가 끝난 뒤 채웁니다"
+          />
+        </label>
+        <p className="hint effect-hint">
+          정성적 효과와 산출 근거는 <b>과제 개요</b>에 적습니다.
+          근거 자료(엑셀·PPT)는 개요의 [파일 첨부]로 붙일 수 있습니다.
+        </p>
       </div>
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions">

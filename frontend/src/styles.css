@@ -385,6 +385,17 @@ button { white-space: nowrap; }
 /* 개요의 안내 문구(인용문)는 실제 내용과 구분되게 흐리게 */
 .markdown blockquote { margin: 6px 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--border); color: var(--muted); font-size: 13px; }
 
+/* ── 과제 효과 (억원/년) ─────────────────────────── */
+.effect-col { white-space: nowrap; text-align: right; }
+.effect-col .th-unit { display: block; font-weight: 400; font-size: 10px; color: var(--muted); }
+/* 기대효과는 아직 확인 전이라 담담하게, 실증효과는 확인된 값이라 또렷하게 */
+.effect { font-variant-numeric: tabular-nums; color: var(--muted); }
+.effect.verified { color: var(--text); font-weight: 700; }
+/* 같은 줄의 다른 칸(label)이 flex:1 이므로, 안내 문구도 flex 로 자리를 잡아야
+   앞의 입력 칸이 한 글자 폭으로 찌부러지지 않는다. 1 : 1 : 2 로 나눈다. */
+.effect-hint { flex: 2 1 0; align-self: flex-end; padding-bottom: 8px; margin: 0; }
+.overview-actions { display: flex; align-items: center; gap: 8px; }
+
 /* ── 메인 상단 대시보드 ──────────────────────────── */
 /* 슬림하게. 목록 위에 얹히는 한 뼘이지 또 하나의 화면이 아니다. */
 .dashboard {

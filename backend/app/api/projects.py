@@ -21,6 +21,12 @@ SORTS = {
     "due": "CASE WHEN p.due_date IS NULL THEN 1 ELSE 0 END, p.due_date ASC",
     "title": "p.title ASC",
     "created": "p.created_at DESC",
+    # 효과가 큰 과제부터. 실증효과가 있으면 그것을, 없으면 기대효과를 기준으로 본다.
+    # 효과를 안 적은 과제는 맨 뒤로 보낸다 (0으로 취급하면 실제 0원 과제와 섞인다).
+    "effect": (
+        "CASE WHEN COALESCE(p.effect_verified, p.effect_expected) IS NULL THEN 1 ELSE 0 END,"
+        " COALESCE(p.effect_verified, p.effect_expected) DESC, p.title ASC"
+    ),
 }
 
 
@@ -55,6 +61,9 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "last_reported_at": row["last_reported_at"],
+        # 효과 금액 (억원/년). 실증효과는 과제가 끝나야 나오므로 대개 비어 있다.
+        "effect_expected": row["effect_expected"],
+        "effect_verified": row["effect_verified"],
         "tags": _tags(conn, row["id"]),
         "entry_count": conn.execute(
             "SELECT COUNT(*) AS n FROM entry WHERE project_id = ?", (row["id"],)

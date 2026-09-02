@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS project (
   created_at       TEXT,
   updated_at       TEXT,
   last_reported_at TEXT,
+  -- 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다.
+  effect_expected  REAL,
+  effect_verified  REAL,
   body             TEXT,
   file_mtime       REAL
 );
