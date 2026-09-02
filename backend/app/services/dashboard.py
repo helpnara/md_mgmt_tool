@@ -6,6 +6,7 @@
 담는 것은 넷뿐이다.
   · 상태별 과제 수      — 눌러서 그 상태로 거른다
   · 속성별 과제 수      — 눌러서 그 속성으로 거른다
+  · 담당자별 과제 수    — 지금 누가 몇 개를 들고 있나
   · 이번 주 보고 대상   — 상위 몇 건. 누르면 그 과제 상세로 간다
   · 마감 임박 / 기한 초과 — 작게. 있을 때만 눈에 띈다
 """
@@ -25,6 +26,29 @@ DUE_SOON_DAYS = 7
 def _counts(conn: sqlite3.Connection, column: str) -> dict[str, int]:
     rows = conn.execute(f"SELECT {column} AS key, COUNT(*) AS n FROM project GROUP BY {column}")
     return {(row["key"] or ""): row["n"] for row in rows}
+
+
+def _owner_counts(conn: sqlite3.Connection) -> list[dict]:
+    """담당자별 과제 수. 많이 맡은 사람부터, 같으면 이름순.
+
+    한 과제에 담당자가 여러 명일 수 있어 이 수들의 합은 전체 과제 수보다 클 수 있다.
+    화면에서 그 사실을 알려 주도록, 합이 다른지는 보는 쪽이 판단한다.
+    상태·속성 칸과 마찬가지로 끝난 과제도 포함한다 — 기준이 섞이면
+    "N건"을 눌렀을 때 나오는 수와 어긋난다(5.8).
+    """
+    owners = [
+        {"key": row["name"], "label": row["name"], "count": row["n"]}
+        for row in conn.execute(
+            "SELECT name, COUNT(*) AS n FROM project_owner GROUP BY name ORDER BY n DESC, name"
+        )
+    ]
+    unassigned = conn.execute(
+        "SELECT COUNT(*) AS n FROM project p"
+        " WHERE NOT EXISTS (SELECT 1 FROM project_owner po WHERE po.project_id = p.id)"
+    ).fetchone()["n"]
+    if unassigned:
+        owners.append({"key": "none", "label": "미지정", "count": unassigned})
+    return owners
 
 
 def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT) -> dict:
@@ -65,6 +89,7 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT) -> dict:
         ]
         # 속성을 안 정한 과제도 세고, 눌러서 거를 수 있게 키를 준다.
         + ([{"key": "none", "label": "미지정", "count": type_counts[""]}] if type_counts.get("") else []),
+        "owners": _owner_counts(conn),
         "due_soon": due_soon,
         "due_soon_days": DUE_SOON_DAYS,
         "overdue": overdue,

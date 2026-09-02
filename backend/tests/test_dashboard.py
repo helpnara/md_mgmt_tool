@@ -50,6 +50,35 @@ def test_counts_by_status_and_type(client):
     assert all(item["count"] > 0 for item in data["statuses"] + data["types"])
 
 
+def test_counts_by_owner(client):
+    make(client, title="혼자", owners=["권경락"])
+    make(client, title="둘이", owners=["권경락", "김현우"])
+    make(client, title="김현우 것", owners=["김현우"])
+    make(client, title="담당 없음")
+
+    owners = client.get("/api/dashboard").json()["owners"]
+    # 많이 맡은 사람부터, 같으면 이름순. 담당이 없는 과제는 '미지정'으로 맨 뒤에.
+    assert owners == [
+        {"key": "권경락", "label": "권경락", "count": 2},
+        {"key": "김현우", "label": "김현우", "count": 2},
+        {"key": "none", "label": "미지정", "count": 1},
+    ]
+
+
+def test_owner_counts_may_exceed_total(client):
+    """한 과제에 담당자가 여러 명이면 담당 칩의 합은 전체보다 크다."""
+    make(client, title="셋이", owners=["권경락", "김현우", "박서준"])
+
+    data = client.get("/api/dashboard").json()
+    assert data["total"] == 1
+    assert sum(item["count"] for item in data["owners"]) == 3
+
+
+def test_unassigned_owner_is_left_out_when_everyone_has_one(client):
+    make(client, title="담당 있음", owners=["권경락"])
+    assert [item["key"] for item in client.get("/api/dashboard").json()["owners"]] == ["권경락"]
+
+
 def test_finished_projects_are_not_counted_as_overdue(client):
     make(client, title="늦은 과제", status="in_progress", due_date=day(-3))
     make(client, title="끝난 과제", status="done", due_date=day(-10))
@@ -74,9 +103,11 @@ def test_due_soon_counts_only_the_days_ahead(client):
 
 def test_numbers_match_what_the_list_filters(client):
     """대시보드의 각 수를 눌렀을 때 목록이 그만큼 걸러져야 한다."""
-    make(client, title="늦은 진행", status="in_progress", due_date=day(-2), type="rnd")
-    make(client, title="끝난 늦은 과제", status="done", due_date=day(-9), type="rnd")
-    make(client, title="곧 마감", status="reviewing", due_date=day(2))
+    make(client, title="늦은 진행", status="in_progress", due_date=day(-2), type="rnd",
+         owners=["권경락"])
+    make(client, title="끝난 늦은 과제", status="done", due_date=day(-9), type="rnd",
+         owners=["권경락", "김현우"])
+    make(client, title="곧 마감", status="reviewing", due_date=day(2), owners=["김현우"])
     make(client, title="속성 없음", status="planned")
 
     data = client.get("/api/dashboard").json()
@@ -90,6 +121,8 @@ def test_numbers_match_what_the_list_filters(client):
         assert listed(status=item["key"]) == item["count"], item
     for item in data["types"]:
         assert listed(type=item["key"]) == item["count"], item
+    for item in data["owners"]:
+        assert listed(owner=item["key"]) == item["count"], item
 
 
 def test_candidates_are_capped_and_ordered(client):

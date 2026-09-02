@@ -419,6 +419,9 @@ button { white-space: nowrap; }
 .dash-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* 고른 칩에도 마우스 반응은 남긴다 — 색을 바꾸지 않고 밝기만 낮춘다. */
 .dash-chip.on:hover { filter: brightness(0.92); }
+/* [+N명] · [접기] 는 세는 칩이 아니라 조작 버튼이다. 흐리게 둔다. */
+.dash-chip.more { background: transparent; border-style: dashed; color: var(--muted); }
+.dash-note { font-size: 11px; color: var(--muted); opacity: 0.8; }
 
 /* 마감 경고는 작게. 있을 때만 눈에 띄면 된다. */
 .dash-warn { display: flex; gap: 6px; margin-left: auto; flex: 0 0 auto; }

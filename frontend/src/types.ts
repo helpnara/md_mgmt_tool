@@ -141,6 +141,8 @@ export interface Dashboard {
   total: number;
   statuses: DashboardCount[];
   types: DashboardCount[];
+  /** 담당자별 과제 수. 한 과제에 여러 명일 수 있어 합이 total 보다 클 수 있다. */
+  owners: DashboardCount[];
   due_soon: number;
   due_soon_days: number;
   overdue: number;

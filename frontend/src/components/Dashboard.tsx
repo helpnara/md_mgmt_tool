@@ -3,10 +3,13 @@ import { api } from "../api";
 import type { Dashboard as DashboardData } from "../types";
 
 const OPEN_KEY = "md-mgmt:dashboard";
+/** 담당 줄에 처음 세우는 사람 수. 넘치면 [+N명]으로 접어 둔다. */
+const OWNER_CHIPS = 8;
 
 interface Filters {
   status: string;
   type: string;
+  owner: string;
   due: string;
 }
 
@@ -14,7 +17,7 @@ interface Props {
   /** 값이 바뀌면 다시 읽는다 (과제를 추가했거나 다시 읽기를 눌렀을 때). */
   refreshKey: number;
   filters: Filters;
-  onFilter: (key: "status" | "type" | "due", value: string) => void;
+  onFilter: (key: "status" | "type" | "owner" | "due", value: string) => void;
 }
 
 /**
@@ -27,6 +30,7 @@ interface Props {
 export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) !== "off");
+  const [allOwners, setAllOwners] = useState(false);
 
   const load = useCallback(() => {
     api.dashboard().then(setData).catch(() => setData(null));
@@ -36,8 +40,14 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
 
   if (!data || data.total === 0) return null;
 
-  const toggle = (key: "status" | "type" | "due", value: string) =>
+  const toggle = (key: "status" | "type" | "owner" | "due", value: string) =>
     onFilter(key, filters[key] === value ? "" : value);
+
+  // 한 과제에 담당자가 여러 명일 수 있어 담당 칩의 합은 전체보다 클 수 있다.
+  // 상태·속성 줄은 합이 딱 맞으므로, 다를 때만 그 사실을 밝혀 둔다.
+  const ownerSum = data.owners.reduce((sum, item) => sum + item.count, 0);
+  const shownOwners = allOwners ? data.owners : data.owners.slice(0, OWNER_CHIPS);
+  const hiddenOwners = data.owners.length - shownOwners.length;
 
   return (
     <section className={`dashboard${open ? "" : " closed"}`}>
@@ -106,6 +116,36 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
               ))}
             </div>
           </div>
+
+          {data.owners.length > 0 && (
+            <div className="dash-row">
+              <span className="dash-label">
+                담당
+                {ownerSum > data.total && <span className="dash-note"> 중복 포함</span>}
+              </span>
+              <div className="dash-chips">
+                {shownOwners.map((item) => (
+                  <button
+                    key={item.key}
+                    className={`dash-chip type${filters.owner === item.key ? " on" : ""}`}
+                    onClick={() => toggle("owner", item.key)}
+                  >
+                    {item.label} <b>{item.count}</b>
+                  </button>
+                ))}
+                {hiddenOwners > 0 && (
+                  <button className="dash-chip more" onClick={() => setAllOwners(true)}>
+                    +{hiddenOwners}명
+                  </button>
+                )}
+                {allOwners && data.owners.length > OWNER_CHIPS && (
+                  <button className="dash-chip more" onClick={() => setAllOwners(false)}>
+                    접기
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {data.candidates.length > 0 && (
             <div className="dash-candidates">

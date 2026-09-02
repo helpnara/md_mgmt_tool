@@ -83,6 +83,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           </select>
           <select value={filters.owner} onChange={(event) => setFilter("owner", event.target.value)}>
             <option value="">담당자 전체</option>
+            <option value="none">미지정</option>
             {meta.owners.map((name) => (
               <option key={name} value={name}>
                 {name}

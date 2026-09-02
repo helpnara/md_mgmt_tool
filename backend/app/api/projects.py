@@ -105,7 +105,10 @@ def list_projects(
             "p.id IN (SELECT pt.project_id FROM project_tag pt JOIN tag t ON t.id = pt.tag_id WHERE t.name = ?)"
         )
         params.append(tag)
-    if owner:
+    if owner == "none":
+        # 담당자를 아직 안 정한 과제만. 대시보드의 '미지정' 칸이 이 값을 쓴다.
+        where.append("NOT EXISTS (SELECT 1 FROM project_owner po WHERE po.project_id = p.id)")
+    elif owner:
         where.append("p.id IN (SELECT po.project_id FROM project_owner po WHERE po.name = ?)")
         params.append(owner)
     if due in DUE_FILTERS:
