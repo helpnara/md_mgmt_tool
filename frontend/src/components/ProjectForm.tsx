@@ -87,12 +87,12 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           </select>
         </label>
         <label>
-          그룹
+          그룹 (예 : 회의체, 지시사항 등)
           <input
             list="group-options"
             value={form.group ?? ""}
             onChange={(event) => update("group", event.target.value)}
-            placeholder="예: 차세대전지"
+            placeholder="예: 회의체"
           />
           <datalist id="group-options">
             {meta.groups.map((group) => (
