@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
 import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
+import { pasteAsTable } from "../table";
 import { daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
@@ -42,6 +43,8 @@ export default function ProjectDetail({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [overviewDraft, setOverviewDraft] = useState("");
   const [creatingEntry, setCreatingEntry] = useState(false);
+  // [이어쓰기]로 시작하면 지난 기록의 내용을 담아 온다. 없으면 서식에서 시작한다.
+  const [entrySeed, setEntrySeed] = useState<string | null>(null);
   // 첨부 때문에 편집 도중 먼저 만들어진 기록. 편집기 아래 타임라인에 중복 표시하지 않는다.
   const [draftEntryId, setDraftEntryId] = useState<number | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
@@ -146,6 +149,9 @@ export default function ProjectDetail({
   const due = dueLabel(project.due_date, project.status);
   // 개요(index.md)는 과제 폴더 바로 아래에 있어 첨부 링크가 assets/… 이고,
   // 진행일지는 logs/ 안에 있어 ../assets/… 이다. 기준 경로가 서로 다르다.
+  // renderEntry 는 아래에 선언된 함수라 project 가 null 이 아님을 스스로 알지 못한다.
+  // 여기서 좁혀진 값을 붙잡아 넘긴다.
+  const current = project;
   const base = filesBase(project.dir_name);
   const entryBase = filesBase(project.dir_name, "logs");
   // 편집기를 연 동안에는 2단을 잠시 1단으로 돌려 전체 폭을 쓴다.
@@ -339,6 +345,11 @@ export default function ProjectDetail({
               <textarea
                 value={overviewDraft}
                 onChange={(event) => setOverviewDraft(event.target.value)}
+                onPaste={(event) =>
+                  pasteAsTable(event, (snippet) =>
+                    setOverviewDraft((prev) => `${prev.replace(/\s*$/, "")}\n${snippet}`),
+                  )
+                }
                 spellCheck={false}
               />
               {preview && (
@@ -483,15 +494,19 @@ export default function ProjectDetail({
       {creatingEntry && (
         <EntryEditor
           projectId={project.id}
+          knownTags={meta.tags}
           dirName={project.dir_name}
+          initial={{ body: entrySeed ?? project.entry_template ?? "" }}
           onCancel={() => {
             setCreatingEntry(false);
+            setEntrySeed(null);
             setDraftEntryId(null);
             load();
           }}
           onSaved={(entry, options) => {
             if (options.close) {
               setCreatingEntry(false);
+              setEntrySeed(null);
               setDraftEntryId(null);
             } else {
               setDraftEntryId(entry.id);
@@ -503,12 +518,36 @@ export default function ProjectDetail({
       )}
 
       <ol className="timeline">
-        {visibleEntries.map((entry, index) =>
-          editingEntryId === entry.id ? (
+        {visibleEntries.map((entry, index) => (
+          <Fragment key={entry.id}>
+            {/* 어디까지 보고했는지를 목록에서 바로 보이게 한다.
+                기록은 최신순이므로, 보고에 담긴 첫 기록 위에 선을 긋는다. */}
+            {entry.reported_on && entry.reported_on !== visibleEntries[index - 1]?.reported_on && (
+              <li className="report-marker" aria-hidden="true">
+                <span>여기까지 {entry.reported_on} 보고함</span>
+              </li>
+            )}
+            {renderEntry(entry, index)}
+          </Fragment>
+        ))}
+        {visibleEntries.length === 0 && !creatingEntry && (
+          <li className="empty card">아직 기록이 없습니다. [기록 추가]로 첫 진행 내용을 남겨 보세요.</li>
+        )}
+      </ol>
+
+      </div>
+      </div>
+    </section>
+  );
+
+  function renderEntry(entry: Entry, index: number) {
+    return (
+        editingEntryId === entry.id ? (
             <li key={entry.id}>
               <EntryEditor
-                projectId={project.id}
-                dirName={project.dir_name}
+                projectId={current.id}
+                knownTags={meta.tags}
+                dirName={current.dir_name}
                 initial={entry}
                 onCancel={() => {
                   setEditingEntryId(null);
@@ -553,6 +592,17 @@ export default function ProjectDetail({
                   ))}
                 </div>
                 <div className="entry-actions">
+                  <button
+                    className="ghost"
+                    title="이 기록의 내용을 가져와 오늘 날짜로 새 기록을 씁니다"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEntrySeed(entry.body ?? "");
+                      setCreatingEntry(true);
+                    }}
+                  >
+                    이어쓰기
+                  </button>
                   <button className="ghost" onClick={() => setEditingEntryId(entry.id)}>
                     수정
                   </button>
@@ -586,17 +636,9 @@ export default function ProjectDetail({
                 </div>
               )}
             </li>
-          ),
-        )}
-        {visibleEntries.length === 0 && !creatingEntry && (
-          <li className="empty card">아직 기록이 없습니다. [기록 추가]로 첫 진행 내용을 남겨 보세요.</li>
-        )}
-      </ol>
-
-      </div>
-      </div>
-    </section>
-  );
+          )
+    );
+  }
 }
 
 

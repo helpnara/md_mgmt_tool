@@ -21,6 +21,7 @@ from typing import BinaryIO, Iterable
 from ..config import get_settings
 from ..vault import paths
 from .projects import now_iso, project_dir
+from . import trash as trash_service
 
 CHUNK_SIZE = 1024 * 1024  # 1MB
 # 문서가 놓인 폴더(과제 폴더 기준 상대 경로). 링크는 이 위치를 기준으로 만든다.
@@ -342,6 +343,13 @@ def delete_attachment(conn: sqlite3.Connection, attachment_id: int) -> None:
             trash, f"{row['project_id']}-{datetime.now():%Y%m%d%H%M%S}-{path.stem}", path.suffix
         )
         paths.move(path, target)
+        trash_service.record(
+            "attachment",
+            label=row["orig_name"],
+            moved_to=target,
+            origin=path,
+            project_id=row["project_id"],
+        )
     conn.execute("DELETE FROM attachment WHERE id = ?", (attachment_id,))
     conn.commit()
     sync_doc_meta(conn, entry_id=row["entry_id"], report_id=row["report_id"])

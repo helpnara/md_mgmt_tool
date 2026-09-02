@@ -17,6 +17,7 @@ from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
 from . import settings as settings_service
+from . import trash as trash_service
 from .projects import now_iso, project_dir
 
 # 진행일지 본문의 첨부 링크(../assets/…)를 보고 문서 위치에서 본 경로로 바꾼다.
@@ -65,7 +66,7 @@ def unreported_entries(conn: sqlite3.Connection, project_id: str) -> list[sqlite
 
 def _draft_body(entries: list[sqlite3.Row]) -> str:
     if not entries:
-        return DRAFT_TEMPLATE.format(summary="- (이번 기간에 새로 작성된 진행일지가 없습니다)")
+        return settings_service.report_template().format(summary="- (이번 기간에 새로 작성된 진행일지가 없습니다)")
 
     summary = "\n".join(f"- {row['date']} {row['title']}" for row in entries)
     sections = []
@@ -75,7 +76,7 @@ def _draft_body(entries: list[sqlite3.Row]) -> str:
         sections.append(f"### {row['date']} {row['title']}\n\n{body.strip()}")
 
     return (
-        DRAFT_TEMPLATE.format(summary=summary).replace(
+        settings_service.report_template().format(summary=summary).replace(
             "## 특이사항 및 이슈",
             "## 진행 내용\n\n" + "\n\n".join(sections) + "\n\n## 특이사항 및 이슈",
         )
@@ -199,6 +200,13 @@ def delete_report(conn: sqlite3.Connection, report_id: int) -> None:
         trash, f"{row['project_id']}-report-{row['report_date']}-{datetime.now():%Y%m%d%H%M%S}", ""
     )
     paths.move(folder, target)
+    trash_service.record(
+        "report",
+        label=f"{row['report_date']} 보고" + (f" · {row['audience']}" if row["audience"] else ""),
+        moved_to=target,
+        origin=folder,
+        project_id=row["project_id"],
+    )
     index_project(conn, project_dir(conn, row["project_id"]))
     conn.commit()
 

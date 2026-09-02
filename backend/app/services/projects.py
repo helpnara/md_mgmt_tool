@@ -10,6 +10,7 @@ from ..config import DEFAULT_STATUS, STATUS_KEYS, TYPE_KEYS, get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
+from . import trash as trash_service
 
 # 카드 제목이 "과제 개요"이므로 본문은 같은 제목을 반복하지 않는다.
 # 각 항목이 무엇을 적는 자리인지 괄호로 안내하고, 사용자는 그 줄을 지우고 쓰면 된다.
@@ -194,7 +195,15 @@ def archive_project(conn: sqlite3.Connection, project_id: str) -> None:
     directory = project_dir(conn, project_id)
     settings.trash_dir.mkdir(parents=True, exist_ok=True)
     target = paths.unique_path(settings.trash_dir, f"{directory.name}-{datetime.now():%Y%m%d%H%M%S}", "")
+    row = conn.execute("SELECT title FROM project WHERE id = ?", (project_id,)).fetchone()
     paths.move(directory, target)
+    trash_service.record(
+        "project",
+        label=f"{project_id} {row['title'] if row else directory.name}",
+        moved_to=target,
+        origin=directory,
+        project_id=project_id,
+    )
     conn.execute("DELETE FROM project WHERE id = ?", (project_id,))
     conn.execute("DELETE FROM search_fts WHERE project_id = ?", (project_id,))
     conn.commit()

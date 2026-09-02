@@ -21,6 +21,19 @@ def _tags(conn: sqlite3.Connection, entry_id: int) -> list[str]:
     return [row["name"] for row in rows]
 
 
+def _reported_on(conn: sqlite3.Connection, entry_id: int) -> str | None:
+    """이 진행일지가 담긴 확정 보고의 날짜. 여러 번 담겼으면 가장 이른 것."""
+    row = conn.execute(
+        """
+        SELECT MIN(r.report_date) AS report_date
+          FROM report_entry re JOIN report r ON r.id = re.report_id
+         WHERE re.entry_id = ? AND r.frozen_at IS NOT NULL
+        """,
+        (entry_id,),
+    ).fetchone()
+    return row["report_date"] if row else None
+
+
 def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, with_body: bool = True) -> dict:
     data = {
         "id": row["id"],
@@ -32,6 +45,9 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, with_body: bool = Tru
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "tags": _tags(conn, row["id"]),
+        # 이 기록이 어느 보고에 담겼는지. 타임라인에 "여기까지 보고함" 선을 긋는 데 쓴다.
+        # 확정된 보고만 센다 — 작성 중인 초안은 아직 보고한 것이 아니다.
+        "reported_on": _reported_on(conn, row["id"]),
     }
     if with_body:
         data["body"] = row["body"]

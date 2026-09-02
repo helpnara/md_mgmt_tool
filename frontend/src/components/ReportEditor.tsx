@@ -5,6 +5,7 @@ import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import type { Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
+import { pasteAsTable } from "../table";
 import { scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
@@ -225,7 +226,10 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
               if (files.length > 0) {
                 event.preventDefault();
                 void handleFiles(files);
+                return;
               }
+              // 보고 문서야말로 엑셀 표를 그대로 옮겨 오는 일이 잦다.
+              if (pasteAsTable(event, insertAtCursor)) setDirty(true);
             }}
             spellCheck={false}
           />

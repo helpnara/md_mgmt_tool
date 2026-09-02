@@ -11,6 +11,7 @@ from ..config import get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
+from . import trash as trash_service
 from . import settings as settings_service
 from .projects import now_iso, project_dir
 
@@ -141,5 +142,12 @@ def delete_entry(conn: sqlite3.Connection, entry_id: int) -> None:
     trash.mkdir(parents=True, exist_ok=True)
     target = paths.unique_path(trash, f"{row['project_id']}-{path.stem}-{datetime.now():%Y%m%d%H%M%S}", ".md")
     paths.move(path, target)
+    trash_service.record(
+        "entry",
+        label=f"{row['date']} {row['title'] or path.stem}",
+        moved_to=target,
+        origin=path,
+        project_id=row["project_id"],
+    )
     index_project(conn, project_dir(conn, row["project_id"]))
     conn.commit()

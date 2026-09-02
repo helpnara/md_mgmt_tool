@@ -607,6 +607,8 @@ score = elapsed + unreported_entries × 0.5
 | GET | `/api/report-candidates` | 보고 대상 후보 목록(경과일·미보고 건수·점수) |
 | GET | `/api/dashboard` | 메인 상단 대시보드(상태별·속성별 과제 수, 마감 임박·초과, 보고 대상 상위 N건) |
 | POST | `/api/projects/{id}/attachments` | 과제 개요에 직접 붙이는 첨부(효과 산출 근거 등) |
+| GET | `/api/trash` · POST `/api/trash/{name}/restore` | 삭제 보관함 목록 · 원래 자리로 되돌리기 |
+| GET | `/api/settings/defaults` | 설정을 비웠을 때 쓰이는 기본 서식(진행일지·보고 초안) |
 | POST | `/api/entries/{entry_id}/attachments` | 첨부 업로드(multipart) |
 | GET | `/api/attachments/{id}` | 원본 다운로드 |
 | GET | `/api/attachments/{id}/thumb` | 이미지 썸네일 |

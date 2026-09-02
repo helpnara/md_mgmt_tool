@@ -4,9 +4,11 @@ import { filesBase, renderMarkdown } from "../markdown";
 import type { Entry } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
+import { pasteAsTable } from "../table";
 import { scrollEditorIntoView, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
+import TagSuggestions from "./TagSuggestions";
 
 const AUTOSAVE_DELAY_MS = 10_000;
 const AUTOSAVE_PREF_KEY = "md-mgmt:autosave";
@@ -23,6 +25,8 @@ interface UploadState {
 
 interface Props {
   projectId: string;
+  /** 이미 쓰고 있는 태그 — 눌러서 덧붙일 수 있게 보여 준다 */
+  knownTags?: string[];
   dirName?: string;
   initial?: Partial<Entry>;
   onSaved: (entry: Entry, options: { close: boolean }) => void;
@@ -33,7 +37,7 @@ function draftKey(projectId: string, entryId: number | null): string {
   return `md-mgmt:draft:${entryId ?? `new-${projectId}`}`;
 }
 
-export default function EntryEditor({ projectId, dirName, initial, onSaved, onCancel }: Props) {
+export default function EntryEditor({ projectId, knownTags = [], dirName, initial, onSaved, onCancel }: Props) {
   const [entryId, setEntryId] = useState<number | null>(initial?.id ?? null);
   const [date, setDate] = useState(initial?.date ?? todayIso());
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -281,6 +285,14 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
             }}
             placeholder="측정, 분석"
           />
+          <TagSuggestions
+            known={knownTags}
+            value={tags}
+            onPick={(next) => {
+              setTags(next);
+              markDirty();
+            }}
+          />
         </label>
       </div>
 
@@ -299,7 +311,10 @@ export default function EntryEditor({ projectId, dirName, initial, onSaved, onCa
             if (files.length > 0) {
               event.preventDefault();
               void handleFiles(files);
+              return;
             }
+            // 엑셀에서 복사한 표는 마크다운 표로 바꿔 넣는다.
+            if (pasteAsTable(event, insertAtCursor)) markDirty();
           }}
           placeholder="진행 내용을 마크다운으로 작성합니다. 이미지는 Ctrl+V로 바로 붙여넣을 수 있습니다."
           spellCheck={false}

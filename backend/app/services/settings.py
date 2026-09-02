@@ -12,7 +12,16 @@ from typing import Any
 from ..config import get_settings
 
 FILENAME = "settings.json"
-DEFAULTS: dict[str, Any] = {"author": ""}
+
+# 빈 문자열이면 코드에 있는 기본 서식을 쓴다. 사용자가 채우면 그것이 우선한다.
+# 진행일지 서식은 과제 속성마다 다를 수 있어 사전으로 둔다 ("" 키가 공통 서식).
+DEFAULTS: dict[str, Any] = {
+    "author": "",
+    "entry_templates": {},
+    "report_template": "",
+}
+# 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
+_TEXT_KEYS = ("author", "report_template")
 
 
 def _path():
@@ -34,8 +43,17 @@ def load() -> dict[str, Any]:
 def save(updates: dict[str, Any]) -> dict[str, Any]:
     current = load()
     for key in DEFAULTS:
-        if key in updates and updates[key] is not None:
+        if key not in updates or updates[key] is None:
+            continue
+        if key in _TEXT_KEYS:
             current[key] = str(updates[key]).strip()
+        elif key == "entry_templates":
+            # 빈 서식은 저장하지 않는다 — 비우면 "기본 서식으로 되돌린다"는 뜻이다.
+            current[key] = {
+                str(k): str(v) for k, v in dict(updates[key]).items() if str(v).strip()
+            }
+        else:
+            current[key] = updates[key]
     path = _path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -50,3 +68,28 @@ def current_author(explicit: str | None = None) -> str:
     if explicit and explicit.strip():
         return explicit.strip()
     return load()["author"]
+
+
+def entry_template(project_type: str | None) -> str:
+    """진행일지 기본 서식.
+
+    과제 속성별 서식이 있으면 그것을, 없으면 공통 서식을, 그것도 없으면
+    코드에 든 기본값을 쓴다. 빈칸에서 시작하면 무엇을 적을지부터 고민하게 된다.
+    """
+    from ..config import DEFAULT_ENTRY_TEMPLATE
+
+    templates = load()["entry_templates"]
+    for key in (project_type or "", ""):
+        text = str(templates.get(key, "")).strip()
+        if text:
+            return text
+    return DEFAULT_ENTRY_TEMPLATE
+
+
+def report_template() -> str:
+    """보고 초안 서식. `{summary}` 자리에 미보고 진행일지가 들어간다."""
+    from ..services.reports import DRAFT_TEMPLATE
+
+    text = load()["report_template"].strip()
+    # {summary} 가 없으면 진행 내용이 통째로 사라진다. 그런 서식은 쓰지 않는다.
+    return text if "{summary}" in text else DRAFT_TEMPLATE

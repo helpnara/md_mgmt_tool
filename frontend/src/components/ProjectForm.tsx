@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Meta, Project } from "../types";
+import TagSuggestions from "./TagSuggestions";
 
 interface Props {
   meta: Meta;
@@ -145,6 +146,11 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             value={form.tags}
             onChange={(event) => update("tags", event.target.value)}
             placeholder="예: 공정, 수명평가"
+          />
+          <TagSuggestions
+            known={meta.tags}
+            value={form.tags}
+            onPick={(next) => update("tags", next)}
           />
         </label>
       </div>

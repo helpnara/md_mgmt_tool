@@ -1,4 +1,4 @@
-import type { AppSettings, Dashboard, Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview } from "./types";
+import type { AppSettings, Dashboard, Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -43,6 +43,14 @@ export const api = {
     ),
   deleteAttachment: (id: number) => request<void>(`/api/attachments/${id}`, { method: "DELETE" }),
   settings: () => request<AppSettings>("/api/settings"),
+  settingsDefaults: () =>
+    request<{ entry_template: string; report_template: string }>("/api/settings/defaults"),
+  trash: () => request<TrashItem[]>("/api/trash"),
+  restoreFromTrash: (name: string) =>
+    request<{ restored_to: string; label: string }>(
+      `/api/trash/${encodeURIComponent(name)}/restore`,
+      { method: "POST" },
+    ),
   saveSettings: (payload: Partial<AppSettings>) =>
     request<AppSettings>("/api/settings", { method: "PUT", body: JSON.stringify(payload) }),
   listReports: (projectId: string) => request<Report[]>(`/api/projects/${projectId}/reports`),

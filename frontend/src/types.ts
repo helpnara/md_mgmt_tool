@@ -45,6 +45,8 @@ export interface Project {
   report_count?: number;
   attachment_count?: number;
   attachment_bytes?: number;
+  /** 새 진행일지를 시작할 서식 (설정에서 속성별로 바꿀 수 있다) */
+  entry_template?: string;
 }
 
 export interface Entry {
@@ -58,6 +60,8 @@ export interface Entry {
   created_at: string | null;
   updated_at: string | null;
   tags: string[];
+  /** 이 기록이 담긴 확정 보고의 날짜. 없으면 아직 보고 전이다. */
+  reported_on?: string | null;
 }
 
 export interface SearchResults {
@@ -131,6 +135,22 @@ export interface SpreadsheetPreview {
 export interface AppSettings {
   /** 지금은 설정에서 정한 사용자, 나중에는 로그인한 사용자가 된다. */
   author: string;
+  /** 과제 속성별 진행일지 서식. "" 키가 공통 서식. */
+  entry_templates: Record<string, string>;
+  /** 보고 초안 서식. {summary} 자리에 미보고 진행일지가 들어간다. */
+  report_template: string;
+}
+
+export interface TrashItem {
+  trash_name: string;
+  kind: string | null;
+  kind_label: string | null;
+  label: string;
+  project_id: string | null;
+  deleted_at: string | null;
+  origin: string | null;
+  restorable: boolean;
+  is_folder: boolean;
 }
 
 export interface DashboardCount {

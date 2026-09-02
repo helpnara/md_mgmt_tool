@@ -10,6 +10,7 @@ from ..vault.markdown import ExternalChangeError
 from ..vault.paths import FileInUseError
 from ..services import projects as svc
 from ..services import search as search_svc
+from ..services import settings as settings_service
 from ..schemas import ProjectCreate, ProjectUpdate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -167,6 +168,8 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     ).fetchone()
     data["attachment_count"] = files["n"]
     data["attachment_bytes"] = files["bytes"]
+    # 새 진행일지를 빈칸이 아니라 서식에서 시작하도록 함께 실어 보낸다.
+    data["entry_template"] = settings_service.entry_template(row["type"])
     return data
 
 

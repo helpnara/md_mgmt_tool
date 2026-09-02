@@ -28,6 +28,15 @@ EFFECT_UNIT = "억원/년"
 # 기대효과(착수 시 예상) / 실증효과(끝난 뒤 확인). 둘은 반드시 나눠 둔다 —
 # 한 칸에 담으면 "예상은 얼마였고 실제로 얼마였나"를 되짚을 수 없다.
 EFFECT_FIELDS = ("effect_expected", "effect_verified")
+
+# 진행일지 기본 서식. 설정에서 속성별로 바꿀 수 있다 (services/settings.py).
+# 빈칸에서 시작하면 무엇을 적을지부터 고민하게 되므로 뼈대를 준다.
+DEFAULT_ENTRY_TEMPLATE = """## 진행 내용
+
+## 결과 · 확인한 것
+
+## 다음 할 일
+"""
 # 보드에서 기본 접어 두는 상태
 COLLAPSED_STATUSES = {"done", "dropped"}
 # 끝난 과제 — 마감이 지났다고 경고하지 않는다.

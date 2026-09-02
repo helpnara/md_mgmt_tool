@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta } from "../types";
+import ReportTemplateCard from "./ReportTemplateCard";
+import EntryTemplateCard from "./EntryTemplateCard";
+import TrashCard from "./TrashCard";
 
 /**
  * 도구 설정.
@@ -84,6 +87,10 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
           </button>
         </div>
       </div>
+
+      <EntryTemplateCard meta={meta} />
+      <ReportTemplateCard />
+      <TrashCard />
 
       <div className="card">
         <h2>데이터 위치</h2>
