@@ -411,9 +411,14 @@ button { white-space: nowrap; }
   background: #fcfcfd; font-size: 12px; color: var(--text); cursor: pointer;
 }
 .dash-chip b { font-weight: 700; margin-left: 2px; }
-.dash-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+/* 고르지 않은 칩만 건드린다. 아래 .on 규칙과 우선순위가 얽히면
+   파란 바탕에 파란 글씨, 흰 바탕에 흰 글씨가 되어 칩이 통째로 사라진다. */
+.dash-chip.type:not(.on) { background: #f8fafc; }
+.dash-chip:hover:not(.on) { border-color: var(--accent); color: var(--accent); }
+/* 고른 칩은 배경·글자색을 이 규칙이 끝까지 쥐고 있어야 한다. */
 .dash-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-.dash-chip.type { background: #f8fafc; }
+/* 고른 칩에도 마우스 반응은 남긴다 — 색을 바꾸지 않고 밝기만 낮춘다. */
+.dash-chip.on:hover { filter: brightness(0.92); }
 
 /* 마감 경고는 작게. 있을 때만 눈에 띄면 된다. */
 .dash-warn { display: flex; gap: 6px; margin-left: auto; flex: 0 0 auto; }
