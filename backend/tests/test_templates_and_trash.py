@@ -19,7 +19,7 @@ def make(client, **kwargs):
 def test_entry_template_falls_back_to_the_built_in_default(client):
     project = make(client)
     detail = client.get(f"/api/projects/{project['id']}").json()
-    assert "## 진행 내용" in detail["entry_template"]
+    assert detail["entry_template"] == "## 내용\n\n## 진행\n\n## 계획\n"
 
 
 def test_entry_template_per_project_type(client):
@@ -39,7 +39,7 @@ def test_clearing_a_template_returns_to_the_default(client):
     client.put("/api/settings", json={"entry_templates": {"": "잠깐 쓰던 서식"}})
     client.put("/api/settings", json={"entry_templates": {"": "   "}})
     project = make(client)
-    assert "## 진행 내용" in client.get(f"/api/projects/{project['id']}").json()["entry_template"]
+    assert client.get(f"/api/projects/{project['id']}").json()["entry_template"].startswith("## 내용")
 
 
 # ── 보고 초안 서식 ────────────────────────────────────

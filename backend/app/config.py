@@ -31,11 +31,11 @@ EFFECT_FIELDS = ("effect_expected", "effect_verified")
 
 # 진행일지 기본 서식. 설정에서 속성별로 바꿀 수 있다 (services/settings.py).
 # 빈칸에서 시작하면 무엇을 적을지부터 고민하게 되므로 뼈대를 준다.
-DEFAULT_ENTRY_TEMPLATE = """## 진행 내용
+DEFAULT_ENTRY_TEMPLATE = """## 내용
 
-## 결과 · 확인한 것
+## 진행
 
-## 다음 할 일
+## 계획
 """
 # 보드에서 기본 접어 두는 상태
 COLLAPSED_STATUSES = {"done", "dropped"}
