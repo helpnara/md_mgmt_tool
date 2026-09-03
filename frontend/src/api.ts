@@ -1,4 +1,4 @@
-import type { AppSettings, Dashboard, Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { AppSettings, Dashboard, Entry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -79,6 +79,34 @@ export const api = {
   unfreezeReport: (id: number) => request<Report>(`/api/reports/${id}/unfreeze`, { method: "POST" }),
   deleteReport: (id: number) => request<void>(`/api/reports/${id}`, { method: "DELETE" }),
   listReportAttachments: (id: number) => request<Attachment[]>(`/api/reports/${id}/attachments`),
+  /** 지난 보고 대비 변경분 (T11). */
+  reportDiff: (id: number) => request<ReportDiff>(`/api/reports/${id}/diff`),
+  /** 과제를 가로질러 보고를 찾는다 (T13). */
+  searchReports: (filters: {
+    audience?: string;
+    from?: string;
+    to?: string;
+    q?: string;
+    state?: string;
+  }) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    const query = params.toString();
+    return request<ReportHistoryItem[]>(`/api/reports${query ? `?${query}` : ""}`);
+  },
+  /** 과제 번호를 새 팀 코드로 한 번에 맞춘다. preview 는 파일을 건드리지 않는다. */
+  renumberPreview: (code: string) =>
+    request<RenumberPlan>("/api/settings/project-code/renumber/preview", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  renumberApply: (code: string) =>
+    request<{ code: string; changed: { id: string; new_id: string; title: string }[] }>(
+      "/api/settings/project-code/renumber",
+      { method: "POST", body: JSON.stringify({ code }) },
+    ),
   reportCandidates: (includeInactive = false) =>
     request<{ cycle_days: number; default_report_date: string; items: ReportCandidate[] }>(
       `/api/report-candidates?include_inactive=${includeInactive}`,

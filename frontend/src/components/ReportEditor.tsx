@@ -10,6 +10,7 @@ import { scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
+import ReportDiff from "./ReportDiff";
 
 interface UploadState {
   key: string;
@@ -39,6 +40,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   // 보고일. 초안일 때만 고칠 수 있다 — 확정된 보고의 날짜는 "언제 보고했는가"라는 사실이다.
   const [reportDate, setReportDate] = useState(report.report_date);
   const [preview, togglePreview] = usePreview();
+  // "지난주와 뭐가 달라졌나" — 보고 자리에서 가장 많이 받는 질문이다.
+  const [showDiff, setShowDiff] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -165,6 +168,13 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
               진행 내용 지우기
             </button>
           )}
+          <button
+            className={showDiff ? "ghost on" : "ghost"}
+            onClick={() => setShowDiff((prev) => !prev)}
+            title="직전에 확정한 보고와 비교합니다."
+          >
+            지난 보고 대비
+          </button>
           <button className="ghost" onClick={() => copy("excel")}>
             엑셀 셀로 복사
           </button>
@@ -228,6 +238,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
           {report.author && ` · 작성 ${report.author}`}
         </span>
       </div>
+
+      {showDiff && <ReportDiff reportId={report.id} />}
 
       {frozen ? (
         <div className="markdown snapshot" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />

@@ -32,3 +32,11 @@ def vault_dir(client):
     from app.config import get_settings
 
     return get_settings().vault_dir
+
+
+@pytest.fixture()
+def db(client):
+    """서버가 쓰고 있는 그 커넥션. 서비스 함수를 직접 부르는 시험에 쓴다."""
+    from app import deps
+
+    return deps._conn

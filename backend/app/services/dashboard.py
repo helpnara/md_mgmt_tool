@@ -9,6 +9,7 @@
   · 담당자별 과제 수    — 지금 누가 몇 개를 들고 있나
   · 이번 주 보고 대상   — 상위 몇 건. 누르면 그 과제 상세로 간다
   · 마감 임박 / 기한 초과 — 작게. 있을 때만 눈에 띈다
+  · 보고 리마인더       — 선정일·보고일에만. 매일 뜨면 곧 안 보게 된다
 """
 from __future__ import annotations
 
@@ -94,6 +95,8 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT) -> dict:
         "due_soon_days": DUE_SOON_DAYS,
         "overdue": overdue,
         "report_date": reports_service.default_report_date(),
+        # 오늘이 선정일도 보고일도 아니면 None 이다. 화면은 그때 배너를 접는다.
+        "reminder": reports_service.reminder(conn),
         "candidates": candidates,
     }
 

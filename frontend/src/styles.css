@@ -528,3 +528,121 @@ button { white-space: nowrap; }
 .draft-controls input { width: auto; }
 .report-date-field { max-width: 170px; }
 .report-date-field input:disabled { background: #f6f7f9; color: var(--muted); }
+
+/* ── 보고 리마인더 (T12) ─────────────────────────────────────────────────────
+   선정일·보고일에만 뜬다. 매일 뜨면 곧 안 보게 되므로, 뜰 때는 확실히 보이게 한다. */
+.report-reminder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+.report-reminder.report { border-color: var(--warn); background: #fef6e7; }
+.reminder-mark {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.report-reminder.report .reminder-mark { background: var(--warn); }
+.reminder-text { flex: 1 1 260px; }
+/* 연한 파랑 위의 기본 --accent 는 명암비 4.03 으로 AA(4.5)에 못 미친다. 한 단계 어둡게. */
+.reminder-go { flex: none; color: #255ccc; font-weight: 600; text-decoration: none; }
+.report-reminder.report .reminder-go { color: var(--warn); }
+.reminder-go:hover { text-decoration: underline; }
+
+/* ── 지난 보고 대비 변경분 (T11) ───────────────────────────────────────────── */
+.report-diff {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.report-diff .hint { margin: 0 0 8px; }
+.diff-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 340px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.diff-lines li { display: flex; gap: 8px; padding: 0 6px; white-space: pre-wrap; word-break: break-word; }
+.diff-mark { flex: none; width: 10px; text-align: center; font-weight: 700; }
+.diff-text { flex: 1; }
+/* 색만으로 구분하지 않는다 — +/− 기호를 함께 둔 이유다 (색각 이상·흑백 인쇄) */
+.diff-add { background: #e7f6ec; color: #14532d; }
+.diff-del { background: #fdeceb; color: #7f1d1d; }
+.diff-same { color: var(--muted); }
+.diff-gap { color: var(--muted); background: var(--surface); font-style: italic; justify-content: center; }
+
+/* ── 보고 이력 (T13) ──────────────────────────────────────────────────────── */
+.history-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.history-filters label { min-width: 130px; }
+.history-filters input, .history-filters select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--surface);
+  color: var(--text);
+}
+.history-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.history-list a {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+}
+/* 확정된 보고와 작성 중인 초안은 성격이 다르다. 왼쪽 띠로 구분한다. */
+.history-list li.frozen a { border-left-color: var(--accent); }
+.history-list li.draft a { border-left-color: var(--warn); }
+.history-list a:hover { background: var(--accent-soft); }
+.history-date { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; }
+.history-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.history-project { font-weight: 500; }
+.history-excerpt { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; }
+.history-audience { color: var(--accent); font-weight: 600; }
+
+/* ── 과제 번호 일괄 변경 ──────────────────────────────────────────────────── */
+.renumber-plan {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.renumber-plan h3 { margin: 0 0 8px; font-size: 13px; }
+.renumber-list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; }
+.renumber-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+.renumber-list code.from { color: var(--muted); text-decoration: line-through; }
+.renumber-list code.to { color: var(--accent); font-weight: 700; }
+.renumber-title { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.warn-tag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 700;
+}

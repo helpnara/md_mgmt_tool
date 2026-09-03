@@ -187,5 +187,62 @@ export interface Dashboard {
   due_soon_days: number;
   overdue: number;
   report_date: string;
+  /** 오늘이 선정일·보고일일 때만 채워진다. 매일 뜨면 곧 안 보게 된다. */
+  reminder: ReportReminder | null;
   candidates: ReportCandidate[];
+}
+
+/** 보고 주기 알림 (T12). */
+export interface ReportReminder {
+  /** select = 오늘 고르는 날, report = 오늘 보고하는 날 */
+  phase: "select" | "report";
+  report_date: string;
+  /** 그 날짜로 만들어 둔 초안 수 */
+  drafts: number;
+  /** 그 날짜로 이미 확정한 보고 수 */
+  done: number;
+  /** 아직 보고에 담기지 않은 진행일지를 가진 과제 수 */
+  pending: number;
+}
+
+/** 과제를 가로질러 본 보고 한 건 (T13). 본문은 담지 않는다. */
+export interface ReportHistoryItem {
+  id: number;
+  project_id: string;
+  project_title: string;
+  project_status: string;
+  project_type: string | null;
+  report_date: string;
+  title: string | null;
+  audience: string | null;
+  author: string | null;
+  frozen_at: string | null;
+  frozen: boolean;
+  covers_from: string | null;
+  covers_to: string | null;
+  entry_count: number;
+  excerpt: string;
+}
+
+/** 지난 보고 대비 변경분 (T11). */
+export interface ReportDiff {
+  previous: { id: number; report_date: string; title: string | null; audience: string | null } | null;
+  added: number;
+  removed: number;
+  lines: { kind: "add" | "del" | "same" | "gap"; text: string }[];
+}
+
+/** 과제 번호 일괄 변경 미리보기. */
+export interface RenumberPlan {
+  code: string;
+  total: number;
+  changes: {
+    id: string;
+    title: string;
+    new_id: string;
+    dir_name: string;
+    new_dir_name: string;
+    renumbered: boolean;
+  }[];
+  skipped: { id: string; title: string; skip: string }[];
 }

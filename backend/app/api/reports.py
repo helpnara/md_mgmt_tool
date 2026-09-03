@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from ..deps import get_db
@@ -54,6 +54,30 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, with_body: bool = Tru
     return data
 
 
+@router.get("/api/reports")
+def search_reports(
+    audience: str | None = None,
+    date_from: str | None = Query(None, alias="from"),
+    date_to: str | None = Query(None, alias="to"),
+    q: str | None = None,
+    project_id: str | None = None,
+    state: str | None = Query(None, pattern="^(frozen|draft)$"),
+    limit: int = Query(svc.SEARCH_LIMIT, ge=1, le=500),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> list[dict]:
+    """과제를 가로질러 보고 문서를 찾는다 (피보고자·기간·검색어)."""
+    return svc.search(
+        conn,
+        audience=audience,
+        date_from=date_from,
+        date_to=date_to,
+        query=q,
+        project_id=project_id,
+        state=state,
+        limit=limit,
+    )
+
+
 @router.get("/api/projects/{project_id}/reports")
 def list_reports(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> list[dict]:
     rows = conn.execute(
@@ -100,6 +124,15 @@ def update_report(
     except FileInUseError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _serialize(conn, svc.report_row(conn, report_id))
+
+
+@router.get("/api/reports/{report_id}/diff")
+def report_diff(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """직전에 확정한 보고와의 차이. 비교할 보고가 없으면 previous 가 null."""
+    try:
+        return svc.diff_with_previous(conn, report_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="보고 문서를 찾을 수 없습니다.") from exc
 
 
 @router.post("/api/reports/{report_id}/freeze")

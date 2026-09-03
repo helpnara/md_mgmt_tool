@@ -308,3 +308,226 @@ def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list
 
     results.sort(key=lambda item: (-item["score"], item["id"]))
     return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 보고 이력 찾기 (T13)
+#
+# 보고 문서는 과제 폴더 안에 흩어져 있다. 그래서 "그 회의체에 마지막으로 뭘
+# 보고했더라"를 확인하려면 과제를 하나씩 열어 봐야 했다. 과제를 가로질러 한 번에
+# 훑을 수 있게, 보고만 따로 모아 보는 길을 낸다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+SEARCH_LIMIT = 200
+
+
+def search(
+    conn: sqlite3.Connection,
+    *,
+    audience: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    query: str | None = None,
+    project_id: str | None = None,
+    state: str | None = None,
+    limit: int = SEARCH_LIMIT,
+) -> list[dict]:
+    """조건에 맞는 보고 문서를 최근 순으로 돌려준다.
+
+    본문은 담지 않는다 — 목록에서 쓸 일이 없고, 보고가 쌓이면 응답만 무거워진다.
+    대신 검색어에 걸린 자리를 알 수 있게 짧은 발췌를 붙인다.
+    """
+    where = ["1=1"]
+    params: list[Any] = []
+
+    if audience:
+        # 회의체 이름은 "전사 주요업무 보고"처럼 길어 정확히 치기 어렵다. 부분 일치로 본다.
+        where.append("LOWER(IFNULL(r.audience, '')) LIKE '%' || LOWER(?) || '%'")
+        params.append(audience)
+    if date_from:
+        where.append("r.report_date >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("r.report_date <= ?")
+        params.append(date_to)
+    if project_id:
+        where.append("r.project_id = ?")
+        params.append(project_id)
+    if state == "frozen":
+        where.append("r.frozen_at IS NOT NULL")
+    elif state == "draft":
+        where.append("r.frozen_at IS NULL")
+    if query:
+        where.append(
+            "(LOWER(IFNULL(r.title, '')) LIKE '%' || LOWER(?) || '%'"
+            " OR LOWER(IFNULL(r.body, '')) LIKE '%' || LOWER(?) || '%'"
+            " OR LOWER(p.title) LIKE '%' || LOWER(?) || '%')"
+        )
+        params.extend([query, query, query])
+
+    rows = conn.execute(
+        "SELECT r.*, p.title AS project_title, p.dir_name AS project_dir,"
+        "       p.status AS project_status, p.type AS project_type"
+        "  FROM report r JOIN project p ON p.id = r.project_id"
+        f" WHERE {' AND '.join(where)}"
+        # 같은 날 여러 건이면 나중에 만든 것이 위로. 날짜만으로는 순서가 흔들린다.
+        " ORDER BY r.report_date DESC, r.id DESC"
+        " LIMIT ?",
+        [*params, max(1, limit)],
+    ).fetchall()
+
+    results = []
+    for row in rows:
+        results.append(
+            {
+                "id": row["id"],
+                "project_id": row["project_id"],
+                "project_title": row["project_title"],
+                "project_status": row["project_status"],
+                "project_type": row["project_type"],
+                "report_date": row["report_date"],
+                "title": row["title"],
+                "audience": row["audience"],
+                "author": row["author"],
+                "frozen_at": row["frozen_at"],
+                "frozen": bool(row["frozen_at"]),
+                "covers_from": row["covers_from"],
+                "covers_to": row["covers_to"],
+                "entry_count": conn.execute(
+                    "SELECT COUNT(*) AS n FROM report_entry WHERE report_id = ?", (row["id"],)
+                ).fetchone()["n"],
+                "excerpt": _excerpt(row["body"], query),
+            }
+        )
+    return results
+
+
+def _excerpt(body: str | None, query: str | None, width: int = 60) -> str:
+    """검색어 둘레를 잘라 낸다. 검색어가 없으면 첫 줄 몇 글자."""
+    text = " ".join((body or "").split())
+    if not text:
+        return ""
+    if query:
+        found = text.lower().find(query.lower())
+        if found >= 0:
+            start = max(0, found - width // 2)
+            piece = text[start : start + width]
+            return ("…" if start > 0 else "") + piece + ("…" if start + width < len(text) else "")
+    return text[:width] + ("…" if len(text) > width else "")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 지난 보고 대비 변경분 (T11)
+#
+# 보고 자리에서 가장 많이 받는 질문이 "지난주와 뭐가 달라졌나"다.
+# 확정된 보고는 이미 그 시점 그대로 굳어 있으므로, 비교만 하면 답이 나온다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+DIFF_CONTEXT = 2  # 바뀐 줄 앞뒤로 함께 보여 줄 줄 수
+
+
+def previous_report(conn: sqlite3.Connection, row: sqlite3.Row) -> sqlite3.Row | None:
+    """같은 과제에서 이 보고 **직전에 확정된** 보고.
+
+    초안끼리 비교하면 기준이 흔들린다. "지난번에 실제로 보고한 것"만 상대로 삼는다.
+    같은 날짜에 여러 건이면 id 가 작은 쪽이 앞선 것이다.
+    """
+    return conn.execute(
+        "SELECT * FROM report"
+        " WHERE project_id = ? AND frozen_at IS NOT NULL AND id <> ?"
+        "   AND (report_date < ? OR (report_date = ? AND id < ?))"
+        " ORDER BY report_date DESC, id DESC LIMIT 1",
+        (row["project_id"], row["id"], row["report_date"], row["report_date"], row["id"]),
+    ).fetchone()
+
+
+def diff_with_previous(conn: sqlite3.Connection, report_id: int) -> dict:
+    """이 보고와 직전 확정 보고의 차이."""
+    import difflib
+
+    row = report_row(conn, report_id)
+    before = previous_report(conn, row)
+    if before is None:
+        return {"previous": None, "added": 0, "removed": 0, "lines": []}
+
+    old_lines = (before["body"] or "").splitlines()
+    new_lines = (row["body"] or "").splitlines()
+
+    lines: list[dict[str, str]] = []
+    added = removed = 0
+    opcodes = difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False).get_opcodes()
+    for index, (tag, i1, i2, j1, j2) in enumerate(opcodes):
+        if tag == "equal":
+            same = new_lines[j1:j2]
+            # 안 바뀐 줄은 **바뀐 줄 둘레만** 남긴다. 전체를 실으면 "무엇이 달라졌나"가
+            # 도로 묻히고, 문서가 길수록 응답만 무거워진다.
+            head = [] if index == 0 else same[:DIFF_CONTEXT]
+            tail = [] if index == len(opcodes) - 1 else same[-DIFF_CONTEXT:]
+            if len(head) + len(tail) >= len(same):
+                lines.extend({"kind": "same", "text": text} for text in same)
+                continue
+            lines.extend({"kind": "same", "text": text} for text in head)
+            lines.append({"kind": "gap", "text": f"⋯ {len(same) - len(head) - len(tail)}줄 같음"})
+            lines.extend({"kind": "same", "text": text} for text in tail)
+            continue
+        for text in old_lines[i1:i2]:
+            lines.append({"kind": "del", "text": text})
+            removed += 1
+        for text in new_lines[j1:j2]:
+            lines.append({"kind": "add", "text": text})
+            added += 1
+
+    return {
+        "previous": {
+            "id": before["id"],
+            "report_date": before["report_date"],
+            "title": before["title"],
+            "audience": before["audience"],
+        },
+        "added": added,
+        "removed": removed,
+        "lines": lines,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 보고 리마인더 (T12)
+#
+# 월요일에 보고 대상을 고르고 화요일에 보고한다. 이 주기는 사람이 기억할 일이
+# 아니라 화면이 알려 줄 일이다. 다만 매일 뜨면 곧 안 보게 되므로,
+# **선정일과 보고일에만** 띄운다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+REPORT_WEEKDAY = 1  # 화요일 (월=0)
+
+
+def reminder(conn: sqlite3.Connection, today: date_cls | None = None) -> dict | None:
+    """오늘이 선정일이거나 보고일이면 알림 내용을, 아니면 None."""
+    today = today or date_cls.today()
+    weekday = today.weekday()
+    if weekday == REPORT_WEEKDAY:
+        phase = "report"
+    elif weekday == (REPORT_WEEKDAY - 1) % 7:
+        phase = "select"
+    else:
+        return None
+
+    report_date = default_report_date(today)
+    drafts = conn.execute(
+        "SELECT COUNT(*) AS n FROM report WHERE report_date = ? AND frozen_at IS NULL",
+        (report_date,),
+    ).fetchone()["n"]
+    done = conn.execute(
+        "SELECT COUNT(*) AS n FROM report WHERE report_date = ? AND frozen_at IS NOT NULL",
+        (report_date,),
+    ).fetchone()["n"]
+    # 후보는 대시보드가 이미 계산해 둔 것과 같은 기준이어야 한다.
+    pending = sum(1 for item in candidates(conn) if item["unreported_entries"] > 0)
+
+    return {
+        "phase": phase,
+        "report_date": report_date,
+        "drafts": drafts,
+        "done": done,
+        "pending": pending,
+    }

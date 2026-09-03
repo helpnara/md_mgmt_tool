@@ -3,6 +3,8 @@ import { api } from "../api";
 import type { Dashboard as DashboardData } from "../types";
 
 const OPEN_KEY = "md-mgmt:dashboard";
+/** 리마인더를 닫은 날. 같은 날 다시 띄우지 않는다. */
+const REMINDER_KEY = "md-mgmt:reminder-closed";
 /** 담당 줄에 처음 세우는 사람 수. 넘치면 [+N명]으로 접어 둔다. */
 const OWNER_CHIPS = 8;
 
@@ -27,10 +29,17 @@ interface Props {
  * 모든 숫자는 누르면 그 조건으로 걸러진 목록으로 이어진다.
  * 이미 걸려 있는 조건을 다시 누르면 해제된다.
  */
+/** 오늘 날짜 (YYYY-MM-DD). 리마인더를 "오늘 하루만" 닫아 두는 데 쓴다. */
+function today(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) !== "off");
   const [allOwners, setAllOwners] = useState(false);
+  const [reminderClosed, setReminderClosed] = useState(() => localStorage.getItem(REMINDER_KEY));
 
   const load = useCallback(() => {
     api.dashboard().then(setData).catch(() => setData(null));
@@ -49,8 +58,48 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
   const shownOwners = allOwners ? data.owners : data.owners.slice(0, OWNER_CHIPS);
   const hiddenOwners = data.owners.length - shownOwners.length;
 
+  // 오늘이 선정일·보고일이 아니면 reminder 는 null 이라 배너 자체가 없다.
+  const reminder = data.reminder && reminderClosed !== today() ? data.reminder : null;
+
   return (
     <section className={`dashboard${open ? "" : " closed"}`}>
+      {reminder && (
+        <div className={`report-reminder ${reminder.phase}`}>
+          <span className="reminder-mark">{reminder.phase === "report" ? "오늘 보고" : "오늘 선정"}</span>
+          <span className="reminder-text">
+            {reminder.phase === "report" ? (
+              <>
+                <b>{reminder.report_date} 보고하는 날</b>입니다.
+                {reminder.drafts > 0
+                  ? ` 초안 ${reminder.drafts}건이 확정을 기다리고 있습니다.`
+                  : reminder.done > 0
+                    ? ` ${reminder.done}건을 보고했습니다.`
+                    : " 아직 만든 초안이 없습니다."}
+              </>
+            ) : (
+              <>
+                <b>내일({reminder.report_date}) 보고</b>입니다. 오늘 보고 대상을 고르세요.
+                {reminder.pending > 0
+                  ? ` 보고할 진행이 쌓인 과제 ${reminder.pending}건.`
+                  : " 아직 새로 쌓인 진행일지가 없습니다."}
+              </>
+            )}
+          </span>
+          <a className="reminder-go" href="#/reports">
+            보고 대상 보기 →
+          </a>
+          <button
+            className="ghost small"
+            title="오늘은 다시 띄우지 않습니다."
+            onClick={() => {
+              localStorage.setItem(REMINDER_KEY, today());
+              setReminderClosed(today());
+            }}
+          >
+            닫기
+          </button>
+        </div>
+      )}
       <div className="dash-row">
         <button
           className="dash-fold"
