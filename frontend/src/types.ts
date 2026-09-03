@@ -124,6 +124,10 @@ export interface ReportCandidate {
   group: string | null;
   due_date: string | null;
   last_reported_at: string | null;
+  /** 마지막으로 확정한 보고의 피보고자·회의체. 날짜만으로는 보고 수준을 알 수 없다. */
+  last_report_audience: string | null;
+  /** 그 보고 문서. 눌러서 바로 열 수 있게 한다. */
+  last_report_id: number | null;
   days_since_report: number | null;
   unreported_entries: number;
   latest_entry_date: string | null;

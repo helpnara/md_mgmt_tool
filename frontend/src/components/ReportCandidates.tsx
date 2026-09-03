@@ -121,6 +121,7 @@ export default function ReportCandidates({ meta }: { meta: Meta }) {
             <th>과제</th>
             <th>상태</th>
             <th>마지막 보고</th>
+            <th>보고처</th>
             <th>보고 경과</th>
             <th>미보고</th>
             <th>점수</th>
@@ -155,6 +156,29 @@ export default function ReportCandidates({ meta }: { meta: Meta }) {
                 )}
               </td>
               <td>
+                {/* 같은 날짜라도 팀 주간회의와 전사 보고는 수준이 다르다.
+                    누른 곳에서 그때 무엇을 보고했는지 바로 열어 볼 수 있게 한다. */}
+                {item.last_report_audience ? (
+                  item.last_report_id ? (
+                    <a
+                      className="plain-link audience-link"
+                      href={`#/projects/${item.id}?report=${item.last_report_id}`}
+                      title="그때 보고한 내용 열기"
+                    >
+                      {item.last_report_audience}
+                    </a>
+                  ) : (
+                    item.last_report_audience
+                  )
+                ) : item.never_reported ? (
+                  <span className="muted">—</span>
+                ) : (
+                  <span className="muted" title="보고 문서에 피보고자가 적혀 있지 않습니다.">
+                    미기재
+                  </span>
+                )}
+              </td>
+              <td>
                 {item.days_since_report === null ? (
                   "—"
                 ) : (
@@ -176,7 +200,7 @@ export default function ReportCandidates({ meta }: { meta: Meta }) {
           ))}
           {items.length === 0 && (
             <tr>
-              <td colSpan={8} className="empty">
+              <td colSpan={9} className="empty">
                 보고 후보가 없습니다.
               </td>
             </tr>

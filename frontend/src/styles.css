@@ -646,3 +646,7 @@ button { white-space: nowrap; }
   font-size: 11px;
   font-weight: 700;
 }
+
+/* 보고 대상 표의 보고처 — 누르면 그때 보고한 내용이 열린다 */
+.audience-link { color: #255ccc; font-weight: 600; }
+.audience-link:hover { text-decoration: underline; }

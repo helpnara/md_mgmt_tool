@@ -258,6 +258,21 @@ def delete_report(conn: sqlite3.Connection, report_id: int) -> None:
     conn.commit()
 
 
+def last_report_info(conn: sqlite3.Connection, project_id: str) -> sqlite3.Row | None:
+    """마지막으로 **확정한** 보고 한 건.
+
+    `project.last_reported_at` 은 날짜만 들고 있어 "언제"까지만 답한다. 정작 알고 싶은 것은
+    **누구에게 보고했는가**다 — 팀 주간회의에 올린 것과 전사 보고에 올린 것은 같은 날짜라도
+    수준이 다르다. 여기서 그 한 건을 통째로 집어 온다.
+    """
+    return conn.execute(
+        "SELECT report_date, audience, title, id FROM report"
+        " WHERE project_id = ? AND frozen_at IS NOT NULL"
+        " ORDER BY report_date DESC, id DESC LIMIT 1",
+        (project_id,),
+    ).fetchone()
+
+
 def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list[dict]:
     """보고 대상 후보. 마지막 보고 후 경과일과 미보고 진행 분량으로 정렬한다."""
     from ..config import STATUSES
@@ -274,6 +289,7 @@ def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list
 
         unreported = unreported_entries(conn, project["id"])
         last_reported = project["last_reported_at"]
+        last_report = last_report_info(conn, project["id"])
         baseline = last_reported or project["start_date"] or project["created_at"]
         days_since = None
         if baseline:
@@ -298,6 +314,9 @@ def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list
                 "group": project["grp"],
                 "due_date": project["due_date"],
                 "last_reported_at": last_reported,
+                # 날짜만으로는 어떤 수준의 보고였는지 알 수 없다. 보고처를 함께 준다.
+                "last_report_audience": last_report["audience"] if last_report else None,
+                "last_report_id": last_report["id"] if last_report else None,
                 "days_since_report": days_since,
                 "unreported_entries": len(unreported),
                 "latest_entry_date": unreported[-1]["date"] if unreported else None,

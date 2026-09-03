@@ -201,3 +201,46 @@ def test_banner_counts_what_is_already_prepared(client, db):
 def test_dashboard_carries_the_reminder_slot(client):
     make_project(client)
     assert "reminder" in client.get("/api/dashboard").json()
+
+
+# ── 마지막 보고처 (보고 대상 표의 새 칸) ──────────────────────────────────────
+
+def test_candidate_carries_where_the_last_report_went(client):
+    """날짜만으로는 어떤 수준의 보고였는지 알 수 없다. 보고처를 함께 준다."""
+    project = make_project(client)
+    make_report(client, project["id"], report_date="2026-08-04", audience="팀 주간회의", freeze=True)
+    last = make_report(
+        client, project["id"], report_date="2026-08-18", audience="전사 주요업무 보고", freeze=True
+    )
+
+    item = client.get("/api/report-candidates").json()["items"][0]
+    assert item["last_report_audience"] == "전사 주요업무 보고"
+    # 그 보고를 바로 열 수 있게 id 도 함께 준다.
+    assert item["last_report_id"] == last["id"]
+
+
+def test_a_draft_is_not_the_last_report(client):
+    """확정하지 않은 초안은 아직 보고가 아니다. 마지막 보고처가 초안을 가리키면 안 된다."""
+    project = make_project(client)
+    make_report(client, project["id"], report_date="2026-08-04", audience="팀 주간회의", freeze=True)
+    make_report(client, project["id"], report_date="2026-08-18", audience="전사 주요업무 보고")
+
+    item = client.get("/api/report-candidates").json()["items"][0]
+    assert item["last_report_audience"] == "팀 주간회의"
+
+
+def test_never_reported_project_has_no_last_report(client):
+    make_project(client)
+    item = client.get("/api/report-candidates").json()["items"][0]
+    assert item["never_reported"] is True
+    assert item["last_report_audience"] is None and item["last_report_id"] is None
+
+
+def test_a_report_without_an_audience_is_not_an_error(client):
+    """피보고자를 안 적고 보고한 건도 있다. 화면이 '미기재'로 보여 준다."""
+    project = make_project(client)
+    make_report(client, project["id"], report_date="2026-08-04", freeze=True)
+
+    item = client.get("/api/report-candidates").json()["items"][0]
+    assert item["never_reported"] is False
+    assert item["last_report_audience"] is None
