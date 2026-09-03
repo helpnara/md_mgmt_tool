@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, ReportCandidate } from "../types";
 import { formatDate } from "../util";
+import { projectLink, useAddressBar } from "../nav";
 import StatusBadge from "./StatusBadge";
 
 const PICKS_KEY = "md-mgmt:report-picks";
@@ -15,11 +16,18 @@ function loadPicks(): string[] {
   }
 }
 
-export default function ReportCandidates({ meta }: { meta: Meta }) {
+interface Props {
+  meta: Meta;
+  /** 주소에 실려 온 조건 (보고 예정일 · 보류·완료 포함 여부). */
+  query: string;
+}
+
+export default function ReportCandidates({ meta, query }: Props) {
+  const initial = new URLSearchParams(query);
   const [items, setItems] = useState<ReportCandidate[]>([]);
   const [cycleDays, setCycleDays] = useState(7);
-  const [reportDate, setReportDate] = useState("");
-  const [includeInactive, setIncludeInactive] = useState(false);
+  const [reportDate, setReportDate] = useState(() => initial.get("date") ?? "");
+  const [includeInactive, setIncludeInactive] = useState(() => initial.get("all") === "1");
   const [picks, setPicks] = useState<string[]>(loadPicks);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +45,17 @@ export default function ReportCandidates({ meta }: { meta: Meta }) {
 
   useEffect(load, [load]);
 
+  // 고른 조건과 주소를 맞춘다. 과제를 열어 보고 돌아와도 그대로다.
+  useAddressBar(
+    "reports",
+    { date: reportDate, all: includeInactive ? "1" : "" },
+    query,
+    (params) => {
+      setReportDate(params.get("date") ?? "");
+      setIncludeInactive(params.get("all") === "1");
+    },
+  );
+
   function togglePick(id: string) {
     setPicks((prev) => {
       const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
@@ -50,7 +69,7 @@ export default function ReportCandidates({ meta }: { meta: Meta }) {
     setError(null);
     try {
       const report = await api.createDraft(projectId, reportDate);
-      window.location.hash = `#/projects/${projectId}?report=${report.id}`;
+      window.location.hash = projectLink(projectId, { report: report.id });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -102,7 +121,7 @@ export default function ReportCandidates({ meta }: { meta: Meta }) {
           <ul className="picked-list">
             {picked.map((item) => (
               <li key={item.id}>
-                <a href={`#/projects/${item.id}`}>{item.title}</a>
+                <a href={projectLink(item.id)}>{item.title}</a>
                 <button className="ghost small" disabled={busy} onClick={() => makeDraft(item.id)}>
                   보고 초안 만들기
                 </button>
@@ -140,7 +159,7 @@ export default function ReportCandidates({ meta }: { meta: Meta }) {
                 />
               </td>
               <td>
-                <a className="plain-link" href={`#/projects/${item.id}`}>
+                <a className="plain-link" href={projectLink(item.id)}>
                   <span className="project-id">{item.id}</span>
                   <span className="project-title">{item.title}</span>
                 </a>
@@ -162,7 +181,7 @@ export default function ReportCandidates({ meta }: { meta: Meta }) {
                   item.last_report_id ? (
                     <a
                       className="plain-link audience-link"
-                      href={`#/projects/${item.id}?report=${item.last_report_id}`}
+                      href={projectLink(item.id, { report: item.last_report_id })}
                       title="그때 보고한 내용 열기"
                     >
                       {item.last_report_audience}

@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
+import { backTarget } from "../nav";
 import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -22,6 +23,8 @@ interface Props {
   openReportId?: number;
   /** 검색 결과에서 넘어온 경우 그 진행일지로 이동해 잠깐 강조한다. */
   openEntryId?: number;
+  /** 어느 화면에서 들어왔는지 (nav.ts). 뒤로 가기가 그리로 돌아간다. */
+  back?: string | null;
 }
 
 export default function ProjectDetail({
@@ -30,6 +33,7 @@ export default function ProjectDetail({
   onMetaChange,
   openReportId,
   openEntryId,
+  back,
 }: Props) {
   const [project, setProject] = useState<Project | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -193,8 +197,9 @@ export default function ProjectDetail({
 
   return (
     <section className="project-detail">
-      <a className="back" href="#/">
-        ← 과제 목록
+      {/* 온 곳이 주소에 실려 있으면 그리로, 없으면 지금까지처럼 과제 목록으로. */}
+      <a className="back" href={backTarget(back).href}>
+        ← {backTarget(back).label}
       </a>
 
       <div className="card detail-header">
@@ -229,7 +234,8 @@ export default function ProjectDetail({
               onClick={async () => {
                 if (!window.confirm("이 과제를 보관함(.trash)으로 옮길까요?")) return;
                 await api.archiveProject(project.id);
-                window.location.hash = "#/";
+                // 보관한 과제는 사라진다. 온 곳이 목록 성격이면 그리로 돌려보낸다.
+                window.location.hash = backTarget(back).href;
               }}
             >
               보관

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Dashboard as DashboardData } from "../types";
+import { projectLink } from "../nav";
 
 const OPEN_KEY = "md-mgmt:dashboard";
 /** 리마인더를 닫은 날. 같은 날 다시 띄우지 않는다. */
@@ -207,7 +208,7 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
               <ol className="dash-list">
                 {data.candidates.map((item) => (
                   <li key={item.id}>
-                    <a href={`#/projects/${item.id}`}>
+                    <a href={projectLink(item.id)}>
                       <span className="project-id">{item.id}</span>
                       <span className="dash-title">{item.title}</span>
                       <span className="dash-reason">

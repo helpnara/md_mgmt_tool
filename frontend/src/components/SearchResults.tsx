@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { projectLink } from "../nav";
 import type { Meta, SearchResults as Results } from "../types";
 import { formatBytes } from "../upload";
 import StatusBadge from "./StatusBadge";
@@ -49,7 +50,7 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
           <ul className="result-list">
             {results.projects.map((project) => (
               <li key={project.id}>
-                <a href={`#/projects/${project.id}`}>
+                <a href={projectLink(project.id)}>
                   <span className="project-id">{project.id}</span>
                   <strong>
                     <Highlight text={project.title} query={query} />
@@ -71,7 +72,7 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
           <ul className="result-list">
             {results.entries.map((entry) => (
               <li key={entry.id}>
-                <a href={`#/projects/${entry.project_id}?entry=${entry.id}`}>
+                <a href={projectLink(entry.project_id, { entry: entry.id })}>
                   <span className="project-id">
                     {entry.date} · {entry.project_title}
                   </span>
@@ -94,7 +95,7 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
           <ul className="result-list">
             {results.attachments.map((attachment) => (
               <li key={attachment.id}>
-                <a href={`#/projects/${attachment.project_id}`}>
+                <a href={projectLink(attachment.project_id)}>
                   <span className="project-id">{attachment.project_title}</span>
                   <strong>
                     <Highlight text={attachment.orig_name} query={query} />

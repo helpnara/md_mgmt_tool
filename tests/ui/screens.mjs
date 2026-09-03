@@ -278,6 +278,103 @@ async function main() {
     expect(text.includes("/api/settings"), `무슨 동작이었는지 안 보입니다: ${text}`);
   });
 
+  console.log("\n[2-2] 왔던 화면으로 돌아가는가 (TODO 48)");
+
+  /** 상세 화면의 뒤로 가기 문구. */
+  const backLabel = () => page.locator(".back").first().innerText();
+
+  await check("보고 대상에서 연 과제는 보고 대상으로 돌아간다", async () => {
+    await go("#/reports");
+    await page.locator(".grid tbody tr .plain-link").first().click();
+    await page.waitForTimeout(700);
+    equal((await backLabel()).trim(), "← 보고 대상", "뒤로 가기 문구");
+    await page.locator(".back").first().click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes("#/reports"), `보고 대상으로 안 갔습니다: ${page.url()}`);
+  });
+
+  await check("보고 이력에서 연 보고는 보고 이력으로 돌아간다", async () => {
+    await go("#/history");
+    await page.locator(".history-list a").first().click();
+    await page.waitForTimeout(900);
+    equal((await backLabel()).trim(), "← 보고 이력", "뒤로 가기 문구");
+    await page.locator(".back").first().click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes("#/history"), `보고 이력으로 안 갔습니다: ${page.url()}`);
+  });
+
+  await check("검색 결과에서 연 과제는 검색 결과로 돌아간다", async () => {
+    await go("#/search?q=시제품");
+    await page.locator("main a[href*='#/projects/']").first().click();
+    await page.waitForTimeout(700);
+    equal((await backLabel()).trim(), "← 검색 결과", "뒤로 가기 문구");
+    await page.locator(".back").first().click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes("q=") && page.url().includes("search"), `검색 결과로 안 갔습니다: ${page.url()}`);
+  });
+
+  await check("과제 목록에서 연 과제는 지금까지처럼 과제 목록으로 돌아간다", async () => {
+    await go("#/");
+    await page.locator(".grid tbody tr").first().click();
+    await page.waitForTimeout(700);
+    equal((await backLabel()).trim(), "← 과제 목록", "뒤로 가기 문구");
+  });
+
+  await check("거른 조건이 주소에 남고, 돌아왔을 때 그대로 살아난다", async () => {
+    await go("#/history");
+    await page.fill(".history-filters input[list]", "주간");
+    await page.waitForTimeout(700);
+    const filtered = await page.locator(".history-list li").count();
+    expect(page.url().includes("audience="), `조건이 주소에 없습니다: ${page.url()}`);
+
+    // 보고를 열었다가 뒤로 가기 — 조건이 살아 있어야 한다
+    await page.locator(".history-list a").first().click();
+    await page.waitForTimeout(900);
+    await page.locator(".back").first().click();
+    await page.waitForTimeout(900);
+    equal(await page.locator(".history-filters input[list]").inputValue(), "주간", "되돌아온 뒤 피보고자 조건");
+    equal(await page.locator(".history-list li").count(), filtered, "되돌아온 뒤 걸러진 건수");
+  });
+
+  await check("과제 목록의 조건도 주소에 남는다", async () => {
+    await go("#/");
+    await page.selectOption(".filters select", { index: 1 }); // 상태 하나 고르기
+    await page.waitForTimeout(600);
+    expect(page.url().includes("status="), `조건이 주소에 없습니다: ${page.url()}`);
+  });
+
+  await check("주소만으로도 걸러진 화면을 열 수 있다 (즐겨찾기)", async () => {
+    await go("#/history?audience=" + encodeURIComponent("팀 주간회의"));
+    equal(await page.locator(".history-filters input[list]").inputValue(), "팀 주간회의", "주소로 연 조건");
+    expect(await page.locator(".history-list li").count() > 0, "걸러진 결과가 없습니다");
+  });
+
+  await check("상단 메뉴를 누르면 조건이 풀리고 주소도 그에 맞는다", async () => {
+    // 주소가 화면을 속이면 안 된다 — #/ 인데 걸러진 채로 남아 있으면 안 된다.
+    await go("#/?status=done");
+    expect(await page.locator(".filters select").first().inputValue() === "done", "주소의 조건이 안 걸렸습니다");
+    await page.locator("nav a[href='#/']").click();
+    await page.waitForTimeout(700);
+    equal(await page.locator(".filters select").first().inputValue(), "", "메뉴를 누른 뒤 상태 조건");
+  });
+
+  await check("상세 안에서 보고를 열고 닫아도 온 곳을 잃지 않는다", async () => {
+    await go("#/reports");
+    await page.locator(".grid tbody tr .plain-link").first().click();
+    await page.waitForTimeout(700);
+
+    const report = page.locator(".report-open").first();
+    expect(await report.count() > 0, "상세에 열어 볼 보고가 없습니다 (시험 자료 문제)");
+    await report.click();
+    await page.waitForTimeout(800);
+    expect(await page.locator(".report-editor").count() > 0, "보고가 열리지 않았습니다");
+
+    equal((await backLabel()).trim(), "← 보고 대상", "보고를 연 뒤 뒤로 가기");
+    await page.locator(".back").first().click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes("#/reports"), `보고 대상으로 안 갔습니다: ${page.url()}`);
+  });
+
   console.log("\n[3] 글자가 읽히는가 (WCAG AA)");
 
   await check("대시보드 칩 — 기본·마우스올림·선택·선택+올림 모두 읽힌다", async () => {

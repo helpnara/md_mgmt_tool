@@ -7,13 +7,15 @@ import ReportHistory from "./components/ReportHistory";
 import Settings from "./components/Settings";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
+import { BACK_PARAM } from "./nav";
 
 type Route =
-  | { name: "list" }
-  | { name: "project"; id: string; reportId?: number; entryId?: number }
+  // 목록 화면은 거른 조건을 주소에 두고 그대로 돌려받는다 (nav.ts).
+  | { name: "list"; query: string }
+  | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null }
   | { name: "search"; query: string }
-  | { name: "reports" }
-  | { name: "history" }
+  | { name: "reports"; query: string }
+  | { name: "history"; query: string }
   | { name: "settings" };
 
 function readRoute(): Route {
@@ -29,13 +31,14 @@ function readRoute(): Route {
       id: path.slice("projects/".length),
       reportId: reportId ? Number(reportId) : undefined,
       entryId: entryId ? Number(entryId) : undefined,
+      back: params.get(BACK_PARAM),
     };
   }
   if (path.startsWith("search")) return { name: "search", query: params.get("q") ?? "" };
-  if (path.startsWith("history")) return { name: "history" };
-  if (path.startsWith("reports")) return { name: "reports" };
+  if (path.startsWith("history")) return { name: "history", query: queryString ?? "" };
+  if (path.startsWith("reports")) return { name: "reports", query: queryString ?? "" };
   if (path.startsWith("settings")) return { name: "settings" };
-  return { name: "list" };
+  return { name: "list", query: queryString ?? "" };
 }
 
 export default function App() {
@@ -150,13 +153,14 @@ export default function App() {
             onMetaChange={loadMeta}
             openReportId={route.reportId}
             openEntryId={route.entryId}
+            back={route.back}
           />
         )}
-        {route.name === "reports" && <ReportCandidates meta={meta} />}
-        {route.name === "history" && <ReportHistory meta={meta} />}
+        {route.name === "reports" && <ReportCandidates meta={meta} query={route.query} />}
+        {route.name === "history" && <ReportHistory meta={meta} query={route.query} />}
         {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} />}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
-        {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} />}
+        {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
       </main>
     </div>
   );

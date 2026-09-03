@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { projectLink } from "../nav";
 import type { Meta, Project } from "../types";
 import { dueLabel, formatDate } from "../util";
 import { TypeBadge } from "./StatusBadge";
@@ -45,7 +46,7 @@ export default function ProjectBoard({ meta, projects }: Props) {
                     <article
                       key={project.id}
                       className="board-card"
-                      onClick={() => (window.location.hash = `#/projects/${project.id}`)}
+                      onClick={() => (window.location.hash = projectLink(project.id))}
                     >
                       <span className="project-id">{project.id}</span>
                       <h3>{project.title}</h3>

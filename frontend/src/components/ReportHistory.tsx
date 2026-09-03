@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, ReportHistoryItem } from "../types";
+import { projectLink, useAddressBar } from "../nav";
 
 /**
  * 보고 이력 찾기.
@@ -11,12 +12,19 @@ import type { Meta, ReportHistoryItem } from "../types";
  * 거르는 기준은 실제로 찾을 때 쓰는 셋뿐이다 — **피보고자·기간·검색어**.
  * 기준을 늘리면 화면만 복잡해지고, 정작 쓰는 것은 이 셋이다.
  */
-export default function ReportHistory({ meta }: { meta: Meta }) {
-  const [audience, setAudience] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [q, setQ] = useState("");
-  const [state, setState] = useState("");
+interface Props {
+  meta: Meta;
+  /** 주소에 실려 온 거른 조건. 보고를 열어 보고 돌아와도 그대로 살아 있다. */
+  query: string;
+}
+
+export default function ReportHistory({ meta, query }: Props) {
+  const initial = new URLSearchParams(query);
+  const [audience, setAudience] = useState(() => initial.get("audience") ?? "");
+  const [from, setFrom] = useState(() => initial.get("from") ?? "");
+  const [to, setTo] = useState(() => initial.get("to") ?? "");
+  const [q, setQ] = useState(() => initial.get("q") ?? "");
+  const [state, setState] = useState(() => initial.get("state") ?? "");
   const [items, setItems] = useState<ReportHistoryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +40,15 @@ export default function ReportHistory({ meta }: { meta: Meta }) {
     const timer = window.setTimeout(load, q ? 250 : 0);
     return () => window.clearTimeout(timer);
   }, [load, q]);
+
+  // 고른 조건과 주소를 맞춘다. 자주 보는 조건은 즐겨찾기해 두어도 된다.
+  useAddressBar("history", { audience, from, to, q, state }, query, (params) => {
+    setAudience(params.get("audience") ?? "");
+    setFrom(params.get("from") ?? "");
+    setTo(params.get("to") ?? "");
+    setQ(params.get("q") ?? "");
+    setState(params.get("state") ?? "");
+  });
 
   const filtered = Boolean(audience || from || to || q || state);
 
@@ -116,7 +133,7 @@ export default function ReportHistory({ meta }: { meta: Meta }) {
         {items?.map((item) => (
           <li key={item.id} className={item.frozen ? "frozen" : "draft"}>
             {/* 보고 문서를 바로 열어 준다 — 찾는 이유가 대개 "그때 뭐라고 썼더라" 이기 때문 */}
-            <a href={`#/projects/${item.project_id}?report=${item.id}`}>
+            <a href={projectLink(item.project_id, { report: item.id })}>
               <span className="history-date">{item.report_date}</span>
               <span className="history-main">
                 <span className="history-project">

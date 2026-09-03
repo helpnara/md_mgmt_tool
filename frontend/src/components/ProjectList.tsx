@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, Project } from "../types";
 import { dueLabel, effectText, EFFECT_UNIT, formatDate } from "../util";
+import { projectLink, useAddressBar } from "../nav";
 import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
@@ -10,13 +11,26 @@ import StatusBadge, { TypeBadge } from "./StatusBadge";
 interface Props {
   meta: Meta;
   onMetaChange: () => void;
+  /** 주소에 실려 온 거른 조건. 과제를 보고 돌아왔을 때 그대로 살아난다. */
+  query: string;
 }
 
-export default function ProjectList({ meta, onMetaChange }: Props) {
+const DEFAULT_FILTERS = {
+  status: "", type: "", group: "", tag: "", owner: "", due: "", sort: "updated",
+};
+
+function readFilters(params: URLSearchParams): typeof DEFAULT_FILTERS {
+  const values = { ...DEFAULT_FILTERS };
+  for (const key of Object.keys(values) as (keyof typeof values)[]) {
+    values[key] = params.get(key) ?? DEFAULT_FILTERS[key];
+  }
+  return values;
+}
+
+export default function ProjectList({ meta, onMetaChange, query }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [filters, setFilters] = useState({
-    status: "", type: "", group: "", tag: "", owner: "", due: "", sort: "updated",
-  });
+  // 조건은 주소에서 시작한다. 처음 열 때든, 과제를 보고 돌아왔을 때든 같은 길이다.
+  const [filters, setFilters] = useState(() => readFilters(new URLSearchParams(query)));
   const [view, setView] = useState<"table" | "board">(
     () => (localStorage.getItem("md-mgmt:view") === "board" ? "board" : "table"),
   );
@@ -34,6 +48,18 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
   }, [filters]);
 
   useEffect(load, [load]);
+
+  // 고른 조건과 주소를 맞춘다. 기본값은 적지 않아 주소가 짧게 유지된다.
+  useAddressBar(
+    "",
+    Object.fromEntries(
+      Object.entries(filters).filter(
+        ([key, value]) => value !== DEFAULT_FILTERS[key as keyof typeof DEFAULT_FILTERS],
+      ),
+    ) as Record<string, string>,
+    query,
+    (params) => setFilters(readFilters(params)),
+  );
 
   const setFilter = (key: string, value: string) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -152,7 +178,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
               onMetaChange();
               setRefreshKey((value) => value + 1);
               // 만들면 대개 곧바로 개요나 첫 기록을 쓴다. 상세로 데려간다.
-              window.location.hash = `#/projects/${created.id}`;
+              window.location.hash = projectLink(created.id);
             }}
           />
         </div>
@@ -207,7 +233,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           {projects.map((project) => {
             const due = dueLabel(project.due_date, project.status);
             return (
-              <tr key={project.id} onClick={() => (window.location.hash = `#/projects/${project.id}`)}>
+              <tr key={project.id} onClick={() => (window.location.hash = projectLink(project.id))}>
                 <td>
                   <span className="project-id">{project.id}</span>
                   <span className="project-title">{project.title}</span>
