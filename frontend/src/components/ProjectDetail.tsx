@@ -280,6 +280,7 @@ export default function ProjectDetail({
         {editingProject && (
           <ProjectForm
             meta={meta}
+            onMetaChange={onMetaChange}
             initial={project}
             submitLabel="저장"
             onCancel={() => setEditingProject(false)}

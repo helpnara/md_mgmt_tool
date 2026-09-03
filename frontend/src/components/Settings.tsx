@@ -4,6 +4,8 @@ import type { Meta } from "../types";
 import ReportTemplateCard from "./ReportTemplateCard";
 import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
+import PeopleCard from "./PeopleCard";
+import ProjectCodeCard from "./ProjectCodeCard";
 
 /**
  * 도구 설정.
@@ -88,6 +90,8 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
         </div>
       </div>
 
+      <PeopleCard onChanged={onSaved} />
+      <ProjectCodeCard onSaved={onSaved} />
       <EntryTemplateCard meta={meta} />
       <ReportTemplateCard />
       <TrashCard />

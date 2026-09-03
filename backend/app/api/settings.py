@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..services import settings as svc
@@ -14,6 +14,8 @@ class SettingsUpdate(BaseModel):
     entry_templates: dict[str, str] | None = None
     # 보고 초안 서식. {summary} 자리에 미보고 진행일지가 들어간다.
     report_template: str | None = None
+    # 과제 번호의 팀·부문 코드. 비우면 2026-001, "소재" 면 2026-소재-001.
+    project_code: str | None = None
 
 
 @router.get("")
@@ -23,8 +25,14 @@ def read_settings() -> dict:
 
 @router.put("")
 def update_settings(payload: SettingsUpdate) -> dict:
+    changes = payload.model_dump(exclude_unset=True)
+    if "project_code" in changes:
+        try:
+            changes["project_code"] = svc.validate_project_code(changes["project_code"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     # 보내지 않은 항목은 건드리지 않는다.
-    return svc.save(payload.model_dump(exclude_unset=True))
+    return svc.save(changes)
 
 
 @router.get("/defaults")

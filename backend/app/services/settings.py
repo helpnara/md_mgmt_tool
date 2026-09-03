@@ -19,9 +19,15 @@ DEFAULTS: dict[str, Any] = {
     "author": "",
     "entry_templates": {},
     "report_template": "",
+    # 담당자 명부. 표기 흔들림(권경락 / 권 경락)을 막고, 나중에 계정을 붙일 자리다.
+    # [{"name": "권경락", "employee_id": "", "account": ""}]
+    "people": [],
+    # 과제 번호의 팀·부문 코드. 비우면 2026-001, "소재" 를 넣으면 2026-소재-001.
+    # 여러 팀장이 함께 쓰게 될 때 번호가 겹치지 않게 하는 자리다.
+    "project_code": "",
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
-_TEXT_KEYS = ("author", "report_template")
+_TEXT_KEYS = ("author", "report_template", "project_code")
 
 
 def _path():
@@ -47,6 +53,8 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             continue
         if key in _TEXT_KEYS:
             current[key] = str(updates[key]).strip()
+        elif key == "people":
+            current[key] = normalize_people(updates[key])
         elif key == "entry_templates":
             # 빈 서식은 저장하지 않는다 — 비우면 "기본 서식으로 되돌린다"는 뜻이다.
             current[key] = {
@@ -93,3 +101,68 @@ def report_template() -> str:
     text = load()["report_template"].strip()
     # {summary} 가 없으면 진행 내용이 통째로 사라진다. 그런 서식은 쓰지 않는다.
     return text if "{summary}" in text else DRAFT_TEMPLATE
+
+
+# ── 담당자 명부 ───────────────────────────────────────
+
+def normalize_people(value: object) -> list[dict[str, str]]:
+    """명부를 정리한다. 이름이 비었거나 겹치는 줄은 버린다.
+
+    사번·계정 칸은 지금 비어 있는 것이 정상이다 — 로그인이 생길 때 채운다.
+    """
+    people: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for raw in value or []:
+        item = raw if isinstance(raw, dict) else {"name": raw}
+        name = str(item.get("name", "")).strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        people.append(
+            {
+                "name": name,
+                "employee_id": str(item.get("employee_id", "")).strip(),
+                "account": str(item.get("account", "")).strip(),
+            }
+        )
+    people.sort(key=lambda person: person["name"])
+    return people
+
+
+def people() -> list[dict[str, str]]:
+    return normalize_people(load()["people"])
+
+
+def known_names() -> list[str]:
+    return [person["name"] for person in people()]
+
+
+def add_person(name: str) -> list[dict[str, str]]:
+    """명부에 없는 이름을 그 자리에서 추가한다 (화면에서 물어본 뒤 부른다)."""
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("이름을 입력하세요.")
+    current = people()
+    if any(person["name"] == name for person in current):
+        return current
+    current.append({"name": name, "employee_id": "", "account": ""})
+    return save({"people": current})["people"]
+
+
+# ── 과제 번호 코드 ────────────────────────────────────
+
+def project_code() -> str:
+    """과제 번호에 넣을 팀·부문 코드. 비어 있으면 번호는 지금 형태 그대로다."""
+    return str(load()["project_code"]).strip()
+
+
+def validate_project_code(code: str) -> str:
+    """숫자만으로 된 코드는 받지 않는다 — 일련번호와 구분되지 않는다."""
+    code = (code or "").strip()
+    if not code:
+        return ""
+    if code.isdigit():
+        raise ValueError("팀 코드는 숫자만으로 지을 수 없습니다. 일련번호와 구분되지 않습니다.")
+    if any(ch in code for ch in "/\\ \t"):
+        raise ValueError("팀 코드에 공백이나 경로 문자를 넣을 수 없습니다.")
+    return code

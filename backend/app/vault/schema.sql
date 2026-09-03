@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS project (
   -- 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다.
   effect_expected  REAL,
   effect_verified  REAL,
+  -- 과제를 등록한 사람. 담당자(누가 하는가)와 다르다 (누가 등록했는가).
+  -- 나중에 넣으면 그 전 과제는 영영 빈칸이라 지금부터 남긴다.
+  created_by       TEXT,
   body             TEXT,
   file_mtime       REAL
 );

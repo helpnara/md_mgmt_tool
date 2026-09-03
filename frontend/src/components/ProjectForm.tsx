@@ -1,16 +1,21 @@
 import { useState } from "react";
 import type { Meta, Project } from "../types";
 import TagSuggestions from "./TagSuggestions";
+import UnknownOwners from "./UnknownOwners";
 
 interface Props {
   meta: Meta;
+  /** 명부에 사람을 새로 넣었을 때 상단 meta 를 다시 읽는다 */
+  onMetaChange?: () => void;
   initial?: Partial<Project>;
   submitLabel: string;
   onSubmit: (payload: Partial<Project>) => Promise<void>;
   onCancel: () => void;
 }
 
-export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCancel }: Props) {
+export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCancel, onMetaChange = () => undefined }: Props) {
+  // 자동완성은 명부를 먼저 보여 주고, 명부에 없지만 이미 쓰이는 이름을 뒤에 붙인다.
+  const ownerOptions = [...meta.people, ...meta.owners.filter((name) => !meta.people.includes(name))];
   const [form, setForm] = useState({
     title: initial?.title ?? "",
     status: initial?.status ?? "in_progress",
@@ -117,10 +122,15 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             placeholder="예: 권경락, 홍길동"
           />
           <datalist id="owner-options">
-            {meta.owners.map((name) => (
+            {ownerOptions.map((name) => (
               <option key={name} value={name} />
             ))}
           </datalist>
+          <UnknownOwners
+            known={meta.people}
+            value={form.owners}
+            onAdded={onMetaChange}
+          />
         </label>
       </div>
       <div className="form-row">

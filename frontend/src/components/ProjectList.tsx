@@ -143,6 +143,7 @@ export default function ProjectList({ meta, onMetaChange }: Props) {
           <h2>새 과제</h2>
           <ProjectForm
             meta={meta}
+            onMetaChange={onMetaChange}
             submitLabel="만들기"
             onCancel={() => setCreating(false)}
             onSubmit={async (payload) => {

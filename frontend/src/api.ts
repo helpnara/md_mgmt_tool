@@ -1,4 +1,4 @@
-import type { AppSettings, Dashboard, Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview, TrashItem } from "./types";
+import type { AppSettings, Dashboard, Entry, Meta, Project, Report, ReportCandidate, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -45,6 +45,16 @@ export const api = {
   settings: () => request<AppSettings>("/api/settings"),
   settingsDefaults: () =>
     request<{ entry_template: string; report_template: string }>("/api/settings/defaults"),
+  people: () => request<{ people: Person[]; unregistered: { name: string; used: number }[] }>("/api/people"),
+  savePeople: (people: Person[]) =>
+    request<{ people: Person[] }>("/api/people", { method: "PUT", body: JSON.stringify({ people }) }),
+  addPerson: (name: string) =>
+    request<{ people: Person[] }>("/api/people", { method: "POST", body: JSON.stringify({ name }) }),
+  renameOwner: (old: string, next: string) =>
+    request<{ count: number; changed: string[] }>("/api/people/rename", {
+      method: "POST",
+      body: JSON.stringify({ old, new: next }),
+    }),
   trash: () => request<TrashItem[]>("/api/trash"),
   restoreFromTrash: (name: string) =>
     request<{ restored_to: string; label: string }>(

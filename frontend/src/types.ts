@@ -17,6 +17,10 @@ export interface Meta {
   tags: string[];
   owners: string[];
   audiences: string[];
+  /** 담당자 명부 — 자동완성이 먼저 쓰는 표준 이름 목록 */
+  people: string[];
+  /** 과제 번호의 팀·부문 코드 (비면 2026-001) */
+  project_code: string;
   vault: string;
   report_cycle_days: number;
 }
@@ -36,6 +40,8 @@ export interface Project {
   /** 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다. */
   effect_expected: number | null;
   effect_verified: number | null;
+  /** 과제를 등록한 사람. 담당자(누가 하는가)와 다르다. */
+  created_by?: string | null;
   tags: string[];
   entry_count: number;
   body?: string;
@@ -132,6 +138,13 @@ export interface SpreadsheetPreview {
 }
 
 
+export interface Person {
+  name: string;
+  employee_id: string;
+  account: string;
+  used?: number;
+}
+
 export interface AppSettings {
   /** 지금은 설정에서 정한 사용자, 나중에는 로그인한 사용자가 된다. */
   author: string;
@@ -139,6 +152,10 @@ export interface AppSettings {
   entry_templates: Record<string, string>;
   /** 보고 초안 서식. {summary} 자리에 미보고 진행일지가 들어간다. */
   report_template: string;
+  /** 담당자 명부 (설정 파일에 저장되는 원본) */
+  people: Person[];
+  /** 과제 번호의 팀·부문 코드. 비우면 2026-001. */
+  project_code: string;
 }
 
 export interface TrashItem {

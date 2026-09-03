@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from ..config import COLLAPSED_STATUSES, PROJECT_TYPES, STATUSES, get_settings
 from ..deps import get_db
+from ..services import settings as settings_service
 from ..vault.indexer import reindex_all
 
 router = APIRouter(prefix="/api", tags=["meta"])
@@ -47,6 +48,9 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "tags": tags,
         "owners": owners,
         "audiences": audiences,
+        # 담당자 명부 — 자동완성이 이것을 먼저 쓰고, 없는 이름이면 화면에서 물어본다.
+        "people": settings_service.known_names(),
+        "project_code": settings_service.project_code(),
         "vault": str(get_settings().vault_dir),
         "report_cycle_days": get_settings().report_cycle_days,
     }

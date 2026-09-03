@@ -10,6 +10,7 @@ from ..config import DEFAULT_STATUS, STATUS_KEYS, TYPE_KEYS, get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
+from . import settings as settings_service
 from . import trash as trash_service
 
 # 카드 제목이 "과제 개요"이므로 본문은 같은 제목을 반복하지 않는다.
@@ -46,7 +47,7 @@ INDEX_TEMPLATE = """## 배경
 META_ORDER = [
     "id", "title", "status", "type", "group", "tags", "owners",
     "start_date", "due_date", "effect_expected", "effect_verified",
-    "created_at", "updated_at",
+    "created_by", "created_at", "updated_at",
 ]
 
 
@@ -84,18 +85,31 @@ def now_iso() -> str:
     return datetime.now().astimezone().replace(microsecond=0).isoformat()
 
 
-def next_project_id(year: int | None = None) -> str:
+def next_project_id(year: int | None = None, code: str | None = None) -> str:
+    """다음 과제 번호.
+
+    팀 코드를 비워 두면 `2026-001`, `소재` 를 넣으면 `2026-소재-001` 이 된다.
+    일련번호는 **코드별로 따로 센다** — 팀마다 자기 번호를 갖는 편이 자연스럽고,
+    코드가 다르면 번호가 같아도 과제 번호는 겹치지 않는다.
+
+    **이미 만든 과제의 번호는 바꾸지 않는다.** 번호는 식별자라 섞여도 되고,
+    바꾸면 폴더명과 문서 안의 링크가 모두 흔들린다.
+    """
     settings = get_settings()
     settings.ensure_dirs()
     year = year or datetime.now().year
-    prefix = f"{year}-"
+    if code is None:
+        code = settings_service.project_code()
+    prefix = f"{year}-{code}-" if code else f"{year}-"
+
     used = 0
     for child in settings.projects_dir.iterdir():
-        if child.is_dir() and child.name.startswith(prefix):
-            seq = child.name[len(prefix):].split("-")[0]
-            if seq.isdigit():
-                used = max(used, int(seq))
-    return f"{year}-{used + 1:03d}"
+        if not child.is_dir() or not child.name.startswith(prefix):
+            continue
+        seq = child.name[len(prefix):].split("-")[0]
+        if seq.isdigit():
+            used = max(used, int(seq))
+    return f"{prefix}{used + 1:03d}"
 
 
 def project_dir(conn: sqlite3.Connection, project_id: str) -> Path:
@@ -140,6 +154,9 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "due_date": data.get("due_date") or None,
         "effect_expected": normalize_effect(data.get("effect_expected")),
         "effect_verified": normalize_effect(data.get("effect_verified")),
+        # 담당자(누가 하는가)와 다른, "누가 등록했는가". 소급이 안 되므로 지금부터 남긴다.
+        # 로그인이 생기면 이 자리에 로그인 사용자가 들어온다.
+        "created_by": settings_service.current_author(data.get("created_by")) or None,
         "created_at": stamp,
         "updated_at": stamp,
     }

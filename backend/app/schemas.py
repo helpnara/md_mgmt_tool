@@ -16,6 +16,8 @@ class ProjectCreate(BaseModel):
     # 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다.
     effect_expected: float | None = None
     effect_verified: float | None = None
+    # 비우면 설정의 작성자를 쓴다 (로그인이 생기면 로그인 사용자).
+    created_by: str | None = None
     tags: list[str] = Field(default_factory=list)
     body: str | None = None
 

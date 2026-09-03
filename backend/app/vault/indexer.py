@@ -144,10 +144,23 @@ def _index_entries(
 
 
 def project_id_from_dir_name(dir_name: str) -> str:
-    """폴더명 '2026-001-제목' 에서 과제 id '2026-001' 을 얻는다."""
+    """폴더명에서 과제 id 를 얻는다. 두 형태를 모두 읽는다.
+
+        2026-001-제목        →  2026-001
+        2026-소재-001-제목    →  2026-소재-001
+
+    규칙: 맨 앞 네 자리 연도로 시작하고, 그 뒤 **처음 나오는 숫자 토막**이 일련번호다.
+    그 사이에 있는 것이 팀 코드다. (팀 코드는 숫자만으로 지을 수 없게 막아 두었다 —
+    그래야 일련번호와 헷갈리지 않는다)
+
+    이 함수는 front matter 의 id 를 못 읽었을 때만 쓰는 예비 수단이다.
+    """
     parts = dir_name.split("-")
-    if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
-        return f"{parts[0]}-{parts[1]}"
+    if len(parts) < 2 or not (len(parts[0]) == 4 and parts[0].isdigit()):
+        return dir_name
+    for index in range(1, len(parts)):
+        if parts[index].isdigit():
+            return "-".join(parts[: index + 1])
     return dir_name
 
 
@@ -176,15 +189,15 @@ def index_project(
     conn.execute(
         """
         INSERT INTO project(id, dir_name, title, status, type, grp, owner, start_date, due_date,
-                            effect_expected, effect_verified,
+                            effect_expected, effect_verified, created_by,
                             created_at, updated_at, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
           type=excluded.type, grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
           due_date=excluded.due_date,
           effect_expected=excluded.effect_expected, effect_verified=excluded.effect_verified,
-          created_at=excluded.created_at,
+          created_by=excluded.created_by, created_at=excluded.created_at,
           updated_at=excluded.updated_at, body=excluded.body, file_mtime=excluded.file_mtime
         """,
         (
@@ -199,6 +212,7 @@ def index_project(
             _as_str(doc.meta.get("due_date")),
             _as_effect(doc.meta.get("effect_expected")),
             _as_effect(doc.meta.get("effect_verified")),
+            _as_str(doc.meta.get("created_by")),
             _as_str(doc.meta.get("created_at")),
             updated_at,
             doc.body,

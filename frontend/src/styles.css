@@ -510,3 +510,15 @@ button { white-space: nowrap; }
 .trash-when { flex: 0 0 auto; font-size: 12px; }
 .trash-note { flex: 0 0 auto; font-size: 11px; }
 .trash-list li > button { flex: 0 0 auto; }
+
+/* ── 담당자 명부 (설정) ───────────────────────────── */
+.people-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.people-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 6px; }
+.people-table td { padding: 3px 6px; }
+.people-table td input { padding: 5px 8px; font-size: 13px; }
+.people-table th:nth-child(4), .people-table td:nth-child(4) { width: 60px; text-align: right; font-size: 12px; }
+.people-table th:last-child, .people-table td:last-child { width: 60px; }
+.unregistered { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+/* 명부에 없는 이름 — 막지 않고 알려만 준다 */
+.tag-pick.add { background: #fef3c7; color: #92400e; }
+.tag-pick.add:hover { border-color: var(--warn); }
