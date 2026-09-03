@@ -29,9 +29,11 @@ interface Props {
   audiences: string[];
   onChanged: () => void;
   onClose: () => void;
+  /** 지워졌을 때. onChanged 와 나눠 둔 이유는 아래 [삭제] 주석 참고. */
+  onDeleted: () => void;
 }
 
-export default function ReportEditor({ report, dirName, audiences, onChanged, onClose }: Props) {
+export default function ReportEditor({ report, dirName, audiences, onChanged, onClose, onDeleted }: Props) {
   const [body, setBody] = useState(report.body ?? "");
   const [audience, setAudience] = useState(report.audience ?? "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -231,6 +233,30 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             피보고자만 저장
           </button>
         )}
+        {/* 자동완성 목록은 칸을 눌러야 뜨고 브라우저마다 모양이 달라, 있는 줄 모르고
+            매번 손으로 치게 된다. 쓰던 것을 눌러서 넣게 한다 (진행일지 태그와 같은 방식). */}
+        {!frozen && audiences.length > 0 && (
+          <div className="tag-suggest audience-suggest">
+            <span className="muted">쓰던 피보고자</span>
+            {audiences
+              .filter((name) => name !== audience)
+              .slice(0, 8)
+              .map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className="tag-pick"
+                  onClick={() => {
+                    setAudience(name);
+                    setDirty(true);
+                  }}
+                >
+                  {name}
+                </button>
+              ))}
+          </div>
+        )}
+
         <span className="hint">
           {report.covers_from
             ? `포함 기간 ${report.covers_from} ~ ${report.covers_to} · 진행일지 ${report.entry_count}건`
@@ -352,6 +378,30 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             </button>
           ) : (
             <>
+              {/* 초안을 잘못 만들었을 때 만든 자리에서 바로 지운다. 지금까지는 편집기를 닫고
+                  과제 상세의 보고 이력 목록까지 가야 했다. 확정된 보고에는 두지 않는다 —
+                  그 문서는 "언제 무엇을 보고했는가"라는 기록이라, 확정을 먼저 풀어야 한다. */}
+              <button
+                className="ghost danger"
+                disabled={busy}
+                onClick={async () => {
+                  if (!window.confirm("이 보고 초안을 보관함(.trash)으로 옮길까요? 보관함에서 되돌릴 수 있습니다."))
+                    return;
+                  setBusy(true);
+                  try {
+                    await api.deleteReport(report.id);
+                    // onChanged 를 쓰면 안 된다 — 그쪽은 "바뀌었으니 이 보고를 다시 읽어라"
+                    // 라는 뜻이라, 방금 지운 문서를 다시 불러 404 가 난다.
+                    onDeleted();
+                  } catch (err) {
+                    setError((err as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                삭제
+              </button>
               <button className="ghost" disabled={busy || !dirty} onClick={() => void save()}>
                 저장
               </button>

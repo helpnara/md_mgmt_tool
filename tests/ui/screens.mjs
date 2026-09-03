@@ -137,6 +137,14 @@ async function seed() {
   await api.post(`/api/projects/${a.id}/entries`, {
     date: "2026-08-27", title: "측정", body: "## 내용\n\n인장강도 측정\n",
   });
+  // 진행일지가 쌓여 화면이 길어진 과제 — [맨 위로]가 필요해지는 바로 그 상황이다.
+  for (let day = 1; day <= 14; day += 1) {
+    await api.post(`/api/projects/${a.id}/entries`, {
+      date: `2026-07-${String(day).padStart(2, "0")}`,
+      title: `${day}일차 진행`,
+      body: "## 내용\n\n" + "설비 조건을 바꿔 가며 시험했다.\n".repeat(6),
+    });
+  }
 
   const first = await api.post(`/api/projects/${a.id}/reports/draft`, {
     report_date: "2026-08-25", audience: "전사 주요업무 보고",
@@ -171,6 +179,10 @@ async function main() {
   // 화면에서 난 오류는 소리 없이 사라진다. 전부 모아 두었다가 시험 끝에 따진다.
   const pageErrors = [];
   page.on("console", (message) => message.type() === "error" && pageErrors.push(message.text()));
+  // 어떤 요청이 실패했는지까지 남긴다 — "404" 만으로는 어디를 봐야 할지 알 수 없다.
+  page.on("response", (response) => {
+    if (response.status() >= 400) pageErrors.push(`${response.status()} ${response.url()}`);
+  });
   page.on("pageerror", (err) => pageErrors.push(String(err)));
   page.on("dialog", (dialog) => dialog.accept());
   await page.addInitScript(CONTRAST_HELPERS);
@@ -373,6 +385,152 @@ async function main() {
     await page.locator(".back").first().click();
     await page.waitForTimeout(700);
     expect(page.url().includes("#/reports"), `보고 대상으로 안 갔습니다: ${page.url()}`);
+  });
+
+  console.log("\n[2-3] 이번에 넣은 것 (TODO 50·51·54·55)");
+
+  await check("주간 보고 요일을 바꾸면 보고 예정일이 따라온다", async () => {
+    await go("#/settings");
+    const card = page.locator(".card").filter({ hasText: "주간 보고 요일" });
+    expect(await card.count() > 0, "요일 설정 칸이 없습니다");
+    await card.locator("select").selectOption("4"); // 금요일
+    await card.getByRole("button", { name: /저장/ }).click();
+    await page.waitForTimeout(800);
+
+    const meta = await api.get("/api/meta");
+    equal(meta.report_weekday, 4, "설정에 저장된 요일");
+    // 보고 대상 화면의 기본 보고 예정일이 금요일이어야 한다.
+    const candidates = await api.get("/api/report-candidates");
+    const day = new Date(candidates.default_report_date + "T00:00:00").getDay();
+    equal(day, 5, `보고 예정일의 요일 (${candidates.default_report_date})`);
+
+    await go("#/settings");
+    await page.locator(".card").filter({ hasText: "주간 보고 요일" }).locator("select").selectOption("1");
+    await page.locator(".card").filter({ hasText: "주간 보고 요일" }).getByRole("button", { name: /저장/ }).click();
+    await page.waitForTimeout(700);
+  });
+
+  await check("설정 화면이 넓은 화면에서 오른쪽 여백을 쓴다", async () => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await go("#/settings");
+    const main = await page.locator("main").boundingBox();
+    const cards = await page.locator(".settings-grid > .card").all();
+    expect(cards.length > 1, "설정 카드가 격자에 들어 있지 않습니다");
+
+    // 두 칸으로 흐르는지 — 같은 줄에 선 카드가 있어야 한다.
+    const boxes = [];
+    for (const card of cards) boxes.push(await card.boundingBox());
+    const sameRow = boxes.some((a, i) => boxes.some((b, j) => i !== j && Math.abs(a.y - b.y) < 20));
+    expect(sameRow, "카드가 여전히 한 줄에 하나씩입니다");
+
+    // 오른쪽 끝까지 쓰는지 — 예전에는 720px 에서 끊겨 있었다.
+    const rightMost = Math.max(...boxes.map((b) => b.x + b.width));
+    expect(rightMost > main.x + main.width * 0.85,
+      `오른쪽이 비어 있습니다 (본문 ${Math.round(main.width)}px, 카드 끝 ${Math.round(rightMost - main.x)}px)`);
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  await check("좁은 화면에서는 설정이 한 줄에 하나씩 선다", async () => {
+    await page.setViewportSize({ width: 900, height: 900 });
+    await go("#/settings");
+    const boxes = [];
+    for (const card of await page.locator(".settings-grid > .card").all()) {
+      boxes.push(await card.boundingBox());
+    }
+    const sameRow = boxes.some((a, i) => boxes.some((b, j) => i !== j && Math.abs(a.y - b.y) < 20));
+    expect(!sameRow, "좁은 화면인데 두 칸으로 벌어졌습니다");
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  await check("보고 편집기에서 쓰던 피보고자를 눌러 넣는다", async () => {
+    await go(`#/projects/${seeded.projectA}?report=${seeded.draft}`);
+    const chip = page.locator(".audience-suggest .tag-pick").first();
+    expect(await chip.count() > 0, "쓰던 피보고자 칩이 없습니다");
+    const name = (await chip.innerText()).trim();
+    await chip.click();
+    await page.waitForTimeout(300);
+    equal(await page.locator(".report-meta input[list]").inputValue(), name, "눌러서 들어간 피보고자");
+  });
+
+  await check("보고 초안을 만든 자리에서 바로 지운다", async () => {
+    const draft = await api.post(`/api/projects/${seeded.projectB}/reports/draft`, {
+      report_date: "2026-10-06", audience: "지울 것",
+    });
+    await go(`#/projects/${seeded.projectB}?report=${draft.id}`);
+    await page.locator(".report-editor").getByRole("button", { name: "삭제" }).click();
+    await page.waitForTimeout(1200);
+
+    const left = await api.get("/api/reports");
+    expect(!left.some((row) => row.id === draft.id), "보고가 지워지지 않았습니다");
+  });
+
+  await check("확정된 보고에는 삭제가 없다", async () => {
+    const rows = await api.get("/api/reports?state=frozen");
+    expect(rows.length > 0, "확정된 보고가 없습니다 (시험 자료 문제)");
+    await go(`#/projects/${rows[0].project_id}?report=${rows[0].id}`);
+    equal(
+      await page.locator(".report-editor").getByRole("button", { name: "삭제" }).count(),
+      0,
+      "확정된 보고 편집기의 삭제 단추 수",
+    );
+  });
+
+  await check("화면을 옮기면 맨 위에서 시작한다", async () => {
+    // 해시 이동은 같은 문서 안에서 일어나 스크롤이 그대로 남는다.
+    // 목록을 한참 내려보다 과제를 열면 상세가 중간부터 보이던 문제.
+    await go("#/");
+    await page.evaluate(() => window.scrollTo(0, 1500));
+    await page.waitForTimeout(300);
+    await page.locator(".grid tbody tr").first().click();
+    await page.waitForTimeout(800);
+    equal(await page.evaluate(() => Math.round(window.scrollY)), 0, "과제를 연 뒤 스크롤 위치");
+  });
+
+  await check("보고를 지정해 열면 그 자리로 데려간다 (맨 위로 덮어쓰지 않는다)", async () => {
+    await go("#/history");
+    await page.locator(".history-list a").first().click();
+    await page.waitForTimeout(1200);
+    expect(await page.locator(".report-editor").count() > 0, "보고가 열리지 않았습니다");
+    // 문서 자리로 데려가는 동작이 살아 있어야 한다 — 맨 위로 올려 버리면 안 된다.
+    const box = await page.locator(".report-editor").boundingBox();
+    expect(box.y < 400, `보고가 화면 안에 들어오지 않았습니다 (y=${Math.round(box.y)})`);
+  });
+
+  await check("맨 위로 단추가 내렸을 때만 나타난다", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    // 앞선 시험이 보고를 열어 놓았을 수 있다. 맨 위에서 시작하는지부터 맞춰 둔다.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+    equal(await page.locator(".scroll-top").count(), 0, "맨 위에서의 단추 수");
+
+    await page.evaluate(() => window.scrollTo(0, 2000));
+    await page.waitForTimeout(400);
+    expect(await page.locator(".scroll-top").count() > 0, "내렸는데도 단추가 없습니다");
+
+    await page.locator(".scroll-top").click();
+    await page.waitForTimeout(900);
+    equal(await page.evaluate(() => Math.round(window.scrollY)), 0, "맨 위로 간 뒤 위치");
+  });
+
+  await check("맨 위로 단추가 모든 화면에서 같은 자리에 있다", async () => {
+    // 요청의 핵심이 "동일한 위치"다. 스크롤이 실제로 생기는 긴 화면들로 견준다.
+    const spots = [];
+    for (const hash of [`#/projects/${seeded.projectA}`, "#/settings", "#/", "#/reports", "#/history"]) {
+      await go(hash);
+      await page.evaluate(() => window.scrollTo(0, 4000));
+      await page.waitForTimeout(400);
+      const button = page.locator(".scroll-top");
+      if ((await button.count()) === 0) continue; // 내용이 짧아 스크롤이 안 생기는 화면
+      const box = await button.boundingBox();
+      spots.push({ hash, x: Math.round(box.x), y: Math.round(box.y) });
+    }
+    expect(spots.length >= 2, `단추가 뜬 화면이 너무 적습니다: ${JSON.stringify(spots)}`);
+    const first = spots[0];
+    for (const spot of spots) {
+      expect(spot.x === first.x && spot.y === first.y,
+        `자리가 다릅니다: ${JSON.stringify(spots)}`);
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
   });
 
   console.log("\n[3] 글자가 읽히는가 (WCAG AA)");

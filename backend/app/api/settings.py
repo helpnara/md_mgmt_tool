@@ -21,6 +21,8 @@ class SettingsUpdate(BaseModel):
     report_template: str | None = None
     # 과제 번호의 팀·부문 코드. 비우면 2026-001, "소재" 면 2026-소재-001.
     project_code: str | None = None
+    # 주간 보고를 하는 요일 (0=월 … 6=일). 보고 예정일과 리마인더가 함께 따라간다.
+    report_weekday: int | None = None
 
 
 @router.get("")
@@ -34,6 +36,11 @@ def update_settings(payload: SettingsUpdate) -> dict:
     if "project_code" in changes:
         try:
             changes["project_code"] = svc.validate_project_code(changes["project_code"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if "report_weekday" in changes:
+        try:
+            changes["report_weekday"] = svc.validate_report_weekday(changes["report_weekday"])
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     # 보내지 않은 항목은 건드리지 않는다.

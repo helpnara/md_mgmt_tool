@@ -38,7 +38,7 @@ export default function ReportTemplateCard() {
   }
 
   return (
-    <div className="card">
+    <div className="card wide">
       <h2>보고 초안 서식</h2>
       <p className="hint">
         [보고 초안 만들기]로 만드는 문서의 뼈대입니다. <code>{"{summary}"}</code> 자리에{" "}

@@ -53,6 +53,8 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "project_code": settings_service.project_code(),
         "vault": str(get_settings().vault_dir),
         "report_cycle_days": get_settings().report_cycle_days,
+        # 주간 보고 요일 (0=월 … 6=일). 화면이 안내 문구에 쓴다.
+        "report_weekday": settings_service.report_weekday(),
     }
 
 

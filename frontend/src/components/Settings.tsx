@@ -6,6 +6,7 @@ import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
 import PeopleCard from "./PeopleCard";
 import ProjectCodeCard from "./ProjectCodeCard";
+import ReportDayCard from "./ReportDayCard";
 import ErrorLogCard from "./ErrorLogCard";
 
 /**
@@ -53,6 +54,9 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
       </a>
       <h1 className="search-title">설정</h1>
 
+      {/* 넓은 화면에서 두 칸으로 흐른다 (styles.css .settings-grid).
+          서식·오류 기록처럼 넓게 봐야 하는 것은 아래에서 wide 로 두 칸을 쓴다. */}
+      <div className="settings-grid">
       <div className="card">
         <h2>작성자</h2>
         <p className="hint">
@@ -91,11 +95,12 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
         </div>
       </div>
 
-      <PeopleCard onChanged={onSaved} />
+      <ReportDayCard onSaved={onSaved} />
       <ProjectCodeCard onSaved={onSaved} />
+      <PeopleCard onChanged={onSaved} />
+      <TrashCard />
       <EntryTemplateCard meta={meta} />
       <ReportTemplateCard />
-      <TrashCard />
       <ErrorLogCard />
 
       <div className="card">
@@ -123,8 +128,8 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
         <h2>보고 기준</h2>
         <p className="hint">
           보고 대상 후보의 점수를 계산할 때 쓰는 기준 주기는 <strong>{meta.report_cycle_days}일</strong>입니다.
-          (주간 보고 기준)
         </p>
+      </div>
       </div>
     </section>
   );

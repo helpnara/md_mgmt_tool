@@ -41,7 +41,7 @@ export default function EntryTemplateCard({ meta }: { meta: Meta }) {
   }
 
   return (
-    <div className="card">
+    <div className="card wide">
       <div className="card-head">
         <h2>진행일지 서식</h2>
         <select value={target} onChange={(event) => setTarget(event.target.value)}>

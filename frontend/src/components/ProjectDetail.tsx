@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
-import { backTarget } from "../nav";
+import { backTarget, projectLink } from "../nav";
 import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -482,6 +482,13 @@ export default function ProjectDetail({
           audiences={meta.audiences}
           onChanged={load}
           onClose={() => setOpenReport(null)}
+          onDeleted={() => {
+            setOpenReport(null);
+            // 주소에 지운 보고가 남아 있으면 새로고침했을 때 없는 문서를 열려 한다.
+            // projectLink 가 온 곳(back)은 그대로 두고 report 만 뗀다.
+            window.history.replaceState(null, "", projectLink(project.id));
+            load();
+          }}
         />
       )}
 
@@ -681,12 +688,14 @@ function ReportEditorLoader({
   audiences,
   onChanged,
   onClose,
+  onDeleted,
 }: {
   reportId: number;
   dirName?: string;
   audiences: string[];
   onChanged: () => void;
   onClose: () => void;
+  onDeleted: () => void;
 }) {
   const [report, setReport] = useState<Report | null>(null);
 
@@ -707,6 +716,7 @@ function ReportEditorLoader({
         onChanged();
       }}
       onClose={onClose}
+      onDeleted={onDeleted}
     />
   );
 }

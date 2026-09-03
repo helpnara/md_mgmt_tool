@@ -55,7 +55,7 @@ export default function ErrorLogCard() {
   }
 
   return (
-    <div className="card">
+    <div className="card wide">
       <div className="card-head">
         <h2>최근 오류 ({items.length})</h2>
         <div className="form-actions" style={{ margin: 0 }}>

@@ -4,6 +4,7 @@ import ProjectDetail from "./components/ProjectDetail";
 import ProjectList from "./components/ProjectList";
 import ReportCandidates from "./components/ReportCandidates";
 import ReportHistory from "./components/ReportHistory";
+import ScrollTop from "./components/ScrollTop";
 import Settings from "./components/Settings";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
@@ -68,6 +69,28 @@ export default function App() {
     observer.observe(header);
     return () => observer.disconnect();
   });
+
+  // 화면을 옮기면 맨 위에서 시작한다.
+  //
+  // 해시 이동은 같은 문서 안에서 일어나 **스크롤이 그대로 남는다.** 그래서 목록을 한참
+  // 내려보다 과제를 열면 상세가 중간부터 보였다. 옮긴 화면은 처음부터 보여야 한다.
+  //
+  // 다만 보고·진행일지를 지정해 여는 경우(`?report=` `?entry=`)는 건드리지 않는다 —
+  // 그쪽은 해당 문서 자리로 데려가는 것이 목적이고(util.ts scrollEditorIntoView),
+  // 여기서 맨 위로 올리면 그 동작을 덮어써 버린다.
+  const screenKey = route.name === "project" ? `project:${route.id}` : route.name;
+  const targeted = route.name === "project" && (route.reportId !== undefined || route.entryId !== undefined);
+  useEffect(() => {
+    // 브라우저는 같은 문서 안 이동에서 스크롤 위치를 **되살린다.** 그대로 두면
+    // 아래에서 맨 위로 올려 놓아도 곧바로 원래 자리로 되돌려 놓는다.
+    if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+  }, []);
+
+  useEffect(() => {
+    if (!targeted) window.scrollTo(0, 0);
+    // 같은 화면 안에서 조건만 바뀐 경우는 제외하려고 화면 이름만 본다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenKey]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -162,6 +185,8 @@ export default function App() {
         {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
       </main>
+      {/* 화면마다 따로 두지 않는다 — 요청의 핵심이 "어디서나 같은 자리"다. */}
+      <ScrollTop />
     </div>
   );
 }

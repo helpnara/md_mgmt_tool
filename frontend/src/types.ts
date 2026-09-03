@@ -21,6 +21,8 @@ export interface Meta {
   people: string[];
   /** 과제 번호의 팀·부문 코드 (비면 2026-001) */
   project_code: string;
+  /** 주간 보고 요일 (0=월 … 6=일) */
+  report_weekday: number;
   vault: string;
   report_cycle_days: number;
 }
@@ -160,6 +162,8 @@ export interface AppSettings {
   people: Person[];
   /** 과제 번호의 팀·부문 코드. 비우면 2026-001. */
   project_code: string;
+  /** 주간 보고 요일 (0=월 … 6=일). 보고 예정일과 알림이 함께 따라간다. */
+  report_weekday: number;
 }
 
 export interface TrashItem {

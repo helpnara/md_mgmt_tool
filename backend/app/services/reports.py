@@ -38,9 +38,14 @@ DRAFT_TEMPLATE = """## 보고 요약
 
 
 def default_report_date(today: date_cls | None = None) -> str:
-    """주간 보고는 화요일에 한다. 오늘이 화요일이면 오늘, 아니면 다음 화요일."""
+    """다음 보고 예정일. 오늘이 보고 요일이면 오늘, 아니면 돌아오는 그 요일.
+
+    보고 요일은 팀마다 다르므로 설정에서 읽는다 (기본값 화요일).
+    리마인더도 **같은 값**을 본다 — 따로 두면 "내일 보고입니다" 안내가
+    실제 보고 예정일과 어긋난다.
+    """
     today = today or date_cls.today()
-    days_ahead = (1 - today.weekday()) % 7  # 월=0, 화=1
+    days_ahead = (settings_service.report_weekday() - today.weekday()) % 7
     return (today + timedelta(days=days_ahead)).isoformat()
 
 
@@ -512,21 +517,22 @@ def diff_with_previous(conn: sqlite3.Connection, report_id: int) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # 보고 리마인더 (T12)
 #
-# 월요일에 보고 대상을 고르고 화요일에 보고한다. 이 주기는 사람이 기억할 일이
+# 보고 요일 하루 전에 대상을 고르고, 그날 보고한다. 이 주기는 사람이 기억할 일이
 # 아니라 화면이 알려 줄 일이다. 다만 매일 뜨면 곧 안 보게 되므로,
-# **선정일과 보고일에만** 띄운다.
+# **선정일과 보고일에만** 띄운다. 요일은 설정에서 읽는다 (TODO 50).
 # ─────────────────────────────────────────────────────────────────────────────
 
-REPORT_WEEKDAY = 1  # 화요일 (월=0)
-
-
 def reminder(conn: sqlite3.Connection, today: date_cls | None = None) -> dict | None:
-    """오늘이 선정일이거나 보고일이면 알림 내용을, 아니면 None."""
+    """오늘이 선정일이거나 보고일이면 알림 내용을, 아니면 None.
+
+    보고 요일은 설정에서 읽고, 선정일은 그 **하루 전**이다.
+    """
     today = today or date_cls.today()
+    report_weekday = settings_service.report_weekday()
     weekday = today.weekday()
-    if weekday == REPORT_WEEKDAY:
+    if weekday == report_weekday:
         phase = "report"
-    elif weekday == (REPORT_WEEKDAY - 1) % 7:
+    elif weekday == (report_weekday - 1) % 7:
         phase = "select"
     else:
         return None

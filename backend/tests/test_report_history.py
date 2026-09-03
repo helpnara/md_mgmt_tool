@@ -244,3 +244,75 @@ def test_a_report_without_an_audience_is_not_an_error(client):
     item = client.get("/api/report-candidates").json()["items"][0]
     assert item["never_reported"] is False
     assert item["last_report_audience"] is None
+
+
+# ── 주간 보고 요일 설정 (TODO 50) ─────────────────────────────────────────────
+
+def set_weekday(client, weekday):
+    response = client.put("/api/settings", json={"report_weekday": weekday})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_report_day_defaults_to_tuesday(client):
+    """지금까지 쓰던 값. 설정을 건드리지 않은 사람의 동작이 바뀌면 안 된다."""
+    assert client.get("/api/settings").json()["report_weekday"] == 1
+    assert svc.default_report_date(date(2026, 9, 3)) == "2026-09-08"  # 목 → 다음 화
+
+
+def test_the_report_day_follows_the_setting(client):
+    set_weekday(client, 4)  # 금요일
+    # 2026-09-03 은 목요일 → 다음 날이 금요일
+    assert svc.default_report_date(date(2026, 9, 3)) == "2026-09-04"
+    set_weekday(client, 0)  # 월요일
+    assert svc.default_report_date(date(2026, 9, 3)) == "2026-09-07"
+
+
+def test_today_counts_when_it_is_the_report_day(client):
+    set_weekday(client, 3)  # 목요일
+    assert svc.default_report_date(date(2026, 9, 3)) == "2026-09-03"
+
+
+def test_the_reminder_moves_with_the_setting(client, db):
+    """보고 예정일과 리마인더가 따로 놀면 '내일 보고입니다' 안내가 거짓말이 된다."""
+    set_weekday(client, 4)  # 금요일
+    assert svc.reminder(db, date(2026, 9, 4))["phase"] == "report"   # 금 = 보고일
+    assert svc.reminder(db, date(2026, 9, 3))["phase"] == "select"   # 목 = 선정일
+    assert svc.reminder(db, date(2026, 9, 2)) is None                # 수 = 조용
+
+
+def test_the_reminder_names_the_same_day_the_draft_would_use(client, db):
+    for weekday in range(7):
+        set_weekday(client, weekday)
+        today = date(2026, 9, 3)
+        note = svc.reminder(db, today)
+        if note:
+            assert note["report_date"] == svc.default_report_date(today), weekday
+
+
+def test_sunday_wraps_around_to_saturday_for_the_selection_day(client, db):
+    set_weekday(client, 6)  # 일요일 보고
+    assert svc.reminder(db, date(2026, 9, 5))["phase"] == "select"  # 토
+    assert svc.reminder(db, date(2026, 9, 6))["phase"] == "report"  # 일
+
+
+def test_a_weekday_outside_the_week_is_refused(client):
+    for bad in (7, -1, "화요일"):
+        response = client.put("/api/settings", json={"report_weekday": bad})
+        assert response.status_code in (400, 422), (bad, response.text)
+    # 거절당해도 기존 값은 그대로다.
+    assert client.get("/api/settings").json()["report_weekday"] == 1
+
+
+def test_a_broken_setting_falls_back_instead_of_crashing(client, vault_dir):
+    import json as json_module
+
+    path = vault_dir / "settings.json"
+    path.write_text(json_module.dumps({"report_weekday": "엉뚱한 값"}), encoding="utf-8")
+    # 설정이 깨졌다고 보고 예정일을 못 구하면 도구 전체가 멈춘다.
+    assert svc.default_report_date(date(2026, 9, 3)) == "2026-09-08"
+
+
+def test_meta_carries_the_weekday_for_the_screen(client):
+    set_weekday(client, 2)
+    assert client.get("/api/meta").json()["report_weekday"] == 2

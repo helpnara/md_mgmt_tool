@@ -25,6 +25,9 @@ DEFAULTS: dict[str, Any] = {
     # 과제 번호의 팀·부문 코드. 비우면 2026-001, "소재" 를 넣으면 2026-소재-001.
     # 여러 팀장이 함께 쓰게 될 때 번호가 겹치지 않게 하는 자리다.
     "project_code": "",
+    # 주간 보고를 하는 요일 (0=월 … 6=일). 팀마다 다르다.
+    # 이 값 하나가 보고 예정일·리마인더·초안 기본 날짜를 모두 정한다.
+    "report_weekday": 1,
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
 _TEXT_KEYS = ("author", "report_template", "project_code")
@@ -55,6 +58,8 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = str(updates[key]).strip()
         elif key == "people":
             current[key] = normalize_people(updates[key])
+        elif key == "report_weekday":
+            current[key] = validate_report_weekday(updates[key])
         elif key == "entry_templates":
             # 빈 서식은 저장하지 않는다 — 비우면 "기본 서식으로 되돌린다"는 뜻이다.
             current[key] = {
@@ -166,3 +171,26 @@ def validate_project_code(code: str) -> str:
     if any(ch in code for ch in "/\\ \t"):
         raise ValueError("팀 코드에 공백이나 경로 문자를 넣을 수 없습니다.")
     return code
+
+
+# ── 주간 보고 요일 ────────────────────────────────────
+
+WEEKDAY_LABELS = ("월", "화", "수", "목", "금", "토", "일")
+
+
+def report_weekday() -> int:
+    """주간 보고를 하는 요일 (0=월 … 6=일). 값이 깨져 있으면 기본값으로 돌린다."""
+    try:
+        return validate_report_weekday(load()["report_weekday"])
+    except ValueError:
+        return int(DEFAULTS["report_weekday"])
+
+
+def validate_report_weekday(value: object) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("보고 요일은 0(월)부터 6(일) 사이의 숫자여야 합니다.") from exc
+    if not 0 <= number <= 6:
+        raise ValueError("보고 요일은 0(월)부터 6(일) 사이여야 합니다.")
+    return number
