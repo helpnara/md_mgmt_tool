@@ -178,7 +178,9 @@ def test_candidates_rank_by_elapsed_time_and_backlog(client):
     items = client.get("/api/report-candidates").json()["items"]
     assert items[0]["id"] == stale["id"]
     assert items[0]["unreported_entries"] == 3
-    assert items[0]["score"] > items[-1]["score"]
+    # 보고한 적 없는 과제가 앞, 방금 보고한 과제가 뒤.
+    assert items[0]["never_reported"] is True
+    assert items[-1]["id"] == fresh["id"]
 
 
 def test_candidates_exclude_finished_projects(client):
@@ -222,30 +224,32 @@ def test_default_report_date_is_a_tuesday():
         assert result >= date(2026, 9, day)
 
 
-def test_project_with_nothing_new_ranks_below_one_with_backlog(client):
-    """보고할 새 내용이 없으면 아무리 오래 방치됐어도 위로 올라오면 안 된다."""
+def test_a_long_neglected_project_is_not_pushed_down_by_having_no_backlog(client):
+    """예전에는 '진행이 없으면' 계수 0.25 를 먹어 오래 방치된 과제가 아래로 갔다.
+
+    사용자가 정한 규칙은 "오래된 것이 먼저"이고, 거기에 예외는 없다 (TODO 52).
+    """
     ancient = make_project(client, title="아주 오래됐지만 진행 없는 과제", start_date="2015-01-01")
     active = make_project(client, title="최근 진행이 쌓인 과제", start_date="2026-08-25")
     for day in ("2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31"):
         add_entry(client, active["id"], day, f"{day} 기록")
 
     items = client.get("/api/report-candidates").json()["items"]
-    assert items[0]["id"] == active["id"]
-
-    scores = {item["id"]: item["score"] for item in items}
-    assert scores[ancient["id"]] == 2.0  # 경과 항 상한 8.0 × 진행 없음 계수 0.25
-    assert scores[active["id"]] > scores[ancient["id"]]
+    assert [item["id"] for item in items] == [ancient["id"], active["id"]]
 
 
-def test_elapsed_term_is_capped(client):
-    """10년 방치된 과제와 1년 방치된 과제가 같은 상한에 걸린다."""
+def test_elapsed_time_is_no_longer_capped(client):
+    """10년 방치와 1년 방치가 같은 값이 되던 상한(주기×8=56일)을 없앴다.
+
+    이 상한 때문에 D+100 과 D+150 의 순서가 뒤집히던 것이 TODO 52 의 발단이다.
+    """
     old_one = make_project(client, title="1년 전 과제", start_date="2025-09-01")
     older = make_project(client, title="10년 전 과제", start_date="2015-09-01")
     for project in (old_one, older):
         add_entry(client, project["id"], "2026-08-30", "기록")
 
-    scores = {item["id"]: item["score"] for item in client.get("/api/report-candidates").json()["items"]}
-    assert scores[old_one["id"]] == scores[older["id"]] == 8.5  # 상한 8.0 + 미보고 1건
+    items = client.get("/api/report-candidates").json()["items"]
+    assert [item["id"] for item in items] == [older["id"], old_one["id"]]
 
 
 # ── 보고일 바꾸기 ─────────────────────────────────────

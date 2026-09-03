@@ -42,7 +42,7 @@ export default function ReportHistory({ meta, query }: Props) {
   }, [load, q]);
 
   // 고른 조건과 주소를 맞춘다. 자주 보는 조건은 즐겨찾기해 두어도 된다.
-  useAddressBar("history", { audience, from, to, q, state }, query, (params) => {
+  useAddressBar("history", { audience, from, to, q, state }, (params) => {
     setAudience(params.get("audience") ?? "");
     setFrom(params.get("from") ?? "");
     setTo(params.get("to") ?? "");

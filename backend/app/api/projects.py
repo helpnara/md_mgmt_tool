@@ -15,6 +15,40 @@ from ..schemas import ProjectCreate, ProjectUpdate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
+def _flip(clause: str, order: str) -> str:
+    """정렬 구문의 방향을 바꾼다.
+
+    빈 값을 뒤로 보내는 `CASE WHEN … THEN 1 ELSE 0 END` 항은 **건드리지 않는다.**
+    오름차순일 때만 빈 줄이 위로 오면, 같은 열을 두 번 눌렀을 때 빈 줄이 위아래로 튀어
+    예측이 안 된다. 빈 값은 어느 방향에서나 뒤에 있어야 한다.
+    """
+    parts = []
+    for piece in _split_terms(clause):
+        if piece.upper().startswith("CASE"):
+            parts.append(piece)
+            continue
+        base = piece.removesuffix(" DESC").removesuffix(" ASC").rstrip()
+        parts.append(f"{base} {'DESC' if order == 'desc' else 'ASC'}")
+    return ", ".join(parts)
+
+
+def _split_terms(clause: str) -> list[str]:
+    """정렬 구문을 항 단위로 나눈다. **괄호 안의 쉼표는 건드리지 않는다** —
+    `COALESCE(a, b)` 나 `ORDER BY x, y LIMIT 1` 같은 것이 반으로 잘리면 SQL 이 깨진다.
+    """
+    terms, depth, start = [], 0, 0
+    for index, char in enumerate(clause):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "," and depth == 0:
+            terms.append(clause[start:index].strip())
+            start = index + 1
+    terms.append(clause[start:].strip())
+    return [term for term in terms if term]
+
+
 SORTS = {
     "updated": "p.updated_at DESC",
     # 마지막 보고가 오래된 과제부터. 보고한 적 없는 과제가 맨 앞에 온다.
@@ -28,6 +62,27 @@ SORTS = {
         "CASE WHEN COALESCE(p.effect_verified, p.effect_expected) IS NULL THEN 1 ELSE 0 END,"
         " COALESCE(p.effect_verified, p.effect_expected) DESC, p.title ASC"
     ),
+    # ── 열 머리글로 고르는 정렬 (TODO 57) ───────────────────────────────
+    # 빈 값은 어느 방향에서나 뒤로 간다 (_flip 주석 참고).
+    "id": "p.id ASC",
+    "status": "p.status ASC, p.title ASC",
+    "type": "CASE WHEN p.type IS NULL OR p.type = '' THEN 1 ELSE 0 END, p.type ASC, p.title ASC",
+    "group": "CASE WHEN p.grp IS NULL OR p.grp = '' THEN 1 ELSE 0 END, p.grp ASC, p.title ASC",
+    # 담당자·태그는 여러 개일 수 있다. **맨 앞 하나**를 기준으로 삼는다 —
+    # 개수로 세면 "김현우"를 찾는 사람에게 아무 도움이 안 된다.
+    "owner": (
+        "CASE WHEN (SELECT po.name FROM project_owner po WHERE po.project_id = p.id"
+        "           ORDER BY po.position, po.name LIMIT 1) IS NULL THEN 1 ELSE 0 END,"
+        " (SELECT po.name FROM project_owner po WHERE po.project_id = p.id"
+        "  ORDER BY po.position, po.name LIMIT 1) ASC, p.title ASC"
+    ),
+    "tag": (
+        "CASE WHEN (SELECT t.name FROM tag t JOIN project_tag pt ON pt.tag_id = t.id"
+        "           WHERE pt.project_id = p.id ORDER BY t.name LIMIT 1) IS NULL THEN 1 ELSE 0 END,"
+        " (SELECT t.name FROM tag t JOIN project_tag pt ON pt.tag_id = t.id"
+        "  WHERE pt.project_id = p.id ORDER BY t.name LIMIT 1) ASC, p.title ASC"
+    ),
+    "entries": "(SELECT COUNT(*) FROM entry e WHERE e.project_id = p.id) DESC, p.title ASC",
 }
 
 
@@ -98,6 +153,8 @@ def list_projects(
     q: str | None = None,
     due: str | None = None,
     sort: str = Query("updated"),
+    # 열 머리글을 눌러 방향을 뒤집는다 (TODO 57). 정렬 키는 SORTS 가 정의한다.
+    order: str | None = Query(None, pattern="^(asc|desc)$"),
 ) -> list[dict]:
     where, params = [], []
     if status:
@@ -134,8 +191,10 @@ def list_projects(
         params.extend(matched)
 
     clause = f"WHERE {' AND '.join(where)}" if where else ""
-    order = SORTS.get(sort, SORTS["updated"])
-    rows = conn.execute(f"SELECT p.* FROM project p {clause} ORDER BY {order}", params).fetchall()
+    clause_order = SORTS.get(sort, SORTS["updated"])
+    if order is not None:
+        clause_order = _flip(clause_order, order)
+    rows = conn.execute(f"SELECT p.* FROM project p {clause} ORDER BY {clause_order}", params).fetchall()
     return [_serialize(conn, row) for row in rows]
 
 

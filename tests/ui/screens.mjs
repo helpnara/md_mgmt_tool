@@ -189,15 +189,27 @@ async function main() {
 
   const seeded = await seed();
 
+  /**
+   * 화면을 옮긴다. **사람이 링크를 누르는 것과 같은 방식**으로.
+   *
+   * page.goto 로 주소의 `#` 뒤만 바꾸면 주소는 바뀌는데 hashchange 가 나지 않아,
+   * 화면이 예전 상태(걸어 둔 조건·정렬)를 그대로 들고 있는다. 실제 사용에서는
+   * 링크를 누르므로 그런 일이 없다 — 시험도 같은 길로 다녀야 한다.
+   */
   async function go(hash) {
-    // 이미 그 주소에 있으면 goto 는 아무것도 하지 않는다(같은 문서 안 이동).
-    // 그러면 화면이 다시 그려지지 않아, 방금 만든 자료가 없는 것처럼 보인다.
-    if (page.url() === BASE + "/" + hash || page.url() === BASE + hash) {
+    const onSamePage = page.url().startsWith(BASE);
+    if (!onSamePage) {
+      await page.goto(BASE + hash, { waitUntil: "networkidle" });
+    } else if (page.url() === BASE + "/" + hash || page.url() === BASE + hash) {
+      // 같은 주소면 아무 일도 안 일어난다. 자료가 바뀌었을 수 있으니 다시 읽는다.
       await page.reload({ waitUntil: "networkidle" });
     } else {
-      await page.goto(BASE + hash, { waitUntil: "networkidle" });
+      await page.evaluate((target) => {
+        window.location.hash = target.replace(/^#/, "");
+      }, hash);
+      await page.waitForLoadState("networkidle");
     }
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(400);
   }
 
   /** 요소 하나의 명암비. state 는 마우스올림 같은 상태를 만들어 두고 잰다. */
@@ -531,6 +543,115 @@ async function main() {
         `자리가 다릅니다: ${JSON.stringify(spots)}`);
     }
     await page.evaluate(() => window.scrollTo(0, 0));
+  });
+
+  console.log("\n[2-4] 거르기·정렬·검색 (TODO 49·52·53·57)");
+
+  await check("보고 대상이 기본 순서로 선다 (보고 이력 없음 먼저)", async () => {
+    await go("#/reports");
+    const first = await page.locator(".grid tbody tr").first().innerText();
+    expect(first.includes("보고 이력 없음"), `맨 위가 보고 이력 없음이 아닙니다: ${first}`);
+    expect(await page.locator(".sort-note").count() > 0, "기본 순서 표시가 없습니다");
+    // 점수 열은 없앴다 — 기본 순서가 더는 점수순이 아니라 쓰이지 않는 숫자가 된다.
+    expect(!(await page.locator(".grid thead").innerText()).includes("점수"), "점수 열이 남아 있습니다");
+  });
+
+  await check("보고 대상을 담당자로 거른다", async () => {
+    await go("#/reports");
+    const all = await page.locator(".grid tbody tr").count();
+    await page.selectOption(".candidates .filters select:nth-of-type(3)", "김현우");
+    await page.waitForTimeout(700);
+    const some = await page.locator(".grid tbody tr").count();
+    expect(some > 0 && some < all, `거르기가 듣지 않았습니다 (전체 ${all}, 거른 뒤 ${some})`);
+    expect(page.url().includes("owner="), `조건이 주소에 없습니다: ${page.url()}`);
+    await page.getByRole("button", { name: "조건 지우기" }).click();
+    await page.waitForTimeout(600);
+    equal(await page.locator(".grid tbody tr").count(), all, "조건을 지운 뒤");
+  });
+
+  await check("열 이름을 누르면 그 열로 정렬되고, 다시 누르면 방향이 바뀐다", async () => {
+    await go("#/reports");
+    const title = () => page.locator(".grid tbody tr td:nth-child(2) .project-title").allInnerTexts();
+
+    await page.locator(".grid thead th.sortable button", { hasText: "과제" }).click();
+    await page.waitForTimeout(700);
+    const up = await title();
+    expect(page.url().includes("sort=title"), `정렬이 주소에 없습니다: ${page.url()}`);
+
+    await page.locator(".grid thead th.sortable button", { hasText: "과제" }).click();
+    await page.waitForTimeout(700);
+    const down = await title();
+    equal(down.join("|"), [...up].reverse().join("|"), "다시 눌렀을 때의 순서");
+  });
+
+  await check("[기본 순서로]를 누르면 원래 순서로 돌아간다", async () => {
+    await go("#/reports");
+    // 앞선 시험이 정렬을 걸어 두었을 수 있다. 화면이 "기본 순서"라고 말할 때까지 기다린다.
+    await page.locator(".sort-note").waitFor({ state: "visible" });
+    await page.waitForTimeout(300);
+    const base = await page.locator(".grid tbody tr td:nth-child(2) .project-title").allInnerTexts();
+
+    await page.locator(".grid thead th.sortable button", { hasText: "과제" }).click();
+    await page.waitForTimeout(700);
+    await page.getByRole("button", { name: "기본 순서로" }).click();
+    await page.locator(".sort-note").waitFor({ state: "visible" });
+    await page.waitForTimeout(400);
+
+    equal(
+      (await page.locator(".grid tbody tr td:nth-child(2) .project-title").allInnerTexts()).join("|"),
+      base.join("|"),
+      "기본 순서로 돌아온 뒤",
+    );
+    expect(!page.url().includes("sort="), `정렬이 주소에 남아 있습니다: ${page.url()}`);
+  });
+
+  await check("과제 목록도 열 이름으로 정렬된다", async () => {
+    await go("#/");
+    await page.locator(".grid thead th.sortable button", { hasText: "과제" }).click();
+    await page.waitForTimeout(700);
+    const up = await page.locator(".grid tbody tr .project-title").allInnerTexts();
+    expect(page.url().includes("sort=title"), `정렬이 주소에 없습니다: ${page.url()}`);
+
+    await page.locator(".grid thead th.sortable button", { hasText: "과제" }).click();
+    await page.waitForTimeout(700);
+    const down = await page.locator(".grid tbody tr .project-title").allInnerTexts();
+    equal(down.join("|"), [...up].reverse().join("|"), "다시 눌렀을 때의 순서");
+  });
+
+  await check("정렬 선택 상자와 열 머리글이 같은 값을 본다", async () => {
+    await go("#/");
+    await page.locator(".grid thead th.sortable button", { hasText: "마감" }).click();
+    await page.waitForTimeout(700);
+    // 상자가 머리글을 따라와야 한다 — 둘이 따로 놀면 무엇이 이기는지 알 수 없다.
+    equal(await page.locator(".filters select").last().inputValue(), "due", "정렬 상자의 값");
+  });
+
+  await check("상단 검색으로 보고를 찾는다 (피보고자)", async () => {
+    await go("#/search?q=" + encodeURIComponent("주요업무"));
+    const cards = await page.locator(".search-results .card h2").allInnerTexts();
+    expect(cards.some((text) => text.startsWith("보고")), `보고 갈래가 없습니다: ${cards}`);
+    // 눌러서 그 보고 문서로 바로 갈 수 있어야 한다.
+    const link = page.locator(".search-results .card", { hasText: "보고 " }).locator("a").first();
+    await link.click();
+    await page.waitForTimeout(1200);
+    expect(await page.locator(".report-editor").count() > 0, "보고 문서가 열리지 않았습니다");
+  });
+
+  await check("상단 검색으로 담당자와 태그도 찾는다", async () => {
+    await go("#/search?q=" + encodeURIComponent("김현우"));
+    expect(await page.locator(".search-results .card").count() > 0, "담당자로 찾지 못했습니다");
+    const text = await page.locator(".search-results").innerText();
+    expect(text.includes("공정 자동화"), `담당 과제가 안 나옵니다: ${text.slice(0, 200)}`);
+  });
+
+  await check("대시보드는 보고 대상 목록 대신 길만 열어 둔다", async () => {
+    await go("#/");
+    equal(await page.locator(".dash-list").count(), 0, "대시보드에 남은 보고 대상 목록");
+    const link = page.locator(".dash-mini.go");
+    expect(await link.count() > 0, "보고 대상으로 가는 길이 없습니다");
+    await link.click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes("#/reports"), `보고 대상으로 가지 않았습니다: ${page.url()}`);
   });
 
   console.log("\n[3] 글자가 읽히는가 (WCAG AA)");

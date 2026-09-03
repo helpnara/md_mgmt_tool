@@ -107,10 +107,22 @@ export const api = {
       "/api/settings/project-code/renumber",
       { method: "POST", body: JSON.stringify({ code }) },
     ),
-  reportCandidates: (includeInactive = false) =>
-    request<{ cycle_days: number; default_report_date: string; items: ReportCandidate[] }>(
-      `/api/report-candidates?include_inactive=${includeInactive}`,
-    ),
+  reportCandidates: (options: {
+    includeInactive?: boolean;
+    status?: string;
+    type?: string;
+    owner?: string;
+    sort?: string;
+    order?: string;
+  } = {}) => {
+    const params = new URLSearchParams({ include_inactive: String(options.includeInactive ?? false) });
+    for (const key of ["status", "type", "owner", "sort", "order"] as const) {
+      if (options[key]) params.set(key, options[key] as string);
+    }
+    return request<{ cycle_days: number; default_report_date: string; items: ReportCandidate[] }>(
+      `/api/report-candidates?${params.toString()}`,
+    );
+  },
   spreadsheetPreview: (attachmentId: number) =>
     request<SpreadsheetPreview>(`/api/attachments/${attachmentId}/preview`),
   search: (query: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),

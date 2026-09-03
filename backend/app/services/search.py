@@ -48,9 +48,12 @@ def _matching_refs(conn: sqlite3.Connection, query: str, limit: int) -> list[tup
         UNION ALL
         SELECT 'entry' AS kind, CAST(id AS TEXT) AS ref_id FROM entry
          WHERE title LIKE ? OR body LIKE ?
+        UNION ALL
+        SELECT 'report' AS kind, CAST(id AS TEXT) AS ref_id FROM report
+         WHERE title LIKE ? OR body LIKE ? OR audience LIKE ?
         LIMIT ?
         """,
-        (pattern, pattern, pattern, pattern, limit),
+        (pattern, pattern, pattern, pattern, pattern, pattern, pattern, limit),
     ).fetchall()
     return [(row["kind"], row["ref_id"]) for row in rows]
 
@@ -58,11 +61,12 @@ def _matching_refs(conn: sqlite3.Connection, query: str, limit: int) -> list[tup
 def search(conn: sqlite3.Connection, query: str, limit: int = 60) -> dict:
     query = (query or "").strip()
     if not query:
-        return {"query": "", "projects": [], "entries": [], "attachments": [], "total": 0}
+        return {"query": "", "projects": [], "entries": [], "reports": [], "attachments": [], "total": 0}
 
     refs = _matching_refs(conn, query, limit)
     project_ids = [ref for kind, ref in refs if kind == "project"]
     entry_ids = [int(ref) for kind, ref in refs if kind == "entry"]
+    report_ids = [int(ref) for kind, ref in refs if kind == "report"]
 
     projects = []
     if project_ids:
@@ -105,6 +109,33 @@ def search(conn: sqlite3.Connection, query: str, limit: int = 60) -> dict:
                 }
             )
 
+    # 보고 문서. "그 회의체에 뭘 보고했더라" 를 상단 검색 하나로 답한다 (TODO 53).
+    reports = []
+    if report_ids:
+        placeholders = ",".join("?" * len(report_ids))
+        for row in conn.execute(
+            f"""
+            SELECT r.id, r.project_id, r.report_date, r.title, r.audience, r.body, r.frozen_at,
+                   p.title AS project_title
+              FROM report r JOIN project p ON p.id = r.project_id
+             WHERE r.id IN ({placeholders})
+             ORDER BY r.report_date DESC, r.id DESC
+            """,
+            report_ids,
+        ):
+            reports.append(
+                {
+                    "id": row["id"],
+                    "project_id": row["project_id"],
+                    "project_title": row["project_title"],
+                    "report_date": row["report_date"],
+                    "title": row["title"],
+                    "audience": row["audience"],
+                    "frozen": bool(row["frozen_at"]),
+                    "snippet": make_snippet(row["body"], query),
+                }
+            )
+
     # 첨부는 본문이 없으므로 파일명으로만 찾는다.
     attachments = [
         {
@@ -130,15 +161,17 @@ def search(conn: sqlite3.Connection, query: str, limit: int = 60) -> dict:
         "query": query,
         "projects": projects,
         "entries": entries,
+        "reports": reports,
         "attachments": attachments,
-        "total": len(projects) + len(entries) + len(attachments),
+        "total": len(projects) + len(entries) + len(reports) + len(attachments),
     }
 
 
 def project_ids_matching(conn: sqlite3.Connection, query: str) -> list[str]:
-    """검색어에 걸리는 과제 id 목록 (본문·진행일지·첨부 파일명 모두 대상)."""
+    """검색어에 걸리는 과제 id 목록 (본문·진행일지·보고·첨부 파일명 모두 대상)."""
     result = search(conn, query, limit=500)
     ids = {item["id"] for item in result["projects"]}
     ids.update(item["project_id"] for item in result["entries"])
+    ids.update(item["project_id"] for item in result["reports"])
     ids.update(item["project_id"] for item in result["attachments"])
     return sorted(ids)

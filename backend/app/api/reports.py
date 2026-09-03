@@ -217,12 +217,25 @@ def upload_report_attachment(
 
 @router.get("/api/report-candidates")
 def report_candidates(
-    include_inactive: bool = False, conn: sqlite3.Connection = Depends(get_db)
+    include_inactive: bool = False,
+    status: str | None = None,
+    type: str | None = None,
+    owner: str | None = None,
+    sort: str | None = None,
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    conn: sqlite3.Connection = Depends(get_db),
 ) -> dict:
+    """보고 대상 후보. 거르기(TODO 49)와 열 정렬(TODO 57)을 함께 받는다.
+
+    `sort` 를 주지 않으면 기본 순서다 — 보고 이력 없음 먼저, 그다음 오래된 순(TODO 52).
+    """
     from ..config import get_settings
 
     return {
         "cycle_days": get_settings().report_cycle_days,
         "default_report_date": svc.default_report_date(),
-        "items": svc.candidates(conn, include_inactive),
+        "sorts": list(svc.CANDIDATE_SORTS),
+        "items": svc.candidates(
+            conn, include_inactive, status=status, type=type, owner=owner, sort=sort, order=order
+        ),
     }

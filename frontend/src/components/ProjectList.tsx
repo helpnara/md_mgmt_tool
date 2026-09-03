@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { Meta, Project } from "../types";
 import { dueLabel, effectText, EFFECT_UNIT, formatDate } from "../util";
 import { projectLink, useAddressBar } from "../nav";
+import SortHeader, { type SortState } from "./SortHeader";
 import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
@@ -16,7 +17,21 @@ interface Props {
 }
 
 const DEFAULT_FILTERS = {
-  status: "", type: "", group: "", tag: "", owner: "", due: "", sort: "updated",
+  status: "", type: "", group: "", tag: "", owner: "", due: "", sort: "updated", order: "",
+};
+
+/** 열 머리글 → 서버가 아는 정렬 이름. 여기 없는 열은 눌러도 아무 일이 없다. */
+const COLUMN_SORTS: Record<string, { key: string; first?: "asc" | "desc" }> = {
+  과제: { key: "title" },
+  상태: { key: "status" },
+  속성: { key: "type" },
+  그룹: { key: "group" },
+  담당자: { key: "owner" },
+  태그: { key: "tag" },
+  마감: { key: "due" },
+  효과: { key: "effect", first: "desc" },
+  기록: { key: "entries", first: "desc" },
+  "최근 업데이트": { key: "updated", first: "desc" },
 };
 
 function readFilters(params: URLSearchParams): typeof DEFAULT_FILTERS {
@@ -57,12 +72,22 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
         ([key, value]) => value !== DEFAULT_FILTERS[key as keyof typeof DEFAULT_FILTERS],
       ),
     ) as Record<string, string>,
-    query,
     (params) => setFilters(readFilters(params)),
   );
 
   const setFilter = (key: string, value: string) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
+
+  // 정렬 선택 상자와 열 머리글이 같은 값을 본다 — 둘이 따로 놀면 무엇이 이기는지 헷갈린다.
+  const sortState: SortState | null = filters.order
+    ? { key: filters.sort, order: filters.order as "asc" | "desc" }
+    : null;
+  const onSort = (next: SortState) =>
+    setFilters((prev) => ({ ...prev, sort: next.key, order: next.order }));
+  const header = (label: string) => {
+    const column = COLUMN_SORTS[label];
+    return { sortKey: column?.key, first: column?.first, current: sortState, onSort };
+  };
 
   return (
     <section className="project-list">
@@ -123,7 +148,14 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
             <option value="14">14일 이내</option>
             <option value="30">30일 이내</option>
           </select>
-          <select value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)}>
+          {/* 선택 상자와 열 머리글은 같은 값을 쓴다. 상자에서 고르면 그 정렬이 원래 갖는
+              방향을 따르고(order 를 비운다), 머리글을 누르면 방향까지 정한다. */}
+          <select
+            value={filters.sort}
+            onChange={(event) =>
+              setFilters((prev) => ({ ...prev, sort: event.target.value, order: "" }))
+            }
+          >
             <option value="updated">최근 업데이트순</option>
             <option value="due">마감일순</option>
             <option value="reported">보고 경과일순</option>
@@ -215,18 +247,20 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
       <table className="grid">
         <thead>
           <tr>
-            <th>과제</th>
-            <th>상태</th>
-            <th>속성</th>
-            <th>그룹</th>
-            <th>담당자</th>
-            <th>태그</th>
-            <th>마감</th>
-            <th className="effect-col" title={`기대효과 → 실증효과 (${EFFECT_UNIT})`}>
-              효과<span className="th-unit">{EFFECT_UNIT}</span>
-            </th>
-            <th>기록</th>
-            <th>최근 업데이트</th>
+            <SortHeader {...header("과제")}>과제</SortHeader>
+            <SortHeader {...header("상태")}>상태</SortHeader>
+            <SortHeader {...header("속성")}>속성</SortHeader>
+            <SortHeader {...header("그룹")}>그룹</SortHeader>
+            <SortHeader {...header("담당자")}>담당자</SortHeader>
+            <SortHeader {...header("태그")}>태그</SortHeader>
+            <SortHeader {...header("마감")}>마감</SortHeader>
+            <SortHeader {...header("효과")}>
+              <span title={`기대효과 → 실증효과 (${EFFECT_UNIT})`}>
+                효과<span className="th-unit">{EFFECT_UNIT}</span>
+              </span>
+            </SortHeader>
+            <SortHeader {...header("기록")}>기록</SortHeader>
+            <SortHeader {...header("최근 업데이트")}>최근 업데이트</SortHeader>
           </tr>
         </thead>
         <tbody>

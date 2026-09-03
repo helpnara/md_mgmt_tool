@@ -316,3 +316,113 @@ def test_a_broken_setting_falls_back_instead_of_crashing(client, vault_dir):
 def test_meta_carries_the_weekday_for_the_screen(client):
     set_weekday(client, 2)
     assert client.get("/api/meta").json()["report_weekday"] == 2
+
+
+# ── 보고 대상 거르기·정렬 (TODO 49·52·57) ────────────────────────────────────
+
+def candidates(client, **params):
+    response = client.get("/api/report-candidates", params=params)
+    assert response.status_code == 200, response.text
+    return response.json()["items"]
+
+
+def test_never_reported_projects_come_first(client):
+    """사용자가 정한 기본 규칙 1번."""
+    reported = make_project(client, "보고한 과제")
+    make_report(client, reported["id"], report_date="2026-09-01", freeze=True)
+    fresh = make_project(client, "한 번도 보고 안 한 과제")
+
+    assert [item["id"] for item in candidates(client)] == [fresh["id"], reported["id"]]
+
+
+def test_older_last_report_comes_first(client):
+    """기본 규칙 2번 — D+150 이 D+100 보다 위. 예전에는 상한 때문에 뒤집혔다."""
+    older = make_project(client, "오래 전에 보고")
+    newer = make_project(client, "비교적 최근 보고")
+    make_report(client, older["id"], report_date="2026-01-05", freeze=True)
+    make_report(client, newer["id"], report_date="2026-06-05", freeze=True)
+
+    assert [item["id"] for item in candidates(client)] == [older["id"], newer["id"]]
+
+
+def test_backlog_only_breaks_ties(client):
+    """미보고 건수는 동점일 때만 가른다 — 규칙이 단순해야 예측이 된다."""
+    quiet = make_project(client, "오래됐지만 조용한 과제")
+    busy = make_project(client, "최근 보고했지만 진행이 많은 과제")
+    make_report(client, quiet["id"], report_date="2026-01-05", freeze=True)
+    make_report(client, busy["id"], report_date="2026-08-05", freeze=True)
+    for day in range(1, 6):
+        client.post(f"/api/projects/{busy['id']}/entries",
+                    json={"date": f"2026-08-{day + 10}", "body": "진행"})
+
+    # 진행이 많아도 '오래된 것 먼저' 를 이기지 못한다.
+    assert [item["id"] for item in candidates(client)] == [quiet["id"], busy["id"]]
+
+
+def test_filter_by_owner_and_type(client):
+    make_project(client, "권경락 소재", owners=["권경락"], type="rnd")
+    make_project(client, "김현우 스마트", owners=["김현우"], type="smart")
+    make_project(client, "담당 없음")
+
+    assert len(candidates(client, owner="권경락")) == 1
+    assert len(candidates(client, owner="none")) == 1
+    assert len(candidates(client, type="smart")) == 1
+    assert len(candidates(client, type="none")) == 1
+    assert len(candidates(client)) == 3
+
+
+def test_filter_by_status_stays_inside_the_candidate_set(client):
+    make_project(client, "진행중", status="in_progress")
+    make_project(client, "검토중", status="reviewing")
+    make_project(client, "완료", status="done")
+
+    assert [item["title"] for item in candidates(client, status="reviewing")] == ["검토중"]
+    # 완료는 후보가 아니라, 상태로 걸러도 include_inactive 없이는 안 나온다.
+    assert candidates(client, status="done") == []
+    assert [item["title"] for item in candidates(client, status="done", include_inactive=True)] == ["완료"]
+
+
+def test_a_column_sort_replaces_the_default_order(client):
+    make_project(client, "다 과제")
+    make_project(client, "가 과제")
+    make_project(client, "나 과제")
+
+    assert [item["title"] for item in candidates(client, sort="title")] == ["가 과제", "나 과제", "다 과제"]
+    assert [item["title"] for item in candidates(client, sort="title", order="desc")] == [
+        "다 과제", "나 과제", "가 과제",
+    ]
+
+
+def test_clearing_the_sort_returns_to_the_default_order(client):
+    reported = make_project(client, "가나다 보고한 과제")
+    make_report(client, reported["id"], report_date="2026-09-01", freeze=True)
+    fresh = make_project(client, "하하하 보고 안 한 과제")
+
+    assert [item["id"] for item in candidates(client, sort="title")] == [reported["id"], fresh["id"]]
+    # sort 를 빼면 기본 순서로 돌아온다.
+    assert [item["id"] for item in candidates(client)] == [fresh["id"], reported["id"]]
+
+
+def test_empty_values_stay_at_the_bottom_in_both_directions(client):
+    """오름차순일 때만 빈 줄이 위로 오면, 두 번 눌렀을 때 위아래로 튀어 예측이 안 된다."""
+    with_audience = make_project(client, "보고처 있는 과제")
+    make_report(client, with_audience["id"], report_date="2026-09-01",
+                audience="전사 주요업무 보고", freeze=True)
+    make_project(client, "보고처 없는 과제")
+
+    for order in ("asc", "desc"):
+        rows = candidates(client, sort="audience", order=order)
+        assert rows[-1]["last_report_audience"] is None, order
+
+
+def test_an_unknown_sort_falls_back_to_the_default(client):
+    fresh = make_project(client, "보고 안 한 과제")
+    reported = make_project(client, "보고한 과제")
+    make_report(client, reported["id"], report_date="2026-09-01", freeze=True)
+
+    assert [item["id"] for item in candidates(client, sort="엉뚱한열")] == [fresh["id"], reported["id"]]
+
+
+def test_candidates_carry_owners_for_the_screen(client):
+    make_project(client, "둘이 하는 과제", owners=["권경락", "김현우"])
+    assert candidates(client)[0]["owners"] == ["권경락", "김현우"]

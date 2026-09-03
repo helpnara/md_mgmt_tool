@@ -90,6 +90,17 @@ export interface SearchResults {
     title: string;
     snippet: string;
   }[];
+  /** 보고 문서 (제목·본문·피보고자로 찾는다) */
+  reports: {
+    id: number;
+    project_id: string;
+    project_title: string;
+    report_date: string;
+    title: string | null;
+    audience: string | null;
+    frozen: boolean;
+    snippet: string;
+  }[];
   attachments: {
     id: number;
     project_id: string;
@@ -130,10 +141,11 @@ export interface ReportCandidate {
   last_report_audience: string | null;
   /** 그 보고 문서. 눌러서 바로 열 수 있게 한다. */
   last_report_id: number | null;
+  /** 담당자. 보고 대상 표에서 거르기에 쓴다. */
+  owners: string[];
   days_since_report: number | null;
   unreported_entries: number;
   latest_entry_date: string | null;
-  score: number;
   never_reported: boolean;
 }
 

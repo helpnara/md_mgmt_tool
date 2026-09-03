@@ -89,6 +89,31 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
         </div>
       )}
 
+      {results.reports.length > 0 && (
+        <div className="card">
+          <h2>보고 {results.reports.length}건</h2>
+          <ul className="result-list">
+            {results.reports.map((report) => (
+              <li key={report.id}>
+                {/* 누르면 그 보고 문서가 바로 열린다 — 찾는 이유가 대개 "그때 뭐라고 썼더라"다. */}
+                <a href={projectLink(report.project_id, { report: report.id })}>
+                  <span className="project-id">
+                    {report.report_date} · {report.project_title}
+                    {!report.frozen && <span className="draft-tag"> 작성 중</span>}
+                  </span>
+                  <strong>
+                    <Highlight text={report.audience || report.title || "보고"} query={query} />
+                  </strong>
+                </a>
+                <p className="snippet">
+                  <Highlight text={report.snippet} query={query} />
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {results.attachments.length > 0 && (
         <div className="card">
           <h2>첨부 파일 {results.attachments.length}건</h2>

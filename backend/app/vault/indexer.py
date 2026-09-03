@@ -388,17 +388,43 @@ def _sha256_of(path: Path) -> str:
 
 
 def _rebuild_search(conn: sqlite3.Connection, project_id: str) -> None:
+    """검색 색인을 이 과제 몫만 다시 만든다.
+
+    색인에 넣는 것은 **사람이 검색창에 칠 만한 것 전부**다 (TODO 53).
+    예전에는 과제와 진행일지의 제목·본문만 넣어서, "전사 주요업무 보고" 로 찾으면
+    아무것도 안 나왔다 — 보고 문서가 아예 색인 대상이 아니었기 때문이다.
+
+    태그·담당자는 과제의 본문 뒤에 덧붙인다. 따로 갈래를 만들 만큼 긴 글이 아니고,
+    "권경락" 으로 찾으면 그 사람이 맡은 과제가 나오는 것이 자연스럽다.
+    """
     conn.execute("DELETE FROM search_fts WHERE project_id = ?", (project_id,))
     project = conn.execute("SELECT title, body FROM project WHERE id = ?", (project_id,)).fetchone()
     if project:
+        extras = [row["name"] for row in conn.execute(
+            "SELECT name FROM project_owner WHERE project_id = ?", (project_id,)
+        )]
+        extras += [row["name"] for row in conn.execute(
+            "SELECT t.name FROM tag t JOIN project_tag pt ON pt.tag_id = t.id"
+            " WHERE pt.project_id = ?", (project_id,)
+        )]
+        body = "\n".join([project["body"] or "", *extras])
         conn.execute(
             "INSERT INTO search_fts(kind, ref_id, project_id, title, body) VALUES ('project', ?, ?, ?, ?)",
-            (project_id, project_id, project["title"], project["body"] or ""),
+            (project_id, project_id, project["title"], body),
         )
     for row in conn.execute("SELECT id, title, body FROM entry WHERE project_id = ?", (project_id,)):
         conn.execute(
             "INSERT INTO search_fts(kind, ref_id, project_id, title, body) VALUES ('entry', ?, ?, ?, ?)",
             (str(row["id"]), project_id, row["title"], row["body"] or ""),
+        )
+    # 보고 문서. 피보고자("전사 주요업무 보고")로 찾는 일이 잦아 제목 쪽에 함께 넣는다.
+    for row in conn.execute(
+        "SELECT id, title, body, audience, report_date FROM report WHERE project_id = ?", (project_id,)
+    ):
+        title = " ".join(filter(None, [row["report_date"], row["title"], row["audience"]]))
+        conn.execute(
+            "INSERT INTO search_fts(kind, ref_id, project_id, title, body) VALUES ('report', ?, ?, ?, ?)",
+            (str(row["id"]), project_id, title, row["body"] or ""),
         )
 
 

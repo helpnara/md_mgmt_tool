@@ -137,8 +137,9 @@ def test_candidates_are_capped_and_ordered(client):
 
     data = client.get("/api/dashboard").json()
     assert len(data["candidates"]) == 5  # 주간 회의에서 훑을 만큼만
-    scores = [item["score"] for item in data["candidates"]]
-    assert scores == sorted(scores, reverse=True)
+    # 모두 보고한 적이 없으므로, 미보고가 많은 쪽이 앞에 온다 (기본 순서의 3번째 기준).
+    backlog = [item["unreported_entries"] for item in data["candidates"]]
+    assert backlog == sorted(backlog, reverse=True)
     assert data["candidates"][0]["unreported_entries"] == 7
 
     assert len(client.get("/api/dashboard", params={"limit": 3}).json()["candidates"]) == 3

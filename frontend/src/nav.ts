@@ -100,7 +100,6 @@ export function syncQuery(screen: string, values: Record<string, string>): void 
 export function useAddressBar(
   screen: string,
   values: Record<string, string>,
-  query: string,
   onAddressChanged: (params: URLSearchParams) => void,
 ): void {
   const written = useRef<string | null>(null);
@@ -115,11 +114,22 @@ export function useAddressBar(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, signature]);
 
+  // 들어오는 쪽은 **주소를 직접 읽는다.**
+  //
+  // 화면 위쪽에서 넘겨주는 값을 믿으면 안 된다. 조건을 바꿀 때 쓰는 replaceState 는
+  // hashchange 를 일으키지 않아, 위쪽이 기억하는 주소가 실제 주소보다 뒤처져 있다.
+  // 그 상태로 비교하면 "메뉴를 눌러 조건 없는 주소로 왔다"를 알아채지 못한다.
   useEffect(() => {
-    const incoming = buildQuery(Object.fromEntries(new URLSearchParams(query)));
-    if (written.current !== null && incoming !== written.current) {
-      handler.current(new URLSearchParams(query));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+    const onHashChange = () => {
+      const here = currentLocation();
+      // 다른 화면으로 떠나는 중이면 이 화면의 조건을 건드릴 이유가 없다.
+      if (here.split("?")[0].replace(/\/$/, "") !== screen) return;
+      const params = queryOf(here);
+      if (written.current !== null && buildQuery(Object.fromEntries(params)) !== written.current) {
+        handler.current(params);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [screen]);
 }

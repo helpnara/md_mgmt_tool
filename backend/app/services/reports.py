@@ -24,9 +24,6 @@ from .projects import now_iso, project_dir
 # 진행일지 본문의 첨부 링크(../assets/…)를 보고 문서 위치에서 본 경로로 바꾼다.
 _ENTRY_LINK = re.compile(r"\]\(\s*\.\./(assets/[^)\s]+)")
 
-MAX_ELAPSED_TERM = 8.0  # 경과 항의 상한 (기준 주기의 8배)
-IDLE_PENALTY = 0.25     # 미보고 진행일지가 하나도 없을 때 경과 항에 곱하는 계수
-
 DRAFT_TEMPLATE = """## 보고 요약
 
 {summary}
@@ -278,12 +275,36 @@ def last_report_info(conn: sqlite3.Connection, project_id: str) -> sqlite3.Row |
     ).fetchone()
 
 
-def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list[dict]:
-    """보고 대상 후보. 마지막 보고 후 경과일과 미보고 진행 분량으로 정렬한다."""
+# 보고 대상 표에서 열 머리글을 눌러 정렬할 수 있는 값들 (TODO 57).
+# 기본은 아래 `_default_key` — 어느 한 열로 표현할 수 없는 순서라 여기 넣지 않는다.
+CANDIDATE_SORTS = ("id", "title", "status", "type", "last_reported_at", "audience", "unreported")
+
+
+def candidates(
+    conn: sqlite3.Connection,
+    include_inactive: bool = False,
+    *,
+    status: str | None = None,
+    type: str | None = None,
+    owner: str | None = None,
+    sort: str | None = None,
+    order: str = "asc",
+) -> list[dict]:
+    """보고 대상 후보.
+
+    **기본 순서** (TODO 52 — 사용자가 정한 규칙)
+
+    1. **한 번도 보고하지 않은 과제가 맨 위.** 시작이 오래된 것부터.
+    2. 그다음은 **마지막 보고가 오래된 것부터** (D+150 이 D+100 보다 위).
+    3. 같으면 미보고 진행일지가 많은 쪽, 그래도 같으면 과제 번호 순.
+
+    예전에는 점수 하나로 줄을 세웠는데 두 가지가 어긋났다.
+    경과일에 상한(기준 주기의 8배 = 56일)이 있어 **D+100 과 D+150 이 같은 값**이 됐고,
+    보고한 적 없는 과제는 기준일이 시작일이라 오히려 **맨 아래**로 갔다.
+    "오래 방치된 것이 먼저"라는 규칙은 상한도 예외도 없어야 지켜진다.
+    """
     from ..config import STATUSES
 
-    settings = get_settings()
-    cycle = max(1, settings.report_cycle_days)
     active = {key for key, _, candidate in STATUSES if candidate}
     today = date_cls.today()
 
@@ -291,25 +312,21 @@ def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list
     for project in conn.execute("SELECT * FROM project ORDER BY id"):
         if not include_inactive and project["status"] not in active:
             continue
+        if status and project["status"] != status:
+            continue
+        if type == "none":
+            if project["type"]:
+                continue
+        elif type and project["type"] != type:
+            continue
+        if owner is not None and not _has_owner(conn, project["id"], owner):
+            continue
 
         unreported = unreported_entries(conn, project["id"])
         last_reported = project["last_reported_at"]
         last_report = last_report_info(conn, project["id"])
-        baseline = last_reported or project["start_date"] or project["created_at"]
-        days_since = None
-        if baseline:
-            try:
-                days_since = (today - date_cls.fromisoformat(str(baseline)[:10])).days
-            except ValueError:
-                days_since = None
+        days_since = _days_between(last_reported or project["start_date"] or project["created_at"], today)
 
-        # 오래 방치된 과제가 점수를 독점하지 않도록 경과 항에 상한을 둔다.
-        elapsed_term = min((days_since or 0) / cycle, MAX_ELAPSED_TERM)
-        # 보고할 새 내용이 없으면 아무리 오래됐어도 후순위다. 다만 목록에서 지우지는 않는다
-        # ("오래 조용한 과제"는 그 자체로 확인할 거리가 되기 때문).
-        if not unreported:
-            elapsed_term *= IDLE_PENALTY
-        score = round(elapsed_term + len(unreported) * 0.5, 2)
         results.append(
             {
                 "id": project["id"],
@@ -318,6 +335,10 @@ def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list
                 "type": project["type"],
                 "group": project["grp"],
                 "due_date": project["due_date"],
+                "owners": [row["name"] for row in conn.execute(
+                    "SELECT name FROM project_owner WHERE project_id = ? ORDER BY position, name",
+                    (project["id"],),
+                )],
                 "last_reported_at": last_reported,
                 # 날짜만으로는 어떤 수준의 보고였는지 알 수 없다. 보고처를 함께 준다.
                 "last_report_audience": last_report["audience"] if last_report else None,
@@ -325,21 +346,102 @@ def candidates(conn: sqlite3.Connection, include_inactive: bool = False) -> list
                 "days_since_report": days_since,
                 "unreported_entries": len(unreported),
                 "latest_entry_date": unreported[-1]["date"] if unreported else None,
-                "score": score,
                 "never_reported": last_reported is None,
             }
         )
 
-    results.sort(key=lambda item: (-item["score"], item["id"]))
+    results.sort(key=_sort_key(sort, order))
     return results
+
+
+def _has_owner(conn: sqlite3.Connection, project_id: str, owner: str) -> bool:
+    if owner == "none":
+        row = conn.execute(
+            "SELECT 1 FROM project_owner WHERE project_id = ? LIMIT 1", (project_id,)
+        ).fetchone()
+        return row is None
+    row = conn.execute(
+        "SELECT 1 FROM project_owner WHERE project_id = ? AND name = ? LIMIT 1", (project_id, owner)
+    ).fetchone()
+    return row is not None
+
+
+def _days_between(baseline: object, today: date_cls) -> int | None:
+    if not baseline:
+        return None
+    try:
+        return (today - date_cls.fromisoformat(str(baseline)[:10])).days
+    except ValueError:
+        return None
+
+
+def _default_key(item: dict) -> tuple:
+    """기본 순서 — 보고 이력 없음 먼저, 그다음 마지막 보고가 오래된 것부터."""
+    return (
+        0 if item["never_reported"] else 1,
+        # 오래된 것이 먼저이므로 경과일은 큰 것이 앞. 날짜를 못 읽으면 뒤로 보낸다.
+        -(item["days_since_report"] if item["days_since_report"] is not None else -1),
+        -item["unreported_entries"],
+        item["id"],
+    )
+
+
+def _sort_key(sort: str | None, order: str):
+    """열 머리글로 고른 정렬 (TODO 57). 고르지 않았으면 기본 순서.
+
+    빈 값은 **오름·내림 어느 쪽이든 항상 뒤로** 보낸다. 오름차순일 때만 앞에 오면
+    같은 열을 두 번 눌렀을 때 빈 줄이 위아래로 튀어 예측이 안 된다.
+    """
+    if sort not in CANDIDATE_SORTS:
+        return _default_key
+
+    descending = order == "desc"
+
+    def key(item: dict) -> tuple:
+        if sort == "unreported":
+            raw: object = item["unreported_entries"]
+        elif sort == "audience":
+            raw = item["last_report_audience"]
+        else:
+            raw = item.get(sort)
+        missing = raw is None or raw == ""
+        if isinstance(raw, (int, float)):
+            value: object = -raw if descending else raw
+        else:
+            value = str(raw or "")
+        # 정렬 방향과 무관하게 빈 값을 뒤로 두려고, 뒤집기 전에 자리를 먼저 정한다.
+        return (1 if missing else 0, value, item["id"])
+
+    if not descending:
+        return key
+
+    def reversed_key(item: dict):
+        first, value, ident = key(item)
+        return (first, _Reversed(value) if isinstance(value, str) else value, ident)
+
+    return reversed_key
+
+
+class _Reversed:
+    """문자열을 거꾸로 세우기 위한 감싸개. 숫자는 부호를 뒤집으면 되지만 문자열은 안 된다."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+    def __lt__(self, other: "_Reversed") -> bool:
+        return other.value < self.value
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _Reversed) and other.value == self.value
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 보고 이력 찾기 (T13)
 #
-# 보고 문서는 과제 폴더 안에 흩어져 있다. 그래서 "그 회의체에 마지막으로 뭘
-# 보고했더라"를 확인하려면 과제를 하나씩 열어 봐야 했다. 과제를 가로질러 한 번에
-# 훑을 수 있게, 보고만 따로 모아 보는 길을 낸다.
+# 보고 문서는 과제 폴더 안에 흩어져 있다. 과제를 가로질러 한 번에 훑을 수 있게,
+# 보고만 따로 모아 보는 길을 낸다. (상단 검색창은 TODO 53 에서 따로 다룬다)
 # ─────────────────────────────────────────────────────────────────────────────
 
 SEARCH_LIMIT = 200

@@ -716,3 +716,40 @@ button { white-space: nowrap; }
 
 /* 보고 편집기의 '쓰던 피보고자' — 진행일지 태그 칩과 같은 모양으로 맞춘다 */
 .audience-suggest { flex-basis: 100%; margin-top: -2px; }
+
+/* ── 눌러서 정렬하는 열 머리글 (TODO 57) ─────────────────────────────────── */
+.grid th.sortable { padding: 0; }
+.grid th.sortable button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+}
+.grid th.sortable button:hover { background: var(--accent-soft); color: var(--accent-strong); filter: none; }
+/* 정렬 중이 아닌 열의 ⇅ 는 있는 줄만 알면 되므로 흐리게 둔다. */
+.sort-arrow { font-size: 9px; opacity: 0.35; }
+.grid th.sorted { color: var(--accent-strong); }
+.grid th.sorted .sort-arrow { opacity: 1; }
+
+/* 기본 순서로 돌아가는 길. 열 머리글을 세 번 돌리는 방식은 세 번째를 못 찾는다. */
+.sort-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sort-note { color: var(--muted); font-size: 12px; }
+
+/* 대시보드에서 보고 대상 화면으로 가는 길 (목록 자체는 그쪽에 있다) */
+.dash-mini.go { border-color: var(--accent); color: var(--accent-strong); text-decoration: none; }
+.dash-mini.go:hover { background: var(--accent-soft); }
+
+/* 열 이름이 두 줄로 접히면 머리글 높이가 들쭉날쭉해진다 */
+.grid th { white-space: nowrap; }

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Dashboard as DashboardData } from "../types";
-import { projectLink } from "../nav";
 
 const OPEN_KEY = "md-mgmt:dashboard";
 /** 리마인더를 닫은 날. 같은 날 다시 띄우지 않는다. */
@@ -198,35 +197,16 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
           )}
 
           {data.candidates.length > 0 && (
-            <div className="dash-candidates">
-              <div className="dash-row">
-                <span className="dash-label">{data.report_date} 보고 대상</span>
-                <a className="dash-more" href="#/reports">
-                  전체 보기 →
-                </a>
-              </div>
-              <ol className="dash-list">
-                {data.candidates.map((item) => (
-                  <li key={item.id}>
-                    <a href={projectLink(item.id)}>
-                      <span className="project-id">{item.id}</span>
-                      <span className="dash-title">{item.title}</span>
-                      <span className="dash-reason">
-                        {item.never_reported ? (
-                          <span className="never">보고 이력 없음</span>
-                        ) : (
-                          `마지막 보고 D+${item.days_since_report ?? 0}`
-                        )}
-                        {item.unreported_entries > 0 && (
-                          <span className="accent"> · 미보고 {item.unreported_entries}건</span>
-                        )}
-                      </span>
-                    </a>
-                  </li>
-                ))}
-              </ol>
+            /* 목록 자체는 [보고 대상] 화면에 있다. 같은 자료를 두 곳에 세우면
+               한쪽만 고쳐져 어긋나기 쉽다. 여기서는 길만 열어 둔다 (TODO 52). */
+            <div className="dash-row dash-candidates">
+              <span className="dash-label">{data.report_date} 보고</span>
+              <a className="dash-mini go" href="#/reports">
+                보고 대상 {data.candidates.length}건 보기 →
+              </a>
             </div>
           )}
+
         </>
       )}
     </section>
