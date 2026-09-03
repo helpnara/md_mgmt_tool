@@ -70,7 +70,10 @@ export const api = {
       body: JSON.stringify({ report_date: reportDate ?? null, audience: audience ?? null }),
     }),
   getReport: (id: number) => request<Report>(`/api/reports/${id}`),
-  updateReport: (id: number, payload: { title?: string; body?: string; audience?: string }) =>
+  updateReport: (
+    id: number,
+    payload: { title?: string; body?: string; audience?: string; report_date?: string },
+  ) =>
     request<Report>(`/api/reports/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   freezeReport: (id: number) => request<Report>(`/api/reports/${id}/freeze`, { method: "POST" }),
   unfreezeReport: (id: number) => request<Report>(`/api/reports/${id}/unfreeze`, { method: "POST" }),

@@ -5,7 +5,7 @@ import type { Entry, Meta, Project, Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
 import { pasteAsTable } from "../table";
-import { daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
+import { todayIso, daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import ExportMenu from "./ExportMenu";
@@ -57,6 +57,9 @@ export default function ProjectDetail({
   const [showFiles, setShowFiles] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [openReport, setOpenReport] = useState<number | null>(openReportId ?? null);
+  // 보고 초안을 만들 때 쓸 날짜. 기본값은 다음 보고 예정일(주간 기준 화요일)이고
+  // 그대로 두면 지금까지와 같지만, 여기서 바꿔 만들 수 있다.
+  const [draftDate, setDraftDate] = useState("");
   const [reportError, setReportError] = useState<string | null>(null);
   // 기록이 쌓이면 전부 펼쳐져 스크롤이 길어진다. 최근 것만 펼쳐 둔다.
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
@@ -81,6 +84,15 @@ export default function ProjectDetail({
 
   useEffect(load, [load]);
   useEffect(() => setOpenReport(openReportId ?? null), [openReportId]);
+
+  // 다음 보고 예정일을 기본값으로 채워 둔다 (서버가 주간 주기로 계산한다).
+  useEffect(() => {
+    if (draftDate) return;
+    api
+      .reportCandidates()
+      .then((data) => setDraftDate(data.default_report_date))
+      .catch(() => setDraftDate(todayIso()));
+  }, [draftDate]);
 
   // 검색 결과에서 넘어왔다면 그 기록을 펼치고 화면에 보이게 한다.
   useEffect(() => {
@@ -388,20 +400,29 @@ export default function ProjectDetail({
               <span className="muted"> · 마지막 보고 {formatDate(project.last_reported_at)}</span>
             )}
           </h2>
-          <button
-            onClick={async () => {
-              setReportError(null);
-              try {
-                const draft = await api.createDraft(project.id);
-                setOpenReport(draft.id);
-                load();
-              } catch (err) {
-                setReportError((err as Error).message);
-              }
-            }}
-          >
-            보고 초안 만들기
-          </button>
+          <div className="draft-controls">
+            <input
+              type="date"
+              value={draftDate}
+              onChange={(event) => setDraftDate(event.target.value)}
+              title="이 날짜로 보고 초안을 만듭니다. 만든 뒤에도 바꿀 수 있습니다."
+            />
+            <button
+              disabled={!draftDate}
+              onClick={async () => {
+                setReportError(null);
+                try {
+                  const draft = await api.createDraft(project.id, draftDate);
+                  setOpenReport(draft.id);
+                  load();
+                } catch (err) {
+                  setReportError((err as Error).message);
+                }
+              }}
+            >
+              보고 초안 만들기
+            </button>
+          </div>
         </div>
         {reportError && <p className="form-error">{reportError}</p>}
         {reports.length === 0 ? (
@@ -418,8 +439,13 @@ export default function ProjectDetail({
                     <span className="report-audience missing">(피보고자 미입력)</span>
                   )}
                   {report.frozen ? (
-                    <span className="report-done" title={`보고 완료(${formatDateTime(report.frozen_at)})`}>
-                      보고 완료({formatDateTime(report.frozen_at)})
+                    /* 확정 시각까지 적으면 줄이 길어지고, 정작 중요한 것은 '보고일'이다.
+                       확정 시각은 마우스를 올리면 보인다. */
+                    <span
+                      className="report-done"
+                      title={`확정 ${formatDateTime(report.frozen_at)}`}
+                    >
+                      보고 완료
                     </span>
                   ) : (
                     <span className="draft-tag">작성 중</span>

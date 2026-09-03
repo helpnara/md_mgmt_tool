@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import posixpath
+from pathlib import Path
 import re
 import sqlite3
 from datetime import date as date_cls
@@ -137,8 +138,40 @@ def report_path(conn: sqlite3.Connection, report_id: int):
 
 
 # 확정 뒤에도 고칠 수 있는 항목. 보고 '내용'이 아니라 꼬리표에 해당한다.
+# 보고일은 여기 없다 — 확정된 보고의 날짜는 "언제 보고했는가"라는 사실이므로,
+# 고치려면 확정을 먼저 풀어야 한다.
 EDITABLE_WHEN_FROZEN = {"audience", "title", "report_type"}
-META_FIELDS = {"title", "report_type", "audience"}
+META_FIELDS = {"title", "report_type", "audience", "report_date"}
+
+
+def _move_report_folder(
+    conn: sqlite3.Connection, report_id: int, directory: Path, path: Path, new_date: str
+) -> Path:
+    """보고일이 바뀌면 문서가 든 폴더도 따라 옮긴다.
+
+    보고 문서는 `reports/<보고일>/report.md` 에 있고 첨부도 그 아래에 있다.
+    날짜만 고치고 폴더를 두면 폴더 이름과 내용이 어긋나, 나중에 폴더만 보고는
+    무슨 보고인지 알 수 없게 된다. 첨부까지 함께 옮겨야 하므로 폴더째 옮긴다.
+    """
+    folder = path.parent
+    target = paths.unique_path(folder.parent, new_date, "")
+    paths.move(folder, target)
+    new_path = target / path.name
+
+    old_rel, new_rel = (
+        path.relative_to(directory).as_posix(),
+        new_path.relative_to(directory).as_posix(),
+    )
+    # 인덱스가 '새 문서 + 사라진 문서'로 보고 id를 새로 발급하지 않도록 먼저 경로를 옮겨 둔다.
+    # id가 바뀌면 화면이 잡고 있던 보고를 잃고, 어떤 진행일지를 담았는지도 끊긴다.
+    conn.execute("UPDATE report SET rel_path = ? WHERE id = ?", (new_rel, report_id))
+    old_prefix, new_prefix = f"{old_rel.rsplit('/', 1)[0]}/", f"{new_rel.rsplit('/', 1)[0]}/"
+    conn.execute(
+        "UPDATE attachment SET rel_path = ? || SUBSTR(rel_path, ?)"
+        " WHERE report_id = ? AND rel_path LIKE ? || '%'",
+        (new_prefix, len(old_prefix) + 1, report_id, old_prefix),
+    )
+    return new_path
 
 
 def update_report(conn: sqlite3.Connection, report_id: int, updates: dict[str, Any]) -> None:
@@ -155,9 +188,23 @@ def update_report(conn: sqlite3.Connection, report_id: int, updates: dict[str, A
     md.ensure_unchanged(path, row["file_mtime"])
     doc = md.load(path)
     body = updates.pop("body", None)
+
+    # 보고일을 바꾸면 폴더도 함께 옮긴다.
+    new_date = updates.get("report_date")
+    if new_date is not None:
+        new_date = paths.validate_date(new_date, row["report_date"])
+        updates["report_date"] = new_date
+        # 제목을 손대지 않았다면(기본 제목 그대로면) 날짜를 따라가게 한다.
+        if "title" not in updates and doc.meta.get("title") == f"{row['report_date']} 보고":
+            updates["title"] = f"{new_date} 보고"
+
     meta = md.merge_meta(doc.meta, {k: v for k, v in updates.items() if k in META_FIELDS})
     md.save(path, md.MarkdownDoc(meta, body if body is not None else doc.body))
-    index_project(conn, project_dir(conn, row["project_id"]))
+
+    directory = project_dir(conn, row["project_id"])
+    if new_date is not None and new_date != row["report_date"]:
+        path = _move_report_folder(conn, row["id"], directory, path, new_date)
+    index_project(conn, directory)
     conn.commit()
 
 

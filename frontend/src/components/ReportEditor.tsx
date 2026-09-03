@@ -36,6 +36,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploads, setUploads] = useState<UploadState[]>([]);
   const [previewing, setPreviewing] = useState<Attachment | null>(null);
+  // 보고일. 초안일 때만 고칠 수 있다 — 확정된 보고의 날짜는 "언제 보고했는가"라는 사실이다.
+  const [reportDate, setReportDate] = useState(report.report_date);
   const [preview, togglePreview] = usePreview();
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -59,9 +61,15 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   useEffect(refresh, [refresh]);
   useEffect(() => setBody(report.body ?? ""), [report.id, report.body]);
   useEffect(() => setAudience(report.audience ?? ""), [report.id, report.audience]);
+  useEffect(() => setReportDate(report.report_date), [report.id, report.report_date]);
 
   async function save(): Promise<void> {
-    await api.updateReport(report.id, { body, audience });
+    // 보고일은 초안일 때만 보낸다. 바뀌면 서버가 문서 폴더도 함께 옮긴다.
+    await api.updateReport(report.id, {
+      body,
+      audience,
+      ...(frozen ? {} : { report_date: reportDate }),
+    });
     setDirty(false);
     onChanged();
   }
@@ -170,6 +178,19 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       </div>
 
       <div className="report-meta">
+        <label className="report-date-field">
+          보고일
+          <input
+            type="date"
+            value={reportDate}
+            disabled={frozen}
+            title={frozen ? "확정된 보고의 날짜는 바꿀 수 없습니다. 확정을 풀면 고칠 수 있습니다." : undefined}
+            onChange={(event) => {
+              setReportDate(event.target.value);
+              setDirty(true);
+            }}
+          />
+        </label>
         <label>
           피보고자 · 회의체
           <input

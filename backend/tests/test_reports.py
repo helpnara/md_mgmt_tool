@@ -246,3 +246,111 @@ def test_elapsed_term_is_capped(client):
 
     scores = {item["id"]: item["score"] for item in client.get("/api/report-candidates").json()["items"]}
     assert scores[old_one["id"]] == scores[older["id"]] == 8.5  # 상한 8.0 + 미보고 1건
+
+
+# ── 보고일 바꾸기 ─────────────────────────────────────
+
+def _project(client, title="보고일 과제"):
+    return client.post("/api/projects", json={"title": title}).json()
+
+
+def test_draft_uses_the_given_date_not_only_the_default(client):
+    """초안을 만들 때 날짜를 직접 정할 수 있어야 한다.
+
+    기본값(다음 화요일)만 쓸 수 있으면 지난 보고를 뒤늦게 기록할 수 없다.
+    """
+    project = _project(client)
+    draft = client.post(
+        f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-08-11"}
+    ).json()
+    assert draft["report_date"] == "2026-08-11"
+
+
+def test_changing_the_date_moves_the_folder(client, vault_dir):
+    """보고 문서는 reports/<보고일>/ 에 있다. 날짜만 고치면 폴더와 내용이 어긋난다."""
+    project = _project(client, "폴더 이동")
+    draft = client.post(
+        f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-08"}
+    ).json()
+    directory = vault_dir / "projects" / f"{project['id']}-폴더-이동" / "reports"
+    assert (directory / "2026-09-08" / "report.md").exists()
+
+    updated = client.patch(f"/api/reports/{draft['id']}", json={"report_date": "2026-09-15"}).json()
+    assert updated["report_date"] == "2026-09-15"
+    assert (directory / "2026-09-15" / "report.md").exists()
+    assert not (directory / "2026-09-08").exists()
+    # 기본 제목이었다면 날짜를 따라간다.
+    assert updated["title"] == "2026-09-15 보고"
+
+
+def test_changing_the_date_carries_attachments_along(client, vault_dir):
+    project = _project(client, "첨부 이동")
+    draft = client.post(
+        f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-08"}
+    ).json()
+    client.post(
+        f"/api/reports/{draft['id']}/attachments",
+        files={"file": ("보고자료.xlsx", b"x", "application/vnd.ms-excel")},
+    )
+    client.patch(f"/api/reports/{draft['id']}", json={"report_date": "2026-09-15"})
+
+    directory = vault_dir / "projects" / f"{project['id']}-첨부-이동" / "reports"
+    assert (directory / "2026-09-15" / "assets" / "001-보고자료.xlsx").exists()
+    names = [a["orig_name"] for a in client.get(f"/api/reports/{draft['id']}/attachments").json()]
+    assert names == ["보고자료.xlsx"]
+
+
+def test_a_title_the_user_wrote_is_left_alone(client):
+    project = _project(client, "제목 유지")
+    draft = client.post(
+        f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-08"}
+    ).json()
+    client.patch(f"/api/reports/{draft['id']}", json={"title": "전사 주요업무 보고"})
+    updated = client.patch(f"/api/reports/{draft['id']}", json={"report_date": "2026-09-15"}).json()
+    assert updated["title"] == "전사 주요업무 보고"
+
+
+def test_frozen_report_keeps_its_date(client):
+    """확정된 보고의 날짜는 '언제 보고했는가'라는 사실이다. 풀어야 고칠 수 있다."""
+    project = _project(client, "확정 날짜")
+    draft = client.post(
+        f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-08"}
+    ).json()
+    client.post(f"/api/reports/{draft['id']}/freeze")
+
+    response = client.patch(f"/api/reports/{draft['id']}", json={"report_date": "2026-09-15"})
+    assert response.status_code == 409
+
+    client.post(f"/api/reports/{draft['id']}/unfreeze")
+    assert (
+        client.patch(f"/api/reports/{draft['id']}", json={"report_date": "2026-09-15"}).json()[
+            "report_date"
+        ]
+        == "2026-09-15"
+    )
+
+
+def test_invalid_date_is_rejected(client):
+    project = _project(client, "잘못된 날짜")
+    draft = client.post(f"/api/projects/{project['id']}/reports/draft", json={}).json()
+    for bad in ("2026-13-45", "../../탈출", "그냥글자"):
+        assert client.patch(f"/api/reports/{draft['id']}", json={"report_date": bad}).status_code == 400
+
+
+def test_moving_onto_an_existing_date_does_not_overwrite(client, vault_dir):
+    """같은 날짜에 이미 보고가 있으면 덮어쓰지 않고 옆에 놓는다."""
+    project = _project(client, "같은 날 이동")
+    first = client.post(
+        f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-15"}
+    ).json()
+    second = client.post(
+        f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-08"}
+    ).json()
+
+    client.patch(f"/api/reports/{second['id']}", json={"report_date": "2026-09-15"})
+    reports = client.get(f"/api/projects/{project['id']}/reports").json()
+    assert len(reports) == 2
+    assert all(r["report_date"] == "2026-09-15" for r in reports)
+    directory = vault_dir / "projects" / f"{project['id']}-같은-날-이동" / "reports"
+    assert (directory / "2026-09-15").exists() and (directory / "2026-09-15-2").exists()
+    assert client.get(f"/api/reports/{first['id']}").status_code == 200

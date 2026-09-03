@@ -11,6 +11,7 @@ from ..vault.markdown import ExternalChangeError
 from ..services import attachments as attach_svc
 from ..services import reports as svc
 from ..vault import paths
+from ..vault.paths import FileInUseError, InvalidDateError
 
 router = APIRouter(tags=["reports"])
 
@@ -24,6 +25,7 @@ class ReportUpdate(BaseModel):
     title: str | None = None
     body: str | None = None
     audience: str | None = None  # 피보고자 또는 회의체명
+    report_date: str | None = None  # 바꾸면 문서가 든 폴더도 함께 옮긴다
 
     def changes(self) -> dict:
         return {k: v for k, v in self.model_dump().items() if v is not None}
@@ -92,6 +94,10 @@ def update_report(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="보고 문서를 찾을 수 없습니다.") from exc
     except (PermissionError, ExternalChangeError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except InvalidDateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileInUseError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _serialize(conn, svc.report_row(conn, report_id))
 

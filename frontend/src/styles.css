@@ -522,3 +522,9 @@ button { white-space: nowrap; }
 /* 명부에 없는 이름 — 막지 않고 알려만 준다 */
 .tag-pick.add { background: #fef3c7; color: #92400e; }
 .tag-pick.add:hover { border-color: var(--warn); }
+
+/* ── 보고 초안 날짜 · 보고일 편집 ─────────────────── */
+.draft-controls { display: flex; align-items: center; gap: 8px; }
+.draft-controls input { width: auto; }
+.report-date-field { max-width: 170px; }
+.report-date-field input:disabled { background: #f6f7f9; color: var(--muted); }
