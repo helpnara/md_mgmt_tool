@@ -161,15 +161,37 @@ def project_code() -> str:
     return str(load()["project_code"]).strip()
 
 
+# 팀 코드는 **그대로 폴더 이름에 들어간다** (`2026-소재-001-제목`).
+# 과제명은 슬러그로 다듬어지지만 코드는 다듬지 않으므로, 여기서 막지 않으면
+# 윈도우에서 폴더를 아예 만들지 못하는 이름이 된다.
+_CODE_FORBIDDEN = '/\\:*?"<>| \t\r\n'
+MAX_CODE_LEN = 20
+
+
 def validate_project_code(code: str) -> str:
-    """숫자만으로 된 코드는 받지 않는다 — 일련번호와 구분되지 않는다."""
+    """과제 번호에 쓸 팀 코드를 검사한다.
+
+    막는 것 넷:
+      · 숫자만  — 일련번호와 구분되지 않는다
+      · 윈도우가 파일 이름에 못 쓰는 문자 — 폴더를 만들 수 없다
+      · 끝의 점 — 탐색기가 잘라 내 폴더 이름이 어긋난다
+      · 너무 긴 것 — 폴더 이름이 길어져 윈도우 260자 경로 제한에 걸린다
+    """
     code = (code or "").strip()
     if not code:
         return ""
     if code.isdigit():
         raise ValueError("팀 코드는 숫자만으로 지을 수 없습니다. 일련번호와 구분되지 않습니다.")
-    if any(ch in code for ch in "/\\ \t"):
-        raise ValueError("팀 코드에 공백이나 경로 문자를 넣을 수 없습니다.")
+    bad = sorted({ch for ch in code if ch in _CODE_FORBIDDEN})
+    if bad:
+        shown = " ".join(repr(ch).strip("'") if ch.strip() else "공백" for ch in bad)
+        raise ValueError(f"팀 코드에 쓸 수 없는 문자가 있습니다: {shown}")
+    if code != code.rstrip("."):
+        raise ValueError("팀 코드는 점(.)으로 끝날 수 없습니다. 윈도우에서 잘려 나갑니다.")
+    if set(code) <= {"."}:
+        raise ValueError("팀 코드를 점만으로 지을 수 없습니다.")
+    if len(code) > MAX_CODE_LEN:
+        raise ValueError(f"팀 코드는 {MAX_CODE_LEN}자 이내여야 합니다. 폴더 이름이 너무 길어집니다.")
     return code
 
 

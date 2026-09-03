@@ -128,3 +128,45 @@ def test_running_twice_changes_nothing_the_second_time(client):
     client.post("/api/settings/project-code/renumber", json={"code": "소재"})
     again = client.post("/api/settings/project-code/renumber", json={"code": "소재"}).json()
     assert again["changed"] == []
+
+
+# ── 팀 코드가 폴더 이름으로 안전한가 ─────────────────────────────────────────
+#
+# 코드는 **그대로 폴더 이름에 들어간다** (2026-소재-001-제목). 과제명은 슬러그로
+# 다듬어지지만 코드는 다듬지 않으므로, 여기서 막지 않으면 윈도우에서 폴더를 만들지 못한다.
+
+import pytest
+
+
+@pytest.mark.parametrize("code", ['소재:개발', '소재*', '소재?', '소재"', '소재<개발', '소재|팀',
+                                  '소재/개발', '소재\\개발', '소재 개발', '소재\t개발'])
+def test_windows_forbidden_characters_are_refused(client, code):
+    response = client.put("/api/settings", json={"project_code": code})
+    assert response.status_code == 400, (code, response.text)
+    assert "쓸 수 없는 문자" in response.json()["detail"] or "공백" in response.json()["detail"]
+
+
+def test_a_code_ending_in_a_dot_is_refused(client):
+    """윈도우 탐색기가 끝의 점을 잘라 내, 폴더 이름과 설정이 어긋난다."""
+    assert client.put("/api/settings", json={"project_code": "소재."}).status_code == 400
+    assert client.put("/api/settings", json={"project_code": ".."}).status_code == 400
+
+
+def test_a_very_long_code_is_refused(client):
+    """폴더 이름이 길어지면 윈도우 260자 경로 제한에 걸린다."""
+    assert client.put("/api/settings", json={"project_code": "부" * 40}).status_code == 400
+    assert client.put("/api/settings", json={"project_code": "부" * 20}).status_code == 200
+
+
+def test_ordinary_codes_still_pass(client):
+    for code in ["소재", "선강DX개발팀", "R&D", "소재-개발", "Team_1", "소재.개발"]:
+        assert client.put("/api/settings", json={"project_code": code}).status_code == 200, code
+
+
+def test_the_renumber_preview_refuses_a_bad_code_too(client):
+    """저장은 막아 놓고 일괄 변경만 뚫리면 소용이 없다."""
+    client.post("/api/projects", json={"title": "과제"})
+    response = client.post("/api/settings/project-code/renumber/preview", json={"code": "소재:개발"})
+    assert response.status_code == 400
+    response = client.post("/api/settings/project-code/renumber", json={"code": "소재*"})
+    assert response.status_code == 400
