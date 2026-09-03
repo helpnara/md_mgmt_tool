@@ -6,6 +6,9 @@
   --muted: #6b7280;
   --accent: #2f6feb;
   --accent-soft: #eaf1fe;
+  /* 연한 바탕 위의 글자용. 기본 --accent 는 흰색 위에서만 AA(4.5)를 넘어,
+     칩(#fcfcfd)·연한 파랑(#eaf1fe) 위에서는 4.0~4.46 으로 모자란다. */
+  --accent-strong: #255ccc;
   --danger: #c0392b;
   --warn: #b45309;
   --radius: 10px;
@@ -425,7 +428,7 @@ button { white-space: nowrap; }
 /* 고르지 않은 칩만 건드린다. 아래 .on 규칙과 우선순위가 얽히면
    파란 바탕에 파란 글씨, 흰 바탕에 흰 글씨가 되어 칩이 통째로 사라진다. */
 .dash-chip.type:not(.on) { background: #f8fafc; }
-.dash-chip:hover:not(.on) { border-color: var(--accent); color: var(--accent); }
+.dash-chip:hover:not(.on) { border-color: var(--accent); color: var(--accent-strong); }
 /* 고른 칩은 배경·글자색을 이 규칙이 끝까지 쥐고 있어야 한다. */
 .dash-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* 고른 칩에도 마우스 반응은 남긴다 — 색을 바꾸지 않고 밝기만 낮춘다. */
@@ -555,8 +558,7 @@ button { white-space: nowrap; }
 }
 .report-reminder.report .reminder-mark { background: var(--warn); }
 .reminder-text { flex: 1 1 260px; }
-/* 연한 파랑 위의 기본 --accent 는 명암비 4.03 으로 AA(4.5)에 못 미친다. 한 단계 어둡게. */
-.reminder-go { flex: none; color: #255ccc; font-weight: 600; text-decoration: none; }
+.reminder-go { flex: none; color: var(--accent-strong); font-weight: 600; text-decoration: none; }
 .report-reminder.report .reminder-go { color: var(--warn); }
 .reminder-go:hover { text-decoration: underline; }
 
@@ -648,5 +650,29 @@ button { white-space: nowrap; }
 }
 
 /* 보고 대상 표의 보고처 — 누르면 그때 보고한 내용이 열린다 */
-.audience-link { color: #255ccc; font-weight: 600; }
+.audience-link { color: var(--accent-strong); font-weight: 600; }
 .audience-link:hover { text-decoration: underline; }
+
+/* ── 최근 오류 (설정) ─────────────────────────────────────────────────────── */
+.error-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.error-list li {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 12px;
+}
+.error-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.error-status {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fdeceb;
+  color: #8c2019;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.error-action { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.error-detail { margin-top: 4px; color: var(--text); word-break: break-word; }
+.error-trail { margin-top: 3px; color: var(--muted); }

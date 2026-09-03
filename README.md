@@ -177,5 +177,12 @@ vault/projects/2026-001-리튬전지-장수명-셀-설계/
 
 ```bash
 .venv/bin/python -m pytest backend/tests -q     # 백엔드 테스트
+node tests/ui/screens.mjs                       # 화면 테스트 (playwright 필요)
 cd frontend && npm run dev                      # UI 개발 서버 (API는 8000번으로 프록시)
 ```
+
+**화면 테스트**는 주요 화면이 오류 없이 열리는지, 누른 결과가 약속과 맞는지
+(대시보드의 수 = 목록이 거른 수), 그리고 **선택·마우스올림 상태까지 글자가 읽히는지**
+(WCAG AA 명암비)를 본다. 화면을 픽셀 단위로 굳히지는 않는다 — 그러면 색 하나 바꿀 때마다
+깨져서 아무도 안 돌리게 된다. 배포용 파일(`frontend/dist`)을 그대로 쓰므로
+`npm run build` 를 먼저 해야 바뀐 화면이 시험된다.

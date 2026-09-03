@@ -1,4 +1,4 @@
-import type { AppSettings, Dashboard, Entry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { AppSettings, Dashboard, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -114,6 +114,8 @@ export const api = {
   spreadsheetPreview: (attachmentId: number) =>
     request<SpreadsheetPreview>(`/api/attachments/${attachmentId}/preview`),
   search: (query: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),
+  errors: () => request<{ items: ErrorEntry[]; keep_months: number }>("/api/errors"),
+  clearErrors: () => request<{ removed_files: number }>("/api/errors", { method: "DELETE" }),
   reindex: () =>
     request<{ indexed: number; problems: { path: string; reason: string }[] }>("/api/reindex", {
       method: "POST",

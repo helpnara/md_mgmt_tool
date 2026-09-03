@@ -3,14 +3,19 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import (http_exception_handler,
+                                        request_validation_exception_handler)
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (attachments, dashboard, entries, export, meta, people, projects,
+from .api import (attachments, dashboard, entries, errors, export, meta, people, projects,
                   reports, search, settings, trash)
+from .services import errorlog
 from .config import REPO_ROOT, get_settings
 from .vault.paths import safe_join
 from .vault.indexer import reindex_all
@@ -22,6 +27,8 @@ FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
 async def lifespan(app: FastAPI):
     settings = get_settings()
     settings.ensure_dirs()
+    # 지난 실행의 동작 꼬리가 이번 실행의 오류에 붙으면 맥락이 아니라 잡음이다.
+    errorlog.clear_trail()
     conn, rebuilt = deps.setup()
     if rebuilt:
         print("\n  프로그램이 새 버전으로 바뀌어 검색 색인을 다시 만듭니다.")
@@ -47,6 +54,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def record_failures(request: Request, call_next):
+    """실패한 요청을 파일에 남긴다 (services/errorlog.py).
+
+    화면에는 "요청에 실패했습니다" 한 줄만 뜨고 끝이라, 나중에 원인을 물어볼 근거가
+    아무것도 남지 않았다. 여기서 동작과 오류 종류만 남긴다 — 과제 내용은 담지 않는다.
+
+    HTTPException(409·507 …)은 아래 처리기가 사유까지 함께 남기므로 여기서는 세지 않는다.
+    여기 걸리는 것은 **아무도 잡지 않은 예외**, 곧 진짜 고장이다.
+    """
+    action = f"{request.method} {request.url.path}"
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        errorlog.record(action=action, status=500, error=type(exc).__name__, detail=str(exc))
+        raise
+    if response.status_code < 400:
+        # 성공한 동작은 파일에 쓰지 않고 꼬리에만 남긴다 — 오류가 날 때 함께 적히는 맥락이다.
+        errorlog.note(action)
+    return response
+
+
+@app.exception_handler(StarletteHTTPException)
+async def record_http_error(request: Request, exc: StarletteHTTPException):
+    """의도해서 돌려보낸 오류(파일이 열려 있음, 저장 공간 부족 …)를 사유까지 남긴다."""
+    if errorlog.should_record(exc.status_code):
+        errorlog.record(
+            action=f"{request.method} {request.url.path}",
+            status=exc.status_code,
+            error="HTTPException",
+            detail=str(exc.detail),
+        )
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def record_validation_error(request: Request, exc: RequestValidationError):
+    """화면이 서버가 받지 못하는 값을 보낸 경우 — 대개 화면 쪽 결함이라 남길 값이 있다."""
+    errorlog.record(
+        action=f"{request.method} {request.url.path}",
+        status=422,
+        error="RequestValidationError",
+        detail=str(exc.errors())[:500],
+    )
+    return await request_validation_exception_handler(request, exc)
+
+
 app.include_router(meta.router)
 app.include_router(dashboard.router)
 app.include_router(projects.router)
@@ -58,6 +112,7 @@ app.include_router(export.router)
 app.include_router(settings.router)
 app.include_router(people.router)
 app.include_router(trash.router)
+app.include_router(errors.router)
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

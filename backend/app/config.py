@@ -93,11 +93,16 @@ class Settings:
         return self.vault_dir / ".index"
 
     @property
+    def logs_dir(self) -> Path:
+        """오류 기록. vault 안에 두어 vault 를 옮기면 기록도 함께 간다."""
+        return self.vault_dir / ".logs"
+
+    @property
     def db_path(self) -> Path:
         return self.index_dir / "index.sqlite3"
 
     def ensure_dirs(self) -> None:
-        for path in (self.vault_dir, self.projects_dir, self.trash_dir, self.index_dir):
+        for path in (self.vault_dir, self.projects_dir, self.trash_dir, self.index_dir, self.logs_dir):
             path.mkdir(parents=True, exist_ok=True)
 
 

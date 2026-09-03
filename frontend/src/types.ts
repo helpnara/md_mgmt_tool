@@ -250,3 +250,15 @@ export interface RenumberPlan {
   }[];
   skipped: { id: string; title: string; skip: string }[];
 }
+
+/** 오류 기록 한 줄. 과제 내용은 담기지 않는다 — 동작과 오류 종류뿐이다. */
+export interface ErrorEntry {
+  at: string;
+  /** 실패한 동작. 예: "PATCH /api/reports/3" */
+  action: string;
+  status: number | null;
+  error: string | null;
+  detail: string | null;
+  /** 실패 직전에 한 동작 3개. "왜 그 상태가 됐는지"의 단서다. */
+  trail: string[];
+}

@@ -6,6 +6,7 @@ import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
 import PeopleCard from "./PeopleCard";
 import ProjectCodeCard from "./ProjectCodeCard";
+import ErrorLogCard from "./ErrorLogCard";
 
 /**
  * 도구 설정.
@@ -95,6 +96,7 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
       <EntryTemplateCard meta={meta} />
       <ReportTemplateCard />
       <TrashCard />
+      <ErrorLogCard />
 
       <div className="card">
         <h2>데이터 위치</h2>
