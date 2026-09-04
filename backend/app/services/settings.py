@@ -28,6 +28,10 @@ DEFAULTS: dict[str, Any] = {
     # 주간 보고를 하는 요일 (0=월 … 6=일). 팀마다 다르다.
     # 이 값 하나가 보고 예정일·리마인더·초안 기본 날짜를 모두 정한다.
     "report_weekday": 1,
+    # 자동 백업 (바깥쪽 안전망). 폴더를 비워 두면 꺼진다.
+    "backup_dir": "",
+    "backup_keep": 10,        # 남겨 둘 백업 개수
+    "backup_every_hours": 24,  # 이 시간이 지나면 다시 백업한다
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
 _TEXT_KEYS = ("author", "report_template", "project_code")
@@ -60,6 +64,12 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = normalize_people(updates[key])
         elif key == "report_weekday":
             current[key] = validate_report_weekday(updates[key])
+        elif key == "backup_dir":
+            from . import backup as backup_service
+
+            current[key] = backup_service.validate_dir(str(updates[key] or ""))
+        elif key in ("backup_keep", "backup_every_hours"):
+            current[key] = _positive_int(key, updates[key])
         elif key == "entry_templates":
             # 빈 서식은 저장하지 않는다 — 비우면 "기본 서식으로 되돌린다"는 뜻이다.
             current[key] = {
@@ -215,4 +225,17 @@ def validate_report_weekday(value: object) -> int:
         raise ValueError("보고 요일은 0(월)부터 6(일) 사이의 숫자여야 합니다.") from exc
     if not 0 <= number <= 6:
         raise ValueError("보고 요일은 0(월)부터 6(일) 사이여야 합니다.")
+    return number
+
+
+def _positive_int(key: str, value: object) -> int:
+    labels = {"backup_keep": "남겨 둘 백업 개수", "backup_every_hours": "백업 주기(시간)"}
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{labels.get(key, key)}는 숫자여야 합니다.") from exc
+    if number < 1:
+        raise ValueError(f"{labels.get(key, key)}는 1 이상이어야 합니다.")
+    if number > 999:
+        raise ValueError(f"{labels.get(key, key)}가 너무 큽니다.")
     return number

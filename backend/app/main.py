@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -40,8 +41,50 @@ async def lifespan(app: FastAPI):
         for item in problems[:10]:
             print(f"    - {item.rel_path}: {item.reason}")
     print(f"  과제 {indexed}건을 읽었습니다.")
-    yield
-    deps.teardown()
+
+    # 자동 백업은 프로그램이 켜져 있는 동안에만 돈다. 사내 PC 에 상주 서비스를 두는 것보다
+    # 이 편이 단순하고, 이 도구는 쓸 때 켜 두는 물건이다.
+    backup_task = asyncio.create_task(_backup_loop())
+    try:
+        yield
+    finally:
+        backup_task.cancel()
+        deps.teardown()
+
+
+# 백업할 때가 됐는지 들여다보는 주기. 주기 자체(기본 24시간)는 설정에서 정한다.
+BACKUP_CHECK_SECONDS = 30 * 60
+
+
+async def _backup_loop() -> None:
+    """때가 되면 백업한다. **실패해도 프로그램에 영향을 주지 않는다.**
+
+    커넥션은 그때그때 제 것을 연다 — 요청이 쓰는 커넥션과 나눠 쓰면 서로의
+    중간 상태를 보게 된다 (deps.py 주석 참고).
+    """
+    from .db import connect
+    from .services import backup as backup_service
+
+    def once():
+        conn = connect()
+        try:
+            return backup_service.maybe_run(conn)
+        finally:
+            conn.close()
+
+    while True:
+        try:
+            # 켜자마자 백업하면 기동이 느려진다. 조금 두고 본다.
+            await asyncio.sleep(20)
+            result = await asyncio.to_thread(once)
+            if result:
+                print(f"  백업을 남겼습니다: {result['file']}")
+            await asyncio.sleep(BACKUP_CHECK_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # 백업이 프로그램을 멈추게 하면 본말이 뒤바뀐다.
+            await asyncio.sleep(BACKUP_CHECK_SECONDS)
 
 
 app = FastAPI(title="과제 이력 관리 도구", version="0.1.0", lifespan=lifespan)

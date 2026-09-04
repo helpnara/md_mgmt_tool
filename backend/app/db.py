@@ -48,6 +48,9 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
+    # 쓰는 요청이 겹치면 SQLite 는 곧바로 "database is locked" 를 낸다.
+    # 사람이 저장 단추를 누르는 속도에서는 잠깐 기다렸다 쓰는 편이 언제나 낫다.
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 

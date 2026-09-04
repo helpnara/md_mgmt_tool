@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections import deque
 from datetime import date, datetime
 from pathlib import Path
@@ -45,6 +46,10 @@ RECORDED_4XX = frozenset({400, 409, 422, 423, 507})
 
 # 최근 동작 꼬리. 요청마다 갱신되고 오류가 날 때만 함께 적힌다.
 _trail: deque[str] = deque(maxlen=TRAIL)
+
+# 요청은 여러 스레드에서 동시에 흐른다. 한 파일에 같이 쓰면 줄이 섞이거나,
+# 자르는 도중에 다른 쪽이 덧붙여 방금 쓴 줄을 잃을 수 있다.
+_lock = threading.Lock()
 
 
 def note(action: str) -> None:
@@ -89,10 +94,11 @@ def record(
             "trail": [item for item in _trail if item != action][-TRAIL:],
         }
         path = _path_for(date.today())
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        _trim(path)
-        _prune()
+        with _lock:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            _trim(path)
+            _prune()
     except (OSError, ValueError, TypeError):
         pass
 

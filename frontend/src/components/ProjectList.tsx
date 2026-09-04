@@ -4,6 +4,7 @@ import type { Meta, Project } from "../types";
 import { dueLabel, effectText, EFFECT_UNIT, formatDate } from "../util";
 import { projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
+import LoadError from "./LoadError";
 import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
@@ -58,7 +59,11 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
   const load = useCallback(() => {
     api
       .listProjects(filters)
-      .then(setProjects)
+      .then((rows) => {
+        setProjects(rows);
+        // 성공하면 지난 오류는 지운다. 안 그러면 한 번의 실패가 화면에 계속 남는다.
+        setError(null);
+      })
       .catch((err: Error) => setError(err.message));
   }, [filters]);
 
@@ -216,7 +221,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
         </div>
       )}
 
-      {error && <p className="form-error">{error}</p>}
+      {error && <LoadError message={error} onRetry={load} />}
 
       {problems.length > 0 && (
         <div className="card problems">

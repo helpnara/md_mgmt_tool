@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, ReportHistoryItem } from "../types";
 import { projectLink, useAddressBar } from "../nav";
+import LoadError from "./LoadError";
 
 /**
  * 보고 이력 찾기.
@@ -31,7 +32,10 @@ export default function ReportHistory({ meta, query }: Props) {
   const load = useCallback(() => {
     api
       .searchReports({ audience, from, to, q, state })
-      .then(setItems)
+      .then((rows) => {
+        setItems(rows);
+        setError(null);
+      })
       .catch((err: Error) => setError(err.message));
   }, [audience, from, to, q, state]);
 
@@ -121,7 +125,7 @@ export default function ReportHistory({ meta, query }: Props) {
         </div>
       </div>
 
-      {error && <p className="form-error">{error}</p>}
+      {error && <LoadError message={error} onRetry={load} />}
       {items === null && <p className="hint">불러오는 중…</p>}
       {items && items.length === 0 && (
         <p className="empty">

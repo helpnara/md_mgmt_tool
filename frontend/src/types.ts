@@ -176,6 +176,10 @@ export interface AppSettings {
   project_code: string;
   /** 주간 보고 요일 (0=월 … 6=일). 보고 예정일과 알림이 함께 따라간다. */
   report_weekday: number;
+  /** 자동 백업 폴더. 비면 꺼진 것이다. */
+  backup_dir: string;
+  backup_keep: number;
+  backup_every_hours: number;
 }
 
 export interface TrashItem {
@@ -286,4 +290,18 @@ export interface DocumentVersion {
   /** 사람이 읽는 시각 */
   saved_at: string;
   size_bytes: number;
+}
+
+/** 자동 백업 현황 (T21). */
+export interface BackupStatus {
+  directory: string;
+  enabled: boolean;
+  /** 폴더에 실제로 닿는가 (네트워크 드라이브가 끊겼을 수 있다) */
+  reachable: boolean;
+  keep: number;
+  every_hours: number;
+  count: number;
+  total_bytes: number;
+  recent: { name: string; size_bytes: number; at: string }[];
+  last: { at: string; ok: boolean; file?: string; error?: string } | null;
 }

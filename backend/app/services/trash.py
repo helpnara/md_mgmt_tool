@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,9 @@ from ..config import get_settings
 from ..vault import paths
 
 MANIFEST = "manifest.jsonl"
+
+# 덧붙이기와 다시 쓰기(경로 갱신)가 겹치면 줄을 잃는다. 파일 하나를 지키는 자물쇠다.
+_lock = threading.Lock()
 
 # 되돌릴 때 무엇을 다시 읽어야 하는지가 종류마다 다르다.
 KIND_LABELS = {
@@ -50,8 +54,9 @@ def record(kind: str, *, label: str, moved_to: Path, origin: Path, project_id: s
             "origin": origin.relative_to(settings.vault_dir).as_posix(),
         }
         settings.trash_dir.mkdir(parents=True, exist_ok=True)
-        with _manifest_path().open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        with _lock:
+            with _manifest_path().open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except (OSError, ValueError):
         # 기록에 실패했다고 사용자의 삭제 동작을 되돌릴 이유는 없다.
         # 이 경우 아래 list_items() 가 '복구 정보 없음' 으로 보여 준다.
@@ -148,3 +153,45 @@ def restore(conn: sqlite3.Connection, trash_name: str) -> dict[str, Any]:
         "kind": info.get("kind"),
         "label": info.get("label"),
     }
+
+
+def rewrite_origins(mapping: dict[str, str]) -> int:
+    """보관함 기록의 원래 경로를 바꾼다.
+
+    과제 번호를 일괄로 바꾸면 폴더 이름이 달라지는데, 보관함 기록에는 **옛 경로**가
+    남아 있다. 그대로 두면 되돌렸을 때 옛 번호로 살아나, 목록에 두 형태가 섞인다
+    (TODO 60 — 2026-09-04 사용자가 "함께 바꾼다" 로 결정).
+
+    `mapping` 은 {옛 폴더명: 새 폴더명}. 바꾼 줄 수를 돌려준다.
+    """
+    path = _manifest_path()
+    if not path.exists() or not mapping:
+        return 0
+    with _lock:
+        return _rewrite_locked(path, mapping)
+
+
+def _rewrite_locked(path: Path, mapping: dict[str, str]) -> int:
+    changed = 0
+    lines = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            lines.append(line)  # 깨진 줄은 그대로 둔다 — 함부로 버리지 않는다
+            continue
+        origin = item.get("origin") or ""
+        parts = origin.split("/")
+        # projects/<과제폴더>/… 형태에서 가운데만 바꾼다.
+        if len(parts) >= 2 and parts[0] == "projects" and parts[1] in mapping:
+            parts[1] = mapping[parts[1]]
+            item["origin"] = "/".join(parts)
+            changed += 1
+        lines.append(json.dumps(item, ensure_ascii=False))
+
+    if changed:
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return changed

@@ -40,13 +40,66 @@ def split_id(project_id: str) -> tuple[str, str, str] | None:
     return None
 
 
+def trashed_projects() -> list[dict[str, Any]]:
+    """보관함에 들어 있는 **과제** 목록.
+
+    보관함 항목은 색인에 없어서 번호 변경에서 빠진다. 그대로 두면 되돌렸을 때
+    옛 번호로 살아나 목록에 두 형태가 섞인다 (TODO 60).
+    번호가 겹치지 않게 하려면 **자리를 차지하고 있다는 사실도** 알아야 한다.
+    """
+    settings = get_settings()
+    trash = settings.trash_dir
+    if not trash.is_dir():
+        return []
+
+    found = []
+    for folder in sorted(trash.iterdir()):
+        index_md = folder / "index.md"
+        if not folder.is_dir() or not index_md.is_file():
+            continue
+        try:
+            doc = md.load(index_md)
+        except (OSError, ValueError):
+            continue
+        project_id = str(doc.meta.get("id") or "").strip()
+        if project_id:
+            found.append(
+                {
+                    "id": project_id,
+                    "title": str(doc.meta.get("title") or folder.name),
+                    "folder": folder.name,
+                }
+            )
+    return found
+
+
+def _free_id(
+    wanted: str, year: str, code: str, seq: str, taken: set[str], assigned: set[str]
+) -> tuple[str, bool]:
+    """원하는 번호가 이미 쓰이고 있으면 뒤 번호로 민다.
+
+    번호를 지키는 것보다 **겹치지 않는 것이 먼저다** — 겹치면 폴더가 서로를 덮는다.
+    살아 있는 과제와 보관함 과제가 **같은 규칙**을 써야 되돌렸을 때도 안전하다.
+    """
+    if wanted not in taken and wanted not in assigned:
+        return wanted, False
+    number, width = int(seq), len(seq)
+    while True:
+        number += 1
+        candidate = f"{year}-{code}-{number:0{width}d}" if code else f"{year}-{number:0{width}d}"
+        if candidate not in taken and candidate not in assigned:
+            return candidate, True
+
+
 def plan(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
     """무엇이 어떻게 바뀌는지 미리 보여 준다. 파일은 건드리지 않는다."""
     code = settings_service.validate_project_code(code)
 
     rows = conn.execute("SELECT id, title, dir_name FROM project ORDER BY id").fetchall()
+    trashed = trashed_projects()
     items: list[dict[str, Any]] = []
-    taken = {row["id"] for row in rows}
+    # 보관함 과제의 번호도 이미 쓰인 것으로 본다 — 되돌렸을 때 겹치면 폴더가 서로를 덮는다.
+    taken = {row["id"] for row in rows} | {item["id"] for item in trashed}
     assigned: set[str] = set()
 
     for row in rows:
@@ -69,19 +122,7 @@ def plan(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
             items.append({"id": row["id"], "title": row["title"], "new_id": None, "skip": "이미 맞습니다."})
             continue
 
-        # 같은 번호가 이미 쓰이고 있으면 뒤 번호로 밀어 둔다. 번호를 지키는 것보다
-        # 겹치지 않는 것이 먼저다 — 겹치면 폴더가 서로를 덮는다.
-        moved = False
-        if new_id in taken - {row["id"]} or new_id in assigned:
-            number = int(seq)
-            width = len(seq)
-            while True:
-                number += 1
-                candidate = f"{year}-{code}-{number:0{width}d}" if code else f"{year}-{number:0{width}d}"
-                if candidate not in taken and candidate not in assigned:
-                    new_id, moved = candidate, True
-                    break
-
+        new_id, moved = _free_id(new_id, year, code, seq, taken - {row["id"]}, assigned)
         assigned.add(new_id)
         items.append(
             {
@@ -96,11 +137,27 @@ def plan(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
             }
         )
 
+    # 보관함 과제도 같은 규칙으로 바꾼다 (TODO 60 — 사용자가 "함께 바꾼다"로 결정).
+    trash_changes = []
+    for item in trashed:
+        parsed = split_id(item["id"])
+        if parsed is None:
+            continue
+        year, _, seq = parsed
+        wanted = f"{year}-{code}-{seq}" if code else f"{year}-{seq}"
+        if wanted == item["id"]:
+            continue
+        # 살아 있는 과제가 가져간 번호를 피한다.
+        new_id, moved = _free_id(wanted, year, code, seq, taken - {item["id"]}, assigned)
+        assigned.add(new_id)
+        trash_changes.append({**item, "new_id": new_id, "renumbered": moved})
+
     return {
         "code": code,
         "total": len(items),
         "changes": [item for item in items if item["new_id"]],
         "skipped": [item for item in items if not item["new_id"]],
+        "trashed": trash_changes,
     }
 
 
@@ -138,7 +195,43 @@ def apply(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
                 raise
         done.append({"id": item["id"], "new_id": item["new_id"], "title": item["title"]})
 
+    # 보관함에 있는 과제도 함께 맞춘다 (TODO 60).
+    #
+    # 두 가지를 고친다 — 보관된 폴더 안 index.md 의 id, 그리고 되돌아갈 자리를 적어 둔
+    # 보관함 기록의 경로. 하나만 고치면 되돌린 뒤에 둘이 어긋난다.
+    trashed_done = []
+    folder_map: dict[str, str] = {}
+    for item in preview.get("trashed", []):
+        folder = settings.trash_dir / item["folder"]
+        index_md = folder / "index.md"
+        if not index_md.is_file():
+            continue
+        try:
+            doc = md.load(index_md)
+            doc.meta["id"] = item["new_id"]
+            md.save(index_md, doc)
+        except (OSError, ValueError):
+            continue
+        folder_map[paths.project_dir_name(item["id"], item["title"])] = paths.project_dir_name(
+            item["new_id"], item["title"]
+        )
+        trashed_done.append({"id": item["id"], "new_id": item["new_id"], "title": item["title"]})
+
+    # 되돌아갈 자리도 새 번호로. 살아 있는 과제의 폴더 이름 변경도 함께 반영한다 —
+    # 보관함에는 그 과제의 진행일지·첨부가 들어 있을 수 있다.
+    for item in preview["changes"]:
+        folder_map[item["dir_name"]] = item["new_dir_name"]
+    from . import trash as trash_service
+
+    rewritten = trash_service.rewrite_origins(folder_map)
+
     # 파일이 원본이다. 전부 옮긴 뒤 색인을 통째로 다시 만든다.
     reindex_all(conn)
     conn.commit()
-    return {"code": preview["code"], "changed": done, "skipped": preview["skipped"]}
+    return {
+        "code": preview["code"],
+        "changed": done,
+        "skipped": preview["skipped"],
+        "trashed": trashed_done,
+        "trash_paths_updated": rewritten,
+    }

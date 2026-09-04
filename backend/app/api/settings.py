@@ -23,6 +23,10 @@ class SettingsUpdate(BaseModel):
     project_code: str | None = None
     # 주간 보고를 하는 요일 (0=월 … 6=일). 보고 예정일과 리마인더가 함께 따라간다.
     report_weekday: int | None = None
+    # 자동 백업 (바깥쪽 안전망). 폴더를 비우면 꺼진다.
+    backup_dir: str | None = None
+    backup_keep: int | None = None
+    backup_every_hours: int | None = None
 
 
 @router.get("")
@@ -43,8 +47,20 @@ def update_settings(payload: SettingsUpdate) -> dict:
             changes["report_weekday"] = svc.validate_report_weekday(changes["report_weekday"])
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if "backup_dir" in changes:
+        from ..services.backup import BackupError, validate_dir
+
+        try:
+            changes["backup_dir"] = validate_dir(changes["backup_dir"] or "")
+        except BackupError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     # 보내지 않은 항목은 건드리지 않는다.
-    return svc.save(changes)
+    # save() 안에서도 값을 검사한다(백업 개수·주기 등). 그 거절은 사용자 실수이지
+    # 프로그램 고장이 아니므로 400 으로 돌려준다.
+    try:
+        return svc.save(changes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/defaults")
@@ -85,3 +101,23 @@ def run_renumber(payload: RenumberRequest, conn: sqlite3.Connection = Depends(ge
     # 번호를 바꿔 놓고 설정이 예전 코드면 다음에 만드는 과제가 또 어긋난다.
     svc.save({"project_code": result["code"]})
     return result
+
+
+# ── 자동 백업 (바깥쪽 안전망) ─────────────────────────
+
+@router.get("/backup/status")
+def backup_status() -> dict:
+    from ..services import backup as backup_svc
+
+    return backup_svc.status()
+
+
+@router.post("/backup/run")
+def backup_now(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """지금 한 벌 내보낸다. 설정을 바꾼 직후 실제로 되는지 확인하는 자리이기도 하다."""
+    from ..services import backup as backup_svc
+
+    try:
+        return backup_svc.run(conn, reason="manual")
+    except backup_svc.BackupError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -241,7 +241,17 @@ def unfreeze_report(conn: sqlite3.Connection, report_id: int) -> None:
 
 
 def delete_report(conn: sqlite3.Connection, report_id: int) -> None:
+    """보고 문서를 보관함으로 옮긴다.
+
+    **확정된 보고는 지우지 못한다** (TODO 61 — 2026-09-04 사용자 결정).
+    그 문서는 "언제 무엇을 보고했는가"라는 사실이라, 확정을 한 번 풀게 하는 것 자체가
+    "이건 기록이다"라는 신호가 된다. 지우려면 확정을 먼저 해제한다.
+    """
     row, path = report_path(conn, report_id)
+    if row["frozen_at"]:
+        raise PermissionError(
+            "확정된 보고는 지울 수 없습니다. 지우려면 [확정 해제]를 먼저 눌러 주세요."
+        )
     trash = get_settings().trash_dir
     trash.mkdir(parents=True, exist_ok=True)
     folder = path.parent

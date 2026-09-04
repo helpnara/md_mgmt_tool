@@ -80,6 +80,7 @@ export default function ProjectDetail({
       api.listReports(projectId),
     ])
       .then(([loadedProject, loadedEntries, loadedFiles, loadedReports]) => {
+        setError(null);
         setProject(loadedProject);
         setEntries(loadedEntries);
         setFiles(loadedFiles);
@@ -187,6 +188,11 @@ export default function ProjectDetail({
             )}
           </p>
           <div className="form-actions">
+            {!missing && (
+              <button className="ghost" onClick={load}>
+                다시 시도
+              </button>
+            )}
             <a className="button-like primary-link" href="#/">
               과제 목록으로
             </a>
@@ -509,13 +515,25 @@ export default function ProjectDetail({
                   )}
                   <span className="muted">진행일지 {report.entry_count}건</span>
                 </button>
+                {/* 확정된 보고는 여기서도 못 지운다 — 편집기와 말이 맞아야 한다 (TODO 61).
+                    지우려면 [확정 해제] 를 먼저 누르게 한다. */}
                 <button
                   className="ghost small danger"
+                  disabled={report.frozen}
+                  title={
+                    report.frozen
+                      ? "확정된 보고는 지울 수 없습니다. 열어서 [확정 해제]를 먼저 눌러 주세요."
+                      : undefined
+                  }
                   onClick={async () => {
                     if (!window.confirm(`${report.report_date} 보고를 보관함으로 옮길까요?`)) return;
-                    await api.deleteReport(report.id);
-                    setOpenReport(null);
-                    load();
+                    try {
+                      await api.deleteReport(report.id);
+                      setOpenReport(null);
+                      load();
+                    } catch (err) {
+                      setReportError((err as Error).message);
+                    }
                   }}
                 >
                   삭제

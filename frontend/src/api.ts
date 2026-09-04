@@ -1,4 +1,4 @@
-import type { AppSettings, Dashboard, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { AppSettings, BackupStatus, Dashboard, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -144,6 +144,11 @@ export const api = {
     request<{ versions: number; documents: number; total_bytes: number; keep_days: number }>(
       "/api/versions/overview",
     ),
+  backupStatus: () => request<BackupStatus>("/api/settings/backup/status"),
+  backupNow: () =>
+    request<{ file: string; bytes: number; directory: string }>("/api/settings/backup/run", {
+      method: "POST",
+    }),
   errors: () => request<{ items: ErrorEntry[]; keep_months: number }>("/api/errors"),
   clearErrors: () => request<{ removed_files: number }>("/api/errors", { method: "DELETE" }),
   reindex: () =>

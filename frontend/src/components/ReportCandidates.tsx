@@ -4,6 +4,7 @@ import type { Meta, ReportCandidate } from "../types";
 import { formatDate } from "../util";
 import { projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
+import LoadError from "./LoadError";
 import StatusBadge from "./StatusBadge";
 
 const PICKS_KEY = "md-mgmt:report-picks";
@@ -48,6 +49,7 @@ export default function ReportCandidates({ meta, query }: Props) {
       .then((data) => {
         setItems(data.items);
         setReportDate((prev) => prev || data.default_report_date);
+        setError(null);
       })
       .catch((err: Error) => setError(err.message));
   }, [includeInactive, status, type, owner, sort, order]);
@@ -211,7 +213,7 @@ export default function ReportCandidates({ meta, query }: Props) {
         </div>
       )}
 
-      {error && <p className="form-error">{error}</p>}
+      {error && <LoadError message={error} onRetry={load} />}
 
       <table className="grid">
         <thead>

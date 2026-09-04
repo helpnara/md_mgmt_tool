@@ -170,3 +170,73 @@ def test_the_renumber_preview_refuses_a_bad_code_too(client):
     assert response.status_code == 400
     response = client.post("/api/settings/project-code/renumber", json={"code": "소재*"})
     assert response.status_code == 400
+
+
+# ── 보관함 과제도 함께 바꾼다 (TODO 60) ──────────────────────────────────────
+#
+# 보관함 항목은 색인에 없어 번호 변경에서 빠졌다. 그대로 두면 되돌렸을 때 옛 번호로
+# 살아나, 목록에 두 형태가 섞여 일괄 변경을 한 의미가 사라진다.
+# 2026-09-04 사용자가 "(나) 함께 바꾼다" 로 결정.
+
+def test_a_trashed_project_is_renumbered_too(client):
+    trashed = make(client, "보관할 과제")
+    make(client, "남길 과제")
+    assert client.post(f"/api/projects/{trashed['id']}/archive").status_code in (200, 204)
+
+    plan = client.post("/api/settings/project-code/renumber/preview", json={"code": "소재"}).json()
+    assert [(item["id"], item["new_id"]) for item in plan["trashed"]] == [
+        ("2026-001", "2026-소재-001")
+    ]
+
+    result = client.post("/api/settings/project-code/renumber", json={"code": "소재"}).json()
+    assert [item["new_id"] for item in result["trashed"]] == ["2026-소재-001"]
+
+
+def test_restoring_after_a_renumber_comes_back_with_the_new_number(client):
+    """되돌린 과제만 옛 번호로 남으면 목록에 두 형태가 섞인다."""
+    trashed = make(client, "보관할 과제")
+    make(client, "남길 과제")
+    client.post(f"/api/projects/{trashed['id']}/archive")
+    client.post("/api/settings/project-code/renumber", json={"code": "소재"})
+
+    name = client.get("/api/trash").json()[0]["trash_name"]
+    assert client.post(f"/api/trash/{name}/restore").status_code == 200
+
+    ids = sorted(row["id"] for row in client.get("/api/projects").json())
+    assert ids == ["2026-소재-001", "2026-소재-002"]
+
+
+def test_a_trashed_number_is_not_handed_to_someone_else(client):
+    """보관함 과제가 쓰고 있는 번호를 다른 과제에 주면, 되돌릴 때 폴더가 서로를 덮는다."""
+    trashed = make(client, "보관할 과제")   # 2026-001
+    client.post(f"/api/projects/{trashed['id']}/archive")
+    set_code(client, "소재")
+    make(client, "새 과제")                 # 2026-소재-001 — 보관함 것과 같은 번호가 된다
+    set_code(client, "")
+
+    plan = client.post("/api/settings/project-code/renumber/preview", json={"code": "소재"}).json()
+    # 보관함의 2026-001 은 이미 쓰이고 있는 2026-소재-001 을 피해 뒤로 밀려야 한다.
+    assert plan["trashed"] == [] or plan["trashed"][0]["new_id"] != "2026-소재-001"
+
+
+def test_the_trash_record_points_at_the_new_folder(client, vault_dir):
+    """폴더 이름만 바꾸고 되돌아갈 자리를 안 고치면, 되돌린 뒤 둘이 어긋난다."""
+    trashed = make(client, "보관할 과제")
+    client.post(f"/api/projects/{trashed['id']}/archive")
+    result = client.post("/api/settings/project-code/renumber", json={"code": "소재"}).json()
+    assert result["trash_paths_updated"] >= 1
+
+    manifest = (vault_dir / ".trash" / "manifest.jsonl").read_text(encoding="utf-8")
+    assert "2026-소재-001" in manifest
+
+
+def test_a_project_with_no_index_file_is_skipped_quietly(client, vault_dir):
+    """보관함에는 진행일지·보고만 들어 있는 항목도 있다. 과제가 아닌 것은 건드리지 않는다."""
+    make(client, "살아 있는 과제")
+    stray = vault_dir / ".trash" / "보고-2026-09-01-20260901120000"
+    stray.mkdir(parents=True, exist_ok=True)
+    (stray / "report.md").write_text("---\ntitle: 보고\n---\n\n내용\n", encoding="utf-8")
+
+    result = client.post("/api/settings/project-code/renumber", json={"code": "소재"}).json()
+    assert result["trashed"] == []
+    assert (stray / "report.md").exists()

@@ -159,6 +159,9 @@ def delete_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) ->
         svc.delete_report(conn, report_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="보고 문서를 찾을 수 없습니다.") from exc
+    except PermissionError as exc:
+        # 확정된 보고 — 확정을 먼저 풀어야 한다 (TODO 61).
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except paths.FileInUseError as exc:
         raise HTTPException(status_code=423, detail=str(exc)) from exc
 

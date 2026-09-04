@@ -426,3 +426,32 @@ def test_an_unknown_sort_falls_back_to_the_default(client):
 def test_candidates_carry_owners_for_the_screen(client):
     make_project(client, "둘이 하는 과제", owners=["권경락", "김현우"])
     assert candidates(client)[0]["owners"] == ["권경락", "김현우"]
+
+
+# ── 확정된 보고는 지울 수 없다 (TODO 61) ─────────────────────────────────────
+
+def test_a_frozen_report_cannot_be_deleted(client):
+    """그 문서는 "언제 무엇을 보고했는가"라는 사실이다. 확정을 먼저 풀게 한다."""
+    project = make_project(client)
+    report = make_report(client, project["id"], report_date="2026-09-01", freeze=True)
+
+    response = client.delete(f"/api/reports/{report['id']}")
+    assert response.status_code == 409
+    assert "확정 해제" in response.json()["detail"]
+    # 실제로 남아 있어야 한다.
+    assert client.get(f"/api/reports/{report['id']}").status_code == 200
+
+
+def test_unfreezing_makes_it_deletable_again(client):
+    project = make_project(client)
+    report = make_report(client, project["id"], report_date="2026-09-01", freeze=True)
+
+    client.post(f"/api/reports/{report['id']}/unfreeze")
+    assert client.delete(f"/api/reports/{report['id']}").status_code == 204
+
+
+def test_a_draft_is_still_freely_deletable(client):
+    """초안은 아직 기록이 아니다. 만든 자리에서 바로 지울 수 있어야 한다."""
+    project = make_project(client)
+    report = make_report(client, project["id"], report_date="2026-09-01")
+    assert client.delete(f"/api/reports/{report['id']}").status_code == 204

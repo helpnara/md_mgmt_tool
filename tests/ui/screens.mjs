@@ -17,7 +17,7 @@
  */
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -724,6 +724,53 @@ async function main() {
       "같은 내용을 다시 저장한 뒤의 버전 수");
   });
 
+  await check("없는 폴더를 백업 위치로 적으면 그렇다고 말해 준다", async () => {
+    // 오타로 엉뚱한 곳에 폴더가 생기는 것보다, 먼저 만들라고 하는 편이 안전하다.
+    await go("#/settings");
+    const card = page.locator(".card").filter({ hasText: "자동 백업" });
+    // 일부러 거절당하는 값을 넣는다 — 400 은 예상한 실패다.
+    await expectingFailures(["/api/settings"], async () => {
+      await card.locator('input[placeholder^="예: D:"]').fill(`${vault}-없는폴더`);
+      await card.getByRole("button", { name: /^저장/ }).click();
+      await page.waitForTimeout(900);
+    });
+    expect((await card.innerText()).includes("없습니다"), "안내가 없습니다");
+  });
+
+  await check("백업 폴더를 정하면 실제로 파일이 생긴다", async () => {
+    const folder = `${vault}-backup`;
+    await mkdir(folder, { recursive: true });
+    await go("#/settings");
+    const card = page.locator(".card").filter({ hasText: "자동 백업" });
+    expect(await card.count() > 0, "자동 백업 칸이 없습니다");
+
+    await card.locator('input[placeholder^="예: D:"]').fill(folder);
+    await card.getByRole("button", { name: /^저장/ }).click();
+    await page.waitForTimeout(900);
+
+    await card.getByRole("button", { name: "지금 백업" }).click();
+    await page.waitForTimeout(1500);
+    const text = await card.innerText();
+    expect(text.includes("과제이력-백업-"), `백업이 안 만들어졌습니다: ${text.slice(0, 300)}`);
+
+    const status = await api.get("/api/settings/backup/status");
+    equal(status.count, 1, "백업 파일 수");
+    expect(status.reachable, "백업 폴더에 닿지 못합니다");
+  });
+
+  await check("데이터 폴더 안을 백업 폴더로 잡으면 막는다", async () => {
+    await go("#/settings");
+    const card = page.locator(".card").filter({ hasText: "자동 백업" });
+    await expectingFailures(["/api/settings"], async () => {
+      await card.locator('input[placeholder^="예: D:"]').fill(`${vault}/백업`);
+      await card.getByRole("button", { name: /^저장/ }).click();
+      await page.waitForTimeout(900);
+    });
+    const text = await card.innerText();
+    expect(text.includes("데이터 폴더 안") || text.includes("없습니다"),
+      `막지 않았습니다: ${text.slice(0, 300)}`);
+  });
+
   await check("설정에 보관 현황이 보인다", async () => {
     await go("#/settings");
     const card = page.locator(".card").filter({ hasText: "이전 버전 보관" });
@@ -855,6 +902,7 @@ async function main() {
   await browser.close();
   server.kill();
   await rm(vault, { recursive: true, force: true });
+  await rm(`${vault}-backup`, { recursive: true, force: true });
 
   const failed = results.filter((item) => !item.ok);
   console.log(`\n${results.length - failed.length}건 통과, ${failed.length}건 실패`);
