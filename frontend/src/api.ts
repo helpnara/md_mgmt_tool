@@ -15,7 +15,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   meta: () => request<Meta>("/api/meta"),
-  dashboard: () => request<Dashboard>("/api/dashboard"),
+  dashboard: (year?: string) =>
+    request<Dashboard>(`/api/dashboard${year ? `?year=${year}` : ""}`),
   listProjects: (params: Record<string, string>) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
     return request<Project[]>(`/api/projects?${query.toString()}`);

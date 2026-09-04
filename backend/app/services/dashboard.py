@@ -24,12 +24,23 @@ CANDIDATE_LIMIT = 5
 DUE_SOON_DAYS = 7
 
 
-def _counts(conn: sqlite3.Connection, column: str) -> dict[str, int]:
-    rows = conn.execute(f"SELECT {column} AS key, COUNT(*) AS n FROM project GROUP BY {column}")
+def _year_filter(year: str | None) -> tuple[str, list]:
+    """연도 조건. 목록과 **같은 기준**이어야 수와 목록이 어긋나지 않는다 (5.8)."""
+    if not year:
+        return "", []
+    return " AND SUBSTR(p.id, 1, 4) = ?", [year]
+
+
+def _counts(conn: sqlite3.Connection, column: str, year: str | None) -> dict[str, int]:
+    clause, params = _year_filter(year)
+    rows = conn.execute(
+        f"SELECT {column} AS key, COUNT(*) AS n FROM project p WHERE 1=1{clause} GROUP BY {column}",
+        params,
+    )
     return {(row["key"] or ""): row["n"] for row in rows}
 
 
-def _owner_counts(conn: sqlite3.Connection) -> list[dict]:
+def _owner_counts(conn: sqlite3.Connection, year: str | None = None) -> list[dict]:
     """담당자별 과제 수. 많이 맡은 사람부터, 같으면 이름순.
 
     한 과제에 담당자가 여러 명일 수 있어 이 수들의 합은 전체 과제 수보다 클 수 있다.
@@ -37,46 +48,67 @@ def _owner_counts(conn: sqlite3.Connection) -> list[dict]:
     상태·속성 칸과 마찬가지로 끝난 과제도 포함한다 — 기준이 섞이면
     "N건"을 눌렀을 때 나오는 수와 어긋난다(5.8).
     """
+    clause, params = _year_filter(year)
     owners = [
         {"key": row["name"], "label": row["name"], "count": row["n"]}
         for row in conn.execute(
-            "SELECT name, COUNT(*) AS n FROM project_owner GROUP BY name ORDER BY n DESC, name"
+            "SELECT po.name AS name, COUNT(*) AS n FROM project_owner po"
+            f" JOIN project p ON p.id = po.project_id WHERE 1=1{clause}"
+            " GROUP BY po.name ORDER BY n DESC, po.name",
+            params,
         )
     ]
     unassigned = conn.execute(
         "SELECT COUNT(*) AS n FROM project p"
         " WHERE NOT EXISTS (SELECT 1 FROM project_owner po WHERE po.project_id = p.id)"
+        f"{clause}",
+        params,
     ).fetchone()["n"]
     if unassigned:
         owners.append({"key": "none", "label": "미지정", "count": unassigned})
     return owners
 
 
-def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT) -> dict:
-    status_counts = _counts(conn, "status")
-    type_counts = _counts(conn, "type")
+def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT, year: str | None = None) -> dict:
+    status_counts = _counts(conn, "status", year)
+    type_counts = _counts(conn, "type", year)
+    year_clause, year_params = _year_filter(year)
 
     placeholders = ",".join("?" * len(FINISHED_STATUSES))
     # 끝난 과제는 마감 경고에서 뺀다. 보류는 멈춰 있을 뿐이라 그대로 센다.
     overdue = conn.execute(
-        f"SELECT COUNT(*) AS n FROM project"
+        f"SELECT COUNT(*) AS n FROM project p"
         f" WHERE due_date IS NOT NULL AND due_date < DATE('now', 'localtime')"
-        f"   AND status NOT IN ({placeholders})",
-        FINISHED_STATUSES,
+        f"   AND status NOT IN ({placeholders}){year_clause}",
+        (*FINISHED_STATUSES, *year_params),
     ).fetchone()["n"]
     due_soon = conn.execute(
-        f"SELECT COUNT(*) AS n FROM project"
+        f"SELECT COUNT(*) AS n FROM project p"
         f" WHERE due_date IS NOT NULL"
         f"   AND due_date >= DATE('now', 'localtime')"
         f"   AND due_date <= DATE('now', 'localtime', '+{DUE_SOON_DAYS} day')"
-        f"   AND status NOT IN ({placeholders})",
-        FINISHED_STATUSES,
+        f"   AND status NOT IN ({placeholders}){year_clause}",
+        (*FINISHED_STATUSES, *year_params),
     ).fetchone()["n"]
 
     candidates = reports_service.candidates(conn)[:limit]
 
     return {
-        "total": conn.execute("SELECT COUNT(*) AS n FROM project").fetchone()["n"],
+        "total": conn.execute(
+            f"SELECT COUNT(*) AS n FROM project p WHERE 1=1{year_clause}", year_params
+        ).fetchone()["n"],
+        "year": year,
+        # 지난해 번호인데 아직 끝나지 않은 과제. 연도로 걸러 두면 이것이 숨는다 —
+        # "작년 과제인데 아직 하고 있다" 는 흔한 일이라, 숨었다는 사실은 알려 줘야 한다.
+        "other_year_active": (
+            conn.execute(
+                f"SELECT COUNT(*) AS n FROM project p"
+                f" WHERE SUBSTR(p.id, 1, 4) <> ? AND status NOT IN ({placeholders})",
+                (year, *FINISHED_STATUSES),
+            ).fetchone()["n"]
+            if year
+            else 0
+        ),
         # 0건인 칸은 보내지 않는다. 빈 칸이 늘어나면 눈이 갈 곳을 잃는다.
         "statuses": [
             {"key": key, "label": label, "count": status_counts[key]}
@@ -90,7 +122,7 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT) -> dict:
         ]
         # 속성을 안 정한 과제도 세고, 눌러서 거를 수 있게 키를 준다.
         + ([{"key": "none", "label": "미지정", "count": type_counts[""]}] if type_counts.get("") else []),
-        "owners": _owner_counts(conn),
+        "owners": _owner_counts(conn, year),
         "due_soon": due_soon,
         "due_soon_days": DUE_SOON_DAYS,
         "overdue": overdue,

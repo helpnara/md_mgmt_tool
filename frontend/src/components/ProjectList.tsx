@@ -17,9 +17,30 @@ interface Props {
   query: string;
 }
 
+/** 해가 바뀌면 지난해 과제가 계속 섞인다. 첫 화면은 **올해**만 보여 준다 (TODO 67). */
+const THIS_YEAR = String(new Date().getFullYear());
+
 const DEFAULT_FILTERS = {
-  status: "", type: "", group: "", tag: "", owner: "", due: "", sort: "updated", order: "",
+  status: "", type: "", group: "", tag: "", owner: "", due: "",
+  year: THIS_YEAR, sort: "updated", order: "",
 };
+
+/** 고를 수 있는 연도 — 올해부터 5년 전까지. 그 이전은 [전체]로 본다. */
+const YEARS = Array.from({ length: 6 }, (_, index) => String(Number(THIS_YEAR) - index));
+
+/**
+ * [전체]를 나타내는 값.
+ *
+ * 빈 문자열로 두면 주소에서 사라져 **기본값(올해)과 구분되지 않는다.**
+ * 그러면 "전체"로 놓고 즐겨찾기해도 다시 열 때 올해로 돌아온다.
+ * 주소가 뜻하는 바가 흔들리지 않게 [전체]에는 이름을 준다.
+ */
+const ALL_YEARS = "all";
+
+/** 서버에는 연도만 넘긴다 — [전체]는 조건이 없는 것이다. */
+function toQuery(filters: typeof DEFAULT_FILTERS): Record<string, string> {
+  return { ...filters, year: filters.year === ALL_YEARS ? "" : filters.year };
+}
 
 /** 열 머리글 → 서버가 아는 정렬 이름. 여기 없는 열은 눌러도 아무 일이 없다. */
 const COLUMN_SORTS: Record<string, { key: string; first?: "asc" | "desc" }> = {
@@ -58,7 +79,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
 
   const load = useCallback(() => {
     api
-      .listProjects(filters)
+      .listProjects(toQuery(filters))
       .then((rows) => {
         setProjects(rows);
         // 성공하면 지난 오류는 지운다. 안 그러면 한 번의 실패가 화면에 계속 남는다.
@@ -143,6 +164,15 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
             {meta.owners.map((name) => (
               <option key={name} value={name}>
                 {name}
+              </option>
+            ))}
+          </select>
+          {/* 첫 화면이 늘 전체면 해가 갈수록 쓸모가 떨어진다. 기본은 올해다. */}
+          <select value={filters.year} onChange={(event) => setFilter("year", event.target.value)}>
+            <option value={ALL_YEARS}>연도 전체</option>
+            {YEARS.map((year) => (
+              <option key={year} value={year}>
+                {year}년
               </option>
             ))}
           </select>

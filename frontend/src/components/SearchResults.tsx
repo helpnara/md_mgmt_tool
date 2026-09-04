@@ -33,20 +33,32 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
   if (error) return <p className="form-error">{error}</p>;
   if (!results) return <div className="app-loading">검색 중…</div>;
 
+  const cut = Object.values(results.truncated ?? {}).some(Boolean);
+
   return (
     <section className="search-results">
       <a className="back" href="#/">
         ← 과제 목록
       </a>
       <h1 className="search-title">
-        “{query}” 검색 결과 <span className="muted">{results.total}건</span>
+        “{query}” 검색 결과{" "}
+        <span className="muted">
+          {results.total}건{cut && " 이상"}
+        </span>
       </h1>
+      {cut && (
+        /* 잘린 줄 모르면 "이게 전부" 라고 믿게 된다. 흔한 낱말일수록 그렇다. */
+        <p className="hint search-cut">
+          찾은 것이 많아 <b>일부만 보여 주고 있습니다.</b> 낱말을 더 붙이거나
+          <b> 보고 이력</b>·<b>과제 목록</b>의 조건으로 좁혀 보세요.
+        </p>
+      )}
 
       {results.total === 0 && <p className="empty card">일치하는 내용이 없습니다.</p>}
 
       {results.projects.length > 0 && (
         <div className="card">
-          <h2>과제 {results.projects.length}건</h2>
+          <h2>과제 {results.projects.length}건{results.truncated?.projects && " 이상"}</h2>
           <ul className="result-list">
             {results.projects.map((project) => (
               <li key={project.id}>
@@ -68,7 +80,7 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
 
       {results.entries.length > 0 && (
         <div className="card">
-          <h2>진행일지 {results.entries.length}건</h2>
+          <h2>진행일지 {results.entries.length}건{results.truncated?.entries && " 이상"}</h2>
           <ul className="result-list">
             {results.entries.map((entry) => (
               <li key={entry.id}>
@@ -91,7 +103,7 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
 
       {results.reports.length > 0 && (
         <div className="card">
-          <h2>보고 {results.reports.length}건</h2>
+          <h2>보고 {results.reports.length}건{results.truncated?.reports && " 이상"}</h2>
           <ul className="result-list">
             {results.reports.map((report) => (
               <li key={report.id}>
@@ -116,7 +128,7 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
 
       {results.attachments.length > 0 && (
         <div className="card">
-          <h2>첨부 파일 {results.attachments.length}건</h2>
+          <h2>첨부 파일 {results.attachments.length}건{results.truncated?.attachments && " 이상"}</h2>
           <ul className="result-list">
             {results.attachments.map((attachment) => (
               <li key={attachment.id}>

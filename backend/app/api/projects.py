@@ -15,6 +15,15 @@ from ..schemas import ProjectCreate, ProjectUpdate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
+def year_clause() -> str:
+    """과제 번호 앞 네 자리로 연도를 가른다 (`2026-001`, `2026-소재-001` 둘 다).
+
+    시작일이 아니라 **번호의 연도**를 쓴다. 번호는 만들 때 정해져 바뀌지 않으므로
+    "그 해에 시작한 과제" 라는 뜻이 흔들리지 않는다.
+    """
+    return "SUBSTR(p.id, 1, 4) = ?"
+
+
 def _flip(clause: str, order: str) -> str:
     """정렬 구문의 방향을 바꾼다.
 
@@ -152,6 +161,8 @@ def list_projects(
     owner: str | None = None,
     q: str | None = None,
     due: str | None = None,
+    # 과제 번호의 연도 (2026-001 → 2026). 비우면 전체.
+    year: str | None = Query(None, pattern=r"^(\d{4})?$"),
     sort: str = Query("updated"),
     # 열 머리글을 눌러 방향을 뒤집는다 (TODO 57). 정렬 키는 SORTS 가 정의한다.
     order: str | None = Query(None, pattern="^(asc|desc)$"),
@@ -182,6 +193,9 @@ def list_projects(
         params.append(owner)
     if due in DUE_FILTERS:
         where.append(DUE_FILTERS[due])
+    if year:
+        where.append(year_clause())
+        params.append(year)
     if q and q.strip():
         # 과제 본문뿐 아니라 진행일지·첨부 파일명에 걸려도 그 과제를 남긴다.
         matched = search_svc.project_ids_matching(conn, q.strip())

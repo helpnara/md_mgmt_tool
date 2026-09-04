@@ -70,6 +70,7 @@ export default function ProjectDetail({
   // 기록이 쌓이면 전부 펼쳐져 스크롤이 길어진다. 최근 것만 펼쳐 둔다.
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [expandAll, setExpandAll] = useState(false);
+  const [entryFind, setEntryFind] = useState("");
   const [highlightEntryId, setHighlightEntryId] = useState<number | null>(null);
 
   const load = useCallback(() => {
@@ -222,7 +223,16 @@ export default function ProjectDetail({
   const sinceLastReport = project.last_reported_at
     ? Math.max(0, -(daysUntil(project.last_reported_at) ?? 0))
     : null;
-  const visibleEntries = entries.filter((entry) => entry.id !== draftEntryId);
+  const kept = entries.filter((entry) => entry.id !== draftEntryId);
+  // 이 과제 안에서만 찾는다. 접힌 기록은 화면에 글자 자체가 없어 브라우저 찾기로도
+  // 안 걸리기 때문이다 (TODO 68). 걸린 기록은 아래에서 자동으로 펼친다.
+  const needle = entryFind.trim().toLowerCase();
+  const matches = (entry: Entry) =>
+    !needle ||
+    `${entry.title} ${entry.body ?? ""} ${entry.tags.join(" ")} ${entry.date}`
+      .toLowerCase()
+      .includes(needle);
+  const visibleEntries = needle ? kept.filter(matches) : kept;
   // 가장 최근 확정 보고에 담긴 기록 중 목록에서 맨 위에 오는 것 — 그 위에 선을 긋는다.
   const latestReportBoundary = project.last_reported_at
     ? visibleEntries.find((entry) => entry.reported_on === project.last_reported_at)?.id ?? null
@@ -230,7 +240,8 @@ export default function ProjectDetail({
 
   const AUTO_OPEN = 5;
   const isOpen = (entry: Entry, index: number) =>
-    expandAll || index < AUTO_OPEN || expandedIds.has(entry.id);
+    // 찾는 중이면 걸린 기록을 모두 펼친다 — 접힌 채로는 왜 걸렸는지 알 수 없다.
+    Boolean(needle) || expandAll || index < AUTO_OPEN || expandedIds.has(entry.id);
   const collapsedCount = Math.max(0, visibleEntries.length - AUTO_OPEN);
   // 기록마다 붙은 첨부를 타임라인에서 바로 확인할 수 있게 묶어 둔다.
   const filesByEntry = new Map<number, Attachment[]>();
@@ -597,9 +608,22 @@ export default function ProjectDetail({
       <div className="detail-right">
 
       <div className="card-head timeline-head">
-        <h2>수행 이력 ({entries.length}건)</h2>
+        <h2>
+          수행 이력 ({entries.length}건)
+          {needle && <span className="muted"> · 찾은 것 {visibleEntries.length}건</span>}
+        </h2>
         <div className="timeline-actions">
-          {collapsedCount > 0 && (
+          {/* 이 과제 안에서만 찾는다. 상단 검색은 전체를 훑지만, 여기서는
+              "이 과제의 그 기록" 하나를 찾는 일이 더 흔하다 (TODO 68). */}
+          <input
+            type="search"
+            className="entry-find"
+            value={entryFind}
+            onChange={(event) => setEntryFind(event.target.value)}
+            placeholder="이 과제에서 찾기"
+            aria-label="이 과제의 진행일지에서 찾기"
+          />
+          {collapsedCount > 0 && !needle && (
             <button className="ghost small" onClick={() => setExpandAll((value) => !value)}>
               {expandAll ? `최근 ${AUTO_OPEN}건만 보기` : `모두 펼치기 (+${collapsedCount})`}
             </button>
@@ -649,7 +673,11 @@ export default function ProjectDetail({
           </Fragment>
         ))}
         {visibleEntries.length === 0 && !creatingEntry && (
-          <li className="empty card">아직 기록이 없습니다. [기록 추가]로 첫 진행 내용을 남겨 보세요.</li>
+          <li className="empty card">
+            {needle
+              ? `"${entryFind.trim()}" 이(가) 든 기록이 없습니다.`
+              : "아직 기록이 없습니다. [기록 추가]로 첫 진행 내용을 남겨 보세요."}
+          </li>
         )}
       </ol>
 

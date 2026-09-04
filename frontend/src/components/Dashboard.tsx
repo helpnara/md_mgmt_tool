@@ -13,13 +13,15 @@ interface Filters {
   type: string;
   owner: string;
   due: string;
+  /** 목록과 같은 연도를 봐야 수와 목록이 어긋나지 않는다 (DESIGN 5.8). */
+  year: string;
 }
 
 interface Props {
   /** 값이 바뀌면 다시 읽는다 (과제를 추가했거나 다시 읽기를 눌렀을 때). */
   refreshKey: number;
   filters: Filters;
-  onFilter: (key: "status" | "type" | "owner" | "due", value: string) => void;
+  onFilter: (key: "status" | "type" | "owner" | "due" | "year", value: string) => void;
 }
 
 /**
@@ -42,8 +44,9 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
   const [reminderClosed, setReminderClosed] = useState(() => localStorage.getItem(REMINDER_KEY));
 
   const load = useCallback(() => {
-    api.dashboard().then(setData).catch(() => setData(null));
-  }, []);
+    // "all" 은 조건이 없는 것이다 (ProjectList 의 ALL_YEARS 와 같은 규칙).
+    api.dashboard(filters.year === "all" ? "" : filters.year).then(setData).catch(() => setData(null));
+  }, [filters.year]);
 
   useEffect(load, [load, refreshKey]);
 
@@ -100,6 +103,20 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
           </button>
         </div>
       )}
+      {/* 연도로 걸러 두면 "작년에 시작해 아직 하고 있는 과제" 가 숨는다.
+          흔한 일이라, 숨었다는 사실과 함께 보는 길을 준다 (TODO 67). */}
+      {data.other_year_active > 0 && (
+        <div className="dash-row hidden-note">
+          <span className="dash-note">
+            {data.year}년 밖에 있지만 <b>아직 진행 중인 과제 {data.other_year_active}건</b>이
+            이 화면에서 빠져 있습니다.
+          </span>
+          <button className="dash-mini go" onClick={() => onFilter("year", "")}>
+            연도 전체로 보기 →
+          </button>
+        </div>
+      )}
+
       <div className="dash-row">
         <button
           className="dash-fold"

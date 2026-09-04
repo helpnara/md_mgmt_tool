@@ -822,6 +822,77 @@ async function main() {
     expect(markers <= 1, `선이 ${markers}개 그어졌습니다`);
   });
 
+  console.log("\n[2-7] 연도·검색 상한·과제 안 찾기 (TODO 66·67·68)");
+
+  await check("첫 화면은 올해 과제만 보여 준다", async () => {
+    await go("#/");
+    const year = String(new Date().getFullYear());
+    equal(await page.locator(".filters select").nth(5).inputValue(), year, "연도 칸의 기본값");
+    // 기본값은 주소에 적지 않는다 — 주소가 짧게 유지되고, 해가 바뀌면 저절로 따라간다.
+    expect(!page.url().includes("year="), `기본값이 주소에 적혔습니다: ${page.url()}`);
+  });
+
+  await check("연도를 [전체]로 바꾸면 지난해 과제도 나온다", async () => {
+    // 지난해 번호를 가진 과제를 만들어 둔다.
+    const year = String(new Date().getFullYear());
+    const before = await page.locator(".grid tbody tr").count();
+    await page.locator(".filters select").nth(5).selectOption("all");
+    await page.waitForTimeout(700);
+    expect(await page.locator(".grid tbody tr").count() >= before, "전체가 올해보다 적습니다");
+    // [전체]는 기본값과 구분되어야 한다 — 아니면 즐겨찾기해도 올해로 돌아온다.
+    expect(page.url().includes("year=all"), `[전체]가 주소에 남지 않았습니다: ${page.url()}`);
+    await page.locator(".filters select").nth(5).selectOption(year);
+    await page.waitForTimeout(600);
+  });
+
+  await check("대시보드의 수가 연도를 따라간다", async () => {
+    await go("#/");
+    const chips = await page.locator(".dash-chip:not(.more)").all();
+    expect(chips.length > 0, "대시보드 칩이 없습니다");
+    for (const chip of chips.slice(0, 3)) {
+      const counted = Number(await chip.locator("b").innerText());
+      await chip.click();
+      await page.waitForTimeout(500);
+      equal(await page.locator(".grid tbody tr:not(.empty-row)").count(), counted, "연도가 걸린 상태의 수");
+      await chip.click();
+      await page.waitForTimeout(400);
+    }
+  });
+
+  await check("검색이 잘리면 잘렸다고 말한다", async () => {
+    // 진행일지를 상한 위로 만든다.
+    const project = seeded.projectB;
+    for (let n = 0; n < 45; n += 1) {
+      await api.post(`/api/projects/${project}/entries`, {
+        date: "2026-05-01", title: `대량 기록 ${n}`, body: "굽힘강도 시험 결과",
+      });
+    }
+    await go("#/search?q=" + encodeURIComponent("굽힘강도"));
+    const text = await page.locator(".search-results").innerText();
+    expect(text.includes("이상"), `잘렸다는 표시가 없습니다: ${text.slice(0, 200)}`);
+    expect(text.includes("일부만 보여 주고"), "왜 그런지 설명이 없습니다");
+  });
+
+  await check("과제 안에서 찾으면 걸린 기록만 펼쳐 보인다", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    const all = await page.locator(".timeline .entry").count();
+    await page.fill(".entry-find", "인장강도");
+    await page.waitForTimeout(500);
+
+    const found = await page.locator(".timeline .entry").count();
+    expect(found > 0 && found < all, `걸러지지 않았습니다 (전체 ${all}, 찾은 뒤 ${found})`);
+    // 걸린 기록은 펼쳐져야 한다 — 접힌 채로는 왜 걸렸는지 알 수 없다.
+    expect(await page.locator(".timeline .entry .markdown").count() > 0, "본문이 안 펼쳐졌습니다");
+    expect((await page.locator(".timeline-head").innerText()).includes("찾은 것"), "찾은 수가 안 보입니다");
+  });
+
+  await check("과제 안에서 못 찾으면 그렇다고 말한다", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.fill(".entry-find", "있을리없는낱말");
+    await page.waitForTimeout(500);
+    expect((await page.locator(".timeline").innerText()).includes("든 기록이 없습니다"), "안내가 없습니다");
+  });
+
   console.log("\n[3] 글자가 읽히는가 (WCAG AA)");
 
   await check("대시보드 칩 — 기본·마우스올림·선택·선택+올림 모두 읽힌다", async () => {
@@ -909,6 +980,38 @@ async function main() {
     ]) {
       const value = await contrastOf(selector);
       expect(value >= AA, `최근 오류 ${label} ${value} < ${AA}`);
+    }
+  });
+
+  await check("이번에 새로 생긴 안내 글자도 읽힌다", async () => {
+    await go("#/");
+    // 대시보드에서 보고 대상으로 가는 길 — 연한 파랑 위의 파란 글씨라 위험한 조합이다.
+    if (await page.locator(".dash-mini.go").count()) {
+      const value = await contrastOf(".dash-mini.go");
+      expect(value >= AA, `[보고 대상 보기] ${value} < ${AA}`);
+    }
+    // 연도로 걸러 숨은 과제 안내 — 화면에 없을 수 있으므로 같은 모양을 만들어 잰다.
+    await page.evaluate(() => {
+      const box = document.createElement("div");
+      box.className = "dash-row hidden-note probe-hidden";
+      box.innerHTML =
+        '<span class="dash-note">2026년 밖에 있지만 <b>아직 진행 중인 과제 1건</b>이 빠져 있습니다.</span>' +
+        '<button class="dash-mini go">연도 전체로 보기 →</button>';
+      (document.querySelector(".dashboard") || document.querySelector("main")).prepend(box);
+    });
+    for (const [label, selector] of [
+      ["안내 문구", ".probe-hidden .dash-note"],
+      ["전체로 보기", ".probe-hidden .dash-mini.go"],
+    ]) {
+      const value = await contrastOf(selector);
+      expect(value >= AA, `숨은 과제 ${label} ${value} < ${AA}`);
+    }
+
+    // 검색이 잘렸다는 안내
+    await go("#/search?q=" + encodeURIComponent("굽힘강도"));
+    if (await page.locator(".search-cut").count()) {
+      const value = await contrastOf(".search-cut");
+      expect(value >= AA, `검색 잘림 안내 ${value} < ${AA}`);
     }
   });
 

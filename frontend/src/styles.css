@@ -750,8 +750,15 @@ button { white-space: nowrap; }
 .sort-note { color: var(--muted); font-size: 12px; }
 
 /* 대시보드에서 보고 대상 화면으로 가는 길 (목록 자체는 그쪽에 있다) */
-.dash-mini.go { border-color: var(--accent); color: var(--accent-strong); text-decoration: none; }
-.dash-mini.go:hover { background: var(--accent-soft); }
+/* 링크로도 단추로도 쓴다. 단추는 전역 규칙에서 파란 배경을 물려받으므로,
+   **배경을 여기서 직접 정해야** 파란 바탕에 파란 글씨가 되지 않는다. */
+.dash-mini.go {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+.dash-mini.go:hover { background: var(--accent-soft); filter: none; }
 
 /* 열 이름이 두 줄로 접히면 머리글 높이가 들쭉날쭉해진다 */
 .grid th { white-space: nowrap; }
@@ -803,3 +810,10 @@ button { white-space: nowrap; }
 
 /* 아직 보고에 담기지 않은 기록. 선만으로는 표현할 수 없는 경우가 있어 기록에 직접 붙인다 */
 .tag.unreported { background: #fef3c7; color: #92400e; font-weight: 600; }
+
+/* 연도로 걸러 숨은 과제 안내 · 검색이 잘렸다는 안내 */
+.dash-row.hidden-note { gap: 10px; }
+.search-cut { margin: -4px 0 12px; color: var(--warn); }
+
+/* 이 과제 안에서 찾기 — 접힌 기록은 브라우저 찾기로 안 걸리기 때문에 따로 둔다 */
+.entry-find { width: 180px; padding: 5px 9px; font-size: 13px; }

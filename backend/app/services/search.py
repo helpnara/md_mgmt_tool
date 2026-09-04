@@ -10,6 +10,13 @@ import sqlite3
 SNIPPET_RADIUS = 70
 MIN_FTS_LENGTH = 3
 
+# 종류마다 따로 상한을 둔다.
+#
+# 예전에는 셋을 합쳐 60개였다. 그래서 흔한 낱말로 찾으면 진행일지가 자리를 다 먹고
+# **제목이 딱 맞는 과제가 밀려날 수** 있었다. 종류를 나누면 그런 일이 없다.
+KIND_LIMITS = {"project": 30, "entry": 40, "report": 30}
+ATTACHMENT_LIMIT = 20
+
 
 def _fts_query(text: str) -> str:
     """FTS5 문법 문자를 그대로 검색어로 다루기 위해 통째로 인용한다."""
@@ -28,45 +35,60 @@ def make_snippet(body: str, query: str) -> str:
     return ("…" if start > 0 else "") + body[start:end] + ("…" if end < len(body) else "")
 
 
-def _matching_refs(conn: sqlite3.Connection, query: str, limit: int) -> list[tuple[str, str]]:
-    """(kind, ref_id) 목록. FTS를 쓸 수 있으면 FTS로, 아니면 LIKE로 찾는다."""
+def _refs_for(
+    conn: sqlite3.Connection, query: str, kind: str, limit: int
+) -> tuple[list[str], bool]:
+    """한 종류의 ref_id 목록과 **잘렸는지 여부**.
+
+    상한보다 하나 더 읽어 본다. 하나가 더 있으면 잘린 것이다 — 그래야 화면이
+    "N건" 이 아니라 "N건 이상" 이라고 말할 수 있다.
+    """
     if len(query) >= MIN_FTS_LENGTH:
         try:
             rows = conn.execute(
-                "SELECT kind, ref_id FROM search_fts WHERE search_fts MATCH ? LIMIT ?",
-                (_fts_query(query), limit),
+                "SELECT ref_id FROM search_fts WHERE search_fts MATCH ? AND kind = ? LIMIT ?",
+                (_fts_query(query), kind, limit + 1),
             ).fetchall()
-            return [(row["kind"], row["ref_id"]) for row in rows]
+            return [row["ref_id"] for row in rows[:limit]], len(rows) > limit
         except sqlite3.OperationalError:
             pass  # trigram 미지원 등 — LIKE로 물러난다
 
     pattern = f"%{query}%"
-    rows = conn.execute(
-        """
-        SELECT 'project' AS kind, id AS ref_id FROM project
-         WHERE title LIKE ? OR body LIKE ?
-        UNION ALL
-        SELECT 'entry' AS kind, CAST(id AS TEXT) AS ref_id FROM entry
-         WHERE title LIKE ? OR body LIKE ?
-        UNION ALL
-        SELECT 'report' AS kind, CAST(id AS TEXT) AS ref_id FROM report
-         WHERE title LIKE ? OR body LIKE ? OR audience LIKE ?
-        LIMIT ?
-        """,
-        (pattern, pattern, pattern, pattern, pattern, pattern, pattern, limit),
-    ).fetchall()
-    return [(row["kind"], row["ref_id"]) for row in rows]
+    sql = {
+        "project": "SELECT id AS ref_id FROM project WHERE title LIKE ? OR body LIKE ?",
+        "entry": "SELECT CAST(id AS TEXT) AS ref_id FROM entry WHERE title LIKE ? OR body LIKE ?",
+        "report": (
+            "SELECT CAST(id AS TEXT) AS ref_id FROM report"
+            " WHERE title LIKE ? OR body LIKE ? OR audience LIKE ?"
+        ),
+    }[kind]
+    params = [pattern] * (3 if kind == "report" else 2)
+    rows = conn.execute(f"{sql} LIMIT ?", (*params, limit + 1)).fetchall()
+    return [row["ref_id"] for row in rows[:limit]], len(rows) > limit
 
 
-def search(conn: sqlite3.Connection, query: str, limit: int = 60) -> dict:
+def search(conn: sqlite3.Connection, query: str, limit: int | None = None) -> dict:
+    """통합 검색. 종류마다 상한이 따로 있고, **잘렸으면 잘렸다고 알린다.**
+
+    `limit` 은 목록 거르기(`project_ids_matching`)처럼 더 많이 필요할 때만 준다.
+    """
     query = (query or "").strip()
     if not query:
-        return {"query": "", "projects": [], "entries": [], "reports": [], "attachments": [], "total": 0}
+        return {
+            "query": "", "projects": [], "entries": [], "reports": [], "attachments": [],
+            "total": 0, "truncated": {},
+        }
 
-    refs = _matching_refs(conn, query, limit)
-    project_ids = [ref for kind, ref in refs if kind == "project"]
-    entry_ids = [int(ref) for kind, ref in refs if kind == "entry"]
-    report_ids = [int(ref) for kind, ref in refs if kind == "report"]
+    # 상한을 통째로 올려 받는 경우(목록 거르기)를 위해 값으로 넘긴다.
+    # 모듈 전역을 고치면 그 뒤의 모든 검색이 함께 바뀐다.
+    caps = {kind: (limit or KIND_LIMITS[kind]) for kind in KIND_LIMITS}
+    attachment_cap = limit or ATTACHMENT_LIMIT
+
+    project_ids, projects_cut = _refs_for(conn, query, "project", caps["project"])
+    entry_refs, entries_cut = _refs_for(conn, query, "entry", caps["entry"])
+    report_refs, reports_cut = _refs_for(conn, query, "report", caps["report"])
+    entry_ids = [int(ref) for ref in entry_refs]
+    report_ids = [int(ref) for ref in report_refs]
 
     projects = []
     if project_ids:
@@ -153,9 +175,11 @@ def search(conn: sqlite3.Connection, query: str, limit: int = 60) -> dict:
              WHERE a.orig_name LIKE ?
              ORDER BY a.rel_path LIMIT ?
             """,
-            (f"%{query}%", limit),
+            (f"%{query}%", attachment_cap + 1),
         )
     ]
+    attachments_cut = len(attachments) > attachment_cap
+    attachments = attachments[:attachment_cap]
 
     return {
         "query": query,
@@ -164,6 +188,13 @@ def search(conn: sqlite3.Connection, query: str, limit: int = 60) -> dict:
         "reports": reports,
         "attachments": attachments,
         "total": len(projects) + len(entries) + len(reports) + len(attachments),
+        # 어느 갈래가 잘렸는지. 화면이 "N건" 대신 "N건 이상" 이라고 말하는 근거다.
+        "truncated": {
+            "projects": projects_cut,
+            "entries": entries_cut,
+            "reports": reports_cut,
+            "attachments": attachments_cut,
+        },
     }
 
 

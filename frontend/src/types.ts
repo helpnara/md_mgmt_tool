@@ -73,6 +73,8 @@ export interface Entry {
 }
 
 export interface SearchResults {
+  /** 갈래마다 상한이 있어 잘렸는지 — 화면이 "N건" 대신 "N건 이상"이라고 말하는 근거 */
+  truncated: { projects: boolean; entries: boolean; reports: boolean; attachments: boolean };
   query: string;
   projects: {
     id: string;
@@ -211,6 +213,10 @@ export interface Dashboard {
   due_soon_days: number;
   overdue: number;
   report_date: string;
+  /** 지금 보고 있는 연도 (없으면 전체) */
+  year: string | null;
+  /** 그 연도 밖인데 아직 끝나지 않은 과제 수 — 걸러 두면 숨는다 */
+  other_year_active: number;
   /** 오늘이 선정일·보고일일 때만 채워진다. 매일 뜨면 곧 안 보게 된다. */
   reminder: ReportReminder | null;
   candidates: ReportCandidate[];
