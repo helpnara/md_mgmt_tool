@@ -9,6 +9,7 @@ import { pasteAsTable } from "../table";
 import { todayIso, daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
+import VersionPanel from "./VersionPanel";
 import ExportMenu from "./ExportMenu";
 import ReportEditor from "./ReportEditor";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
@@ -39,6 +40,7 @@ export default function ProjectDetail({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [editingProject, setEditingProject] = useState(false);
   const [editingOverview, setEditingOverview] = useState(false);
+  const [showOverviewVersions, setShowOverviewVersions] = useState(false);
   const [preview, togglePreview] = usePreview();
   const overviewRef = useRef<HTMLDivElement>(null);
   // 개요에 직접 붙이는 첨부 — 효과 산출 근거(엑셀·PPT)를 위한 자리다.
@@ -159,7 +161,40 @@ export default function ProjectDetail({
     scrollEditorIntoView(document.getElementById(`entry-${entryId}`), "center");
   }, [editingEntryId]);
 
-  if (error) return <p className="form-error">{error}</p>;
+  if (error) {
+    // 과제 번호를 일괄로 바꾸면 예전 주소(즐겨찾기·열어 둔 탭)가 없는 과제를 가리킨다.
+    // 빈 오류만 띄우면 사용자는 자료가 사라진 줄 안다. 무슨 일이 있었는지 알려 준다.
+    const missing = error.includes("찾을 수 없");
+    return (
+      <section className="project-detail">
+        <a className="back" href={backTarget(back).href}>
+          ← {backTarget(back).label}
+        </a>
+        <div className="card">
+          <h2>{missing ? "이 과제를 찾을 수 없습니다" : "과제를 불러오지 못했습니다"}</h2>
+          <p className="hint">
+            <code>{projectId}</code>
+            {missing ? (
+              <>
+                {" "}번 과제가 없습니다. <b>과제 번호가 바뀌었거나</b> 보관함으로 옮겨졌을 수
+                있습니다.
+                <br />
+                번호를 일괄로 바꾸면 예전 주소·즐겨찾기는 더 이상 맞지 않습니다.
+                과제 목록에서 이름으로 찾아 주세요.
+              </>
+            ) : (
+              <> — {error}</>
+            )}
+          </p>
+          <div className="form-actions">
+            <a className="button-like primary-link" href="#/">
+              과제 목록으로
+            </a>
+          </div>
+        </div>
+      </section>
+    );
+  }
   if (!project) return <div className="app-loading">불러오는 중…</div>;
 
   const due = dueLabel(project.due_date, project.status);
@@ -346,6 +381,13 @@ export default function ProjectDetail({
               {uploading ? `올리는 중… ${uploading}` : "📎 파일 첨부"}
             </button>
             <button
+              className={showOverviewVersions ? "ghost on" : "ghost"}
+              onClick={() => setShowOverviewVersions((value) => !value)}
+              title="과제 개요의 이전 내용으로 되돌립니다."
+            >
+              이전 버전
+            </button>
+            <button
               className="ghost"
               onClick={() => {
                 setOverviewDraft(project.body ?? "");
@@ -357,6 +399,15 @@ export default function ProjectDetail({
           </div>
         </div>
         {uploadError && <p className="form-error">{uploadError}</p>}
+        {showOverviewVersions && (
+          <VersionPanel
+            path={`projects/${project.dir_name}/index.md`}
+            onRestored={() => {
+              setEditingOverview(false);
+              load();
+            }}
+          />
+        )}
         {editingOverview ? (
           <>
             <PreviewToggle on={preview} onToggle={togglePreview} />
@@ -480,6 +531,9 @@ export default function ProjectDetail({
           reportId={openReport}
           dirName={project.dir_name}
           audiences={meta.audiences}
+          docPath={`projects/${project.dir_name}/${
+            reports.find((item) => item.id === openReport)?.rel_path ?? ""
+          }`}
           onChanged={load}
           onClose={() => setOpenReport(null)}
           onDeleted={() => {
@@ -589,6 +643,11 @@ export default function ProjectDetail({
                 knownTags={meta.tags}
                 dirName={current.dir_name}
                 initial={entry}
+                docPath={`projects/${current.dir_name}/${entry.rel_path}`}
+                onRestored={() => {
+                  setEditingEntryId(null);
+                  load();
+                }}
                 onCancel={() => {
                   setEditingEntryId(null);
                   load();
@@ -689,6 +748,7 @@ function ReportEditorLoader({
   onChanged,
   onClose,
   onDeleted,
+  docPath,
 }: {
   reportId: number;
   dirName?: string;
@@ -696,6 +756,7 @@ function ReportEditorLoader({
   onChanged: () => void;
   onClose: () => void;
   onDeleted: () => void;
+  docPath?: string;
 }) {
   const [report, setReport] = useState<Report | null>(null);
 
@@ -717,6 +778,7 @@ function ReportEditorLoader({
       }}
       onClose={onClose}
       onDeleted={onDeleted}
+      docPath={docPath}
     />
   );
 }

@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
 from .api import (attachments, dashboard, entries, errors, export, meta, people, projects,
-                  reports, search, settings, trash)
+                  reports, search, settings, trash, versions)
 from .services import errorlog
 from .config import REPO_ROOT, get_settings
 from .vault.paths import safe_join
@@ -113,6 +113,7 @@ app.include_router(settings.router)
 app.include_router(people.router)
 app.include_router(trash.router)
 app.include_router(errors.router)
+app.include_router(versions.router)
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

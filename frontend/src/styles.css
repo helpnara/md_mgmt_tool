@@ -753,3 +753,36 @@ button { white-space: nowrap; }
 
 /* 열 이름이 두 줄로 접히면 머리글 높이가 들쭉날쭉해진다 */
 .grid th { white-space: nowrap; }
+
+/* ── 이전 버전 (안쪽 안전망) ───────────────────────────────────────────────── */
+.version-panel {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.version-panel .hint { margin: 0 0 8px; }
+.version-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.version-list li {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 6px 10px;
+}
+.version-list li.open { border-color: var(--accent); }
+.version-head { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.version-when { font-variant-numeric: tabular-nums; font-weight: 600; }
+.version-head .muted { flex: 1; }
+.version-preview {
+  margin: 8px 0 2px;
+  padding: 8px 10px;
+  max-height: 320px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

@@ -278,3 +278,12 @@ export interface ErrorEntry {
   /** 실패 직전에 한 동작 3개. "왜 그 상태가 됐는지"의 단서다. */
   trail: string[];
 }
+
+/** 한 문서의 이전 버전 한 벌 (TODO 37-1). */
+export interface DocumentVersion {
+  /** 파일 이름이자 시각 키 (2026-09-03_142205) */
+  stamp: string;
+  /** 사람이 읽는 시각 */
+  saved_at: string;
+  size_bytes: number;
+}

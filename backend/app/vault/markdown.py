@@ -46,9 +46,21 @@ def dumps(doc: MarkdownDoc) -> str:
 
 
 def save(path: Path, doc: MarkdownDoc) -> None:
-    """원자적 저장. 쓰다가 중단돼도 기존 파일이 깨지지 않는다."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    """원자적 저장. 쓰다가 중단돼도 기존 파일이 깨지지 않는다.
+
+    덮어쓰기 전에 지금 내용을 한 벌 남긴다 (versions.py). 문서를 쓰는 길이
+    이 함수 하나로 모이므로, 여기에 걸어 두면 진행일지·개요·보고가 모두 지켜진다.
+    """
+    from . import versions
+
     text = dumps(doc)
+    try:
+        versions.keep(path, text)
+    except Exception:
+        # 안전망 때문에 본 작업이 멈추면 본말이 뒤바뀐다. keep 안에도 방어가 있지만,
+        # 나중에 그 안이 바뀌더라도 저장만은 반드시 되도록 여기서 한 번 더 막는다.
+        pass
+    path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:

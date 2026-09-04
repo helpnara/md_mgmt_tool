@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
+import VersionPanel from "./VersionPanel";
 import type { Entry } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
@@ -31,13 +32,18 @@ interface Props {
   initial?: Partial<Entry>;
   onSaved: (entry: Entry, options: { close: boolean }) => void;
   onCancel: () => void;
+  /** 이 문서의 vault 기준 경로. 있으면 [이전 버전]을 열 수 있다 (TODO 37-1). */
+  docPath?: string;
+  /** 되돌린 뒤 화면을 다시 읽는다. */
+  onRestored?: () => void;
 }
 
 function draftKey(projectId: string, entryId: number | null): string {
   return `md-mgmt:draft:${entryId ?? `new-${projectId}`}`;
 }
 
-export default function EntryEditor({ projectId, knownTags = [], dirName, initial, onSaved, onCancel }: Props) {
+export default function EntryEditor({ projectId, knownTags = [], dirName, initial, onSaved, onCancel, docPath, onRestored }: Props) {
+  const [showVersions, setShowVersions] = useState(false);
   const [entryId, setEntryId] = useState<number | null>(initial?.id ?? null);
   const [date, setDate] = useState(initial?.date ?? todayIso());
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -429,6 +435,16 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           {dirty ? "저장 안 됨" : savedAt ? `${savedAt} 저장됨` : ""}
         </span>
         <div className="form-actions">
+          {docPath && (
+            <button
+              type="button"
+              className={showVersions ? "ghost on" : "ghost"}
+              onClick={() => setShowVersions((prev) => !prev)}
+              title="이 진행일지의 이전 내용으로 되돌립니다."
+            >
+              이전 버전
+            </button>
+          )}
           <button type="button" className="ghost" onClick={onCancel}>
             닫기
           </button>
@@ -450,6 +466,10 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           </button>
         </div>
       </div>
+
+      {docPath && showVersions && (
+        <VersionPanel path={docPath} onRestored={() => onRestored?.()} />
+      )}
     </div>
   );
 }

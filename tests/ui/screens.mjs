@@ -183,6 +183,23 @@ async function main() {
   page.on("response", (response) => {
     if (response.status() >= 400) pageErrors.push(`${response.status()} ${response.url()}`);
   });
+
+  /**
+   * 일부러 실패를 만드는 시험 구간. **그 구간에서 예상한 실패만** 걷어낸다.
+   *
+   * 감시를 통째로 끄면, 그 사이에 난 진짜 오류까지 같이 묻힌다.
+   */
+  async function expectingFailures(patterns, fn) {
+    const before = pageErrors.length;
+    await fn();
+    const during = pageErrors.splice(before);
+    const unexpected = during.filter(
+      (text) =>
+        !patterns.some((pattern) => text.includes(pattern)) &&
+        !text.startsWith("Failed to load resource"),
+    );
+    pageErrors.push(...unexpected);
+  }
   page.on("pageerror", (err) => pageErrors.push(String(err)));
   page.on("dialog", (dialog) => dialog.accept());
   await page.addInitScript(CONTRAST_HELPERS);
@@ -652,6 +669,80 @@ async function main() {
     await link.click();
     await page.waitForTimeout(700);
     expect(page.url().includes("#/reports"), `보고 대상으로 가지 않았습니다: ${page.url()}`);
+  });
+
+  console.log("\n[2-5] 안전망과 안내 (TODO 37-1·62·63)");
+
+  await check("진행일지를 고치면 직전 내용이 남고, 되돌릴 수 있다", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    // 첫 진행일지를 고친다.
+    await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(700);
+    const box = page.locator(".entry-editor textarea").first();
+    const before = await box.inputValue();
+    await box.fill("실수로 통째로 지운 내용");
+    await page.locator(".entry-editor").getByRole("button", { name: /^저장/ }).click();
+    await page.waitForTimeout(1200);
+
+    // 다시 열어 [이전 버전] 에서 되돌린다.
+    await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(700);
+    await page.locator(".entry-editor").getByRole("button", { name: "이전 버전" }).click();
+    await page.waitForTimeout(900);
+    expect(await page.locator(".version-list li").count() > 0, "남은 버전이 없습니다");
+
+    await page.locator(".version-list").getByRole("button", { name: "내용 보기" }).first().click();
+    await page.waitForTimeout(600);
+    const preview = await page.locator(".version-preview").innerText();
+    expect(preview.includes(before.split("\n")[0].trim() || "내용"), `미리보기가 예전 내용이 아닙니다`);
+
+    await page.locator(".version-list").getByRole("button", { name: "되돌리기" }).first().click();
+    await page.waitForTimeout(1500);
+    const text = await page.locator(".timeline").innerText();
+    expect(!text.includes("실수로 통째로 지운 내용"), "되돌아가지 않았습니다");
+  });
+
+  await check("같은 내용을 다시 저장해도 버전이 쌓이지 않는다", async () => {
+    const path = `projects/${(await api.get(`/api/projects/${seeded.projectA}`)).dir_name}/index.md`;
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".card").filter({ hasText: "과제 개요" }).getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(600);
+    const box = page.locator(".card").filter({ hasText: "과제 개요" }).locator("textarea").first();
+    await box.fill("## 배경\n\n한 번 고친 개요\n");
+    await page.locator(".card").filter({ hasText: "과제 개요" }).getByRole("button", { name: /^저장/ }).click();
+    await page.waitForTimeout(1200);
+    const once = (await api.get(`/api/versions?path=${encodeURIComponent(path)}`)).items.length;
+
+    await page.locator(".card").filter({ hasText: "과제 개요" }).getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(600);
+    await page.locator(".card").filter({ hasText: "과제 개요" }).locator("textarea").first()
+      .fill("## 배경\n\n한 번 고친 개요\n");
+    await page.locator(".card").filter({ hasText: "과제 개요" }).getByRole("button", { name: /^저장/ }).click();
+    await page.waitForTimeout(1200);
+
+    equal((await api.get(`/api/versions?path=${encodeURIComponent(path)}`)).items.length, once,
+      "같은 내용을 다시 저장한 뒤의 버전 수");
+  });
+
+  await check("설정에 보관 현황이 보인다", async () => {
+    await go("#/settings");
+    const card = page.locator(".card").filter({ hasText: "이전 버전 보관" });
+    expect(await card.count() > 0, "보관 현황 칸이 없습니다");
+    const text = await card.innerText();
+    expect(/보관본 \d+벌/.test(text), `보관본 수가 안 보입니다: ${text}`);
+  });
+
+  await check("없는 과제를 열면 번호가 바뀌었을 수 있다고 알려 준다", async () => {
+    // 이 시험은 일부러 없는 과제를 연다 — 404 는 예상한 실패다.
+    await expectingFailures(["2099"], async () => {
+      await go("#/projects/2099-없는-999");
+    });
+    const text = await page.locator("main").innerText();
+    expect(text.includes("찾을 수 없습니다"), `안내가 없습니다: ${text.slice(0, 150)}`);
+    expect(text.includes("번호가 바뀌었거나"), "번호 변경 안내가 없습니다");
+    await page.getByRole("link", { name: "과제 목록으로" }).click();
+    await page.waitForTimeout(700);
+    expect(await page.locator(".grid").count() > 0, "과제 목록으로 가지 않았습니다");
   });
 
   console.log("\n[3] 글자가 읽히는가 (WCAG AA)");

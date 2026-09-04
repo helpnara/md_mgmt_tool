@@ -33,6 +33,12 @@ TRAIL = 3
 RECENT_LIMIT = 20
 # 보관 개월 수. 지난 기록은 원인 추적에 쓸모가 없고 파일만 늘린다.
 KEEP_MONTHS = 3
+# 한 파일에 담는 최대 줄 수. 넘으면 **오래된 앞부분을 버린다.**
+#
+# 달마다 파일을 새로 열지만 한 달 치의 크기에는 상한이 없었다. 지금은 실패가
+# 사람이 뭔가 눌렀을 때만 나서 위험이 낮은데, 나중에 화면이 스스로 다시 읽는 기능이
+# 붙으면 성격이 바뀐다. 그때 손대는 것보다 지금 막아 두는 편이 싸다.
+MAX_LINES = 2000
 
 # 오류로 볼 응답 상태. 404(없는 것을 찾음)와 401·403 은 흔하고 대개 문제가 아니라 뺀다.
 RECORDED_4XX = frozenset({400, 409, 422, 423, 507})
@@ -82,11 +88,36 @@ def record(
             # 실패한 동작 자신은 빼고, 그 앞의 것만.
             "trail": [item for item in _trail if item != action][-TRAIL:],
         }
-        with _path_for(date.today()).open("a", encoding="utf-8") as handle:
+        path = _path_for(date.today())
+        with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        _trim(path)
         _prune()
     except (OSError, ValueError, TypeError):
         pass
+
+
+def _trim(path: Path) -> None:
+    """파일이 너무 길어지면 앞부분(오래된 것)을 버린다.
+
+    새 것을 버리면 방금 난 오류를 못 보게 되므로, 버리는 쪽은 언제나 오래된 쪽이다.
+    """
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    except OSError:
+        return
+    if len(lines) <= MAX_LINES:
+        return
+    kept = lines[-MAX_LINES:]
+    note = {
+        "at": datetime.now().isoformat(timespec="seconds"),
+        "action": "(오래된 기록 정리)",
+        "status": None,
+        "error": None,
+        "detail": f"기록이 {MAX_LINES}줄을 넘어 앞부분 {len(lines) - MAX_LINES}줄을 버렸습니다.",
+        "trail": [],
+    }
+    path.write_text(json.dumps(note, ensure_ascii=False) + "\n" + "".join(kept), encoding="utf-8")
 
 
 def _prune() -> None:

@@ -118,3 +118,39 @@ def test_a_log_that_cannot_be_written_does_not_break_the_request(client, vault_d
     monkeypatch.setattr("pathlib.Path.open", explode)
     # 거절 자체는 정상적으로 400 으로 돌아와야 한다.
     assert client.put("/api/settings", json={"project_code": "1"}).status_code == 400
+
+
+def test_a_month_of_errors_does_not_grow_without_limit(client, vault_dir):
+    """달마다 파일을 새로 열지만 한 달 치 크기에는 상한이 없었다 (TODO 62)."""
+    path = logs_dir(vault_dir) / "error-2026-09.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    filler = json.dumps({"at": "2026-09-01T00:00:00", "action": "옛 오류", "trail": []},
+                        ensure_ascii=False) + "\n"
+    path.write_text(filler * (errorlog.MAX_LINES + 500), encoding="utf-8")
+
+    client.put("/api/settings", json={"project_code": "1"})  # 오류 하나를 더 낸다
+
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) <= errorlog.MAX_LINES + 1  # 정리했다는 알림 한 줄
+    # 버리는 쪽은 언제나 오래된 쪽 — 방금 난 오류가 남아 있어야 한다.
+    assert "project_code" not in lines[0]
+    assert any("/api/settings" in line for line in lines[-3:])
+
+
+def test_the_trim_says_what_it_threw_away(client, vault_dir):
+    """파일을 직접 열어 본 사람이 '여기서 잘렸다'를 알 수 있어야 한다.
+
+    알림은 버려진 줄이 있던 자리, 곧 파일 맨 앞에 남는다. 화면의 [최근 오류]는
+    새 것부터 20건만 보여 주므로 여기에는 안 나온다 — 그게 맞다.
+    """
+    path = logs_dir(vault_dir) / "error-2026-09.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    filler = json.dumps({"at": "2026-09-01T00:00:00", "action": "옛 오류", "trail": []},
+                        ensure_ascii=False) + "\n"
+    path.write_text(filler * (errorlog.MAX_LINES + 10), encoding="utf-8")
+    client.put("/api/settings", json={"project_code": "1"})
+
+    first = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+    assert "버렸습니다" in first["detail"]
+    # 새 줄을 먼저 붙인 뒤 자르므로 10 이 아니라 11 줄이 버려진다.
+    assert "11줄" in first["detail"]

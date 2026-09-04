@@ -8,6 +8,7 @@ import PeopleCard from "./PeopleCard";
 import ProjectCodeCard from "./ProjectCodeCard";
 import ReportDayCard from "./ReportDayCard";
 import ErrorLogCard from "./ErrorLogCard";
+import VersionsCard from "./VersionsCard";
 
 /**
  * 도구 설정.
@@ -99,6 +100,7 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
       <ProjectCodeCard onSaved={onSaved} />
       <PeopleCard onChanged={onSaved} />
       <TrashCard />
+      <VersionsCard />
       <EntryTemplateCard meta={meta} />
       <ReportTemplateCard />
       <ErrorLogCard />

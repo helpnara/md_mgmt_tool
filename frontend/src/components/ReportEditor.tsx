@@ -11,6 +11,7 @@ import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import ReportDiff from "./ReportDiff";
+import VersionPanel from "./VersionPanel";
 
 interface UploadState {
   key: string;
@@ -31,9 +32,12 @@ interface Props {
   onClose: () => void;
   /** 지워졌을 때. onChanged 와 나눠 둔 이유는 아래 [삭제] 주석 참고. */
   onDeleted: () => void;
+  /** 이 문서의 vault 기준 경로. 있으면 [이전 버전]을 열 수 있다 (TODO 37-1). */
+  docPath?: string;
 }
 
-export default function ReportEditor({ report, dirName, audiences, onChanged, onClose, onDeleted }: Props) {
+export default function ReportEditor({ report, dirName, audiences, onChanged, onClose, onDeleted, docPath }: Props) {
+  const [showVersions, setShowVersions] = useState(false);
   const [body, setBody] = useState(report.body ?? "");
   const [audience, setAudience] = useState(report.audience ?? "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -183,6 +187,15 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
           <button className="ghost" onClick={() => copy("plain")}>
             평문 복사
           </button>
+          {docPath && (
+            <button
+              className={showVersions ? "ghost on" : "ghost"}
+              onClick={() => setShowVersions((prev) => !prev)}
+              title="이 보고 문서의 이전 내용으로 되돌립니다."
+            >
+              이전 버전
+            </button>
+          )}
           <button className="ghost" onClick={onClose}>
             닫기
           </button>
@@ -264,6 +277,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
           {report.author && ` · 작성 ${report.author}`}
         </span>
       </div>
+
+      {docPath && showVersions && <VersionPanel path={docPath} onRestored={onChanged} />}
 
       {showDiff && <ReportDiff reportId={report.id} />}
 

@@ -79,6 +79,7 @@ def normalize_status(value: str | None) -> tuple[str, str | None]:
 class Settings:
     vault_dir: Path
     report_cycle_days: int = 7  # 보고 후보 점수의 기준 주기
+    version_keep_days: int = 365  # 이전 버전 보관 기간 (2026-09-02 사용자 확정)
 
     @property
     def projects_dir(self) -> Path:
@@ -91,6 +92,11 @@ class Settings:
     @property
     def index_dir(self) -> Path:
         return self.vault_dir / ".index"
+
+    @property
+    def versions_dir(self) -> Path:
+        """이전 버전 보관. vault 안에 두어 vault 를 옮기면 안전망도 함께 간다."""
+        return self.vault_dir / ".versions"
 
     @property
     def logs_dir(self) -> Path:

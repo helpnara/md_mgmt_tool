@@ -1,4 +1,4 @@
-import type { AppSettings, Dashboard, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { AppSettings, Dashboard, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -126,6 +126,24 @@ export const api = {
   spreadsheetPreview: (attachmentId: number) =>
     request<SpreadsheetPreview>(`/api/attachments/${attachmentId}/preview`),
   search: (query: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),
+  /** 이 문서의 이전 버전 (TODO 37-1). path 는 vault 기준 상대경로. */
+  versions: (path: string) =>
+    request<{ path: string; items: DocumentVersion[] }>(
+      `/api/versions?path=${encodeURIComponent(path)}`,
+    ),
+  versionContent: (path: string, stamp: string) =>
+    request<{ text: string }>(
+      `/api/versions/content?path=${encodeURIComponent(path)}&stamp=${encodeURIComponent(stamp)}`,
+    ),
+  restoreVersion: (path: string, stamp: string) =>
+    request<{ restored_from: string }>("/api/versions/restore", {
+      method: "POST",
+      body: JSON.stringify({ path, stamp }),
+    }),
+  versionsOverview: () =>
+    request<{ versions: number; documents: number; total_bytes: number; keep_days: number }>(
+      "/api/versions/overview",
+    ),
   errors: () => request<{ items: ErrorEntry[]; keep_months: number }>("/api/errors"),
   clearErrors: () => request<{ removed_files: number }>("/api/errors", { method: "DELETE" }),
   reindex: () =>
