@@ -792,6 +792,36 @@ async function main() {
     expect(await page.locator(".grid").count() > 0, "과제 목록으로 가지 않았습니다");
   });
 
+  console.log("\n[2-6] 보고 마커 (TODO 35)");
+
+  await check("보고 뒤에 지난 날짜로 쓴 기록도 미보고로 보인다", async () => {
+    // 선만으로는 표현할 수 없던 경우다 — 날짜순으로는 선 아래에 놓이는데 실제로는 미보고다.
+    const project = seeded.projectA;
+    await api.post(`/api/projects/${project}/entries`, {
+      date: "2026-08-21", title: "뒤늦게 쓴 시험", body: "## 내용\n\n깜빡했던 기록\n",
+    });
+    await go(`#/projects/${project}`);
+
+    const row = page.locator(".timeline .entry").filter({ hasText: "뒤늦게 쓴 시험" });
+    expect(await row.count() > 0, "뒤늦게 쓴 기록이 안 보입니다");
+    expect((await row.innerText()).includes("미보고"), "미보고 딱지가 없습니다");
+  });
+
+  await check("이미 보고한 기록에는 미보고 딱지가 없다", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    const reported = page.locator(".timeline .entry").filter({ hasText: "1차 시제품" });
+    if (await reported.count() > 0) {
+      expect(!(await reported.innerText()).includes("미보고"), "보고한 기록에 딱지가 붙었습니다");
+    }
+  });
+
+  await check("보고가 여러 건이어도 선은 하나만 긋는다", async () => {
+    // 보고마다 그으면 이력이 쌓일수록 선이 늘어 정작 경계가 안 보인다.
+    await go(`#/projects/${seeded.projectA}`);
+    const markers = await page.locator(".timeline .report-marker").count();
+    expect(markers <= 1, `선이 ${markers}개 그어졌습니다`);
+  });
+
   console.log("\n[3] 글자가 읽히는가 (WCAG AA)");
 
   await check("대시보드 칩 — 기본·마우스올림·선택·선택+올림 모두 읽힌다", async () => {

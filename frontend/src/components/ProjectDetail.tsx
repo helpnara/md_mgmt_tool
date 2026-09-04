@@ -223,6 +223,11 @@ export default function ProjectDetail({
     ? Math.max(0, -(daysUntil(project.last_reported_at) ?? 0))
     : null;
   const visibleEntries = entries.filter((entry) => entry.id !== draftEntryId);
+  // 가장 최근 확정 보고에 담긴 기록 중 목록에서 맨 위에 오는 것 — 그 위에 선을 긋는다.
+  const latestReportBoundary = project.last_reported_at
+    ? visibleEntries.find((entry) => entry.reported_on === project.last_reported_at)?.id ?? null
+    : null;
+
   const AUTO_OPEN = 5;
   const isOpen = (entry: Entry, index: number) =>
     expandAll || index < AUTO_OPEN || expandedIds.has(entry.id);
@@ -632,9 +637,10 @@ export default function ProjectDetail({
       <ol className="timeline">
         {visibleEntries.map((entry, index) => (
           <Fragment key={entry.id}>
-            {/* 어디까지 보고했는지를 목록에서 바로 보이게 한다.
-                기록은 최신순이므로, 보고에 담긴 첫 기록 위에 선을 긋는다. */}
-            {entry.reported_on && entry.reported_on !== visibleEntries[index - 1]?.reported_on && (
+            {/* 선은 **가장 최근 보고 하나만** 긋는다 (TODO 35).
+                보고마다 그으면 이력이 쌓일수록 선이 늘어 정작 경계가 안 보인다.
+                그 아래에서 개별 기록의 보고 여부는 각 기록의 [미보고] 딱지가 말해 준다. */}
+            {entry.id === latestReportBoundary && (
               <li className="report-marker" aria-hidden="true">
                 <span>여기까지 {entry.reported_on} 보고함</span>
               </li>
@@ -702,6 +708,14 @@ export default function ProjectDetail({
                     {entry.author && <span className="entry-author">{entry.author}</span>}
                   </span>
                   <h3>{entry.title}</h3>
+                  {/* 보고 여부는 기록 자체에 붙인다 (TODO 35).
+                      선만으로는 "8/25 보고 뒤에 8/20 자로 쓴 기록"을 표현할 수 없다 —
+                      날짜순으로는 선 아래에 놓이는데 실제로는 미보고이기 때문이다. */}
+                  {!entry.reported_on && (
+                    <span className="tag unreported" title="아직 확정된 보고에 담기지 않았습니다.">
+                      미보고
+                    </span>
+                  )}
                   {entry.tags.map((tag) => (
                     <span key={tag} className="tag">
                       {tag}

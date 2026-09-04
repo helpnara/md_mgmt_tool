@@ -798,3 +798,6 @@ button { white-space: nowrap; }
 /* 불러오지 못했을 때 — 빈 표와 구분되어야 한다 */
 .load-error { border-left: 3px solid var(--danger); }
 .load-error h2 { color: var(--danger); }
+
+/* 아직 보고에 담기지 않은 기록. 선만으로는 표현할 수 없는 경우가 있어 기록에 직접 붙인다 */
+.tag.unreported { background: #fef3c7; color: #92400e; font-weight: 600; }
