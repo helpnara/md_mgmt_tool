@@ -404,7 +404,9 @@ button { white-space: nowrap; }
 
 /* ── 과제 효과 (억원/년) ─────────────────────────── */
 .effect-col { white-space: nowrap; text-align: right; }
-.effect-col .th-unit { display: block; font-weight: 400; font-size: 10px; color: var(--muted); }
+/* 열 머리글이 눌러서 정렬되도록 바뀌면서 .effect-col 이 <th> 에서 사라졌다.
+   단위는 어느 열에 있든 제목 아래 줄에 작게 붙어야 한다. */
+.th-unit { display: block; font-weight: 400; font-size: 10px; color: var(--muted); }
 /* 기대효과는 아직 확인 전이라 담담하게, 실증효과는 확인된 값이라 또렷하게 */
 .effect { font-variant-numeric: tabular-nums; color: var(--muted); }
 .effect.verified { color: var(--text); font-weight: 700; }
