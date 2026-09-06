@@ -428,6 +428,83 @@ def _rebuild_search(conn: sqlite3.Connection, project_id: str) -> None:
         )
 
 
+def _as_number(value: Any) -> float | None:
+    """시간·비용. 손으로 고친 파일에 숫자가 아닌 값이 들어와도 색인을 멈추지 않는다."""
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None
+
+
+def index_activities(
+    conn: sqlite3.Connection, problems: list[IndexProblem] | None = None
+) -> int:
+    """팀원 역량 이력을 색인한다 (TODO 72).
+
+    **사람은 폴더명이 아니라 front matter 의 `person` 으로 정한다.** 폴더명은 읽기 좋으라고
+    붙인 것이지 식별자가 아니다 — 이름을 바꿔 폴더를 못 옮겨도 기록이 미아가 되지 않는다.
+    """
+    from ..config import ACTIVITY_KIND_KEYS, DEFAULT_ACTIVITY_KIND
+
+    settings = get_settings()
+    root = settings.vault_dir
+    seen: list[str] = []
+    for path in sorted(settings.people_dir.glob("*/activities/*.md")):
+        doc = _load_doc(path, root, problems)
+        rel_path = path.relative_to(root).as_posix()
+        if doc is None:
+            seen.append(rel_path)  # 깨진 파일은 건너뛰되 색인에서 지우지는 않는다
+            continue
+        person = _as_str(doc.meta.get("person")) or path.parent.parent.name
+        kind = _as_str(doc.meta.get("kind")) or DEFAULT_ACTIVITY_KIND
+        if kind not in ACTIVITY_KIND_KEYS:
+            kind = DEFAULT_ACTIVITY_KIND
+        conn.execute(
+            """
+            INSERT INTO activity(person, rel_path, date, kind, title, host, place,
+                                 hours, cost, takeaway, link, body, author,
+                                 created_at, updated_at, file_mtime)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(rel_path) DO UPDATE SET
+              person=excluded.person, date=excluded.date, kind=excluded.kind,
+              title=excluded.title, host=excluded.host, place=excluded.place,
+              hours=excluded.hours, cost=excluded.cost, takeaway=excluded.takeaway,
+              link=excluded.link, body=excluded.body, author=excluded.author,
+              created_at=excluded.created_at, updated_at=excluded.updated_at,
+              file_mtime=excluded.file_mtime
+            """,
+            (
+                person,
+                rel_path,
+                _as_str(doc.meta.get("date")) or path.name[:10],
+                kind,
+                _as_str(doc.meta.get("title")) or path.stem,
+                _as_str(doc.meta.get("host")),
+                _as_str(doc.meta.get("place")),
+                _as_number(doc.meta.get("hours")),
+                _as_number(doc.meta.get("cost")),
+                _as_str(doc.meta.get("takeaway")),
+                _as_str(doc.meta.get("link")),
+                doc.body,
+                _as_str(doc.meta.get("author")),
+                _as_str(doc.meta.get("created_at")),
+                _as_str(doc.meta.get("updated_at")),
+                path.stat().st_mtime,
+            ),
+        )
+        seen.append(rel_path)
+
+    if seen:
+        placeholders = ",".join("?" * len(seen))
+        conn.execute(f"DELETE FROM activity WHERE rel_path NOT IN ({placeholders})", tuple(seen))
+    else:
+        conn.execute("DELETE FROM activity")
+    return len(seen)
+
+
 def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
     """vault 전체 재인덱싱. DB를 지운 뒤에도 이것만 돌리면 복구된다.
 
@@ -449,5 +526,8 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
         conn.execute(f"DELETE FROM project WHERE id NOT IN ({placeholders})", tuple(found))
     else:
         conn.execute("DELETE FROM project")
+
+    # 역량 이력은 과제와 이어지지 않으므로 따로 훑는다 (TODO 72).
+    index_activities(conn, problems)
     conn.commit()
     return len(found), problems

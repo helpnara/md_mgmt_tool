@@ -895,3 +895,55 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 /* 수는 오른쪽으로 맞추고 자릿수 폭을 고정한다. 세로로 견줘 읽는 표다. */
 .home .grid th:not(:first-child), .home .grid td:not(:first-child) { text-align: right; }
 .home .grid td:not(:first-child) { font-variant-numeric: tabular-nums; }
+
+/* ── 팀원 역량 이력 — TODO 72 ───────────────────────
+   비어 있는 곳이 먼저 보여야 하는 화면이다. 0 은 흐리게, 뜸한 사람은 눈에 띄게. */
+.skills { display: flex; flex-direction: column; gap: 14px; }
+.skills .card { margin: 0; }
+.skills .card h2 { margin: 0 0 10px; font-size: 15px; }
+.skills-head-right { display: flex; align-items: flex-end; gap: 12px; }
+.skills-intro { margin: -6px 0 0; max-width: 900px; }
+
+.skills-quiet { border-color: #e8d5b5; background: #fffdf8; }
+.skills-quiet-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.skills-quiet-chip {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 12px;
+  border: 1px solid #e0c9a3; border-radius: 999px; background: var(--surface);
+  color: var(--warn); font-size: 13px; font-weight: 600; cursor: pointer; width: auto;
+}
+.skills-quiet-chip:hover { border-color: var(--warn); }
+.skills-quiet-chip .muted { font-weight: 400; font-size: 11px; color: var(--muted); }
+
+.skills-table td, .skills-table th { white-space: nowrap; }
+.skills-table th:not(:first-child), .skills-table td:not(:first-child) { text-align: right; }
+.skills-table td:not(:first-child) { font-variant-numeric: tabular-nums; }
+.skills-table tbody tr { cursor: default; }
+.skills-table tbody tr:hover { background: #fcfcfd; }
+.skills-table tbody tr.quiet-row td:first-child { border-left: 3px solid var(--warn); }
+/* 0 은 흐리게 — 어디가 비었는지가 이 표의 요점이다 */
+/* 흐리되 읽히기는 해야 한다 — 흰 바탕에서 3.6:1 (AA 큰 글자 기준 통과) */
+.skills-table td.zero { color: #7f8894; }
+.linkish {
+  width: auto; padding: 0; border: none; background: none; cursor: pointer;
+  color: var(--accent-strong); font-weight: 600; font-size: 13px;
+}
+.linkish:hover { text-decoration: underline; background: none; }
+.linkish.on { text-decoration: underline; }
+
+/* 최근 몇 해를 나란히 놓는 아주 작은 막대 */
+.spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; padding-bottom: 1px;
+         border-bottom: 1px solid var(--border); vertical-align: middle; }
+.spark-bar { width: 6px; min-height: 2px; background: var(--accent-soft); border-top: 2px solid var(--accent); border-radius: 2px 2px 0 0; }
+
+.activity-form .form-row { align-items: flex-end; }
+.activity-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.activity-list li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd; }
+.activity-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.activity-head .grow { flex: 1 1 auto; }
+.activity-date { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.activity-title { font-size: 14px; }
+.activity-person { padding: 1px 8px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 11px; }
+.activity-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.activity-link { font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; max-width: 420px; white-space: nowrap; }
+.activity-takeaway { margin: 6px 0 0; font-size: 13px; color: var(--text); }
+.activity-takeaway::before { content: "얻은 것 "; color: var(--muted); font-size: 11px; }

@@ -53,6 +53,20 @@ PROJECT_TYPES: list[tuple[str, str]] = [
     ("national", "국책과제"),
 ]
 TYPE_KEYS: list[str] = [key for key, _ in PROJECT_TYPES]
+
+# 팀원 역량 이력의 구분 (TODO 72). 과제의 '속성'과 다른 축이다.
+# 기록 단위는 **사람**이다 — 한 행사에 세 명이 가면 기록도 세 건이다.
+ACTIVITY_KINDS: list[tuple[str, str]] = [
+    ("education", "교육"),
+    ("seminar", "세미나"),
+    ("expo", "박람회"),
+    ("conference", "학회"),
+    ("certificate", "자격·인증"),
+    ("other", "기타"),
+]
+ACTIVITY_KIND_KEYS: list[str] = [key for key, _ in ACTIVITY_KINDS]
+ACTIVITY_KIND_LABELS: dict[str, str] = dict(ACTIVITY_KINDS)
+DEFAULT_ACTIVITY_KIND = "education"
 TYPE_LABELS: dict[str, str] = {key: label for key, label in PROJECT_TYPES}
 
 # 예전 값 → 새 값. 상태로 잘못 들어가 있던 '성격'은 속성으로 옮긴다.
@@ -86,6 +100,11 @@ class Settings:
         return self.vault_dir / "projects"
 
     @property
+    def people_dir(self) -> Path:
+        """팀원 역량 이력. 과제가 아니므로 projects 밑에 두지 않는다 (TODO 72)."""
+        return self.vault_dir / "people"
+
+    @property
     def trash_dir(self) -> Path:
         return self.vault_dir / ".trash"
 
@@ -108,7 +127,8 @@ class Settings:
         return self.index_dir / "index.sqlite3"
 
     def ensure_dirs(self) -> None:
-        for path in (self.vault_dir, self.projects_dir, self.trash_dir, self.index_dir, self.logs_dir):
+        for path in (self.vault_dir, self.projects_dir, self.people_dir,
+                     self.trash_dir, self.index_dir, self.logs_dir):
             path.mkdir(parents=True, exist_ok=True)
 
 

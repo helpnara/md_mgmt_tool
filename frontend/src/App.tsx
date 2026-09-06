@@ -7,6 +7,7 @@ import ReportCandidates from "./components/ReportCandidates";
 import ReportHistory from "./components/ReportHistory";
 import ScrollTop from "./components/ScrollTop";
 import Settings from "./components/Settings";
+import Skills from "./components/Skills";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
 import { BACK_PARAM } from "./nav";
@@ -20,6 +21,7 @@ type Route =
   | { name: "search"; query: string }
   | { name: "reports"; query: string }
   | { name: "history"; query: string }
+  | { name: "skills"; query: string }
   | { name: "settings" };
 
 function readRoute(): Route {
@@ -41,6 +43,7 @@ function readRoute(): Route {
   if (path.startsWith("search")) return { name: "search", query: params.get("q") ?? "" };
   if (path.startsWith("history")) return { name: "history", query: queryString ?? "" };
   if (path.startsWith("reports")) return { name: "reports", query: queryString ?? "" };
+  if (path.startsWith("skills")) return { name: "skills", query: queryString ?? "" };
   if (path.startsWith("settings")) return { name: "settings" };
   if (path.replace(/\/$/, "") === "projects") return { name: "list", query: queryString ?? "" };
   // 아는 주소가 아니면 홈으로. 손으로 고친 주소에서 빈 화면을 만나는 것보다 낫다.
@@ -137,6 +140,9 @@ export default function App() {
           <a href="#/history" className={route.name === "history" ? "active" : undefined}>
             보고 이력
           </a>
+          <a href="#/skills" className={route.name === "skills" ? "active" : undefined}>
+            팀원 역량
+          </a>
           <a href="#/settings" className={route.name === "settings" ? "active" : undefined}>
             설정
           </a>
@@ -194,6 +200,7 @@ export default function App() {
         {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "home" && <Home />}
+        {route.name === "skills" && <Skills meta={meta} query={route.query} />}
       </main>
       {/* 화면마다 따로 두지 않는다 — 요청의 핵심이 "어디서나 같은 자리"다. */}
       <ScrollTop />

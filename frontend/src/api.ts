@@ -1,4 +1,4 @@
-import type { AppSettings, BackupStatus, Dashboard, Home, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -18,6 +18,18 @@ export const api = {
   dashboard: (year?: string) =>
     request<Dashboard>(`/api/dashboard${year ? `?year=${year}` : ""}`),
   home: (year?: string) => request<Home>(`/api/home${year ? `?year=${year}` : ""}`),
+  // 팀원 역량 이력 (TODO 72)
+  activities: (params: Record<string, string>) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    return request<Activity[]>(`/api/activities?${query.toString()}`);
+  },
+  activitySummary: (year?: string) =>
+    request<ActivitySummary>(`/api/activities/summary${year ? `?year=${year}` : ""}`),
+  createActivity: (payload: Partial<Activity>) =>
+    request<{ id: number }>("/api/activities", { method: "POST", body: JSON.stringify(payload) }),
+  updateActivity: (id: number, payload: Partial<Activity>) =>
+    request<{ ok: boolean }>(`/api/activities/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteActivity: (id: number) => request<void>(`/api/activities/${id}`, { method: "DELETE" }),
   listProjects: (params: Record<string, string>) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
     return request<Project[]>(`/api/projects?${query.toString()}`);

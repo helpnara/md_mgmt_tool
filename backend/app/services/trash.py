@@ -33,6 +33,7 @@ KIND_LABELS = {
     "entry": "진행일지",
     "report": "보고 문서",
     "attachment": "첨부 파일",
+    "activity": "역량 이력",
 }
 
 

@@ -13,6 +13,8 @@ export interface TypeInfo {
 export interface Meta {
   statuses: StatusInfo[];
   types: TypeInfo[];
+  /** 역량 이력의 구분 (교육·세미나·박람회·학회·자격). 과제의 속성과 다른 축이다. */
+  activity_kinds: TypeInfo[];
   groups: string[];
   tags: string[];
   owners: string[];
@@ -362,4 +364,51 @@ export interface Home {
   members: HomeMember[];
   types: HomeType[];
   monthly_reports: { month: number; count: number }[];
+}
+
+/** 팀원 역량 이력 한 건 (TODO 72). 기록 단위는 **사람**이다. */
+export interface Activity {
+  id: number;
+  person: string;
+  date: string;
+  kind: string;
+  title: string;
+  host: string | null;
+  place: string | null;
+  /** 시간·비용은 옵션이다. 비어 있는 것이 정상이다. */
+  hours: number | null;
+  cost: number | null;
+  /** 면담에서 실제로 읽게 되는 한 줄 */
+  takeaway: string | null;
+  /** 수료증·자료가 있는 사내 공유 폴더 주소 등 */
+  link: string | null;
+  body: string | null;
+  author: string | null;
+  updated_at: string | null;
+}
+
+export interface ActivityPerson {
+  name: string;
+  count: number;
+  hours: number;
+  cost: number;
+  /** 시간·비용을 실제로 채운 건수 — 합계가 몇 건에서 나온 값인지 밝힌다 */
+  with_hours: number;
+  with_cost: number;
+  by_kind: Record<string, number>;
+  /** 최근 몇 해의 건수. 한 해만 보면 늘고 주는 것을 알 수 없다 */
+  trend: Record<string, number>;
+  last_date: string | null;
+  days_since: number | null;
+  /** 그 해 기록이 없거나 오래 뜸한 사람 — 면담에서 먼저 꺼낼 줄 */
+  quiet: boolean;
+}
+
+export interface ActivitySummary {
+  year: string | null;
+  years: string[];
+  trend_years: string[];
+  quiet_days: number;
+  team: { count: number; hours: number; cost: number; people: number };
+  people: ActivityPerson[];
 }

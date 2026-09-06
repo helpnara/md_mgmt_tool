@@ -23,6 +23,7 @@ const LABELS: Record<string, string> = {
   projects: "과제 목록",
   reports: "보고 대상",
   history: "보고 이력",
+  skills: "팀원 역량",
   search: "검색 결과",
 };
 

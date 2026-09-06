@@ -99,6 +99,33 @@ CREATE TABLE IF NOT EXISTS entry_tag (
   PRIMARY KEY(entry_id, tag_id)
 );
 
+-- 팀원 역량 이력 (TODO 72). 과제와 이어지지 않는 별개의 기록이다.
+-- 기록 단위는 **사람**이라, 한 행사에 여러 명이 가면 사람 수만큼 줄이 생긴다.
+CREATE TABLE IF NOT EXISTS activity (
+  id         INTEGER PRIMARY KEY,
+  person     TEXT NOT NULL,
+  rel_path   TEXT NOT NULL UNIQUE,   -- people/<이름>/activities/<파일>.md
+  date       TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  host       TEXT,                   -- 주최
+  place      TEXT,
+  -- 시간·비용은 **옵션**이다 (2026-09-06 사용자). 비워 두는 것이 정상이다.
+  hours      REAL,
+  cost       REAL,
+  -- 면담에서 실제로 읽게 되는 한 줄. 이 칸 때문에 이 화면을 만든다.
+  takeaway   TEXT,
+  link       TEXT,                   -- 수료증·자료가 있는 사내 공유 폴더 주소 등
+  body       TEXT,
+  author     TEXT,
+  created_at TEXT,
+  updated_at TEXT,
+  file_mtime REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_person_date ON activity(person, date DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_date ON activity(date DESC);
+
 CREATE INDEX IF NOT EXISTS idx_entry_project_date ON entry(project_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_report_project_date ON report(project_id, report_date DESC);
 CREATE INDEX IF NOT EXISTS idx_attachment_entry ON attachment(entry_id);

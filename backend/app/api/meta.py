@@ -4,7 +4,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends
 
-from ..config import COLLAPSED_STATUSES, PROJECT_TYPES, STATUSES, get_settings
+from ..config import ACTIVITY_KINDS, COLLAPSED_STATUSES, PROJECT_TYPES, STATUSES, get_settings
 from ..deps import get_db
 from ..services import settings as settings_service
 from ..vault.indexer import reindex_all
@@ -44,6 +44,8 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
             for key, label, candidate in STATUSES
         ],
         "types": [{"key": key, "label": label} for key, label in PROJECT_TYPES],
+        # 팀원 역량 이력의 구분 (TODO 72). 과제의 속성과 다른 축이다.
+        "activity_kinds": [{"key": key, "label": label} for key, label in ACTIVITY_KINDS],
         "groups": groups,
         "tags": tags,
         "owners": owners,

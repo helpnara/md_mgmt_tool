@@ -248,6 +248,7 @@ async function main() {
     ["과제 상세", `#/projects/${seeded.projectA}`, ".project-detail, .detail-columns"],
     ["보고 대상", "#/reports", ".candidates .grid"],
     ["보고 이력", "#/history", ".history-list"],
+    ["팀원 역량", "#/skills", ".skills"],
     ["설정", "#/settings", ".card"],
     ["검색 결과", "#/search?q=시제품", ".search-results, .card"],
   ];
@@ -340,6 +341,63 @@ async function main() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ai_prompt_prefix: "", ai_prompt_suffix: "" }),
     });
+  });
+
+  console.log("\n[2-8] 팀원 역량 이력 (TODO 72)");
+
+  // 기본 연도가 올해이므로 기록도 오늘 날짜로 만든다 — 해가 바뀌어도 시험이 흔들리지 않는다.
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  await check("기록 단위가 사람이다 — 한 행사에 세 명이 가면 줄도 세 개", async () => {
+    for (const name of ["권경락", "김현우", "이수민"]) {
+      await api.post("/api/activities", {
+        person: name, date: todayStr, kind: "expo", title: "스마트제조 박람회",
+      });
+    }
+    await go("#/skills");
+    equal(await page.locator(".activity-list li").count(), 3, "한 행사로 생긴 기록 수");
+  });
+
+  await check("시간·비용은 비워 두어도 되고, 채운 것만 합계에 들어간다", async () => {
+    await api.post("/api/activities", {
+      person: "권경락", date: todayStr, kind: "education",
+      title: "열처리 공정 심화 과정", hours: 16, cost: 350000,
+      takeaway: "소입 조건 설계 기준을 정리해 옴",
+    });
+    await go("#/skills");
+    const text = await page.locator(".skills .card").first().innerText();
+    // 앞서 넣은 세 건은 시간·비용이 비어 있다. 그것이 0 으로 굳으면 합계가 흔들린다.
+    expect(text.includes("16h"), `교육 시간 합계가 16h 가 아닙니다: ${text}`);
+    expect(text.includes("350,000원"), `비용 합계가 안 맞습니다: ${text}`);
+  });
+
+  await check("기록이 없는 사람이 면담 대상으로 먼저 뜬다", async () => {
+    await api.post("/api/people", { name: "박지훈" });
+    await go("#/skills");
+    const quiet = await page.locator(".skills-quiet").innerText();
+    expect(quiet.includes("박지훈"), `기록 없는 사람이 안 뜹니다: ${quiet}`);
+  });
+
+  await check("사람을 누르면 그 사람의 기록만 남는다", async () => {
+    await go("#/skills");
+    const before = await page.locator(".activity-list li").count();
+    await page.locator(".skills-table tbody .linkish").first().click();
+    await page.waitForTimeout(800);
+    const after = await page.locator(".activity-list li").count();
+    expect(after > 0 && after < before, `걸러지지 않았습니다 (전체 ${before}, 거른 뒤 ${after})`);
+    expect(page.url().includes("person="), `조건이 주소에 없습니다: ${page.url()}`);
+  });
+
+  await check("역량 기록을 화면에서 추가한다", async () => {
+    await go("#/skills");
+    await page.getByRole("button", { name: "기록 추가" }).click();
+    await page.waitForTimeout(400);
+    await page.fill('.activity-form input[list="activity-people"]', "이수민");
+    await page.fill('.activity-form input[placeholder^="예: 열처리"]', "화면에서 넣은 기록");
+    await page.locator(".activity-form").getByRole("button", { name: "저장" }).click();
+    await page.waitForTimeout(1200);
+    const list = await page.locator(".activity-list").innerText();
+    expect(list.includes("화면에서 넣은 기록"), `추가한 기록이 안 보입니다: ${list}`);
   });
 
   await check("과제 번호 일괄 변경 미리보기가 바뀔 목록을 보여 준다", async () => {
@@ -592,7 +650,7 @@ async function main() {
   await check("맨 위로 단추가 모든 화면에서 같은 자리에 있다", async () => {
     // 요청의 핵심이 "동일한 위치"다. 스크롤이 실제로 생기는 긴 화면들로 견준다.
     const spots = [];
-    for (const hash of [`#/projects/${seeded.projectA}`, "#/settings", "#/", "#/projects", "#/reports", "#/history"]) {
+    for (const hash of [`#/projects/${seeded.projectA}`, "#/settings", "#/", "#/projects", "#/reports", "#/history", "#/skills"]) {
       await go(hash);
       await page.evaluate(() => window.scrollTo(0, 4000));
       await page.waitForTimeout(400);
@@ -1078,6 +1136,20 @@ async function main() {
     // 눌러서 이어지는 칸은 마우스를 올렸을 때가 위험하다 (연한 파랑 위 파란 글씨).
     const hovered = await contrastOf(".home-team a.home-stat strong", { hover: true });
     expect(hovered >= AA, `홈 숫자 마우스올림 ${hovered} < ${AA}`);
+  });
+
+  await check("팀원 역량 화면의 글자가 읽힌다", async () => {
+    await go("#/skills");
+    for (const [label, selector, floor] of [
+      ["면담 대상 칩", ".skills-quiet-chip", AA],
+      ["사람 이름", ".skills-table .linkish", AA],
+      ["0 인 칸", ".skills-table td.zero", AA_LARGE],
+      ["얻은 것", ".activity-takeaway", AA],
+    ]) {
+      if (!(await page.locator(selector).count())) continue;
+      const value = await contrastOf(selector);
+      expect(value >= floor, `역량 ${label} ${value} < ${floor}`);
+    }
   });
 
   await check("표의 흐린 글자도 최소 기준은 넘는다", async () => {
