@@ -307,6 +307,7 @@ def candidates(
     1. **한 번도 보고하지 않은 과제가 맨 위.** 시작이 오래된 것부터.
     2. 그다음은 **마지막 보고가 오래된 것부터** (D+150 이 D+100 보다 위).
     3. 같으면 미보고 진행일지가 많은 쪽, 그래도 같으면 과제 번호 순.
+    4. **착수일이 아직 오지 않은 과제는 맨 뒤.** 시작도 안 한 과제는 이번 주 보고 후보가 아니다.
 
     예전에는 점수 하나로 줄을 세웠는데 두 가지가 어긋났다.
     경과일에 상한(기준 주기의 8배 = 56일)이 있어 **D+100 과 D+150 이 같은 값**이 됐고,
@@ -336,6 +337,10 @@ def candidates(
         last_reported = project["last_reported_at"]
         last_report = last_report_info(conn, project["id"])
         days_since = _days_between(last_reported or project["start_date"] or project["created_at"], today)
+        # 착수일이 아직 오지 않으면 경과일이 음수가 된다. 숫자를 그대로 내보내면
+        # 화면에 `D+-27` 처럼 읽히지 않는 값이 뜨므로, 아직 시작 안 했다는 사실을
+        # 따로 알려 주고 화면이 말로 표현하게 한다 (TODO 70).
+        not_started = days_since is not None and days_since < 0
 
         results.append(
             {
@@ -357,6 +362,7 @@ def candidates(
                 "unreported_entries": len(unreported),
                 "latest_entry_date": unreported[-1]["date"] if unreported else None,
                 "never_reported": last_reported is None,
+                "not_started": not_started,
             }
         )
 
@@ -386,9 +392,13 @@ def _days_between(baseline: object, today: date_cls) -> int | None:
 
 
 def _default_key(item: dict) -> tuple:
-    """기본 순서 — 보고 이력 없음 먼저, 그다음 마지막 보고가 오래된 것부터."""
+    """기본 순서 — 보고 이력 없음 먼저, 그다음 마지막 보고가 오래된 것부터.
+
+    착수 전 과제는 보고 이력이 없더라도 맨 뒤에 둔다. 시작하지 않은 과제가
+    "가장 오래 방치된 과제" 자리를 차지하면 목록의 뜻이 흐려진다 (TODO 70).
+    """
     return (
-        0 if item["never_reported"] else 1,
+        2 if item.get("not_started") else (0 if item["never_reported"] else 1),
         # 오래된 것이 먼저이므로 경과일은 큰 것이 앞. 날짜를 못 읽으면 뒤로 보낸다.
         -(item["days_since_report"] if item["days_since_report"] is not None else -1),
         -item["unreported_entries"],

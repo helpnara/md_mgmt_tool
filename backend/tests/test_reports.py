@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 
 def make_project(client, title="리튬전지 수명평가", **kwargs):
@@ -250,6 +250,35 @@ def test_elapsed_time_is_no_longer_capped(client):
 
     items = client.get("/api/report-candidates").json()["items"]
     assert [item["id"] for item in items] == [older["id"], old_one["id"]]
+
+
+def test_a_project_that_has_not_started_says_so_instead_of_a_negative_day_count(client):
+    """착수일이 미래면 경과일이 음수가 되어 화면에 `D+-27` 로 찍히던 문제 (TODO 70).
+
+    숫자를 고치는 대신 **아직 시작 안 했다**는 사실을 따로 알려 준다.
+    화면은 그 자리에 "착수 전" 이라고 적는다.
+    """
+    later = (date.today() + timedelta(days=30)).isoformat()
+    coming = make_project(client, title="아직 시작 안 한 과제", status="planned", start_date=later)
+
+    items = client.get("/api/report-candidates").json()["items"]
+    row = next(item for item in items if item["id"] == coming["id"])
+    assert row["not_started"] is True
+    assert row["days_since_report"] < 0  # 원래 값은 그대로 둔다 — 화면이 말로 바꾼다
+
+
+def test_a_project_that_has_not_started_goes_to_the_bottom(client):
+    """시작도 안 한 과제가 '가장 오래 방치된 과제' 자리를 차지하면 목록의 뜻이 흐려진다.
+
+    둘 다 보고 이력이 없지만, 착수 전 과제는 이미 진행 중인 과제보다 뒤에 서야 한다.
+    """
+    later = (date.today() + timedelta(days=30)).isoformat()
+    coming = make_project(client, title="다음 달 착수", status="planned", start_date=later)
+    running = make_project(client, title="진행 중", start_date="2026-01-02")
+
+    items = client.get("/api/report-candidates").json()["items"]
+    order = [item["id"] for item in items]
+    assert order.index(running["id"]) < order.index(coming["id"])
 
 
 # ── 보고일 바꾸기 ─────────────────────────────────────

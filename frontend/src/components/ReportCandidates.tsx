@@ -285,7 +285,12 @@ export default function ReportCandidates({ meta, query }: Props) {
                 )}
               </td>
               <td>
-                {item.days_since_report === null ? (
+                {item.not_started ? (
+                  /* 착수일이 아직 오지 않았다. `D+-27` 로는 읽히지 않는다 (TODO 70). */
+                  <span className="muted" title="착수일이 아직 오지 않았습니다.">
+                    착수 전
+                  </span>
+                ) : item.days_since_report === null ? (
                   "—"
                 ) : (
                   <span className={item.days_since_report >= LATE_DAYS ? "due due-danger" : "due"}>

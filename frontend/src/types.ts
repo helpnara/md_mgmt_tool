@@ -149,6 +149,8 @@ export interface ReportCandidate {
   unreported_entries: number;
   latest_entry_date: string | null;
   never_reported: boolean;
+  /** 착수일이 아직 오지 않았다 — 경과일을 숫자로 보여 주지 않는다 (TODO 70). */
+  not_started: boolean;
 }
 
 export interface SpreadsheetPreview {
