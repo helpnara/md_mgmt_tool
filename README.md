@@ -196,6 +196,19 @@ node tests/ui/screens.mjs                       # 화면 테스트 (playwright �
 cd frontend && npm run dev                      # UI 개발 서버 (API는 8000번으로 프록시)
 ```
 
+### 배포본 만들기
+
+```bash
+cd frontend && npm run build && cd ..     # 화면을 먼저 빌드한다
+python tools/make_dist.py                 # dist/ 에 ZIP 이 생긴다 (파이썬 3.14 · win_amd64)
+python tools/make_dist.py --python 3.13   # 사내 PC 의 파이썬이 다를 때
+python tools/make_dist.py --no-vendor     # 인터넷이 되는 PC 용 (용량이 작다)
+```
+
+담기는 파일은 **git 이 추적하는 것**으로 정해진다(`git archive`). 그래서 `vault`·`.venv`·
+`__pycache__` 가 딸려 갈 일이 없고, **커밋하지 않은 변경은 담기지 않는다.**
+`vendor/` 는 이 명령을 실행하는 PC 에서 PyPI 로 내려받으므로 **빌드하는 쪽은 인터넷이 필요하다.**
+
 **화면 테스트**는 주요 화면이 오류 없이 열리는지, 누른 결과가 약속과 맞는지
 (대시보드의 수 = 목록이 거른 수), 그리고 **선택·마우스올림 상태까지 글자가 읽히는지**
 (WCAG AA 명암비)를 본다. 화면을 픽셀 단위로 굳히지는 않는다 — 그러면 색 하나 바꿀 때마다
