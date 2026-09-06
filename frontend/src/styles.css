@@ -817,3 +817,81 @@ button { white-space: nowrap; }
 
 /* 이 과제 안에서 찾기 — 접힌 기록은 브라우저 찾기로 안 걸리기 때문에 따로 둔다 */
 .entry-find { width: 180px; padding: 5px 9px; font-size: 13px; }
+
+/* ── 홈 (첫 화면) — TODO 56 ─────────────────────────
+   대시보드가 "지금 무엇을 봐야 하는가"라면 홈은 "올해 무엇을 했는가"다.
+   모든 수는 눌러서 그 조건의 목록으로 이어지므로, 숫자 칸 자체가 링크다. */
+.home { display: flex; flex-direction: column; gap: 14px; }
+.home-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.home-head h1 { margin: 0; font-size: 22px; }
+.home-year { flex-direction: row; align-items: center; gap: 8px; }
+.home-year select { width: auto; min-width: 110px; }
+.home .card { margin: 0; }
+.home .card h2 { margin: 0 0 10px; font-size: 15px; }
+
+.home-stats, .home-week-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.home-stat {
+  display: flex; flex-direction: column; gap: 4px; min-width: 118px;
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+  background: #fcfcfd; text-decoration: none; color: var(--text);
+}
+.home-stat strong { font-size: 20px; font-weight: 700; }
+.home-stat-label { font-size: 12px; color: var(--muted); }
+a.home-stat:hover { border-color: var(--accent); background: var(--accent-soft); }
+a.home-stat:hover strong { color: var(--accent-strong); }
+.home-stat.effect { min-width: 230px; }
+.home-stat.effect strong { font-size: 17px; }
+.home-arrow { color: var(--muted); font-weight: 400; }
+.home-stat.danger strong { color: var(--danger); }
+.home-stat.warn strong { color: var(--warn); }
+
+.home-stale { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.home-stale li {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd;
+}
+.home-stale a { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+.home-stale a:hover { text-decoration: underline; }
+.home-stale .muted { font-size: 12px; color: var(--muted); }
+
+/* 막대는 라이브러리 없이 div 로 그린다 — 사내 오프라인 배포라 의존성을 늘리지 않는다. */
+.bar-row { display: flex; align-items: flex-end; gap: 10px; height: 130px; padding-top: 6px; }
+.bar-row.months { gap: 6px; height: 100px; }
+.bar-col {
+  flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  gap: 4px; height: 100%; text-decoration: none; color: var(--text); min-width: 28px;
+}
+.bar-value { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar {
+  width: 100%; max-width: 54px; min-height: 3px; border-radius: 5px 5px 0 0;
+  background: var(--accent-soft); border: 1px solid #c7dafd; border-bottom: none;
+  display: flex; align-items: flex-end;
+}
+.bar-done { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; }
+.bar-label { font-size: 11px; color: var(--muted); }
+a.bar-col:hover .bar { border-color: var(--accent); background: #dbe8fe; }
+a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
+
+.home-member-table td, .home-member-table th { white-space: nowrap; }
+.home-member-table td:first-child a { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+.home-member-table td:first-child a:hover { text-decoration: underline; }
+
+/* ── AI 요약 프롬프트 (TODO 71) ─────────────────────
+   도구가 AI 를 부르지는 않는다. 무엇이 담기는지 먼저 보여 주고 복사하게 한다. */
+.ai-prompt { margin: 10px 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: #fcfcfd; }
+.ai-prompt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.ai-prompt-head .hint { flex: 1 1 240px; margin: 0; }
+.ai-prompt-box {
+  width: 100%; min-height: 220px; font-family: ui-monospace, monospace; font-size: 12px;
+  background: var(--surface);
+}
+.stack-label { margin-top: 10px; }
+.template-box.short { min-height: 70px; }
+
+/* 홈의 표는 줄을 눌러도 아무 일도 없다 — 목록처럼 손 모양이 뜨면 눌러 보게 된다.
+   (누를 수 있는 것은 첫 칸의 이름·속성 링크뿐이다) */
+.home .grid tbody tr { cursor: default; }
+.home .grid tbody tr:hover { background: #fcfcfd; }
+/* 수는 오른쪽으로 맞추고 자릿수 폭을 고정한다. 세로로 견줘 읽는 표다. */
+.home .grid th:not(:first-child), .home .grid td:not(:first-child) { text-align: right; }
+.home .grid td:not(:first-child) { font-variant-numeric: tabular-nums; }

@@ -19,7 +19,8 @@ import { useEffect, useRef } from "react";
 export const BACK_PARAM = "back";
 
 const LABELS: Record<string, string> = {
-  "": "과제 목록",
+  "": "홈",
+  projects: "과제 목록",
   reports: "보고 대상",
   history: "보고 이력",
   search: "검색 결과",
@@ -58,11 +59,13 @@ export function projectLink(projectId: string, extra?: Record<string, string | n
 
 /** 뒤로 가기가 가리킬 곳과 거기에 쓸 문구. */
 export function backTarget(back: string | null | undefined): { href: string; label: string } {
-  if (!back) return { href: "#/", label: "과제 목록" };
+  // 어디서 왔는지 모르면 과제 목록으로 보낸다. 홈이 아니라 목록인 이유는,
+  // 과제 상세를 여는 길이 대부분 목록이기 때문이다.
+  if (!back) return { href: "#/projects", label: "과제 목록" };
   const path = back.split("?")[0].replace(/\/$/, "");
   const label = LABELS[path];
   // 아는 화면이 아니면(주소를 손으로 고쳤다든가) 안전하게 과제 목록으로 보낸다.
-  if (label === undefined) return { href: "#/", label: "과제 목록" };
+  if (label === undefined) return { href: "#/projects", label: "과제 목록" };
   return { href: `#/${back}`, label };
 }
 

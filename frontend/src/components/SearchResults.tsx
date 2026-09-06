@@ -37,7 +37,7 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
 
   return (
     <section className="search-results">
-      <a className="back" href="#/">
+      <a className="back" href="#/projects">
         ← 과제 목록
       </a>
       <h1 className="search-title">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta } from "../types";
+import AiPromptCard from "./AiPromptCard";
 import ReportTemplateCard from "./ReportTemplateCard";
 import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
@@ -51,7 +52,7 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
 
   return (
     <section className="settings">
-      <a className="back" href="#/">
+      <a className="back" href="#/projects">
         ← 과제 목록
       </a>
       <h1 className="search-title">설정</h1>
@@ -105,6 +106,7 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
       <BackupCard />
       <EntryTemplateCard meta={meta} />
       <ReportTemplateCard />
+      <AiPromptCard />
       <ErrorLogCard />
 
       <div className="card">

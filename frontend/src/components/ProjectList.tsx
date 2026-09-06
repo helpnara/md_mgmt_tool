@@ -92,7 +92,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
 
   // 고른 조건과 주소를 맞춘다. 기본값은 적지 않아 주소가 짧게 유지된다.
   useAddressBar(
-    "",
+    "projects",
     Object.fromEntries(
       Object.entries(filters).filter(
         ([key, value]) => value !== DEFAULT_FILTERS[key as keyof typeof DEFAULT_FILTERS],

@@ -1,4 +1,4 @@
-import type { AppSettings, BackupStatus, Dashboard, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { AppSettings, BackupStatus, Dashboard, Home, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -17,6 +17,7 @@ export const api = {
   meta: () => request<Meta>("/api/meta"),
   dashboard: (year?: string) =>
     request<Dashboard>(`/api/dashboard${year ? `?year=${year}` : ""}`),
+  home: (year?: string) => request<Home>(`/api/home${year ? `?year=${year}` : ""}`),
   listProjects: (params: Record<string, string>) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
     return request<Project[]>(`/api/projects?${query.toString()}`);
@@ -45,7 +46,11 @@ export const api = {
   deleteAttachment: (id: number) => request<void>(`/api/attachments/${id}`, { method: "DELETE" }),
   settings: () => request<AppSettings>("/api/settings"),
   settingsDefaults: () =>
-    request<{ entry_template: string; report_template: string }>("/api/settings/defaults"),
+    request<{ entry_template: string; report_template: string; ai_prompt_prefix: string }>(
+      "/api/settings/defaults",
+    ),
+  /** 이 보고를 AI 에게 넘길 글. **서버가 AI 를 부르지는 않는다** (TODO 71). */
+  aiPrompt: (reportId: number) => request<{ text: string }>(`/api/reports/${reportId}/ai-prompt`),
   people: () => request<{ people: Person[]; unregistered: { name: string; used: number }[] }>("/api/people"),
   savePeople: (people: Person[]) =>
     request<{ people: Person[] }>("/api/people", { method: "PUT", body: JSON.stringify({ people }) }),

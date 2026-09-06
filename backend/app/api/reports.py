@@ -218,6 +218,20 @@ def upload_report_attachment(
     return serialize_attachment(saved, dir_name, doc_dir)
 
 
+@router.get("/api/reports/{report_id}/ai-prompt")
+def ai_prompt(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """이 보고를 AI 에게 넘길 글 한 덩이. **여기서 AI 를 부르지는 않는다** (TODO 71).
+
+    만들어 주기만 하고, 어디에 붙여넣을지는 사람이 정한다.
+    """
+    from ..services import ai_prompt as prompt_svc
+
+    try:
+        return {"text": prompt_svc.build(conn, report_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="보고를 찾을 수 없습니다.") from exc
+
+
 @router.get("/api/report-candidates")
 def report_candidates(
     include_inactive: bool = False,

@@ -27,6 +27,9 @@ class SettingsUpdate(BaseModel):
     backup_dir: str | None = None
     backup_keep: int | None = None
     backup_every_hours: int | None = None
+    # AI 요약 프롬프트의 앞뒤에 붙일 글. 도구가 AI 를 부르지는 않는다 (TODO 71).
+    ai_prompt_prefix: str | None = None
+    ai_prompt_suffix: str | None = None
 
 
 @router.get("")
@@ -67,9 +70,14 @@ def update_settings(payload: SettingsUpdate) -> dict:
 def read_defaults() -> dict:
     """설정을 비웠을 때 쓰이는 기본 서식. 화면에서 안내 문구로 보여 준다."""
     from ..config import DEFAULT_ENTRY_TEMPLATE
+    from ..services.ai_prompt import DEFAULT_PREFIX
     from ..services.reports import DRAFT_TEMPLATE
 
-    return {"entry_template": DEFAULT_ENTRY_TEMPLATE, "report_template": DRAFT_TEMPLATE}
+    return {
+        "entry_template": DEFAULT_ENTRY_TEMPLATE,
+        "report_template": DRAFT_TEMPLATE,
+        "ai_prompt_prefix": DEFAULT_PREFIX,
+    }
 
 
 class RenumberRequest(BaseModel):

@@ -10,6 +10,7 @@ import { scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
+import AiPromptPanel from "./AiPromptPanel";
 import ReportDiff from "./ReportDiff";
 import VersionPanel from "./VersionPanel";
 
@@ -48,6 +49,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   const [preview, togglePreview] = usePreview();
   // "지난주와 뭐가 달라졌나" — 보고 자리에서 가장 많이 받는 질문이다.
   const [showDiff, setShowDiff] = useState(false);
+  // AI 에게 넘길 글. 곧바로 복사하지 않고 **먼저 보여 준다** (TODO 71).
+  const [showPrompt, setShowPrompt] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -181,6 +184,29 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
           >
             지난 보고 대비
           </button>
+          {/* 프롬프트는 **저장된 본문**으로 만든다(서버가 만든다). 고치던 중이면 먼저 저장해
+              화면에 보이는 글과 복사되는 글이 어긋나지 않게 한다. [지난 보고 대비]와 같은 방식이다. */}
+          <button
+            className={showPrompt ? "ghost on" : "ghost"}
+            title="AI 에게 넘길 글을 만들어 보여 줍니다. 이 도구가 AI 를 부르지는 않습니다."
+            onClick={async () => {
+              if (showPrompt) {
+                setShowPrompt(false);
+                return;
+              }
+              if (dirty && !frozen) {
+                try {
+                  await save();
+                } catch (err) {
+                  setError((err as Error).message);
+                  return;
+                }
+              }
+              setShowPrompt(true);
+            }}
+          >
+            AI 요약 프롬프트
+          </button>
           <button className="ghost" onClick={() => copy("excel")}>
             엑셀 셀로 복사
           </button>
@@ -281,6 +307,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       {docPath && showVersions && <VersionPanel path={docPath} onRestored={onChanged} />}
 
       {showDiff && <ReportDiff reportId={report.id} />}
+
+      {showPrompt && <AiPromptPanel reportId={report.id} />}
 
       {frozen ? (
         <div className="markdown snapshot" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />

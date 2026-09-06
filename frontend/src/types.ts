@@ -184,6 +184,9 @@ export interface AppSettings {
   backup_dir: string;
   backup_keep: number;
   backup_every_hours: number;
+  /** AI 요약 프롬프트의 앞뒤에 붙일 글 (TODO 71). 도구가 AI 를 부르지는 않는다. */
+  ai_prompt_prefix: string;
+  ai_prompt_suffix: string;
 }
 
 export interface TrashItem {
@@ -312,4 +315,51 @@ export interface BackupStatus {
   total_bytes: number;
   recent: { name: string; size_bytes: number; at: string }[];
   last: { at: string; ok: boolean; file?: string; error?: string } | null;
+}
+
+/** 홈(첫 화면) 집계 (TODO 56). 연도 기준이 둘이라는 점은 home.py 주석 참고. */
+export interface HomeTeam {
+  total: number;
+  done: number;
+  in_progress: number;
+  /** 확정된 보고의 수. 연도는 **보고일** 기준이다. */
+  reports: number;
+  /** 억원/년. 기대와 실증을 절대 합치지 않는다 — 합치면 확정 여부를 알 수 없다. */
+  effect_expected: number;
+  effect_verified: number;
+}
+
+export interface HomeMember extends HomeTeam {
+  name: string;
+  /** 연도와 무관한 실제 마지막 보고일 */
+  last_reported_at: string | null;
+}
+
+export interface HomeType {
+  key: string;
+  label: string;
+  count: number;
+  done: number;
+  effect_expected: number;
+  effect_verified: number;
+}
+
+export interface Home {
+  year: string | null;
+  years: string[];
+  today: string;
+  this_week: {
+    report_date: string;
+    candidates: number;
+    due_soon: number;
+    overdue: number;
+    stale: ReportCandidate[];
+  };
+  team: HomeTeam;
+  /** 최근 몇 해를 나란히. 왼쪽이 과거다. */
+  compare: (HomeTeam & { year: string })[];
+  /** 담당 중복 포함 — 합이 team 보다 클 수 있다 */
+  members: HomeMember[];
+  types: HomeType[];
+  monthly_reports: { month: number; count: number }[];
 }

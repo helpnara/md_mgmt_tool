@@ -32,9 +32,14 @@ DEFAULTS: dict[str, Any] = {
     "backup_dir": "",
     "backup_keep": 10,        # 남겨 둘 백업 개수
     "backup_every_hours": 24,  # 이 시간이 지나면 다시 백업한다
+    # AI 요약 프롬프트의 앞뒤에 붙일 글 (TODO 71). 비우면 기본 지시문을 쓴다.
+    # 도구가 AI 를 부르지는 않는다 — 붙여넣기 좋은 글을 만들어 줄 뿐이다.
+    "ai_prompt_prefix": "",
+    "ai_prompt_suffix": "",
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
-_TEXT_KEYS = ("author", "report_template", "project_code")
+_TEXT_KEYS = ("author", "report_template", "project_code",
+              "ai_prompt_prefix", "ai_prompt_suffix")
 
 
 def _path():
@@ -116,6 +121,22 @@ def report_template() -> str:
     text = load()["report_template"].strip()
     # {summary} 가 없으면 진행 내용이 통째로 사라진다. 그런 서식은 쓰지 않는다.
     return text if "{summary}" in text else DRAFT_TEMPLATE
+
+
+# ── AI 요약 프롬프트 (TODO 71) ────────────────────────
+
+def ai_prompt_prefix() -> str:
+    """프롬프트 맨 앞에 붙는 글. 비워 두면 기본 지시문을 쓴다."""
+    from . import ai_prompt
+
+    return str(load()["ai_prompt_prefix"]).strip() or ai_prompt.DEFAULT_PREFIX
+
+
+def ai_prompt_suffix() -> str:
+    """프롬프트 맨 뒤에 붙는 글. 기본값은 없다 — 필요한 사람만 채운다."""
+    from . import ai_prompt
+
+    return str(load()["ai_prompt_suffix"]).strip() or ai_prompt.DEFAULT_SUFFIX
 
 
 # ── 담당자 명부 ───────────────────────────────────────

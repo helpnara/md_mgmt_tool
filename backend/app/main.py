@@ -14,8 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (attachments, dashboard, entries, errors, export, meta, people, projects,
-                  reports, search, settings, trash, versions)
+from .api import (attachments, dashboard, entries, errors, export, home, meta, people,
+                  projects, reports, search, settings, trash, versions)
 from .services import errorlog
 from .config import REPO_ROOT, get_settings
 from .vault.paths import safe_join
@@ -146,6 +146,7 @@ async def record_validation_error(request: Request, exc: RequestValidationError)
 
 app.include_router(meta.router)
 app.include_router(dashboard.router)
+app.include_router(home.router)
 app.include_router(projects.router)
 app.include_router(entries.router)
 app.include_router(attachments.router)

@@ -243,7 +243,8 @@ async function main() {
   console.log("\n[1] 주요 화면이 오류 없이 열리는가");
 
   const screens = [
-    ["과제 목록", "#/", ".grid"],
+    ["홈", "#/", ".home"],
+    ["과제 목록", "#/projects", ".grid"],
     ["과제 상세", `#/projects/${seeded.projectA}`, ".project-detail, .detail-columns"],
     ["보고 대상", "#/reports", ".candidates .grid"],
     ["보고 이력", "#/history", ".history-list"],
@@ -262,7 +263,7 @@ async function main() {
   console.log("\n[2] 눌렀을 때 기대한 것이 나오는가");
 
   await check("대시보드의 수와 목록이 거른 수가 같다", async () => {
-    await go("#/");
+    await go("#/projects");
     const chips = await page.locator(".dash-chip:not(.more)").all();
     expect(chips.length > 0, "대시보드 칩이 없습니다");
     for (const chip of chips.slice(0, 6)) {
@@ -292,6 +293,53 @@ async function main() {
     await page.waitForTimeout(600);
     expect(await page.locator(".diff-add").count() > 0, "추가된 줄이 없습니다");
     expect(await page.locator(".diff-del").count() > 0, "삭제된 줄이 없습니다");
+  });
+
+  await check("홈의 수를 누르면 그 조건의 과제 목록으로 이어진다", async () => {
+    // DESIGN 5.8 의 약속 — 이어지지 않는 수는 홈에 두지 않는다.
+    await go("#/");
+    const stat = page.locator(".home-team .home-stat").first();
+    const counted = Number((await stat.locator("strong").innerText()).replace(/[^0-9]/g, ""));
+    await stat.click();
+    await page.waitForTimeout(800);
+    const listed = await page.locator(".grid tbody tr:not(.empty-row)").count();
+    equal(listed, counted, "홈의 과제 수와 목록에 실제로 선 줄 수");
+  });
+
+  await check("홈이 팀원별 성과와 담당 중복을 함께 보여 준다", async () => {
+    await go("#/");
+    expect(await page.locator(".home-member-table tbody tr").count() > 0, "팀원 줄이 없습니다");
+    // 공동 담당 과제가 있으면 사람별 합이 팀 합계를 넘는다. 그 사실을 숨기면 안 된다.
+    const text = await page.locator(".home-members").innerText();
+    expect(text.includes("담당 중복 포함"), "담당 중복을 밝히는 문구가 없습니다");
+  });
+
+  await check("홈은 기대효과와 실증효과를 합치지 않는다", async () => {
+    await go("#/");
+    const text = await page.locator(".home-stat.effect").innerText();
+    expect(text.includes("기대") && text.includes("실증"), `둘이 나뉘어 있지 않습니다: ${text}`);
+  });
+
+  await check("AI 요약 프롬프트에 설정의 앞뒤 글과 진행 내용이 함께 담긴다", async () => {
+    // 도구가 AI 를 부르지는 않는다. 붙여넣을 글을 정확히 만들어 주는 것이 전부다 (TODO 71).
+    await fetch(`${BASE}/api/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ai_prompt_prefix: "시험용 지시문입니다.", ai_prompt_suffix: "시험용 꼬리말입니다." }),
+    });
+    await go(`#/projects/${seeded.projectA}?report=${seeded.draft}`);
+    await page.getByRole("button", { name: "AI 요약 프롬프트" }).click();
+    await page.waitForTimeout(900);
+    const text = await page.locator(".ai-prompt-box").inputValue();
+    expect(text.startsWith("시험용 지시문입니다."), `앞에 붙는 글이 없습니다: ${text.slice(0, 40)}`);
+    expect(text.trim().endsWith("시험용 꼬리말입니다."), `뒤에 붙는 글이 없습니다: ${text.slice(-40)}`);
+    expect(text.includes("--- 진행 내용 ---"), "진행 내용 구분선이 없습니다");
+    // 되돌려 놓는다 — 뒤따르는 시험이 이 설정에 걸리지 않게.
+    await fetch(`${BASE}/api/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ai_prompt_prefix: "", ai_prompt_suffix: "" }),
+    });
   });
 
   await check("과제 번호 일괄 변경 미리보기가 바뀔 목록을 보여 준다", async () => {
@@ -355,7 +403,7 @@ async function main() {
   });
 
   await check("과제 목록에서 연 과제는 지금까지처럼 과제 목록으로 돌아간다", async () => {
-    await go("#/");
+    await go("#/projects");
     await page.locator(".grid tbody tr").first().click();
     await page.waitForTimeout(700);
     equal((await backLabel()).trim(), "← 과제 목록", "뒤로 가기 문구");
@@ -378,7 +426,7 @@ async function main() {
   });
 
   await check("과제 목록의 조건도 주소에 남는다", async () => {
-    await go("#/");
+    await go("#/projects");
     await page.selectOption(".filters select", { index: 1 }); // 상태 하나 고르기
     await page.waitForTimeout(600);
     expect(page.url().includes("status="), `조건이 주소에 없습니다: ${page.url()}`);
@@ -391,10 +439,10 @@ async function main() {
   });
 
   await check("상단 메뉴를 누르면 조건이 풀리고 주소도 그에 맞는다", async () => {
-    // 주소가 화면을 속이면 안 된다 — #/ 인데 걸러진 채로 남아 있으면 안 된다.
-    await go("#/?status=done");
+    // 주소가 화면을 속이면 안 된다 — #/projects 인데 걸러진 채로 남아 있으면 안 된다.
+    await go("#/projects?status=done");
     expect(await page.locator(".filters select").first().inputValue() === "done", "주소의 조건이 안 걸렸습니다");
-    await page.locator("nav a[href='#/']").click();
+    await page.locator("nav a[href='#/projects']").click();
     await page.waitForTimeout(700);
     equal(await page.locator(".filters select").first().inputValue(), "", "메뉴를 누른 뒤 상태 조건");
   });
@@ -507,7 +555,7 @@ async function main() {
   await check("화면을 옮기면 맨 위에서 시작한다", async () => {
     // 해시 이동은 같은 문서 안에서 일어나 스크롤이 그대로 남는다.
     // 목록을 한참 내려보다 과제를 열면 상세가 중간부터 보이던 문제.
-    await go("#/");
+    await go("#/projects");
     await page.evaluate(() => window.scrollTo(0, 1500));
     await page.waitForTimeout(300);
     await page.locator(".grid tbody tr").first().click();
@@ -544,7 +592,7 @@ async function main() {
   await check("맨 위로 단추가 모든 화면에서 같은 자리에 있다", async () => {
     // 요청의 핵심이 "동일한 위치"다. 스크롤이 실제로 생기는 긴 화면들로 견준다.
     const spots = [];
-    for (const hash of [`#/projects/${seeded.projectA}`, "#/settings", "#/", "#/reports", "#/history"]) {
+    for (const hash of [`#/projects/${seeded.projectA}`, "#/settings", "#/", "#/projects", "#/reports", "#/history"]) {
       await go(hash);
       await page.evaluate(() => window.scrollTo(0, 4000));
       await page.waitForTimeout(400);
@@ -623,7 +671,7 @@ async function main() {
   });
 
   await check("과제 목록도 열 이름으로 정렬된다", async () => {
-    await go("#/");
+    await go("#/projects");
     await page.locator(".grid thead th.sortable button", { hasText: "과제" }).click();
     await page.waitForTimeout(700);
     const up = await page.locator(".grid tbody tr .project-title").allInnerTexts();
@@ -636,7 +684,7 @@ async function main() {
   });
 
   await check("정렬 선택 상자와 열 머리글이 같은 값을 본다", async () => {
-    await go("#/");
+    await go("#/projects");
     await page.locator(".grid thead th.sortable button", { hasText: "마감" }).click();
     await page.waitForTimeout(700);
     // 상자가 머리글을 따라와야 한다 — 둘이 따로 놀면 무엇이 이기는지 알 수 없다.
@@ -662,7 +710,7 @@ async function main() {
   });
 
   await check("대시보드는 보고 대상 목록 대신 길만 열어 둔다", async () => {
-    await go("#/");
+    await go("#/projects");
     equal(await page.locator(".dash-list").count(), 0, "대시보드에 남은 보고 대상 목록");
     const link = page.locator(".dash-mini.go");
     expect(await link.count() > 0, "보고 대상으로 가는 길이 없습니다");
@@ -825,7 +873,7 @@ async function main() {
   console.log("\n[2-7] 연도·검색 상한·과제 안 찾기 (TODO 66·67·68)");
 
   await check("첫 화면은 올해 과제만 보여 준다", async () => {
-    await go("#/");
+    await go("#/projects");
     const year = String(new Date().getFullYear());
     equal(await page.locator(".filters select").nth(5).inputValue(), year, "연도 칸의 기본값");
     // 기본값은 주소에 적지 않는다 — 주소가 짧게 유지되고, 해가 바뀌면 저절로 따라간다.
@@ -846,7 +894,7 @@ async function main() {
   });
 
   await check("대시보드의 수가 연도를 따라간다", async () => {
-    await go("#/");
+    await go("#/projects");
     const chips = await page.locator(".dash-chip:not(.more)").all();
     expect(chips.length > 0, "대시보드 칩이 없습니다");
     for (const chip of chips.slice(0, 3)) {
@@ -896,7 +944,7 @@ async function main() {
   console.log("\n[3] 글자가 읽히는가 (WCAG AA)");
 
   await check("대시보드 칩 — 기본·마우스올림·선택·선택+올림 모두 읽힌다", async () => {
-    await go("#/");
+    await go("#/projects");
     // TODO 25 가 난 바로 그 조합이다. 네 상태를 모두 본다.
     for (const [kind, selector] of [
       ["상태 칩", ".dash-chips .dash-chip:not(.type):not(.more)"],
@@ -925,7 +973,7 @@ async function main() {
   });
 
   await check("보고 리마인더 배너의 글자가 읽힌다", async () => {
-    await go("#/");
+    await go("#/projects");
     // 배너는 월·화에만 뜬다. 요일에 따라 시험이 되었다 말았다 하면 안 되므로
     // 같은 클래스로 만든 요소를 넣어 색만 잰다.
     await page.evaluate(() => {
@@ -984,7 +1032,7 @@ async function main() {
   });
 
   await check("이번에 새로 생긴 안내 글자도 읽힌다", async () => {
-    await go("#/");
+    await go("#/projects");
     // 대시보드에서 보고 대상으로 가는 길 — 연한 파랑 위의 파란 글씨라 위험한 조합이다.
     if (await page.locator(".dash-mini.go").count()) {
       const value = await contrastOf(".dash-mini.go");
@@ -1013,6 +1061,23 @@ async function main() {
       const value = await contrastOf(".search-cut");
       expect(value >= AA, `검색 잘림 안내 ${value} < ${AA}`);
     }
+  });
+
+  await check("홈의 글자가 읽힌다", async () => {
+    await go("#/");
+    for (const [label, selector, floor] of [
+      // 흐린 글자(--muted)는 이 도구 전체가 AA_LARGE 기준으로 쓰고 있다 (.project-id 와 같다).
+      ["칸 제목", ".home-stat-label", AA_LARGE],
+      ["안내 문구", ".home .hint", AA_LARGE],
+      ["막대 눈금", ".bar-label", AA_LARGE],
+    ]) {
+      if (!(await page.locator(selector).count())) continue;
+      const value = await contrastOf(selector);
+      expect(value >= floor, `홈 ${label} ${value} < ${floor}`);
+    }
+    // 눌러서 이어지는 칸은 마우스를 올렸을 때가 위험하다 (연한 파랑 위 파란 글씨).
+    const hovered = await contrastOf(".home-team a.home-stat strong", { hover: true });
+    expect(hovered >= AA, `홈 숫자 마우스올림 ${hovered} < ${AA}`);
   });
 
   await check("표의 흐린 글자도 최소 기준은 넘는다", async () => {

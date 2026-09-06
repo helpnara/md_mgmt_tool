@@ -194,7 +194,7 @@ export default function ProjectDetail({
                 다시 시도
               </button>
             )}
-            <a className="button-like primary-link" href="#/">
+            <a className="button-like primary-link" href="#/projects">
               과제 목록으로
             </a>
           </div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import Home from "./components/Home";
 import ProjectDetail from "./components/ProjectDetail";
 import ProjectList from "./components/ProjectList";
 import ReportCandidates from "./components/ReportCandidates";
@@ -11,6 +12,8 @@ import type { Meta } from "./types";
 import { BACK_PARAM } from "./nav";
 
 type Route =
+  // 홈이 `#/` 를 쓰고, 과제 목록은 `#/projects` 로 내려간다 (TODO 56).
+  | { name: "home" }
   // 목록 화면은 거른 조건을 주소에 두고 그대로 돌려받는다 (nav.ts).
   | { name: "list"; query: string }
   | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null }
@@ -39,7 +42,9 @@ function readRoute(): Route {
   if (path.startsWith("history")) return { name: "history", query: queryString ?? "" };
   if (path.startsWith("reports")) return { name: "reports", query: queryString ?? "" };
   if (path.startsWith("settings")) return { name: "settings" };
-  return { name: "list", query: queryString ?? "" };
+  if (path.replace(/\/$/, "") === "projects") return { name: "list", query: queryString ?? "" };
+  // 아는 주소가 아니면 홈으로. 손으로 고친 주소에서 빈 화면을 만나는 것보다 낫다.
+  return { name: "home" };
 }
 
 export default function App() {
@@ -120,7 +125,10 @@ export default function App() {
           과제 이력 관리
         </a>
         <nav className="nav">
-          <a href="#/" className={route.name === "list" ? "active" : undefined}>
+          <a href="#/" className={route.name === "home" ? "active" : undefined}>
+            홈
+          </a>
+          <a href="#/projects" className={route.name === "list" ? "active" : undefined}>
             과제
           </a>
           <a href="#/reports" className={route.name === "reports" ? "active" : undefined}>
@@ -138,7 +146,8 @@ export default function App() {
           onSubmit={(event) => {
             event.preventDefault();
             const query = term.trim();
-            window.location.hash = query ? `#/search?q=${encodeURIComponent(query)}` : "#/";
+            // 검색어를 비우고 누르면 검색을 그만두는 것이므로 과제 목록으로 돌려보낸다.
+            window.location.hash = query ? `#/search?q=${encodeURIComponent(query)}` : "#/projects";
           }}
         >
           <input
@@ -184,6 +193,7 @@ export default function App() {
         {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} />}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
+        {route.name === "home" && <Home />}
       </main>
       {/* 화면마다 따로 두지 않는다 — 요청의 핵심이 "어디서나 같은 자리"다. */}
       <ScrollTop />
