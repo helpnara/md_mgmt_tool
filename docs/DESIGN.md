@@ -626,45 +626,100 @@ score = elapsed + unreported_entries × 0.5
 
 ---
 
-## 6. API 설계 (초안)
+## 6. API 설계
+
+> 2026-09-07 기준 실제 구현 목록이다(끝점 64개 = GET 35 · POST 18 · DELETE 5 · PATCH 4 · PUT 2).
+> 초안 단계에서 적어 두었다가 만들지 않은 것(`/api/tags`, `/api/groups`,
+> 보고 단독 내보내기, 첨부 원본 단독 다운로드)은 아래에서 뺐다 —
+> 태그·그룹은 `/api/meta` 하나로 합쳤고, 첨부 원본은 정적 서빙(`/files/...`)이 맡는다.
+
+**과제**
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET | `/api/projects` | 목록. `?status=&group=&tag=&q=&sort=updated\|due&order=` |
+| GET | `/api/projects` | 목록. `?status=&group=&tag=&owner=&q=&year=&sort=&order=` |
 | POST | `/api/projects` | 과제 생성 (폴더 + index.md 생성) |
 | GET | `/api/projects/{id}` | 개요 + 일지 목록 요약 |
 | PATCH | `/api/projects/{id}` | 메타 수정 → front matter 재작성 |
 | POST | `/api/projects/{id}/archive` | `.trash/`로 이동 |
+| GET | `/api/projects/{id}/export` | 단일 md 내보내기 (5.4) |
+
+**진행일지**
+
+| Method | Path | 설명 |
+|---|---|---|
 | GET | `/api/projects/{id}/entries` | 진행일지 목록 |
 | POST | `/api/projects/{id}/entries` | 일지 생성 |
 | GET/PATCH/DELETE | `/api/entries/{entry_id}` | 일지 조회/수정/삭제 |
-| GET | `/api/projects/{id}/reports` | 보고 이력 목록(날짜 역순) |
+
+**보고**
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET | `/api/reports` | 전체 보고 이력 (`?year=&owner=&q=`) |
+| GET | `/api/projects/{id}/reports` | 과제별 보고 이력(날짜 역순) |
 | POST | `/api/projects/{id}/reports/draft` | 미보고 진행일지로 보고 초안 생성 |
-| GET/PATCH | `/api/reports/{report_id}` | 보고 문서 조회/수정(확정 전에만 수정 가능) |
-| POST | `/api/reports/{report_id}/freeze` | 보고 확정(스냅샷 고정) |
-| POST | `/api/reports/{report_id}/unfreeze` | 확정 해제(오기입 정정용, 이력에 표시) |
+| GET/PATCH | `/api/reports/{report_id}` | 보고 문서 조회/수정(확정 전에만 본문 수정) |
+| GET | `/api/reports/{report_id}/diff` | 지난 보고 대비 변경분 |
+| GET | `/api/reports/{report_id}/ai-prompt` | AI 요약용 프롬프트 생성 (5.13 — 호출은 하지 않는다) |
+| POST | `/api/reports/{report_id}/freeze` · `/unfreeze` | 보고 확정 / 확정 해제(이력에 표시) |
 | DELETE | `/api/reports/{report_id}` | 보고 삭제(`.trash/` 이동) |
-| POST | `/api/reports/{report_id}/attachments` | 보고 자료(xlsx·이미지) 업로드 |
-| GET | `/api/reports/{report_id}/export` | 보고 문서 단독 내보내기(md/HTML) |
-| GET | `/api/report-candidates` | 보고 대상 후보 목록(경과일·미보고 건수·점수) |
-| GET | `/api/dashboard` | 메인 상단 대시보드(상태별·속성별 과제 수, 마감 임박·초과, 보고 대상 상위 N건) |
-| POST | `/api/projects/{id}/attachments` | 과제 개요에 직접 붙이는 첨부(효과 산출 근거 등) |
-| GET | `/api/trash` · POST `/api/trash/{name}/restore` | 삭제 보관함 목록 · 원래 자리로 되돌리기 |
-| GET/PUT/POST | `/api/people` | 담당자 명부 조회·저장·한 명 추가 |
-| POST | `/api/people/rename` | 담당자 표기 통일 (과제 파일까지 반영) |
-| GET | `/api/settings/defaults` | 설정을 비웠을 때 쓰이는 기본 서식(진행일지·보고 초안) |
-| POST | `/api/entries/{entry_id}/attachments` | 첨부 업로드(multipart) |
-| GET | `/api/attachments/{id}` | 원본 다운로드 |
+| GET/POST | `/api/reports/{report_id}/attachments` | 보고 자료(xlsx·이미지) 목록·업로드 |
+| GET | `/api/report-candidates` | 보고 대상 후보(경과일·미보고 건수·점수). `no_report` 과제는 뺀다 |
+| GET | `/api/report-month-grid` | 과제 × 월 보고 표 (`?year=`) |
+
+**첨부**
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET/POST | `/api/projects/{id}/attachments` | 과제 개요 첨부(효과 산출 근거 등) 목록·업로드 |
+| GET/POST | `/api/entries/{entry_id}/attachments` | 진행일지 첨부 목록·업로드(multipart) |
 | GET | `/api/attachments/{id}/thumb` | 이미지 썸네일 |
 | GET | `/api/attachments/{id}/preview` | xlsx 표·이미지 추출 미리보기(HTML) |
 | DELETE | `/api/attachments/{id}` | 첨부 삭제(`.trash/` 이동) |
-| GET | `/api/search?q=` | 통합 검색 |
-| GET | `/api/tags`, `/api/groups` | 필터용 목록 |
-| GET | `/api/projects/{id}/export` | 내보내기 (5.4) |
-| POST | `/api/reindex` | 전체 재인덱싱 |
-| GET | `/api/health` | 상태 확인 |
+| GET | `/files/{dir_name}/{rel_path}` | 원본 정적 서빙. vault 경로를 벗어나는 요청은 정규화 후 거부 |
 
-정적 파일 서빙: `/files/{project_dir}/{rel_path}` — vault 경로를 벗어나는 요청은 정규화 후 거부.
+**집계 화면**
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET | `/api/home` | 홈 대시보드(연도별 팀 현황, 팀원별·속성별 상태 여섯 칸, 효과 합계, 보고 횟수) |
+| GET | `/api/dashboard` | 과제 목록 상단 대시보드(상태별·속성별 과제 수, 마감 임박·초과, 보고 대상 상위 N건) |
+| GET | `/api/search?q=` | 통합 검색 (FTS5 trigram) |
+
+**팀원 역량 이력**
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET | `/api/activities` | 기록 목록 (`?year=&person=&kind=`) |
+| GET | `/api/activities/summary` | 사람별 집계 + 최근 4개년 추이 + 면담 우선 대상 |
+| POST | `/api/activities` | 기록 추가. **누가** 에 쉼표로 여러 명이 오면 사람 수만큼 나눠 만든다 |
+| PATCH/DELETE | `/api/activities/{activity_id}` | 수정(한 명만) / 삭제 |
+
+**명부·설정·메타**
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET/PUT/POST | `/api/people` | 담당자 명부 조회·저장·한 명 추가 |
+| POST | `/api/people/rename` | 담당자 표기 통일 (과제 파일까지 반영) |
+| GET/PUT | `/api/settings` | 설정 조회·저장(서식, 백업 설정, AI 프롬프트 머리말·꼬리말 포함) |
+| GET | `/api/settings/defaults` | 설정을 비웠을 때 쓰이는 기본 서식 |
+| POST | `/api/settings/project-code/renumber/preview` | 과제번호 재부여 영향분석(바꾸지 않는다) |
+| POST | `/api/settings/project-code/renumber` | 과제번호 일괄 재부여 |
+| GET | `/api/meta` | 상태·태그·그룹·속성·회의체 등 필터용 목록 |
+| GET | `/api/health` | 상태 확인 |
+| POST | `/api/reindex` | 전체 재인덱싱 |
+
+**안전망 (버전·휴지통·백업·오류)**
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET | `/api/versions` · `/overview` · `/content` | 로컬 버전 보관(`.versions/`) 목록·개요·내용 |
+| POST | `/api/versions/restore` | 지난 버전으로 되돌리기 |
+| GET | `/api/trash` · POST `/api/trash/{name}/restore` | 삭제 보관함 목록 · 원래 자리로 되돌리기 |
+| GET | `/api/settings/backup/status` · POST `/api/settings/backup/run` | 백업 상태 · 지금 백업 |
+| GET | `/api/backup` | 전체 vault ZIP 내려받기 |
+| GET/DELETE | `/api/errors` | 오류 기록 조회·비우기 (5.10 — 과제 내용은 담지 않는다) |
 
 ---
 
@@ -687,24 +742,34 @@ score = elapsed + unreported_entries × 0.5
 md_mgmt_tool/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI 엔트리, 정적 서빙
+│   │   ├── main.py              # FastAPI 엔트리, 정적 서빙, 오류 기록 미들웨어
 │   │   ├── config.py            # vault 경로, 상태 목록, 업로드 설정
-│   │   ├── db.py                # 커넥션, 마이그레이션
+│   │   ├── db.py                # 커넥션, PRAGMA user_version 기반 스키마 버전
+│   │   ├── deps.py              # 요청 스코프 의존성
 │   │   ├── schemas.py           # Pydantic 모델
 │   │   ├── vault/
 │   │   │   ├── paths.py         # 경로 계산 & traversal 방어
 │   │   │   ├── markdown.py      # front matter 읽기/쓰기
-│   │   │   ├── indexer.py       # 스캔 & 증분 인덱싱
-│   │   │   └── watcher.py
-│   │   ├── api/                 # projects / entries / reports / attachments / search / export
-│   │   └── services/            # attachments.py, export.py, thumbnails.py,
-│   │                            # reports.py(초안 생성·확정), xlsx_preview.py
-│   └── tests/
+│   │   │   ├── indexer.py       # 스캔 & 인덱싱 (md 가 원본, DB 는 파생물)
+│   │   │   ├── versions.py      # .versions/ 로컬 버전 보관
+│   │   │   └── schema.sql       # 색인 스키마 (SCHEMA_VERSION 과 함께 움직인다)
+│   │   ├── api/                 # projects entries reports attachments activities
+│   │   │                        # home dashboard search export people settings
+│   │   │                        # meta trash versions errors
+│   │   └── services/            # projects entries reports attachments activities
+│   │                            # home dashboard search export people settings
+│   │                            # trash backup renumber errorlog ai_prompt
+│   │                            # thumbnails xlsx_preview
+│   └── tests/                   # pytest (백엔드 자동 시험)
 ├── frontend/
-│   └── src/                     # pages / components / api client
-├── docs/DESIGN.md
+│   ├── src/                     # components / api.ts / nav.ts / styles.css …
+│   └── dist/                    # 빌드 결과. Node 없는 PC 를 위해 저장소에 함께 둔다
+├── tests/ui/                    # Playwright 화면 자동 시험 (screens.mjs, contrast.mjs)
+├── tools/make_dist.py           # 오프라인 배포 ZIP 생성 (vendor/ wheel 동봉)
+├── docs/                        # DESIGN · TODO · ROADMAP · 비용산정 · 발표 자료
 ├── vault/                       # 기본 데이터 위치 (.gitignore)
-└── run.sh                       # 백엔드+프론트 동시 기동
+├── setup.py · setup.bat         # 오프라인 설치 (vendor/ 우선)
+└── run.py · run.bat · run.sh    # 실행
 ```
 
 ---
@@ -735,9 +800,12 @@ md_mgmt_tool/
 | **M3. 관리 정보** ✅ | 상태 보드/테이블, 태그·그룹·기간 필터, D-day, 통합 검색(FTS5) | 목록 화면에서 상태·마감·태그·최근 업데이트로 즉시 정렬·필터 |
 | **M4. 보고 이력 & 보고 예측** ✅ | 보고 초안 자동 생성 → 정리 → 확정(스냅샷), 보고 자료(xlsx) 첨부·미리보기, 보고 이력 탭, 보고 대상 후보 대시보드, 엑셀 붙여넣기용 복사 | 매주 "어느 과제를 보고할지"를 도구가 근거(경과일·미보고 건수)와 함께 제시하고, 과거 보고 문서를 그 자리에서 다시 열 수 있다 |
 | **M5. 내보내기 & 백업** ✅ | 단일 md 병합(zip/inline/link), 보고 이력 포함, HTML, 전체 zip 백업 | 보고 직전 과제 이력을 md 한 개로 받아 그대로 붙여넣을 수 있다 |
+| **M5.5. 안전망 · 오프라인 배포** ✅ | 로컬 버전 보관(`.versions/`), 휴지통, 자동 백업, 오류 기록, 과제번호 일괄 재부여, `vendor/` wheel 을 동봉한 오프라인 설치 ZIP | 인터넷이 차단된 사내 PC 에서 압축을 풀고 `setup.bat` → `run.bat` 만으로 쓸 수 있다 |
+| **M5.6. 성과 집계 · 사람 관리** ✅ | 홈 대시보드(연도별 팀 현황 · 팀원별 · 속성별 상태 여섯 칸 · 효과 합계 · 보고 횟수), 과제 × 월 보고 표, AI 요약 프롬프트 생성, 팀원 역량 이력 | 팀장이 홈 화면 하나로 그 해 팀 현황을 읽고, 면담에서 볼 사람을 고를 수 있다 |
 | **M6. 서버 확장 (선택)** ◀ 선택 | Docker 이미지, 간단 인증, 다중 사용자 대비 잠금 | 사내 서버에 올려 팀원이 조회 가능 |
 
 M1~M2까지가 첨부 관련 불편을 해소하는 최소 유용 제품(MVP)이고, **M4가 "보고 시점 예측"이라는 두 번째 핵심 가치**를 완성한다.
+M5.5·M5.6 은 로드맵에 없던 것이 아니라, M5 까지 만들어 놓고 실제로 쓰면서 필요해진 것을 TODO 로 받아 반영한 결과다(TODO 37~80). **남은 것은 M6 하나뿐이다.**
 
 ---
 
@@ -879,3 +947,36 @@ M1~M2까지가 첨부 관련 불편을 해소하는 최소 유용 제품(MVP)이
    `useAddressBar` 가 "우리가 쓴 주소"와 "들어온 주소"를 비교해 이 경우를 가려낸다.
 
 `nav.ts` 한 곳이 이 규칙을 전부 들고 있다. 화면이 늘어도 여기만 쓰면 된다.
+
+---
+
+## 5.13 AI 요약 — 도구는 AI 를 부르지 않는다
+
+주간 보고를 쓸 때 "지난 보고 이후 진행 내용"을 3~5줄로 줄이는 일은 AI 가 잘한다.
+다만 **이 도구가 그 호출을 대신하지는 않는다.**
+
+**택하지 않은 길 — 도구가 AI API 를 직접 부른다.**
+인터넷이 차단된 사내 PC 에서 돌아가지 않고, 무엇보다 **과제 내용이 밖으로 나간다.**
+vault 를 git 저장소로 두지 않기로 한 것과 같은 판단이다(§ R2 메모, TODO 37).
+어디로 보낼지는 도구가 아니라 사람이 정할 일이다.
+
+**택한 길 — 붙여넣기 좋은 글 한 덩이를 만들어 준다.**
+`GET /api/reports/{id}/ai-prompt` 가 아래 순서로 글을 만들고, 화면은 그것을 복사해 준다.
+
+```
+① 설정에 넣어 둔 머리말 (비우면 기본 지시문)
+② 사실 — 과제명·과제번호 · 보고일 · 포함 기간 · 피보고자
+③ --- 진행 내용 ---
+   보고 본문 (마크다운 그대로)
+④ 설정에 넣어 둔 꼬리말 (기본값 없음)
+```
+
+세 가지를 이렇게 정했다.
+
+1. **머리말·꼬리말은 설정에 둔다.** 회사마다 보고처마다 원하는 말투가 다르다.
+   코드에 굳혀 두면 쓰는 사람이 매번 고쳐 붙이게 된다. 비워 두면 기본 지시문이 들어간다.
+2. **본문은 마크다운 그대로 넣는다.** 평문으로 눌러 담으면 표와 목록의 구조가 사라진다.
+   AI 는 마크다운을 그대로 읽으므로 잃을 것만 있고 얻을 것이 없다.
+3. **나가는 것이 없으니 정책 승인이 필요 없다.** 사내 AI 도구가 무엇으로 바뀌어도
+   이 기능은 그대로 쓴다. 사내 AI 엔드포인트가 생기면 그때 (나)안으로 확장한다 —
+   그전까지 (가) 프롬프트 복사는 그대로 둔다 (TODO 71).

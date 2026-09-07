@@ -7,7 +7,7 @@
 | `AX성과공유회_포스터_개발을기다리지않았다.pptx` | 제출·수정용. 회사 PC의 파워포인트에서 그대로 열린다 |
 | `AX성과공유회_포스터_개발을기다리지않았다.pdf` | 인쇄·배포용 (A1 세로, 1쪽) |
 | `make_poster.py` | 포스터를 만드는 스크립트. 수치를 고칠 일이 생기면 이 파일의 `DATA` 만 고친다 |
-| `screen-*.png` | 포스터에 들어간 실제 화면 갈무리 (데모 데이터) |
+| `screen-*.png` | 포스터에 들어간 실제 화면 갈무리 — 홈 · 과제 목록 · 보고 대상 후보 · 팀원 역량 (데모 데이터) |
 
 ## 글꼴
 
@@ -21,6 +21,14 @@
 ```bash
 python make_poster.py                       # pptx 생성 (python-pptx 필요)
 soffice --headless --convert-to pdf --outdir . <파일>.pptx   # PDF 변환
+```
+
+화면 갈무리는 **데모 vault** 를 띄워 놓고 다시 찍는다. 실제 과제 데이터는 쓰지 않는다.
+1400 × 700 · 배율 2 (= 2800 × 1400) 로 맞춰야 네 장의 크기가 같아진다.
+
+```bash
+MD_MGMT_VAULT=<데모 vault> python -m uvicorn app.main:app --app-dir backend --port 8099
+# 그 뒤 #/ · #/projects · #/reports · #/skills 를 각각 갈무리
 ```
 
 ## 숫자의 출처

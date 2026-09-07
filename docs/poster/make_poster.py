@@ -40,11 +40,11 @@ FONT = "맑은 고딕"
 
 # ── 실측 수치 (2026-09-04) ────────────────────────────────────────────────
 DATA = dict(
-    days="3일", hours="30시간", mm_real="0.19 M/M", cost_real="약 250만 원",
-    mm_out="16 M/M", period_out="4~5개월", cost_out="약 2.0억 원",
-    saving="약 1억 9,750만 원", ratio="약 80배", fp="319 FP",
-    loc="12,876줄", api="56개", tests="382건", screens="6개",
-    tables="9개", todo_all="69건", todo_done="59건", todo_wait="10건",
+    days="6일", hours="36시간", mm_real="0.23 M/M", cost_real="약 313만 원",
+    mm_out="19 M/M", period_out="5~6개월", cost_out="약 2.3억 원",
+    saving="약 2억 2,687만 원", ratio="약 74배", fp="363 FP",
+    loc="15,758줄", api="64개", tests="457건", screens="8개",
+    tables="10개", todo_all="80건", todo_done="79건", todo_wait="1건",
 )
 
 # ── 조판 상수 (mm) ────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ def build() -> Path:
     text(slide, M, 32, W, 40,
          [{"t": "개발을 기다리지 않았다", "size": 82, "bold": True, "color": WHITE}])
     text(slide, M, 80, W, 26,
-         [{"t": "AI와 함께 만든 현업 업무혁신 — 개발 리소스 없이 3일 만에 구축한",
+         [{"t": "AI와 함께 만든 현업 업무혁신 — 개발 리소스 없이 엿새 만에 구축한",
            "size": 24, "color": SKY, "after": 1.5},
           {"t": "팀 과제관리 · 보고지원 시스템", "size": 24, "bold": True, "color": WHITE}])
     text(slide, M, 106, W, 10,
@@ -163,7 +163,7 @@ def build() -> Path:
         ("구축 기간", DATA["days"], f"실작업 {DATA['hours']} · 1명", f"외주 추정 {DATA['period_out']}", False),
         ("투입 공수", DATA["mm_real"], "요구·개발·검수 1인", f"외주 추정 {DATA['mm_out']}", False),
         ("소요 비용", DATA["cost_real"], "인건비 + AI 요금", f"외주 추정 {DATA['cost_out']}", False),
-        ("절감 효과", DATA["ratio"], DATA["saving"] + " 절감", "비용 기준 98.7%↓", True),
+        ("절감 효과", DATA["ratio"], DATA["saving"] + " 절감", "비용 기준 98.6%↓", True),
     ]
     gap = 7.0
     cw = (W - gap * 3) / 4
@@ -232,12 +232,16 @@ def build() -> Path:
          ["지난 보고 이후 진행분만 모아 초안 생성",
           "확정본은 스냅샷으로 잠금 — 당시 내용 그대로 보존",
           "지난 보고 대비 변경분·보고 이력 검색"]),
-        ("④", "사내망 전용 · 오프라인 배포",
+        ("④", "팀 현황 · 팀원 역량",
+         ["홈에서 연도별 팀 현황 · 팀원별 수행 현황을 한 화면에",
+          "교육·세미나 이력을 사람 기준으로 — 면담 자료",
+          "과제 × 월 보고 표로 한 해 보고 이력 확인"]),
+        ("⑤", "사내망 전용 · 오프라인 배포",
          ["데이터가 내 PC 밖으로 나가지 않음 (외부 전송 없음)",
-          "인터넷 차단 PC 에서 ZIP 하나로 설치",
-          "자동 백업 · 버전 보관 · 휴지통"]),
+          "AI 요약도 호출 없이 프롬프트만 복사",
+          "인터넷 차단 PC 에서 ZIP 하나로 설치 · 백업 · 버전 보관"]),
     ]
-    fw = (W - 7 * 3) / 4
+    fw = (W - 7 * (len(feats) - 1)) / len(feats)
     for i, (num, title, items) in enumerate(feats):
         x = M + i * (fw + 7)
         rect(slide, x, y, fw, FH, fill=WHITE, line=LINE, radius=0.08, lw=1.0)
@@ -245,19 +249,22 @@ def build() -> Path:
         rect(slide, x, y + 23, fw, 0.5, fill=LINE)
         text(slide, x + 7, y + 4, 12, 9,
              [{"t": num, "size": 17, "bold": True, "color": BLUE}])
-        text(slide, x + 7, y + 11.5, fw - 14, 11,
-             [{"t": title, "size": 16, "bold": True, "color": NAVY, "spacing": 1.1}])
-        bullets(slide, x + 7, y + 28, fw - 13, items, size=13.5, color=MUTED, gap=3.2)
-    y += FH + 7
+        text(slide, x + 6, y + 11.5, fw - 12, 11,
+             [{"t": title, "size": 15, "bold": True, "color": NAVY, "spacing": 1.1}])
+        bullets(slide, x + 6, y + 28, fw - 11, items, size=12.5, color=MUTED, gap=3.0)
+    y += FH + 8
 
     # ── 실제 화면 ────────────────────────────────────────────────────────
     shots = [
-        ("screen-list.png", "과제 목록 — 상태 · 담당자 · 마감 · 효과 · 미보고를 한 화면에"),
+        ("screen-home.png", "홈 — 그 해 팀 현황과 팀원별 수행·효과를 한 화면에"),
+        ("screen-list.png", "과제 목록 — 상태 · 담당자 · 마감 · 효과 · 미보고"),
         ("screen-reports.png", "보고 대상 후보 — 미보고 경과일 순으로 자동 추천"),
-        ("screen-detail.png", "과제 상세 — 개요와 진행이력, 지난 보고 지점 표시"),
+        ("screen-skills.png", "팀원 역량 — 교육·세미나 이력을 사람 기준으로"),
     ]
-    iw, ih, ig = 158.0, 79.0, 7.0
-    x0 = M + (W - (iw * 3 + ig * 2)) / 2
+    ig = 6.0
+    iw = (W - ig * (len(shots) - 1)) / len(shots)
+    ih = iw * 0.5
+    x0 = M
     for i, (fname, cap) in enumerate(shots):
         x = x0 + i * (iw + ig)
         path = OUT / fname
@@ -265,8 +272,9 @@ def build() -> Path:
             slide.shapes.add_picture(str(path), Mm(x), Mm(y), Mm(iw), Mm(ih))
         rect(slide, x, y, iw, ih, fill=None, line=LINE, radius=None, lw=1.0)
         text(slide, x, y + ih + 2.2, iw, 8,
-             [{"t": cap, "size": 11.5, "color": FAINT, "align": PP_ALIGN.CENTER}])
-    y += ih + 8 + 6
+             [{"t": cap, "size": 11, "color": FAINT, "align": PP_ALIGN.CENTER,
+               "spacing": 1.1}])
+    y += ih + 8 + 8
 
     # ── 실측 규모 띠 ──────────────────────────────────────────────────────
     SH = 25.0
@@ -284,7 +292,7 @@ def build() -> Path:
              [{"t": k, "size": 12.5, "color": SKY, "align": PP_ALIGN.CENTER}])
         text(slide, x, y + 11.5, mw, 11,
              [{"t": v, "size": 19, "bold": True, "color": WHITE, "align": PP_ALIGN.CENTER}])
-    y += SH + 12
+    y += SH + 13
 
     # ── 3. 얼마나 아꼈나 ──────────────────────────────────────────────────
     y = section_title(slide, y, "3", "얼마나 아꼈나 — 외주 개발 대비",
@@ -329,7 +337,7 @@ def build() -> Path:
     rect(slide, bx, y + 37, bw, 13, fill=RGBColor(0xE6, 0xEA, 0xEF), radius=0.0)
     rect(slide, bx, y + 37, small, 13, fill=TEAL, radius=0.0)
     text(slide, bx + small + 5, y + 40.2, bw - small - 8, 10,
-         [{"t": f"실제  {DATA['cost_real']}  (1.3%)", "size": 16, "bold": True, "color": TEAL}])
+         [{"t": f"실제  {DATA['cost_real']}  (1.4%)", "size": 16, "bold": True, "color": TEAL}])
     rect(slide, bx, y + 53, bw, 19, fill=TEAL_L, line=TEAL, radius=0.12, lw=1.2)
     text(slide, bx, y + 57, bw, 14,
          [{"t": f"{DATA['saving']} 절감  ·  {DATA['ratio']}", "size": 20, "bold": True,
@@ -338,13 +346,13 @@ def build() -> Path:
     # 아래 : 근거와 해석
     rect(slide, M + 12, y + 75, W - 24, 0.5, fill=LINE)
     text(slide, M + 12, y + 79, W - 24, 27, [
-        {"t": "산출 근거   CRUD 행렬(엔티티 11 × API 56) → 기능점수 간이법 "
+        {"t": "산출 근거   CRUD 행렬(엔티티 12 × API 64) → 기능점수 간이법 "
               f"{DATA['fp']} → 기능점수법·코드라인법·상향식 3중 교차검증 = {DATA['mm_out']} "
-              "(범위 13~20). 비용은 시장 실거래 단가·대가산정 가이드·FP 단가 세 방식(1.6~2.6억)의 중간값. "
-              "실제 비용의 AI 요금은 대화 2,060회·입력 8.3억 토큰 실측 기준 약 100만 원.",
+              "(범위 15~23). 비용은 시장 실거래 단가·대가산정 가이드·FP 단가 세 방식(1.9~3.1억)의 중간값. "
+              "실제 비용의 AI 요금은 대화 2,702회·입력 11.0억 토큰 실측 기준 약 133만 원.",
          "size": 13.5, "color": MUTED, "after": 4, "spacing": 1.2},
         {"t": "이 차이의 절반은 AI의 구현 속도이고, 나머지 절반은 요구자·개발자·검수자가 "
-              "같은 사람일 때 사라지는 회의·문서·검수 비용입니다 (외주 16 M/M 중 4.7 M/M, 29%).",
+              "같은 사람일 때 사라지는 회의·문서·검수 비용입니다 (외주 19 M/M 중 5.8 M/M, 31%).",
          "size": 15, "bold": True, "color": NAVY, "spacing": 1.2},
     ])
     y += EH + 11
@@ -401,7 +409,7 @@ def build() -> Path:
     # ── 꼬리말 ────────────────────────────────────────────────────────────
     rect(slide, M, y, W, 0.6, fill=LINE)
     text(slide, M, y + 4, W, 16, [
-        {"t": "규모·기간·시험 건수는 2026-09-04 실측치입니다. 외주 비용은 기능점수 기반 추정이며, "
+        {"t": "규모·기간·시험 건수는 2026-09-07 실측치입니다. 외주 비용은 기능점수 기반 추정이며, "
               "단가(시장 단가·직접인건비·FP 단가)는 가정값이므로 「소프트웨어사업 대가산정 가이드」와 "
               "「SW기술자 평균임금」 최신 공표치로 대체해 확인하시기 바랍니다.",
          "size": 12, "color": FAINT, "spacing": 1.25},
