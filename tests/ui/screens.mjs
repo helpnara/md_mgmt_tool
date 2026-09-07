@@ -392,12 +392,71 @@ async function main() {
     await go("#/skills");
     await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
-    await page.fill('.activity-form input[list="activity-people"]', "이수민");
+    await page.fill('.activity-form input[placeholder^="예: 권경락, 김현우"]', "이수민");
     await page.fill('.activity-form input[placeholder^="예: 열처리"]', "화면에서 넣은 기록");
     await page.locator(".activity-form").getByRole("button", { name: "저장" }).click();
     await page.waitForTimeout(1200);
     const list = await page.locator(".activity-list").innerText();
     expect(list.includes("화면에서 넣은 기록"), `추가한 기록이 안 보입니다: ${list}`);
+  });
+
+  await check("여러 명을 한 번에 넣으면 사람 수만큼 나뉜다", async () => {
+    // 실사용에서 "A,B" 한 덩이가 사람 하나로 굳었던 사고를 막는 자리다 (TODO 74).
+    await go("#/skills");
+    await page.getByRole("button", { name: "기록 추가" }).click();
+    await page.waitForTimeout(400);
+    await page.fill('.activity-form input[placeholder^="예: 권경락, 김현우"]', "권경락, 김현우");
+    await page.fill('.activity-form input[placeholder^="예: 열처리"]', "둘이 같이 간 교육");
+    // 저장 전에 무엇이 만들어질지 화면이 미리 말해 준다.
+    const hint = await page.locator(".activity-form").innerText();
+    expect(hint.includes("2건"), `나뉠 건수를 미리 알려 주지 않습니다: ${hint}`);
+    await page.locator(".activity-form").getByRole("button", { name: /저장/ }).click();
+    await page.waitForTimeout(1400);
+
+    const rows = page.locator(".activity-list li").filter({ hasText: "둘이 같이 간 교육" });
+    equal(await rows.count(), 2, "나뉜 기록 수");
+    // 사람별 표에 "권경락, 김현우" 같은 없는 사람이 생기면 안 된다.
+    const table = await page.locator(".skills-table").innerText();
+    expect(!table.includes("권경락,"), `붙은 이름이 표에 남았습니다: ${table}`);
+  });
+
+  await check("명부에서 이름을 눌러 넣는다", async () => {
+    await go("#/skills");
+    await page.getByRole("button", { name: "기록 추가" }).click();
+    await page.waitForTimeout(400);
+    const chip = page.locator(".activity-form .tag-pick").first();
+    const name = (await chip.innerText()).trim();
+    await chip.click();
+    await page.waitForTimeout(250);
+    equal(
+      await page.locator('.activity-form input[placeholder^="예: 권경락, 김현우"]').inputValue(),
+      name,
+      "명부를 눌러 넣은 이름",
+    );
+    await page.locator(".activity-form").getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("수정 폼은 누른 기록 바로 아래에서 열린다", async () => {
+    // 화면 맨 위에서 열면 방금 누른 자리가 밀려나 무엇을 고치는 중인지 알 수 없다.
+    await go("#/skills");
+    const row = page.locator(".activity-list li").first();
+    await row.getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(500);
+    equal(await row.locator(".activity-form").count(), 1, "누른 줄 안에 열린 수정 폼");
+    equal(await page.locator(".activity-form").count(), 1, "화면 전체의 수정 폼 수");
+    await row.locator(".activity-form").getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("여러 날에 걸친 교육은 기간으로 보인다", async () => {
+    const twoDaysLater = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+    await api.post("/api/activities", {
+      person: "권경락", kind: "education", title: "사흘짜리 교육",
+      date: todayStr, end_date: twoDaysLater,
+    });
+    await go("#/skills");
+    const row = page.locator(".activity-list li").filter({ hasText: "사흘짜리 교육" }).first();
+    const text = await row.locator(".activity-date").innerText();
+    expect(text.includes("~"), `기간으로 보이지 않습니다: ${text}`);
   });
 
   await check("과제 번호 일괄 변경 미리보기가 바뀔 목록을 보여 준다", async () => {

@@ -370,7 +370,10 @@ export interface Home {
 export interface Activity {
   id: number;
   person: string;
+  /** 시작일. 연도 집계도 이 날짜를 본다 */
   date: string;
+  /** 여러 날에 걸친 교육의 종료일. 하루짜리면 비어 있다 */
+  end_date: string | null;
   kind: string;
   title: string;
   host: string | null;

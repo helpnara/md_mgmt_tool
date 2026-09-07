@@ -133,6 +133,90 @@ def test_filters_narrow_the_list(client):
     assert len(client.get("/api/activities", params={"q": "학회"}).json()) == 1
 
 
+# ── 여러 명 · 기간 (TODO 74) ────────────────────────────
+
+def test_comma_separated_names_become_one_record_each(client, vault_dir):
+    """실사용에서 난 사고 — `"A,B"` 한 덩이가 사람 하나로 굳어 집계에 유령이 생겼다.
+
+    나누는 일은 **서버에서** 한다. 화면만 고치면 API 를 직접 부르는 길로 같은 일이 다시 난다.
+    """
+    response = client.post(
+        "/api/activities",
+        json={"person": "권경락, 김현우; 이수민", "title": "스마트제조 박람회", "kind": "expo"},
+    )
+    assert response.status_code == 201
+    assert response.json()["count"] == 3
+
+    rows = client.get("/api/activities").json()
+    assert {row["person"] for row in rows} == {"권경락", "김현우", "이수민"}
+    # 사람마다 자기 폴더가 생긴다 — "권경락,김현우" 라는 폴더는 없다.
+    folders = {path.name for path in (vault_dir / "people").iterdir()}
+    assert folders == {"권경락", "김현우", "이수민"}
+
+
+def test_the_roster_never_gets_a_glued_name(client):
+    """명부에 `"A,B"` 가 들어가면 지우기 전까지 사람별 표에 남는다. 애초에 못 들어가게 한다."""
+    client.post("/api/activities", json={"person": "권경락,김현우", "title": "공동 교육"})
+
+    names = client.get("/api/meta").json()["people"]
+    assert "권경락" in names and "김현우" in names
+    assert not any("," in name for name in names)
+
+
+def test_duplicate_and_blank_names_are_dropped(client):
+    response = client.post(
+        "/api/activities", json={"person": " 권경락 , ,권경락;", "title": "중복 이름"}
+    )
+    assert response.json()["count"] == 1
+    assert len(client.get("/api/activities").json()) == 1
+
+
+def test_editing_refuses_several_names(client):
+    """고칠 때 나눠 주면 '고쳤는데 기록이 늘어났다' 가 된다. 막고 이유를 말한다."""
+    activity_id = client.post(
+        "/api/activities", json={"person": "권경락", "title": "혼자 간 교육"}
+    ).json()["id"]
+
+    response = client.patch(f"/api/activities/{activity_id}", json={"person": "권경락, 김현우"})
+    assert response.status_code == 400
+    assert "한 사람" in response.json()["detail"]
+
+
+def test_a_multi_day_course_keeps_both_dates(client):
+    """2~3일에 걸친 교육. 파일 이름과 연도 집계는 **시작일**을 따른다."""
+    client.post("/api/activities", json={
+        "person": "권경락", "title": "3일짜리 교육",
+        "date": "2026-05-12", "end_date": "2026-05-14",
+    })
+    row = client.get("/api/activities").json()[0]
+    assert row["date"] == "2026-05-12" and row["end_date"] == "2026-05-14"
+    assert client.get("/api/activities", params={"year": "2026"}).json()
+
+
+def test_one_day_course_leaves_the_end_date_empty(client):
+    """같은 날짜를 두 번 적어도 기간으로 보지 않는다 — 화면이 '~' 를 괜히 붙인다."""
+    client.post("/api/activities", json={
+        "person": "권경락", "title": "하루 교육", "date": "2026-05-12", "end_date": "2026-05-12",
+    })
+    assert client.get("/api/activities").json()[0]["end_date"] is None
+
+
+def test_an_end_date_before_the_start_is_refused(client):
+    response = client.post("/api/activities", json={
+        "person": "권경락", "title": "거꾸로", "date": "2026-05-12", "end_date": "2026-05-01",
+    })
+    assert response.status_code == 400
+    assert "종료일" in response.json()["detail"]
+
+
+def test_the_period_survives_a_reindex(client):
+    client.post("/api/activities", json={
+        "person": "권경락", "title": "기간 교육", "date": "2026-05-12", "end_date": "2026-05-14",
+    })
+    client.post("/api/reindex")
+    assert client.get("/api/activities").json()[0]["end_date"] == "2026-05-14"
+
+
 def test_a_new_name_is_added_to_the_roster(client):
     """명부에 없는 이름으로 기록하면 명부에 넣어 둔다 — 표기 흔들림을 막는 자리다."""
     add(client, person="새로운사람")

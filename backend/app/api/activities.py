@@ -14,8 +14,11 @@ router = APIRouter(prefix="/api/activities", tags=["activities"])
 
 
 class ActivityIn(BaseModel):
+    # 추가할 때는 "권경락, 김현우" 처럼 여러 명을 받는다. 서버가 사람 수만큼 나눠 만든다.
     person: str | None = None
     date: str | None = None
+    # 여러 날에 걸친 교육의 종료일. 하루짜리면 비운다.
+    end_date: str | None = None
     kind: str | None = None
     title: str | None = None
     host: str | None = None
@@ -54,13 +57,15 @@ def summary(
 
 @router.post("", status_code=201)
 def create_activity(payload: ActivityIn, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """여러 명을 한 번에 받는다 — **사람 수만큼 기록이 생긴다** (TODO 74)."""
     try:
-        activity_id = svc.create(conn, payload.model_dump())
+        ids = svc.create(conn, payload.model_dump())
     except InvalidDateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"id": activity_id}
+    # id 하나만 보던 예전 화면이 있어도 깨지지 않게 첫 건을 함께 준다.
+    return {"ids": ids, "count": len(ids), "id": ids[0]}
 
 
 @router.patch("/{activity_id}")

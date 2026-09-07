@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Person } from "../types";
+import { splitPeople } from "../people";
 
 /**
  * 담당자 명부.
@@ -71,6 +72,23 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
     });
   };
 
+  /** `"권경락,김현우"` 처럼 한 칸에 여러 명이 들어간 줄을 사람마다 한 줄로 푼다.
+   *
+   *  역량 이력에서 이름을 쉼표로 적었다가 그대로 명부에 들어간 적이 있다 (TODO 74).
+   *  지금은 서버가 나눠 주지만, 그 전에 들어간 이름은 여기서 풀어야 한다. */
+  const splitRow = (index: number) =>
+    setPeople((prev) => {
+      const target = prev[index];
+      const names = splitPeople(target.name);
+      const rest = prev.filter((_, i) => i !== index);
+      const added = names
+        .filter((name) => !rest.some((person) => person.name === name))
+        .map((name) => ({ name, employee_id: "", account: "" }));
+      return [...rest, ...added].sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    });
+
+  const glued = people.filter((person) => splitPeople(person.name).length > 1);
+
   const update = (index: number, key: keyof Person, value: string) =>
     setPeople((prev) => prev.map((p, i) => (i === index ? { ...p, [key]: value } : p)));
 
@@ -136,6 +154,30 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
             ))}
           </tbody>
         </table>
+      )}
+
+      {glued.length > 0 && (
+        <div className="unregistered">
+          <p className="hint warn-text">
+            <b>한 칸에 여러 이름이 들어간 줄 {glued.length}건</b> — 쉼표로 여러 명을 적었을 때
+            생깁니다. 이대로 두면 사람별 집계에 <b>없는 사람</b>으로 남습니다.
+          </p>
+          <ul className="trash-list">
+            {glued.map((person) => (
+              <li key={person.name}>
+                <span className="trash-label">{person.name}</span>
+                <span className="muted trash-when">→ {splitPeople(person.name).join(" · ")}</span>
+                <button
+                  className="ghost small"
+                  onClick={() => splitRow(people.indexOf(person))}
+                >
+                  사람별로 나누기
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="hint">나눈 뒤 아래 <b>[명부 저장]</b> 을 눌러야 반영됩니다.</p>
+        </div>
       )}
 
       {unregistered.length > 0 && (

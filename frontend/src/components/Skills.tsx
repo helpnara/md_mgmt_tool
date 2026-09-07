@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { Activity, ActivitySummary, Meta } from "../types";
 import { useAddressBar } from "../nav";
+import { splitPeople } from "../people";
 import LoadError from "./LoadError";
 import ActivityForm from "./ActivityForm";
 
@@ -34,8 +35,16 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [rows, setRows] = useState<Activity[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Activity | null>(null);
+  // 고칠 때는 **그 줄 아래**에 폼을 편다. 화면 맨 위에 열면 방금 누른 자리가 화면 밖으로
+  // 밀려나 무엇을 고치는 중인지 알 수 없다 (TODO 74).
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const say = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(null), 4000);
+  };
 
   const yearParam = year === ALL_YEARS ? "" : year;
 
@@ -71,10 +80,26 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const kindLabel = (key: string) =>
     meta.activity_kinds.find((item) => item.key === key)?.label ?? key;
 
+  /** 하루면 날짜 하나, 여러 날이면 기간. 같은 해면 뒤쪽은 월·일만 적는다. */
+  const period = (item: Activity) => {
+    if (!item.end_date) return item.date;
+    const tail = item.end_date.slice(0, 4) === item.date.slice(0, 4)
+      ? item.end_date.slice(5)
+      : item.end_date;
+    return `${item.date} ~ ${tail}`;
+  };
+
   if (error) return <LoadError message={error} onRetry={load} />;
   if (!summary) return <p className="hint">불러오는 중…</p>;
 
-  const quiet = summary.people.filter((item) => item.quiet);
+  // 붙은 이름은 사람이 아니므로 면담 대상에 세우지 않는다. 다만 **사람별 표에는 남겨 둔다** —
+  // 거기서 보여야 사용자가 존재를 알고 정리한다 (TODO 74).
+  const quiet = summary.people.filter(
+    (item) => item.quiet && splitPeople(item.name).length === 1,
+  );
+  // 쉼표로 여러 명을 적었다가 한 덩이로 굳은 이름. 지금은 서버가 나눠 주지만,
+  // 그 전에 명부로 들어간 이름은 사람별 표에 **없는 사람**으로 남는다 (TODO 74).
+  const glued = summary.people.filter((item) => splitPeople(item.name).length > 1);
   const maxTrend = Math.max(
     1,
     ...summary.people.flatMap((item) => Object.values(item.trend)),
@@ -97,7 +122,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
               <option value={ALL_YEARS}>전체</option>
             </select>
           </label>
-          <button onClick={() => { setAdding(true); setEditing(null); }}>기록 추가</button>
+          <button onClick={() => { setAdding(true); setEditingId(null); }}>기록 추가</button>
         </div>
       </div>
 
@@ -107,14 +132,16 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         쌓인 이력을 놓고 <b>내년에 무엇을 하면 좋을지 면담에서 이야기하는 것</b>입니다.
       </p>
 
-      {(adding || editing) && (
+      {adding && (
         <ActivityForm
           meta={meta}
-          activity={editing}
-          onClose={() => { setAdding(false); setEditing(null); }}
-          onSaved={() => { setAdding(false); setEditing(null); load(); }}
+          activity={null}
+          onClose={() => setAdding(false)}
+          onSaved={(message) => { setAdding(false); say(message); load(); }}
         />
       )}
+
+      {notice && <p className="hint notice">{notice}</p>}
 
       {/* ── 팀 합계 ─────────────────────────────────────────────────── */}
       <div className="card">
@@ -172,6 +199,13 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       {/* ── 사람별 ─────────────────────────────────────────────────── */}
       <div className="card wide">
         <h2>사람별</h2>
+        {glued.length > 0 && (
+          <p className="hint warn-text">
+            <b>{glued.map((item) => item.name).join(", ")}</b> 처럼 한 칸에 여러 이름이 든 줄이 있습니다.
+            실제로는 없는 사람이므로 <a href="#/settings">설정 → 담당자 명부</a> 에서{" "}
+            <b>[사람별로 나누기]</b> 를 누르고 <b>[명부 저장]</b> 하시면 사라집니다.
+          </p>
+        )}
         <div className="table-scroll">
           <table className="grid skills-table">
             <thead>
@@ -280,12 +314,18 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             {rows.map((item) => (
               <li key={item.id}>
                 <div className="activity-head">
-                  <span className="activity-date">{item.date}</span>
+                  <span className="activity-date">{period(item)}</span>
                   <span className="tag">{kindLabel(item.kind)}</span>
                   <strong className="activity-title">{item.title}</strong>
                   <span className="activity-person">{item.person}</span>
                   <span className="grow" />
-                  <button className="ghost small" onClick={() => { setEditing(item); setAdding(false); }}>
+                  <button
+                    className={editingId === item.id ? "ghost small on" : "ghost small"}
+                    onClick={() => {
+                      setAdding(false);
+                      setEditingId(editingId === item.id ? null : item.id);
+                    }}
+                  >
                     수정
                   </button>
                   <button
@@ -311,6 +351,14 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                   )}
                 </div>
                 {item.takeaway && <p className="activity-takeaway">{item.takeaway}</p>}
+                {editingId === item.id && (
+                  <ActivityForm
+                    meta={meta}
+                    activity={item}
+                    onClose={() => setEditingId(null)}
+                    onSaved={(message) => { setEditingId(null); say(message); load(); }}
+                  />
+                )}
               </li>
             ))}
           </ul>

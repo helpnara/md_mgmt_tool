@@ -464,12 +464,13 @@ def index_activities(
             kind = DEFAULT_ACTIVITY_KIND
         conn.execute(
             """
-            INSERT INTO activity(person, rel_path, date, kind, title, host, place,
+            INSERT INTO activity(person, rel_path, date, end_date, kind, title, host, place,
                                  hours, cost, takeaway, link, body, author,
                                  created_at, updated_at, file_mtime)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rel_path) DO UPDATE SET
-              person=excluded.person, date=excluded.date, kind=excluded.kind,
+              person=excluded.person, date=excluded.date, end_date=excluded.end_date,
+              kind=excluded.kind,
               title=excluded.title, host=excluded.host, place=excluded.place,
               hours=excluded.hours, cost=excluded.cost, takeaway=excluded.takeaway,
               link=excluded.link, body=excluded.body, author=excluded.author,
@@ -480,6 +481,7 @@ def index_activities(
                 person,
                 rel_path,
                 _as_str(doc.meta.get("date")) or path.name[:10],
+                _as_str(doc.meta.get("end_date")),
                 kind,
                 _as_str(doc.meta.get("title")) or path.stem,
                 _as_str(doc.meta.get("host")),

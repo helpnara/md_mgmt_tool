@@ -105,7 +105,9 @@ CREATE TABLE IF NOT EXISTS activity (
   id         INTEGER PRIMARY KEY,
   person     TEXT NOT NULL,
   rel_path   TEXT NOT NULL UNIQUE,   -- people/<이름>/activities/<파일>.md
-  date       TEXT NOT NULL,
+  date       TEXT NOT NULL,          -- 시작일. 연도 집계도 이 날짜를 본다
+  -- 2~3일에 걸친 교육을 위한 종료일. 하루짜리면 비어 있다 (옵션)
+  end_date   TEXT,
   kind       TEXT NOT NULL,
   title      TEXT NOT NULL,
   host       TEXT,                   -- 주최

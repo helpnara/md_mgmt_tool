@@ -947,3 +947,10 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 .activity-link { font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; max-width: 420px; white-space: nowrap; }
 .activity-takeaway { margin: 6px 0 0; font-size: 13px; color: var(--text); }
 .activity-takeaway::before { content: "얻은 것 "; color: var(--muted); font-size: 11px; }
+
+/* 명부에서 눌러 넣은 이름 (역량 기록의 '누가') */
+.tag-pick.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tag-pick.on:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+/* 고치는 폼은 그 기록 줄 안에서 펼쳐진다 — 무엇을 고치는 중인지 눈에서 놓치지 않게 */
+.activity-list .activity-form { margin: 10px 0 2px; background: var(--surface); }
+.activity-list .activity-form .form-row { flex-wrap: wrap; }

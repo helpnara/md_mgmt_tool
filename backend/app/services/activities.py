@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import date as date_cls
 from datetime import datetime
@@ -36,10 +37,28 @@ BODY_TEMPLATE = """## 내용
 """
 
 META_ORDER = [
-    "person", "date", "kind", "title", "host", "place",
+    "person", "date", "end_date", "kind", "title", "host", "place",
     "hours", "cost", "takeaway", "link", "tags",
     "author", "created_at", "updated_at",
 ]
+
+# 한 행사에 여러 명이 갔을 때 이름을 나누는 기호.
+#
+# **이 함수가 이 화면의 안전장치다.** 나누지 않고 `"권경락,김현우"` 한 덩이로 저장하면
+# 그 문자열이 사람 하나로 굳어, 집계에도 명부에도 유령이 하나 생긴다. 실제로 그렇게 됐다.
+# 그래서 나누는 일은 **화면이 아니라 여기(서버)에서** 한다 — 화면만 고치면 API 를
+# 직접 부르는 길로 같은 사고가 다시 난다.
+_PEOPLE_SPLIT = re.compile(r"[,;\n]+")
+
+
+def split_people(value: object) -> list[str]:
+    """`"권경락, 김현우"` → `["권경락", "김현우"]`. 순서를 지키고 중복은 버린다."""
+    names: list[str] = []
+    for chunk in _PEOPLE_SPLIT.split(str(value or "")):
+        name = chunk.strip()
+        if name and name not in names:
+            names.append(name)
+    return names
 
 
 def now_iso() -> str:
@@ -75,20 +94,32 @@ def _clean(value: object) -> str | None:
 
 
 def _validate(data: dict[str, Any]) -> dict[str, Any]:
-    person = str(data.get("person") or "").strip()
-    if not person:
+    # 한 기록은 한 사람의 것이다. 여러 명은 create() 가 사람 수만큼 나눠 부른다.
+    people = split_people(data.get("person"))
+    if len(people) != 1:
         raise ValueError("누구의 기록인지 골라 주세요.")
+    person = people[0]
     title = str(data.get("title") or "").strip()
     if not title:
         raise ValueError("제목을 입력하세요.")
     kind = data.get("kind") or DEFAULT_ACTIVITY_KIND
     if kind not in ACTIVITY_KIND_KEYS:
         raise ValueError(f"알 수 없는 구분: {kind}")
+    start = paths.validate_date(data.get("date"))
+    end_raw = str(data.get("end_date") or "").strip()
+    end = paths.validate_date(end_raw) if end_raw else None
+    if end:
+        if end < start:
+            raise ValueError("종료일이 시작일보다 빠릅니다.")
+        # 하루짜리를 같은 날짜 두 번으로 적어 두면 화면이 "~" 를 괜히 붙인다.
+        if end == start:
+            end = None
     return {
         "person": person,
         "title": title,
         "kind": kind,
-        "date": paths.validate_date(data.get("date")),
+        "date": start,
+        "end_date": end,
         "host": _clean(data.get("host")),
         "place": _clean(data.get("place")),
         "hours": normalize_number(data.get("hours"), "시간"),
@@ -106,7 +137,19 @@ def file_path(conn: sqlite3.Connection, activity_id: int) -> Path:
     return paths.safe_join(get_settings().vault_dir, row["rel_path"])
 
 
-def create(conn: sqlite3.Connection, data: dict[str, Any]) -> int:
+def create(conn: sqlite3.Connection, data: dict[str, Any]) -> list[int]:
+    """기록을 만든다. **여러 명이면 사람 수만큼 만든다.**
+
+    "권경락, 김현우" 처럼 적어도 기록은 두 건이 된다 — 기록 단위가 사람이기 때문이다.
+    한 덩이로 저장하면 집계에 `"권경락,김현우"` 라는 없는 사람이 생긴다 (TODO 74).
+    """
+    people = split_people(data.get("person"))
+    if not people:
+        raise ValueError("누구의 기록인지 골라 주세요.")
+    return [_create_one(conn, {**data, "person": name}) for name in people]
+
+
+def _create_one(conn: sqlite3.Connection, data: dict[str, Any]) -> int:
     from ..vault.indexer import index_activities
 
     fields = _validate(data)
@@ -136,6 +179,11 @@ def create(conn: sqlite3.Connection, data: dict[str, Any]) -> int:
 def update(conn: sqlite3.Connection, activity_id: int, updates: dict[str, Any]) -> None:
     from ..vault.indexer import index_activities
 
+    # 고칠 때는 한 명만 받는다. 여기서 나눠 새 기록을 만들어 주면 "고쳤는데 늘어났다"가 된다.
+    if "person" in updates and len(split_people(updates["person"])) > 1:
+        raise ValueError(
+            "한 기록은 한 사람의 것입니다. 여러 명은 [기록 추가]에서 한 번에 넣으세요."
+        )
     path = file_path(conn, activity_id)
     doc = md.load(path)
     merged = {**doc.meta, **{k: v for k, v in updates.items() if k != "body"}}
@@ -193,6 +241,7 @@ def _row(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "id": row["id"],
         "person": row["person"],
         "date": row["date"],
+        "end_date": row["end_date"],
         "kind": row["kind"],
         "title": row["title"],
         "host": row["host"],

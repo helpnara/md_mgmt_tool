@@ -25,8 +25,12 @@ export const api = {
   },
   activitySummary: (year?: string) =>
     request<ActivitySummary>(`/api/activities/summary${year ? `?year=${year}` : ""}`),
+  /** 여러 명을 한 번에 넣을 수 있다 — 서버가 사람 수만큼 기록을 만든다 (count 로 알려 준다). */
   createActivity: (payload: Partial<Activity>) =>
-    request<{ id: number }>("/api/activities", { method: "POST", body: JSON.stringify(payload) }),
+    request<{ ids: number[]; count: number; id: number }>("/api/activities", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   updateActivity: (id: number, payload: Partial<Activity>) =>
     request<{ ok: boolean }>(`/api/activities/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteActivity: (id: number) => request<void>(`/api/activities/${id}`, { method: "DELETE" }),
