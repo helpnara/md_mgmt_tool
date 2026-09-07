@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { Meta, ReportHistoryItem } from "../types";
 import { projectLink, useAddressBar } from "../nav";
 import LoadError from "./LoadError";
+import MonthGrid from "./MonthGrid";
 
 /**
  * 보고 이력 찾기.
@@ -55,6 +56,9 @@ export default function ReportHistory({ meta, query }: Props) {
   });
 
   const filtered = Boolean(audience || from || to || q || state);
+  // 과제 × 월 표가 볼 연도. **기간 조건에서 받아 온다** — 화면 하나에 연도 고르는 곳이
+  // 둘이면 어느 쪽이 이기는지 매번 헷갈린다 (TODO 79).
+  const gridYear = (from || to || "").slice(0, 4) || String(new Date().getFullYear());
 
   return (
     <section className="report-history">
@@ -124,6 +128,8 @@ export default function ReportHistory({ meta, query }: Props) {
           )}
         </div>
       </div>
+
+      <MonthGrid year={gridYear} />
 
       {error && <LoadError message={error} onRetry={load} />}
       {items === null && <p className="hint">불러오는 중…</p>}

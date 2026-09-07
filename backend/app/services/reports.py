@@ -309,6 +309,10 @@ def candidates(
     3. 같으면 미보고 진행일지가 많은 쪽, 그래도 같으면 과제 번호 순.
     4. **착수일이 아직 오지 않은 과제는 맨 뒤.** 시작도 안 한 과제는 이번 주 보고 후보가 아니다.
 
+    **별도 보고가 필요 없다고 표시한 과제는 아예 빠진다** (TODO 80). 단순 현황 관리를
+    과제로 세운 경우가 있고, 그런 과제를 매주 눈으로 걸러 내는 것이 실제 부담이었다.
+    빼는 것은 **후보 목록에서뿐**이다 — 손으로 보고를 남기는 길은 그대로 열려 있다.
+
     예전에는 점수 하나로 줄을 세웠는데 두 가지가 어긋났다.
     경과일에 상한(기준 주기의 8배 = 56일)이 있어 **D+100 과 D+150 이 같은 값**이 됐고,
     보고한 적 없는 과제는 기준일이 시작일이라 오히려 **맨 아래**로 갔다.
@@ -321,6 +325,9 @@ def candidates(
 
     results = []
     for project in conn.execute("SELECT * FROM project ORDER BY id"):
+        # 보고가 필요 없다고 정해 둔 과제. 상태와 무관하게 후보에서 뺀다.
+        if project["no_report"]:
+            continue
         if not include_inactive and project["status"] not in active:
             continue
         if status and project["status"] != status:
@@ -678,3 +685,74 @@ def reminder(conn: sqlite3.Connection, today: date_cls | None = None) -> dict | 
         "done": done,
         "pending": pending,
     }
+
+
+def month_grid(conn: sqlite3.Connection, year: str | None) -> dict:
+    """과제 × 월 표의 재료 (TODO 77 · 79).
+
+    **화면 모양은 서버가 모른다.** 과제 목록과 보고 목록만 주고, 열두 칸으로 나누는 일은
+    화면이 한다. 그래야 "한 달에 두 건이면 어떻게 보일지" 를 고칠 때 서버를 안 건드린다.
+
+    **어떤 과제가 줄이 되는가 — 합집합이다.**
+
+        줄 = (그 해 번호의 과제) ∪ (그 해에 보고가 있었던 과제)
+
+    홈은 연도 기준을 둘 쓴다 (과제는 번호의 연도, 보고는 보고한 날의 연도).
+    이 표가 그 둘이 만나는 자리다. 지난해 번호인데 올해 보고한 과제를 빼면
+    **표의 합이 위쪽 "보고 횟수" 와 어긋나고**, 올해 번호인데 아직 한 번도 보고 안 한
+    과제를 빼면 **비어 있다는 사실이 사라진다.** 둘 다 보여야 한다.
+
+    확정된 보고만 담는다 — 초안은 아직 보고한 것이 아니다.
+
+    **보고가 필요 없다고 표시한 과제는 줄에서 뺀다** (TODO 80). 빈 줄로 세우면
+    "관리 공백" 처럼 읽히는데, 그 과제는 원래 보고하지 않기로 한 것이라 뜻이 어긋난다.
+    화면이 몇 건을 뺐는지 밝힐 수 있게 `skipped` 로 함께 알려 준다.
+
+    **홈이 아니라 보고 이력 화면의 것이다** (TODO 79). 과제가 늘면 줄이 그만큼 늘어
+    홈의 "한눈에" 성격과 어긋난다 — 50명 팀이면 과제가 수백 건이다.
+    """
+    if not year:
+        return {"projects": [], "reports": [], "skipped": 0}
+
+    reports = [
+        {
+            "id": row["id"],
+            "project_id": row["project_id"],
+            "date": row["report_date"],
+            "audience": row["audience"],
+        }
+        for row in conn.execute(
+            "SELECT id, project_id, report_date, audience FROM report"
+            " WHERE frozen_at IS NOT NULL AND SUBSTR(report_date, 1, 4) = ?"
+            " ORDER BY report_date, id",
+            (year,),
+        )
+    ]
+
+    reported = {item["project_id"] for item in reports}
+    clause = " AND SUBSTR(p.id, 1, 4) = ?"
+    params = [year]
+    projects = [
+        {"id": row["id"], "title": row["title"], "status": row["status"]}
+        for row in conn.execute(
+            f"SELECT id, title, status FROM project p WHERE no_report = 0{clause} ORDER BY p.id",
+            params,
+        )
+    ]
+    skipped = conn.execute(
+        f"SELECT COUNT(*) AS n FROM project p WHERE no_report = 1{clause}", params
+    ).fetchone()["n"]
+    known = {item["id"] for item in projects}
+    # 그 해 번호가 아닌데 그 해에 보고한 과제 — 번호가 다르므로 화면에서 바로 구분된다.
+    outside = [item for item in reported if item not in known]
+    if outside:
+        placeholders = ",".join("?" * len(outside))
+        projects.extend(
+            {"id": row["id"], "title": row["title"], "status": row["status"]}
+            for row in conn.execute(
+                f"SELECT id, title, status FROM project"
+                f" WHERE id IN ({placeholders}) AND no_report = 0 ORDER BY id",
+                tuple(outside),
+            )
+        )
+    return {"projects": projects, "reports": reports, "skipped": skipped}

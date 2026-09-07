@@ -232,6 +232,15 @@ def ai_prompt(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dic
         raise HTTPException(status_code=404, detail="보고를 찾을 수 없습니다.") from exc
 
 
+@router.get("/api/report-month-grid")
+def month_grid(
+    year: str = Query(..., pattern=r"^\d{4}$"),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    """과제 × 월 보고 표 (TODO 77). 보고 이력 화면이 쓴다 (TODO 79)."""
+    return svc.month_grid(conn, year)
+
+
 @router.get("/api/report-candidates")
 def report_candidates(
     include_inactive: bool = False,

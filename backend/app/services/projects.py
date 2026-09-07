@@ -47,7 +47,7 @@ INDEX_TEMPLATE = """## 배경
 META_ORDER = [
     "id", "title", "status", "type", "group", "tags", "owners",
     "start_date", "due_date", "effect_expected", "effect_verified",
-    "created_by", "created_at", "updated_at",
+    "no_report", "created_by", "created_at", "updated_at",
 ]
 
 
@@ -163,6 +163,9 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "due_date": data.get("due_date") or None,
         "effect_expected": normalize_effect(data.get("effect_expected")),
         "effect_verified": normalize_effect(data.get("effect_verified")),
+        # 단순 현황 관리를 과제로 세운 경우가 있다. 그런 과제는 보고 대상 후보에서 뺀다
+        # — 매주 "이건 보고 안 해도 되는데" 를 눈으로 걸러 내지 않아도 되게 (TODO 80).
+        "no_report": bool(data.get("no_report")),
         # 담당자(누가 하는가)와 다른, "누가 등록했는가". 소급이 안 되므로 지금부터 남긴다.
         # 로그인이 생기면 이 자리에 로그인 사용자가 들어온다.
         "created_by": settings_service.current_author(data.get("created_by")) or None,
@@ -191,6 +194,8 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
     for field in ("effect_expected", "effect_verified"):
         if field in updates:
             updates[field] = normalize_effect(updates[field])
+    if "no_report" in updates:
+        updates["no_report"] = bool(updates["no_report"])
     if "owners" in updates or "owner" in updates:
         updates["owners"] = normalize_owners(updates.pop("owners", None) or updates.pop("owner", None))
     changes = {k: v for k, v in updates.items() if k in META_ORDER or k == "group"}

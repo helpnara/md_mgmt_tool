@@ -1,4 +1,4 @@
-import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -23,6 +23,8 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
     return request<Activity[]>(`/api/activities?${query.toString()}`);
   },
+  /** 과제 × 월 보고 표 (보고 이력 화면) */
+  monthGrid: (year: string) => request<MonthGrid>(`/api/report-month-grid?year=${year}`),
   activitySummary: (year?: string) =>
     request<ActivitySummary>(`/api/activities/summary${year ? `?year=${year}` : ""}`),
   /** 여러 명을 한 번에 넣을 수 있다 — 서버가 사람 수만큼 기록을 만든다 (count 로 알려 준다). */

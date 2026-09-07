@@ -35,6 +35,8 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
 
   // 비우면 null 로 보낸다 — "아직 안 정했다"와 "0원"은 다른 뜻이다.
   const effect = (value: string): number | null => (value.trim() === "" ? null : Number(value));
+  // 단순 현황 관리를 과제로 세운 경우. 보고 대상 후보에서만 빠진다 (TODO 80).
+  const [noReport, setNoReport] = useState(Boolean(initial?.no_report));
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -54,6 +56,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
         due_date: form.due_date || null,
         effect_expected: effect(form.effect_expected),
         effect_verified: effect(form.effect_verified),
+        no_report: noReport,
         tags: form.tags
           .split(",")
           .map((tag) => tag.trim())
@@ -193,6 +196,23 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           정성적 효과와 산출 근거는 <b>과제 개요</b>에 적습니다.
           근거 자료(엑셀·PPT)는 개요의 [파일 첨부]로 붙일 수 있습니다.
         </p>
+      </div>
+
+      <div className="form-row">
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={noReport}
+            onChange={(event) => setNoReport(event.target.checked)}
+          />
+          <span>
+            <b>별도 보고 불필요</b>
+            <span className="hint">
+              단순 현황 관리처럼 주간보고에 올리지 않는 과제입니다. 체크하면{" "}
+              <b>보고 대상 후보에서 빠집니다</b> — 필요할 때 손으로 보고를 남기는 길은 그대로입니다.
+            </span>
+          </span>
+        </label>
       </div>
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions">

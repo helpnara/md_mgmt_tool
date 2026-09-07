@@ -129,6 +129,8 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         # 효과 금액 (억원/년). 실증효과는 과제가 끝나야 나오므로 대개 비어 있다.
         "effect_expected": row["effect_expected"],
         "effect_verified": row["effect_verified"],
+        # 별도 보고가 필요 없는 과제 — 보고 대상 후보에서만 빠진다 (TODO 80).
+        "no_report": bool(row["no_report"]),
         # 과제를 등록한 사람 (담당자와 다르다). 로그인이 생기면 자동으로 채워진다.
         "created_by": row["created_by"],
         "tags": _tags(conn, row["id"]),

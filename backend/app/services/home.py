@@ -199,65 +199,6 @@ def _types(conn: sqlite3.Connection, year: str | None) -> list[dict]:
     return out
 
 
-def _monthly_reports(conn: sqlite3.Connection, year: str | None) -> dict:
-    """과제 × 월 표의 재료 (TODO 77).
-
-    **화면 모양은 서버가 모른다.** 과제 목록과 보고 목록만 주고, 열두 칸으로 나누는 일은
-    화면이 한다. 그래야 "한 달에 두 건이면 어떻게 보일지" 를 고칠 때 서버를 안 건드린다.
-
-    **어떤 과제가 줄이 되는가 — 합집합이다.**
-
-        줄 = (그 해 번호의 과제) ∪ (그 해에 보고가 있었던 과제)
-
-    홈은 연도 기준을 둘 쓴다 (과제는 번호의 연도, 보고는 보고한 날의 연도).
-    이 표가 그 둘이 만나는 자리다. 지난해 번호인데 올해 보고한 과제를 빼면
-    **표의 합이 위쪽 "보고 횟수" 와 어긋나고**, 올해 번호인데 아직 한 번도 보고 안 한
-    과제를 빼면 **비어 있다는 사실이 사라진다.** 둘 다 보여야 한다.
-
-    확정된 보고만 담는다 — 초안은 아직 보고한 것이 아니다.
-    """
-    if not year:
-        return {"projects": [], "reports": []}
-
-    reports = [
-        {
-            "id": row["id"],
-            "project_id": row["project_id"],
-            "date": row["report_date"],
-            "audience": row["audience"],
-        }
-        for row in conn.execute(
-            "SELECT id, project_id, report_date, audience FROM report"
-            " WHERE frozen_at IS NOT NULL AND SUBSTR(report_date, 1, 4) = ?"
-            " ORDER BY report_date, id",
-            (year,),
-        )
-    ]
-
-    reported = {item["project_id"] for item in reports}
-    clause, params = _year_clause(year)
-    projects = [
-        {"id": row["id"], "title": row["title"], "status": row["status"]}
-        for row in conn.execute(
-            f"SELECT id, title, status FROM project p WHERE 1=1{clause} ORDER BY p.id",
-            params,
-        )
-    ]
-    known = {item["id"] for item in projects}
-    # 그 해 번호가 아닌데 그 해에 보고한 과제 — 번호가 다르므로 화면에서 바로 구분된다.
-    outside = [item for item in reported if item not in known]
-    if outside:
-        placeholders = ",".join("?" * len(outside))
-        projects.extend(
-            {"id": row["id"], "title": row["title"], "status": row["status"]}
-            for row in conn.execute(
-                f"SELECT id, title, status FROM project WHERE id IN ({placeholders}) ORDER BY id",
-                tuple(outside),
-            )
-        )
-    return {"projects": projects, "reports": reports}
-
-
 def _compare(conn: sqlite3.Connection) -> list[dict]:
     """최근 몇 해를 나란히. 한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다."""
     return [
@@ -312,7 +253,6 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
         "compare": _compare(conn),
         "members": _members(conn, year),
         "types": _types(conn, year),
-        "monthly_reports": _monthly_reports(conn, year),
     }
 
 

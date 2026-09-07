@@ -16,6 +16,8 @@ class ProjectCreate(BaseModel):
     # 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다.
     effect_expected: float | None = None
     effect_verified: float | None = None
+    # 별도 보고가 필요 없는 과제 (단순 현황 관리). 보고 대상 후보에서만 빠진다.
+    no_report: bool = False
     # 비우면 설정의 작성자를 쓴다 (로그인이 생기면 로그인 사용자).
     created_by: str | None = None
     tags: list[str] = Field(default_factory=list)
@@ -32,6 +34,7 @@ class ProjectUpdate(BaseModel):
     due_date: str | None = None
     effect_expected: float | None = None
     effect_verified: float | None = None
+    no_report: bool | None = None
     tags: list[str] | None = None
     body: str | None = None
 

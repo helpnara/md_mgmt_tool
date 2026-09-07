@@ -9,6 +9,9 @@
   /* 연한 바탕 위의 글자용. 기본 --accent 는 흰색 위에서만 AA(4.5)를 넘어,
      칩(#fcfcfd)·연한 파랑(#eaf1fe) 위에서는 4.0~4.46 으로 모자란다. */
   --accent-strong: #255ccc;
+  /* 흐린 글자용. --muted 는 흰 바탕에서만 AA(4.5)를 넘어, 마우스를 올린 줄
+     (연한 파랑 #eaf1fe) 위에서는 4.26 으로 모자란다. 그런 자리에는 이쪽을 쓴다. */
+  --muted-strong: #626a78;
   --danger: #c0392b;
   --warn: #b45309;
   --radius: 10px;
@@ -637,7 +640,8 @@ button { white-space: nowrap; }
 .history-date { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; }
 .history-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .history-project { font-weight: 500; }
-.history-excerpt { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 마우스를 올리면 줄 바탕이 연한 파랑이 된다. 그 위에서도 읽혀야 한다. */
+.history-excerpt { color: var(--muted-strong); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; }
 .history-audience { color: var(--accent); font-weight: 600; }
 
@@ -995,3 +999,30 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 .home-member-table td.zero { color: #7f8894; }
 .home-member-table td a { color: var(--accent-strong); text-decoration: none; }
 .home-member-table td a:hover { text-decoration: underline; }
+
+/* ── 홈 위쪽 두 칸 나란히 — TODO 78 ─────────────────
+   세로로 쌓으면 오른쪽이 통째로 비고, 정작 매일 보는 "이번 주 할 일"을 보려고
+   스크롤해야 한다. 좁은 화면에서는 다시 한 줄씩 선다. */
+.home-top { display: grid; gap: 14px; align-items: start; }
+@media (min-width: 1100px) {
+  .home-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); }
+}
+/* 두 칸으로 나뉘면 칸이 좁아지므로 수 카드도 함께 줄인다 */
+.home-top .home-stat { min-width: 96px; padding: 9px 12px; }
+.home-top .home-stat strong { font-size: 18px; }
+.home-top .home-stat.effect { min-width: 100%; }
+.home-top .home-stat.effect strong { font-size: 16px; }
+@media (min-width: 1500px) {
+  .home-top .home-stat.effect { min-width: 210px; }
+}
+
+/* 과제별 보고 표는 이제 보고 이력 화면의 것이다 (TODO 79) */
+.month-card { margin: 0 0 14px; }
+
+/* 체크박스 한 줄 — 글자를 눌러도 켜지게 (TODO 80) */
+.check-label {
+  flex-direction: row; align-items: flex-start; gap: 9px; cursor: pointer;
+  font-size: 13px; color: var(--text);
+}
+.check-label input[type="checkbox"] { width: 15px; height: 15px; margin-top: 2px; flex: 0 0 auto; }
+.check-label .hint { display: block; margin-top: 2px; }

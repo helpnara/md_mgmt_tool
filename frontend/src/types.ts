@@ -44,6 +44,8 @@ export interface Project {
   /** 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다. */
   effect_expected: number | null;
   effect_verified: number | null;
+  /** 별도 보고가 필요 없는 과제 — 보고 대상 후보에서만 빠진다 (TODO 80) */
+  no_report?: boolean;
   /** 과제를 등록한 사람. 담당자(누가 하는가)와 다르다. */
   created_by?: string | null;
   tags: string[];
@@ -351,10 +353,12 @@ export interface HomeType {
 }
 
 /** 과제 × 월 표의 재료 (TODO 77). 열두 칸으로 나누는 일은 화면이 한다. */
-export interface MonthlyReports {
-  /** 줄 = (그 해 번호의 과제) ∪ (그 해에 보고가 있었던 과제) */
+export interface MonthGrid {
+  /** 줄 = (그 해 번호의 과제) ∪ (그 해에 보고가 있었던 과제). 보고 불필요 과제는 빠진다 */
   projects: { id: string; title: string; status: string }[];
   reports: { id: number; project_id: string; date: string; audience: string | null }[];
+  /** 보고 불필요로 표시해 뺀 과제 수 — 몇 건이 빠졌는지 화면이 밝힌다 */
+  skipped: number;
 }
 
 export interface Home {
@@ -374,7 +378,6 @@ export interface Home {
   /** 담당 중복 포함 — 합이 team 보다 클 수 있다 */
   members: HomeMember[];
   types: HomeType[];
-  monthly_reports: MonthlyReports;
 }
 
 /** 팀원 역량 이력 한 건 (TODO 72). 기록 단위는 **사람**이다. */

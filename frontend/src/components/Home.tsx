@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import type { Home as HomeData, Meta, MonthlyReports } from "../types";
+import type { Home as HomeData, Meta } from "../types";
 import { projectLink } from "../nav";
 import { effectNumber } from "../util";
 import LoadError from "./LoadError";
@@ -17,10 +17,6 @@ import LoadError from "./LoadError";
  */
 
 const ALL_YEARS = "all";
-const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-/** 한 칸에 세우는 보고 수. 넘치면 +N 으로 접는다 — 한 칸이 길어지면 그 줄만 키가 커진다. */
-const CELL_LIMIT = 2;
-const GRID_KEY = "md-mgmt:home-month-grid";
 /** 억원/년. 목록·과제 상세와 **같은 규칙**으로 적는다 (util.ts effectNumber, TODO 76). */
 function money(value: number): string {
   return value ? effectNumber(value) : "—";
@@ -68,13 +64,6 @@ function StatusCells({
   );
 }
 
-/** 그 달의 보고 이력으로 가는 주소. 마지막 날은 달마다 다르므로 계산해서 쓴다. */
-function monthLink(year: string, month: number): string {
-  const mm = String(month).padStart(2, "0");
-  const last = new Date(Number(year), month, 0).getDate();
-  return `#/history?from=${year}-${mm}-01&to=${year}-${mm}-${last}`;
-}
-
 function listLink(params: Record<string, string>): string {
   const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
   const text = query.toString();
@@ -86,16 +75,6 @@ export default function Home({ meta }: { meta: Meta }) {
   const [year, setYear] = useState(thisYear);
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 과제 수만큼 줄이 늘어나는 표라, 홈이 길어지면 접어 둘 수 있어야 한다.
-  const [gridOpen, setGridOpen] = useState(() => localStorage.getItem(GRID_KEY) !== "off");
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(GRID_KEY, gridOpen ? "on" : "off");
-    } catch {
-      /* 사생활 보호 모드 등 — 접힘 상태를 기억 못 할 뿐이다 */
-    }
-  }, [gridOpen]);
 
   const load = useCallback(() => {
     api
@@ -115,21 +94,7 @@ export default function Home({ meta }: { meta: Meta }) {
   const yearParam = year === ALL_YEARS ? "" : year;
   const { team, this_week: week } = data;
   const memberSum = data.members.reduce((sum, item) => sum + item.total, 0);
-  // 과제 → 달 → 그 달의 보고들. 열두 칸으로 나누는 일은 화면 몫이다 (서버는 목록만 준다).
-  type Report = MonthlyReports["reports"][number];
-  type Months = Map<number, Report[]>;
-  const noReports: Months = new Map();
-  const byProject = new Map<string, Months>();
-  const monthTotals: Record<number, number> = {};
-  for (const report of data.monthly_reports.reports) {
-    const month = Number(report.date.slice(5, 7));
-    monthTotals[month] = (monthTotals[month] ?? 0) + 1;
-    if (!byProject.has(report.project_id)) byProject.set(report.project_id, new Map());
-    const months = byProject.get(report.project_id)!;
-    months.set(month, [...(months.get(month) ?? []), report]);
-  }
   const maxCompare = Math.max(1, ...data.compare.map((item) => item.total));
-
   return (
     <section className="home">
       <div className="home-head">
@@ -148,8 +113,11 @@ export default function Home({ meta }: { meta: Meta }) {
         </label>
       </div>
 
-      {/* ── 이번 주 할 일 ────────────────────────────────────────────────
-          홈을 매일 여는 이유는 지표가 아니라 이 칸이다. 그래서 맨 위에 둔다. */}
+      {/* ── 이번 주 할 일 · 팀 현황 ───────────────────────────────────────
+          홈을 매일 여는 이유는 지표가 아니라 "이번 주 할 일" 이다. 그래서 맨 위에 둔다.
+          둘을 **나란히** 놓는다 — 세로로 쌓으면 오른쪽이 통째로 비고, 정작 중요한 것을
+          보려고 스크롤해야 한다 (TODO 78). 좁은 화면에서는 다시 한 줄씩 선다. */}
+      <div className="home-top">
       <div className="card home-week">
         <h2>
           이번 주 할 일
@@ -228,6 +196,7 @@ export default function Home({ meta }: { meta: Meta }) {
           과제 수·완료·효과 금액은 <b>과제 번호의 연도</b>로, 보고 횟수는 <b>보고한 날의 연도</b>로 셉니다.
           {" "}보고 횟수는 <b>확정된 보고</b>만 셉니다 — 초안은 아직 보고한 것이 아닙니다.
         </p>
+      </div>
       </div>
 
       {/* ── 연도 비교 ────────────────────────────────────────────────
@@ -366,94 +335,6 @@ export default function Home({ meta }: { meta: Meta }) {
             과제마다 속성은 하나뿐이라 이 표의 합은 <b>팀 과제 수와 정확히 맞습니다.</b>
             (담당 중복이 있는 위쪽 팀원별 표와 다른 점입니다)
           </p>
-        </div>
-      )}
-
-      {/* ── 과제 × 월 보고 표 (TODO 77) ────────────────────────────
-          예전에는 막대 12개로 "그 달에 몇 번" 만 알려 줬다. 무엇을 언제 어디에
-          보고했는지가 빠져 있었다. 이제 칸을 누르면 그 보고로 바로 간다. */}
-      {yearParam && data.monthly_reports.projects.length > 0 && (
-        <div className="card home-monthly wide">
-          <div className="card-head">
-            <h2>
-              과제별 보고 — {year}년
-              <span className="hint"> · 확정된 보고 {data.monthly_reports.reports.length}건</span>
-            </h2>
-            <button className="ghost small" onClick={() => setGridOpen((prev) => !prev)}>
-              {gridOpen ? "접기" : "펼치기"}
-            </button>
-          </div>
-          {gridOpen && (
-            <>
-              <div className="table-scroll">
-                <table className="grid month-grid">
-                  <thead>
-                    <tr>
-                      <th className="month-name">과제</th>
-                      {MONTHS.map((month) => (
-                        <th key={month}>
-                          {month}월
-                          {monthTotals[month] > 0 && (
-                            <span className="th-unit">{monthTotals[month]}건</span>
-                          )}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.monthly_reports.projects.map((project) => {
-                      const mine = byProject.get(project.id) ?? noReports;
-                      return (
-                        <tr key={project.id} className={mine.size ? undefined : "quiet-row"}>
-                          <td className="month-name">
-                            <a href={projectLink(project.id)} title={project.title}>
-                              {project.title}
-                            </a>
-                            <span className="project-id">{project.id}</span>
-                          </td>
-                          {MONTHS.map((month) => {
-                            const cell = mine.get(month) ?? [];
-                            return (
-                              <td key={month} className={cell.length ? "month-cell" : "month-cell zero"}>
-                                {cell.slice(0, CELL_LIMIT).map((report) => (
-                                  <a
-                                    key={report.id}
-                                    className="month-hit"
-                                    href={projectLink(project.id, { report: report.id })}
-                                    title={`${report.date}${report.audience ? ` · ${report.audience}` : ""} — 그때 보고한 내용 열기`}
-                                  >
-                                    <span className="month-date">{report.date.slice(5)}</span>
-                                    {report.audience && (
-                                      <span className="month-audience">{report.audience}</span>
-                                    )}
-                                  </a>
-                                ))}
-                                {cell.length > CELL_LIMIT && (
-                                  <a
-                                    className="month-more"
-                                    href={monthLink(year, month)}
-                                    title="이 달의 보고 이력을 모두 봅니다"
-                                  >
-                                    +{cell.length - CELL_LIMIT}
-                                  </a>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <p className="hint">
-                <b>확정된 보고만</b> 셉니다 — 초안은 아직 보고한 것이 아닙니다. 칸을 누르면 그 과제의
-                그 보고가 열립니다. 줄은 <b>올해 번호의 과제</b>와 <b>올해 보고가 있었던 과제</b>를
-                합친 것이라, 지난해 번호 과제라도 올해 보고했다면 함께 섭니다.
-                한 줄이 통째로 비어 있으면 <b>올해 한 번도 보고하지 않은 과제</b>입니다.
-              </p>
-            </>
-          )}
         </div>
       )}
 

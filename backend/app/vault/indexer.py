@@ -50,6 +50,13 @@ def _as_list(value: Any) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def _as_bool(value: object) -> bool:
+    """손으로 고친 파일에 `true` / `"예"` / `1` 무엇이 들어와도 뜻대로 읽는다."""
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"true", "yes", "y", "1", "예"}
+
+
 def _as_effect(value: object) -> float | None:
     """효과 금액(억원/년). 손으로 고친 파일에 숫자가 아닌 값이 들어와도 색인을 멈추지 않는다."""
     if value is None or value == "":
@@ -189,14 +196,15 @@ def index_project(
     conn.execute(
         """
         INSERT INTO project(id, dir_name, title, status, type, grp, owner, start_date, due_date,
-                            effect_expected, effect_verified, created_by,
+                            effect_expected, effect_verified, no_report, created_by,
                             created_at, updated_at, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
           type=excluded.type, grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
           due_date=excluded.due_date,
           effect_expected=excluded.effect_expected, effect_verified=excluded.effect_verified,
+          no_report=excluded.no_report,
           created_by=excluded.created_by, created_at=excluded.created_at,
           updated_at=excluded.updated_at, body=excluded.body, file_mtime=excluded.file_mtime
         """,
@@ -212,6 +220,7 @@ def index_project(
             _as_str(doc.meta.get("due_date")),
             _as_effect(doc.meta.get("effect_expected")),
             _as_effect(doc.meta.get("effect_verified")),
+            1 if _as_bool(doc.meta.get("no_report")) else 0,
             _as_str(doc.meta.get("created_by")),
             _as_str(doc.meta.get("created_at")),
             updated_at,

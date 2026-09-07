@@ -213,18 +213,35 @@ async function main() {
    * 화면이 예전 상태(걸어 둔 조건·정렬)를 그대로 들고 있는다. 실제 사용에서는
    * 링크를 누르므로 그런 일이 없다 — 시험도 같은 길로 다녀야 한다.
    */
+  /** 주소에서 화면 이름만 (`#/reports?date=…` → `reports`). */
+  function screenOf(url) {
+    return (url.split("#")[1] ?? "").replace(/^\/?/, "").split("?")[0].replace(/\/$/, "");
+  }
+
   async function go(hash) {
-    const onSamePage = page.url().startsWith(BASE);
-    if (!onSamePage) {
-      await page.goto(BASE + hash, { waitUntil: "networkidle" });
-    } else if (page.url() === BASE + "/" + hash || page.url() === BASE + hash) {
-      // 같은 주소면 아무 일도 안 일어난다. 자료가 바뀌었을 수 있으니 다시 읽는다.
-      await page.reload({ waitUntil: "networkidle" });
-    } else {
-      await page.evaluate((target) => {
-        window.location.hash = target.replace(/^#/, "");
+    const target = `${BASE}/${hash}`;
+    if (!page.url().startsWith(BASE)) {
+      await page.goto(target, { waitUntil: "networkidle" });
+      await page.waitForTimeout(400);
+      return;
+    }
+
+    // **같은 화면으로 다시 오면 새로 읽는다.**
+    //
+    // 화면이 주소에 조건을 적어 두므로(nav.ts) `#/reports` 로 가려 해도 실제 주소는
+    // `#/reports?date=…` 라 둘이 절대 같아지지 않는다. 그래서 "주소가 같으면 reload"
+    // 규칙만으로는 다시 읽히지 않고, **서버 자료를 바꾼 뒤 같은 화면을 다시 열면
+    // 예전 것을 보게 된다.** 실제로 이 함정에 세 번 빠졌다.
+    // 화면 이름이 같으면 무조건 다시 읽어 그 틈을 없앤다.
+    const sameScreen = screenOf(page.url()) === screenOf(target);
+    if (page.url() !== target) {
+      await page.evaluate((value) => {
+        window.location.hash = value.replace(/^#/, "");
       }, hash);
       await page.waitForLoadState("networkidle");
+    }
+    if (sameScreen) {
+      await page.reload({ waitUntil: "networkidle" });
     }
     await page.waitForTimeout(400);
   }
@@ -233,6 +250,9 @@ async function main() {
   async function contrastOf(selector, { hover = false } = {}) {
     const element = page.locator(selector).first();
     await element.scrollIntoViewIfNeeded();
+    // 앞선 시험이 눌러 둔 자리에 마우스가 남아 있으면 엉뚱한 줄이 hover 상태가 되어,
+    // "기본 상태" 를 잰다면서 실제로는 마우스올림 색을 잰다. 먼저 치운다.
+    if (!hover) await page.mouse.move(0, 0);
     if (hover) await element.hover();
     await page.waitForTimeout(120);
     const value = await element.evaluate((el) => __contrast(el));
@@ -347,8 +367,8 @@ async function main() {
   });
 
   await check("과제별 보고 표에서 칸을 누르면 그 보고가 열린다", async () => {
-    // 예전에는 막대 12개로 "그 달에 몇 번" 만 알려 줬다 (TODO 77).
-    await go("#/");
+    // 홈에 있던 표를 보고 이력으로 옮겼다 — 팀이 크면 줄이 과제 수만큼 늘어난다 (TODO 79).
+    await go("#/history");
     const hit = page.locator(".month-grid .month-hit").first();
     expect(await hit.count() > 0, "보고가 찍힌 칸이 없습니다");
     const label = (await hit.innerText()).trim();
@@ -360,9 +380,9 @@ async function main() {
 
   await check("보고가 한 번도 없는 과제도 줄로 선다", async () => {
     // 한 줄이 통째로 비면 "올해 한 번도 보고하지 않은 과제" 다. 그 사실이 보여야 한다.
-    await go("#/");
+    await go("#/history");
     const rows = await page.locator(".month-grid tbody tr").count();
-    const projects = (await api.get("/api/projects?year=2026")).length;
+    const projects = (await api.get("/api/projects")).filter((p) => !p.no_report).length;
     expect(rows >= projects, `줄이 모자랍니다 (줄 ${rows}, 올해 과제 ${projects})`);
     expect(await page.locator(".month-grid tbody tr.quiet-row").count() > 0,
       "보고 없는 과제 줄이 없습니다");
@@ -377,6 +397,54 @@ async function main() {
     const text = await row.innerText();
     expect(text.includes("1.25"), `1.25 로 안 보입니다: ${text}`);
     await api.patch(`/api/projects/${seeded.projectA}`, { effect_expected: 3.5 });
+  });
+
+  await check("홈이 이번 주 할 일과 팀 현황을 한 줄로 놓는다", async () => {
+    // 세로로 쌓으면 오른쪽이 통째로 비고, 매일 보는 것을 보려고 스크롤해야 한다 (TODO 78).
+    await page.setViewportSize({ width: 1500, height: 900 });
+    await go("#/");
+    const week = await page.locator(".home-top .home-week").boundingBox();
+    const team = await page.locator(".home-top .home-team").boundingBox();
+    expect(week !== null && team !== null, "위쪽 두 칸을 찾지 못했습니다");
+    expect(team.x > week.x + week.width - 10, `나란히 서지 않았습니다: ${JSON.stringify({ week, team })}`);
+    // 좁은 화면에서는 다시 한 줄씩 선다.
+    await page.setViewportSize({ width: 900, height: 900 });
+    await page.waitForTimeout(400);
+    const narrow = await page.locator(".home-top .home-team").boundingBox();
+    expect(narrow.y > week.y + 50, "좁은 화면에서 아래로 안 내려갑니다");
+    await page.setViewportSize({ width: 1500, height: 900 });
+  });
+
+  await check("별도 보고 불필요 과제는 보고 대상 후보에서 빠진다", async () => {
+    // 단순 현황 관리를 과제로 세운 경우. 매주 눈으로 걸러 내지 않아도 되게 한다 (TODO 80).
+    // 새 과제를 만들지 않는다 — 과제 수와 보고 대상 순서를 보는 다른 시험이 흔들린다.
+    await go("#/reports");
+    expect((await page.locator(".grid tbody").innerText()).includes("공정 자동화"),
+      "시험 자료 문제 — 공정 자동화가 후보에 없습니다");
+
+    await api.patch(`/api/projects/${seeded.projectB}`, { no_report: true });
+    await go("#/reports");
+    const listed = await page.locator(".grid tbody").innerText();
+    expect(!listed.includes("공정 자동화"), `후보에 남아 있습니다: ${listed}`);
+
+    // 체크를 풀면 다시 후보로 돌아온다.
+    await api.patch(`/api/projects/${seeded.projectB}`, { no_report: false });
+    await go("#/reports");
+    expect((await page.locator(".grid tbody").innerText()).includes("공정 자동화"),
+      "체크를 풀었는데 후보로 안 돌아옵니다");
+  });
+
+  await check("과제 정보 화면에서 별도 보고 불필요를 켠다", async () => {
+    await go(`#/projects/${seeded.projectB}`);
+    await page.getByRole("button", { name: "과제 정보 수정" }).click();
+    await page.waitForTimeout(500);
+    const box = page.locator(".check-label input[type=checkbox]");
+    expect(await box.count() > 0, "체크 칸이 없습니다");
+    await box.check();
+    await page.getByRole("button", { name: "저장" }).click();
+    await page.waitForTimeout(1000);
+    equal((await api.get(`/api/projects/${seeded.projectB}`)).no_report, true, "저장된 값");
+    await api.patch(`/api/projects/${seeded.projectB}`, { no_report: false });
   });
 
   await check("홈은 기대효과와 실증효과를 합치지 않는다", async () => {
