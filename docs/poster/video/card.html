@@ -1,0 +1,29 @@
+<!-- 소개 영상의 자막 카드. make_video.py 가 CARD 값을 채워 넣고 갈무리한다. -->
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1200px; overflow: hidden;
+    font-family: "NanumGothic", "맑은 고딕", "Malgun Gothic", sans-serif;
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(1500px 900px at 76% 20%, rgba(31,111,235,.28), transparent 62%),
+      radial-gradient(1000px 700px at 8% 96%, rgba(11,138,95,.20), transparent 60%),
+      linear-gradient(158deg, #0f2a47 0%, #091b2e 100%);
+  }
+  .box { width: 1360px; text-align: center; }
+  .step { font-size: 24px; letter-spacing: .16em; color: #7db4ff; font-weight: 700; }
+  h1 { font-size: 92px; font-weight: 800; letter-spacing: -.035em; line-height: 1.14;
+       margin-top: 26px; word-break: keep-all; }
+  h1 .accent { color: #7db4ff; }
+  h1 .good { color: #4bdca6; }
+  .rule { width: 84px; height: 5px; background: #1f6feb; border-radius: 3px; margin: 34px auto 30px; }
+  p { font-size: 34px; line-height: 1.6; color: #c6d6e8; word-break: keep-all; }
+  p b { color: #fff; font-weight: 700; }
+</style>
+<div class="box">
+  <div class="step">__STEP__</div>
+  <h1>__TITLE__</h1>
+  <div class="rule"></div>
+  <p>__BODY__</p>
+</div>

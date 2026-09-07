@@ -1,0 +1,107 @@
+<!-- AX 성과공유회 썸네일 (16:10). make_thumbnail.py 가 이 파일을 열어 갈무리한다. -->
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Nanum"; src: local("NanumGothic"); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px; height: 800px; overflow: hidden;
+    font-family: "NanumGothic", "맑은 고딕", "Malgun Gothic", sans-serif;
+    color: #fff;
+    background:
+      radial-gradient(1100px 700px at 78% 18%, rgba(31,111,235,.30), transparent 62%),
+      radial-gradient(760px 520px at 8% 96%, rgba(11,138,95,.22), transparent 60%),
+      linear-gradient(158deg, #0f2a47 0%, #091b2e 100%);
+    position: relative;
+  }
+  /* 은은한 격자 — 데이터를 다루는 도구라는 인상만 남긴다 */
+  body::before {
+    content: ""; position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(156,195,238,.055) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(156,195,238,.055) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: linear-gradient(115deg, #000 0%, transparent 68%);
+  }
+  .wrap { position: relative; padding: 66px 84px 0; height: 100%; display: flex; flex-direction: column; }
+  .top { display: flex; gap: 44px; align-items: flex-start; }
+  .left { width: 53%; flex: none; }
+  /* 오른쪽에 실제 화면을 놓는다 — 표지에서 "무엇을 만들었는지"가 한눈에 보여야 한다 */
+  .shot {
+    flex: 1; margin-top: 24px;
+    border-radius: 14px; overflow: hidden;
+    border: 1px solid rgba(156,195,238,.34);
+    box-shadow: 0 26px 60px rgba(0,0,0,.42);
+    transform: perspective(1400px) rotateY(-13deg) rotateX(3deg);
+  }
+  .shot img { display: block; width: 100%; }
+
+  .kicker {
+    align-self: flex-start;
+    font-size: 17px; letter-spacing: .10em; font-weight: 700;
+    color: #cfe2fa; background: rgba(156,195,238,.14);
+    border: 1px solid rgba(156,195,238,.34);
+    padding: 9px 20px; border-radius: 999px;
+  }
+  /* 한글은 단어 안에서 끊으면 읽기가 나빠진다 — keep-all 로 어절을 지킨다 */
+  h1 { font-size: 76px; font-weight: 800; letter-spacing: -.035em; line-height: 1.08;
+       margin-top: 26px; word-break: keep-all; }
+  h1 .accent { color: #7db4ff; }
+  .rule { width: 88px; height: 5px; background: #1f6feb; border-radius: 3px; margin: 26px 0 22px; }
+  .sub { font-size: 24px; line-height: 1.5; color: #cbd9ea; font-weight: 400; }
+  .sub b { color: #fff; font-weight: 700; }
+
+  /* 표지에서 딱 한 문장만 기억된다면 이것이어야 한다 */
+  .quote {
+    margin-top: 34px; padding-left: 22px;
+    border-left: 3px solid rgba(35,199,141,.75);
+    font-size: 25px; line-height: 1.5; color: #dfe9f5; font-weight: 400;
+    word-break: keep-all;
+  }
+  .quote b { color: #4bdca6; font-weight: 700; }
+
+  .stats { display: flex; gap: 16px; margin-top: auto; margin-bottom: 24px; }
+  .stat {
+    flex: 1; padding: 20px 24px 22px;
+    background: rgba(255,255,255,.055); border: 1px solid rgba(156,195,238,.22);
+    border-radius: 16px; border-top: 3px solid #1f6feb;
+  }
+  .stat.hi { border-top-color: #23c78d; background: rgba(35,199,141,.11); border-color: rgba(35,199,141,.36); }
+  .stat .label { font-size: 16px; color: #9db4cd; font-weight: 600; }
+  .stat .value { font-size: 46px; font-weight: 800; letter-spacing: -.02em; margin-top: 8px; }
+  .stat.hi .value { color: #4bdca6; }
+  .stat .note { font-size: 15px; color: #8fa6bf; margin-top: 7px; }
+
+  .foot {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 0 26px; border-top: 1px solid rgba(156,195,238,.20);
+    font-size: 18px; color: #9db4cd;
+  }
+  .foot b { color: #e8f0fa; font-weight: 700; }
+</style>
+<div class="wrap">
+  <div class="top">
+    <div class="left">
+      <span class="kicker">2026 사내 AX 성과공유회</span>
+      <h1>개발을 <span class="accent">기다리지</span> 않았다</h1>
+      <div class="rule"></div>
+      <p class="sub">
+        개발 리소스 없이 <b>엿새</b> 만에 만든<br><b>팀 과제관리 · 보고지원 시스템</b>
+      </p>
+      <p class="quote">
+        만들 사람이 매일 쓸 사람이면<br><b>요구정의도, 검수도, 재작업도 없습니다</b>
+      </p>
+    </div>
+    <div class="shot"><img src="screen-home.png" alt="홈 화면"></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">구축 기간</div><div class="value">6일</div><div class="note">실작업 36시간 · 1명</div></div>
+    <div class="stat"><div class="label">투입 공수</div><div class="value">0.23 M/M</div><div class="note">외주 추정 19 M/M</div></div>
+    <div class="stat"><div class="label">소요 비용</div><div class="value">313만 원</div><div class="note">외주 추정 약 2.3억 원</div></div>
+    <div class="stat hi"><div class="label">절감 효과</div><div class="value">약 74배</div><div class="note">약 2억 2,687만 원 절감</div></div>
+  </div>
+
+  <div class="foot">
+    <span><b>선강DX개발팀</b> &nbsp;·&nbsp; 발표자 권경락</span>
+    <span>363 기능점수 · API 64개 · 자동 시험 477건</span>
+  </div>
+</div>

@@ -7,7 +7,10 @@
 | `AX성과공유회_포스터_개발을기다리지않았다.pptx` | 제출·수정용. 회사 PC의 파워포인트에서 그대로 열린다 |
 | `AX성과공유회_포스터_개발을기다리지않았다.pdf` | 인쇄·배포용 (A1 세로, 1쪽) |
 | `make_poster.py` | 포스터를 만드는 스크립트. 수치를 고칠 일이 생기면 이 파일의 `DATA` 만 고친다 |
-| `screen-*.png` | 포스터에 들어간 실제 화면 갈무리 — 홈 · 과제 목록 · 보고 대상 후보 · 팀원 역량 (데모 데이터) |
+| `screen-*.png` | 포스터·썸네일에 들어간 실제 화면 갈무리 — 홈 · 과제 목록 · 보고 대상 후보 · 팀원 역량 (데모 데이터) |
+| `AX성과공유회_썸네일_16-10.png` | **16:10 썸네일** (2560×1600). 목록·표지 슬라이드용 |
+| `make_thumbnail.py` · `thumbnail.html` | 썸네일을 만드는 스크립트와 원본 |
+| `video/` | **소개 영상** (약 1분 30초, 소리 없음). 아래 참고 |
 
 ## 글꼴
 
@@ -30,6 +33,46 @@ soffice --headless --convert-to pdf --outdir . <파일>.pptx   # PDF 변환
 MD_MGMT_VAULT=<데모 vault> python -m uvicorn app.main:app --app-dir backend --port 8099
 # 그 뒤 #/ · #/projects · #/reports · #/skills 를 각각 갈무리
 ```
+
+## 썸네일
+
+16:10 (2560×1600). 목록에 작게 걸려도 **제목과 네 숫자가 읽히는 것**이 유일한 요구다.
+HTML 을 브라우저로 갈무리한다 — 도형으로 짜는 것보다 여백·자간을 잡기 쉽고,
+색과 글꼴이 포스터와 같은 값을 쓴다.
+
+```bash
+python make_thumbnail.py            # 2560x1600 (@2x)
+python make_thumbnail.py --scale 1  # 1280x800
+```
+
+문구·수치를 고칠 일이 생기면 `thumbnail.html` 만 고친다.
+
+## 소개 영상
+
+약 1분 30초, **소리 없음**. 자막 카드와 **실제 화면 녹화**를 번갈아 잇는다 —
+그림을 이어 붙인 슬라이드가 아니라 진짜 동작이라 "된다"는 말을 따로 하지 않아도 된다.
+발표장에서는 말로 덧붙이고, 배포할 때는 자막만으로 읽힌다.
+
+```bash
+# 1) 빈 vault 로 서버를 띄우고 데모 자료를 채운다
+#    경로가 화면 머리글에 그대로 보이므로 짧고 보기 좋은 곳에 둔다
+MD_MGMT_VAULT=~/과제이력관리 python -m uvicorn app.main:app --app-dir backend --port 8094 &
+python video/seed_demo.py
+
+# 2) 화면을 녹화한다 (clips/*.webm)
+OUT=video/clips node video/record.mjs
+
+# 3) 자막 카드를 굽고 이어 붙인다
+python video/make_video.py                 # 1920x1200 (16:10)
+python video/make_video.py --ratio 16:9    # 1920x1080 (프로젝터용)
+```
+
+**실제 과제 데이터는 쓰지 않는다.** `seed_demo.py` 가 만드는 것은 전부 지어낸 팀이다 —
+화면이 비어 있으면 볼 것이 없고, 진짜 자료를 쓰면 사내 내용이 발표물에 그대로 실린다.
+포스터의 `screen-*.png` 도 같은 자료로 찍었다.
+
+문구를 고치려면 `video/make_video.py` 의 `SCENES` 만 고친다 — 카드 아홉 장의
+머리말·제목·설명과 이어 붙일 녹화 파일이 거기 한 곳에 모여 있다.
 
 ## 숫자의 출처
 
