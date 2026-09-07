@@ -954,3 +954,44 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 /* 고치는 폼은 그 기록 줄 안에서 펼쳐진다 — 무엇을 고치는 중인지 눈에서 놓치지 않게 */
 .activity-list .activity-form { margin: 10px 0 2px; background: var(--surface); }
 .activity-list .activity-form .form-row { flex-wrap: wrap; }
+
+/* ── 과제 × 월 보고 표 — TODO 77 ────────────────────
+   열이 13개라 가로로 밀린다. 그때 어느 과제 줄인지 안 보이면 표를 읽을 수 없으므로
+   과제명 열을 왼쪽에 붙여 둔다. */
+.month-grid th, .month-grid td { padding: 7px 9px; vertical-align: top; }
+.month-grid th:not(.month-name), .month-grid td:not(.month-name) { text-align: center; }
+.month-grid tbody tr { cursor: default; }
+.month-grid tbody tr:hover { background: #fcfcfd; }
+.month-grid th.month-name, .month-grid td.month-name {
+  position: sticky; left: 0; z-index: 1; text-align: left;
+  min-width: 220px; max-width: 260px; background: var(--surface);
+  box-shadow: 1px 0 0 var(--border);
+}
+.month-grid th.month-name { background: #fafbfc; }
+.month-grid tbody tr:hover td.month-name { background: #fcfcfd; }
+.month-grid td.month-name a {
+  display: block; color: var(--text); text-decoration: none; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.month-grid td.month-name a:hover { color: var(--accent-strong); text-decoration: underline; }
+/* 보고가 한 건도 없는 줄 — 올해 한 번도 보고하지 않은 과제다 */
+.month-grid tbody tr.quiet-row td.month-name { border-left: 3px solid var(--warn); }
+.month-cell { min-width: 76px; }
+.month-cell.zero::after { content: "·"; color: #c8cfd8; }
+.month-hit {
+  display: block; padding: 3px 5px; border-radius: 6px; text-decoration: none;
+  background: var(--accent-soft); color: var(--accent-strong); margin-bottom: 3px;
+}
+.month-hit:last-child { margin-bottom: 0; }
+.month-hit:hover { background: #dbe8fe; }
+.month-date { display: block; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.month-audience {
+  display: block; font-size: 10px; color: var(--muted); line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 92px;
+}
+.month-more { display: block; font-size: 11px; color: var(--accent-strong); text-decoration: none; }
+.month-more:hover { text-decoration: underline; }
+/* 상태 여섯 칸 — 0 은 흐리게. 어디가 비었는지가 요점이다 (TODO 75) */
+.home-member-table td.zero { color: #7f8894; }
+.home-member-table td a { color: var(--accent-strong); text-decoration: none; }
+.home-member-table td a:hover { text-decoration: underline; }

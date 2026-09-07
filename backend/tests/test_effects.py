@@ -61,6 +61,41 @@ def test_effect_can_be_cleared(client):
     assert cleared["effect_expected"] is None
 
 
+# ── 소수 둘째 자리 (TODO 76) ────────────────────────────
+
+def test_two_decimals_are_kept(client, vault_dir):
+    """단위가 억원/년이라 둘째 자리는 100만 원이다. 1억 2,500만 원을 적을 수 있어야 한다."""
+    project = make(client, title="둘째 자리", effect_expected=1.25, effect_verified=0.08)
+    assert project["effect_expected"] == 1.25
+    assert project["effect_verified"] == 0.08
+
+    raw = (vault_dir / "projects" / f"{project['id']}-둘째-자리" / "index.md").read_text(
+        encoding="utf-8"
+    )
+    assert "1.25" in raw and "0.08" in raw
+
+
+def test_a_third_decimal_is_rounded_when_it_is_saved(client, vault_dir):
+    """화면이 두 자리로 보여 준다면 **파일에도 두 자리만** 있어야 한다.
+
+    여기서 자르지 않으면 API 로 넣은 1.234 가 화면에는 1.23 인데 파일에는 그대로 남아
+    둘이 어긋난다. 파일이 진실의 원천이므로 자르는 자리는 저장 쪽이다.
+    """
+    project = make(client, title="셋째 자리", effect_expected=1.234)
+    assert project["effect_expected"] == 1.23
+
+    raw = (vault_dir / "projects" / f"{project['id']}-셋째-자리" / "index.md").read_text(
+        encoding="utf-8"
+    )
+    assert "1.234" not in raw
+
+
+def test_two_decimals_survive_a_reindex(client):
+    project = make(client, title="재색인", effect_expected=3.07)
+    client.post("/api/reindex")
+    assert client.get(f"/api/projects/{project['id']}").json()["effect_expected"] == 3.07
+
+
 def test_rejects_negative_effect(client):
     response = client.post("/api/projects", json={"title": "음수", "effect_expected": -1})
     assert response.status_code == 400

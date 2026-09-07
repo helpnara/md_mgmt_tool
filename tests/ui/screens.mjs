@@ -256,6 +256,9 @@ async function main() {
     await check(`${label} 화면이 열린다`, async () => {
       const before = pageErrors.length;
       await go(hash);
+      // 자료를 받아 그리는 화면(홈 등)은 networkidle 뒤에 한 번 더 부른다.
+      // "안 그려졌다" 와 "아직 안 그려졌다" 를 시험이 헷갈리면 안 된다.
+      await page.waitForSelector(selector, { timeout: 8000 }).catch(() => undefined);
       expect(await page.locator(selector).count() > 0, `${selector} 가 없습니다`);
       equal(pageErrors.length, before, `${label} 에서 화면 오류가 났습니다: ${pageErrors.slice(before)}`);
     });
@@ -307,12 +310,73 @@ async function main() {
     equal(listed, counted, "홈의 과제 수와 목록에 실제로 선 줄 수");
   });
 
+  await check("홈의 두 표가 상태 여섯 칸을 모두 세운다", async () => {
+    // 줄끼리 세로로 견주는 표라, 칸이 줄마다 달라지면 비교가 안 된다 (TODO 75).
+    await go("#/");
+    const labels = (await api.get("/api/meta")).statuses.map((item) => item.label);
+    for (const [name, selector] of [
+      ["팀원별", ".home-members thead"],
+      ["속성별", ".home-types thead"],
+    ]) {
+      const head = await page.locator(selector).innerText();
+      for (const label of labels) {
+        expect(head.includes(label), `${name} 표에 "${label}" 칸이 없습니다: ${head}`);
+      }
+    }
+  });
+
+  await check("상태 칸의 합이 그 줄의 합계와 같다", async () => {
+    await go("#/");
+    const count = (await api.get("/api/meta")).statuses.length;
+    for (const selector of [".home-members tbody tr", ".home-types tbody tr"]) {
+      const row = page.locator(selector).first();
+      const cells = await row.locator("td").allInnerTexts();
+      // [이름, 합계, 상태 6칸, …]
+      const total = Number(cells[1]);
+      const sum = cells.slice(2, 2 + count).reduce((acc, text) => acc + Number(text), 0);
+      equal(sum, total, `${selector} 의 상태 칸 합`);
+    }
+  });
+
   await check("홈이 팀원별 성과와 담당 중복을 함께 보여 준다", async () => {
     await go("#/");
     expect(await page.locator(".home-member-table tbody tr").count() > 0, "팀원 줄이 없습니다");
     // 공동 담당 과제가 있으면 사람별 합이 팀 합계를 넘는다. 그 사실을 숨기면 안 된다.
     const text = await page.locator(".home-members").innerText();
     expect(text.includes("담당 중복 포함"), "담당 중복을 밝히는 문구가 없습니다");
+  });
+
+  await check("과제별 보고 표에서 칸을 누르면 그 보고가 열린다", async () => {
+    // 예전에는 막대 12개로 "그 달에 몇 번" 만 알려 줬다 (TODO 77).
+    await go("#/");
+    const hit = page.locator(".month-grid .month-hit").first();
+    expect(await hit.count() > 0, "보고가 찍힌 칸이 없습니다");
+    const label = (await hit.innerText()).trim();
+    await hit.click();
+    await page.waitForTimeout(900);
+    expect(page.url().includes("report="), `보고를 열지 않았습니다: ${page.url()}`);
+    expect(await page.locator(".report-editor, .snapshot").count() > 0, `보고가 안 열렸습니다 (${label})`);
+  });
+
+  await check("보고가 한 번도 없는 과제도 줄로 선다", async () => {
+    // 한 줄이 통째로 비면 "올해 한 번도 보고하지 않은 과제" 다. 그 사실이 보여야 한다.
+    await go("#/");
+    const rows = await page.locator(".month-grid tbody tr").count();
+    const projects = (await api.get("/api/projects?year=2026")).length;
+    expect(rows >= projects, `줄이 모자랍니다 (줄 ${rows}, 올해 과제 ${projects})`);
+    expect(await page.locator(".month-grid tbody tr.quiet-row").count() > 0,
+      "보고 없는 과제 줄이 없습니다");
+  });
+
+  await check("효과 금액이 소수 둘째 자리까지 보인다", async () => {
+    // 지금까지는 toFixed(1) 이라 1.25 가 1.3 으로 보였다 (TODO 76).
+    // 새 과제를 만들지 않는다 — 과제 수를 세는 다른 시험이 흔들린다.
+    await api.patch(`/api/projects/${seeded.projectA}`, { effect_expected: 1.25 });
+    await go("#/projects");
+    const row = page.locator(".grid tbody tr").filter({ hasText: "고강도 소재 개발" }).first();
+    const text = await row.innerText();
+    expect(text.includes("1.25"), `1.25 로 안 보입니다: ${text}`);
+    await api.patch(`/api/projects/${seeded.projectA}`, { effect_expected: 3.5 });
   });
 
   await check("홈은 기대효과와 실증효과를 합치지 않는다", async () => {

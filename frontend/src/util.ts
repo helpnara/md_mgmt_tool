@@ -89,11 +89,22 @@ export const EFFECT_UNIT = "억원/년";
  * 아무것도 안 적힌 과제는 null 을 돌려주고, 화면에서는 아예 그리지 않는다 —
  * "0"으로 적으면 실제로 효과가 0인 과제와 구분되지 않는다.
  */
+/**
+ * 효과 금액 한 숫자를 글자로. **없는 자리는 붙이지 않는다.**
+ *
+ * `3` → `3`, `1.2` → `1.2`, `1.25` → `1.25`.
+ * `toFixed(2)` 를 그냥 쓰면 `1.20` `3.00` 이 되어 표가 지저분해진다.
+ * 반올림 자리(2)는 저장 쪽(`normalize_effect`)과 같아야 한다 (TODO 76).
+ */
+export function effectNumber(value: number): string {
+  return String(Number(value.toFixed(2)));
+}
+
 export function effectText(
   expected: number | null | undefined,
   verified: number | null | undefined,
 ): { text: string; verified: boolean } | null {
-  const num = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+  const num = effectNumber;
   if (expected != null && verified != null) {
     return { text: `${num(expected)} → ${num(verified)}`, verified: true };
   }

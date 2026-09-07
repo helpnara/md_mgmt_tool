@@ -333,6 +333,8 @@ export interface HomeTeam {
 
 export interface HomeMember extends HomeTeam {
   name: string;
+  /** 상태 여섯 칸 (예정·검토중·진행중·보류·완료·중단). 합은 total 과 같다. */
+  by_status: Record<string, number>;
   /** 연도와 무관한 실제 마지막 보고일 */
   last_reported_at: string | null;
 }
@@ -341,9 +343,18 @@ export interface HomeType {
   key: string;
   label: string;
   count: number;
+  /** 팀원별과 **같은 모양**이다. 한 화면에서 같은 것을 다르게 세지 않는다. */
+  by_status: Record<string, number>;
   done: number;
   effect_expected: number;
   effect_verified: number;
+}
+
+/** 과제 × 월 표의 재료 (TODO 77). 열두 칸으로 나누는 일은 화면이 한다. */
+export interface MonthlyReports {
+  /** 줄 = (그 해 번호의 과제) ∪ (그 해에 보고가 있었던 과제) */
+  projects: { id: string; title: string; status: string }[];
+  reports: { id: number; project_id: string; date: string; audience: string | null }[];
 }
 
 export interface Home {
@@ -363,7 +374,7 @@ export interface Home {
   /** 담당 중복 포함 — 합이 team 보다 클 수 있다 */
   members: HomeMember[];
   types: HomeType[];
-  monthly_reports: { month: number; count: number }[];
+  monthly_reports: MonthlyReports;
 }
 
 /** 팀원 역량 이력 한 건 (TODO 72). 기록 단위는 **사람**이다. */

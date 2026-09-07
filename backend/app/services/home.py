@@ -23,7 +23,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date as date_cls
 
-from ..config import FINISHED_STATUSES, PROJECT_TYPES
+from ..config import FINISHED_STATUSES, PROJECT_TYPES, STATUS_KEYS
 from . import reports as reports_service
 
 # 연도 비교 막대에 세우는 해의 수. 더 늘리면 막대가 얇아지기만 한다.
@@ -32,6 +32,28 @@ COMPARE_YEARS = 5
 STALE_LIMIT = 3
 
 _DONE = "done"
+
+
+def _by_status(rows: list[sqlite3.Row], key: str) -> dict[str, dict[str, int]]:
+    """`[{key, status, n}, …]` → `{key: {status: n}}`.
+
+    팀원별과 속성별이 **같은 함수를 쓴다.** 따로 짜면 언젠가 한쪽만 고치게 되고,
+    같은 화면의 두 표가 다르게 세기 시작한다 (TODO 75).
+    """
+    out: dict[str, dict[str, int]] = {}
+    for row in rows:
+        out.setdefault(row[key], {})[row["status"]] = row["n"]
+    return out
+
+
+def _full(counts: dict[str, int] | None) -> dict[str, int]:
+    """상태 여섯 칸을 모두 채운다. **0 이라고 빼지 않는다.**
+
+    이 표들은 줄끼리 세로로 견주는 자리라, 칸이 줄마다 달라지면 비교가 안 된다.
+    (대시보드는 반대로 0인 칩을 보내지 않는다 — 거기서는 누를 것 없는 칩이 늘 뿐이다)
+    """
+    counts = counts or {}
+    return {key: counts.get(key, 0) for key in STATUS_KEYS}
 
 
 def _year_clause(year: str | None, alias: str = "p") -> tuple[str, list]:
@@ -89,14 +111,21 @@ def _members(conn: sqlite3.Connection, year: str | None) -> list[dict]:
     clause, params = _year_clause(year)
     rows = conn.execute(
         "SELECT po.name AS name, COUNT(*) AS total,"
-        f"       SUM(CASE WHEN p.status = '{_DONE}' THEN 1 ELSE 0 END) AS done,"
-        "       SUM(CASE WHEN p.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,"
         "       COALESCE(SUM(p.effect_expected), 0) AS effect_expected,"
         "       COALESCE(SUM(p.effect_verified), 0) AS effect_verified"
         " FROM project_owner po JOIN project p ON p.id = po.project_id"
         f" WHERE 1=1{clause} GROUP BY po.name",
         params,
     ).fetchall()
+    statuses = _by_status(
+        conn.execute(
+            "SELECT po.name AS name, p.status AS status, COUNT(*) AS n"
+            " FROM project_owner po JOIN project p ON p.id = po.project_id"
+            f" WHERE 1=1{clause} GROUP BY po.name, p.status",
+            params,
+        ).fetchall(),
+        "name",
+    )
 
     members = []
     for row in rows:
@@ -106,12 +135,15 @@ def _members(conn: sqlite3.Connection, year: str | None) -> list[dict]:
             " WHERE po.name = ? AND r.frozen_at IS NOT NULL",
             (row["name"],),
         ).fetchone()["d"]
+        by_status = _full(statuses.get(row["name"]))
         members.append(
             {
                 "name": row["name"],
                 "total": row["total"],
-                "done": row["done"] or 0,
-                "in_progress": row["in_progress"] or 0,
+                # 상태 여섯 칸. 합은 total 과 같다.
+                "by_status": by_status,
+                "done": by_status[_DONE],
+                "in_progress": by_status["in_progress"],
                 "effect_expected": round(row["effect_expected"] or 0, 2),
                 "effect_verified": round(row["effect_verified"] or 0, 2),
                 "reports": _report_count(conn, year, owner=row["name"]),
@@ -131,24 +163,35 @@ def _types(conn: sqlite3.Connection, year: str | None) -> list[dict]:
         (row["type"] or ""): row
         for row in conn.execute(
             "SELECT type, COUNT(*) AS n,"
-            f"       SUM(CASE WHEN status = '{_DONE}' THEN 1 ELSE 0 END) AS done,"
             "       COALESCE(SUM(effect_expected), 0) AS ee,"
             "       COALESCE(SUM(effect_verified), 0) AS ev"
             f" FROM project p WHERE 1=1{clause} GROUP BY type",
             params,
         )
     }
+    statuses = _by_status(
+        conn.execute(
+            "SELECT COALESCE(type, '') AS type, status, COUNT(*) AS n"
+            f" FROM project p WHERE 1=1{clause} GROUP BY type, status",
+            params,
+        ).fetchall(),
+        "type",
+    )
     out = []
     for key, label in [*PROJECT_TYPES, ("none", "미지정")]:
-        row = rows.get("" if key == "none" else key)
+        stored = "" if key == "none" else key
+        row = rows.get(stored)
         if not row:
             continue
+        by_status = _full(statuses.get(stored))
         out.append(
             {
                 "key": key,
                 "label": label,
                 "count": row["n"],
-                "done": row["done"] or 0,
+                # 팀원별과 같은 모양이다. 한 화면에서 같은 것을 다르게 세지 않는다.
+                "by_status": by_status,
+                "done": by_status[_DONE],
                 "effect_expected": round(row["ee"] or 0, 2),
                 "effect_verified": round(row["ev"] or 0, 2),
             }
@@ -156,19 +199,63 @@ def _types(conn: sqlite3.Connection, year: str | None) -> list[dict]:
     return out
 
 
-def _monthly_reports(conn: sqlite3.Connection, year: str | None) -> list[dict]:
-    """월별 확정 보고 수. **빈 달이 곧 관리 공백**이라 0인 달도 자리를 남긴다."""
+def _monthly_reports(conn: sqlite3.Connection, year: str | None) -> dict:
+    """과제 × 월 표의 재료 (TODO 77).
+
+    **화면 모양은 서버가 모른다.** 과제 목록과 보고 목록만 주고, 열두 칸으로 나누는 일은
+    화면이 한다. 그래야 "한 달에 두 건이면 어떻게 보일지" 를 고칠 때 서버를 안 건드린다.
+
+    **어떤 과제가 줄이 되는가 — 합집합이다.**
+
+        줄 = (그 해 번호의 과제) ∪ (그 해에 보고가 있었던 과제)
+
+    홈은 연도 기준을 둘 쓴다 (과제는 번호의 연도, 보고는 보고한 날의 연도).
+    이 표가 그 둘이 만나는 자리다. 지난해 번호인데 올해 보고한 과제를 빼면
+    **표의 합이 위쪽 "보고 횟수" 와 어긋나고**, 올해 번호인데 아직 한 번도 보고 안 한
+    과제를 빼면 **비어 있다는 사실이 사라진다.** 둘 다 보여야 한다.
+
+    확정된 보고만 담는다 — 초안은 아직 보고한 것이 아니다.
+    """
     if not year:
-        return []
-    counts = {
-        row["m"]: row["n"]
+        return {"projects": [], "reports": []}
+
+    reports = [
+        {
+            "id": row["id"],
+            "project_id": row["project_id"],
+            "date": row["report_date"],
+            "audience": row["audience"],
+        }
         for row in conn.execute(
-            "SELECT SUBSTR(report_date, 6, 2) AS m, COUNT(*) AS n FROM report"
-            " WHERE frozen_at IS NOT NULL AND SUBSTR(report_date, 1, 4) = ? GROUP BY m",
+            "SELECT id, project_id, report_date, audience FROM report"
+            " WHERE frozen_at IS NOT NULL AND SUBSTR(report_date, 1, 4) = ?"
+            " ORDER BY report_date, id",
             (year,),
         )
-    }
-    return [{"month": month, "count": counts.get(f"{month:02d}", 0)} for month in range(1, 13)]
+    ]
+
+    reported = {item["project_id"] for item in reports}
+    clause, params = _year_clause(year)
+    projects = [
+        {"id": row["id"], "title": row["title"], "status": row["status"]}
+        for row in conn.execute(
+            f"SELECT id, title, status FROM project p WHERE 1=1{clause} ORDER BY p.id",
+            params,
+        )
+    ]
+    known = {item["id"] for item in projects}
+    # 그 해 번호가 아닌데 그 해에 보고한 과제 — 번호가 다르므로 화면에서 바로 구분된다.
+    outside = [item for item in reported if item not in known]
+    if outside:
+        placeholders = ",".join("?" * len(outside))
+        projects.extend(
+            {"id": row["id"], "title": row["title"], "status": row["status"]}
+            for row in conn.execute(
+                f"SELECT id, title, status FROM project WHERE id IN ({placeholders}) ORDER BY id",
+                tuple(outside),
+            )
+        )
+    return {"projects": projects, "reports": reports}
 
 
 def _compare(conn: sqlite3.Connection) -> list[dict]:

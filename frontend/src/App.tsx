@@ -199,7 +199,7 @@ export default function App() {
         {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} />}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
-        {route.name === "home" && <Home />}
+        {route.name === "home" && <Home meta={meta} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}
       </main>
       {/* 화면마다 따로 두지 않는다 — 요청의 핵심이 "어디서나 같은 자리"다. */}

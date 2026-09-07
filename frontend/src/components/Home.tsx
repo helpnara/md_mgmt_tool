@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import type { Home as HomeData } from "../types";
+import type { Home as HomeData, Meta, MonthlyReports } from "../types";
 import { projectLink } from "../nav";
+import { effectNumber } from "../util";
 import LoadError from "./LoadError";
 
 /**
@@ -16,9 +17,62 @@ import LoadError from "./LoadError";
  */
 
 const ALL_YEARS = "all";
-/** 억원/년. 소수 한 자리면 충분하다 — 그 아래는 보고 자리에서 의미가 없다. */
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+/** 한 칸에 세우는 보고 수. 넘치면 +N 으로 접는다 — 한 칸이 길어지면 그 줄만 키가 커진다. */
+const CELL_LIMIT = 2;
+const GRID_KEY = "md-mgmt:home-month-grid";
+/** 억원/년. 목록·과제 상세와 **같은 규칙**으로 적는다 (util.ts effectNumber, TODO 76). */
 function money(value: number): string {
-  return value ? value.toFixed(1) : "—";
+  return value ? effectNumber(value) : "—";
+}
+
+/**
+ * 상태 여섯 칸 (예정·검토중·진행중·보류·완료·중단).
+ *
+ * **순서는 `meta.statuses` 를 그대로 따른다.** 화면에 순서를 다시 적으면 나중에 상태를
+ * 하나 더할 때 두 곳이 어긋난다. 팀원별·속성별 두 표가 이 부품을 나눠 쓰므로,
+ * 한 화면에서 같은 것을 다르게 세는 일이 생기지 않는다 (TODO 75).
+ */
+function StatusHead({ meta }: { meta: Meta }) {
+  return (
+    <>
+      {meta.statuses.map((status) => (
+        <th key={status.key}>{status.label}</th>
+      ))}
+    </>
+  );
+}
+
+function StatusCells({
+  meta,
+  counts,
+  link,
+}: {
+  meta: Meta;
+  counts: Record<string, number>;
+  /** 그 칸이 가리킬 목록 주소. 0 인 칸은 갈 곳이 없으므로 링크를 걸지 않는다. */
+  link: (statusKey: string) => string;
+}) {
+  return (
+    <>
+      {meta.statuses.map((status) => {
+        const count = counts?.[status.key] ?? 0;
+        return (
+          // 0 은 흐리게. 어디가 비었는지가 이 표의 요점이다.
+          <td key={status.key} className={count ? undefined : "zero"}>
+            {count ? <a href={link(status.key)}>{count}</a> : 0}
+          </td>
+        );
+      })}
+    </>
+  );
+}
+
+/** 그 달의 보고 이력으로 가는 주소. 마지막 날은 달마다 다르므로 계산해서 쓴다. */
+function monthLink(year: string, month: number): string {
+  const mm = String(month).padStart(2, "0");
+  const last = new Date(Number(year), month, 0).getDate();
+  return `#/history?from=${year}-${mm}-01&to=${year}-${mm}-${last}`;
 }
 
 function listLink(params: Record<string, string>): string {
@@ -27,11 +81,21 @@ function listLink(params: Record<string, string>): string {
   return `#/projects${text ? `?${text}` : ""}`;
 }
 
-export default function Home() {
+export default function Home({ meta }: { meta: Meta }) {
   const thisYear = String(new Date().getFullYear());
   const [year, setYear] = useState(thisYear);
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 과제 수만큼 줄이 늘어나는 표라, 홈이 길어지면 접어 둘 수 있어야 한다.
+  const [gridOpen, setGridOpen] = useState(() => localStorage.getItem(GRID_KEY) !== "off");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GRID_KEY, gridOpen ? "on" : "off");
+    } catch {
+      /* 사생활 보호 모드 등 — 접힘 상태를 기억 못 할 뿐이다 */
+    }
+  }, [gridOpen]);
 
   const load = useCallback(() => {
     api
@@ -51,7 +115,19 @@ export default function Home() {
   const yearParam = year === ALL_YEARS ? "" : year;
   const { team, this_week: week } = data;
   const memberSum = data.members.reduce((sum, item) => sum + item.total, 0);
-  const maxMonthly = Math.max(1, ...data.monthly_reports.map((item) => item.count));
+  // 과제 → 달 → 그 달의 보고들. 열두 칸으로 나누는 일은 화면 몫이다 (서버는 목록만 준다).
+  type Report = MonthlyReports["reports"][number];
+  type Months = Map<number, Report[]>;
+  const noReports: Months = new Map();
+  const byProject = new Map<string, Months>();
+  const monthTotals: Record<number, number> = {};
+  for (const report of data.monthly_reports.reports) {
+    const month = Number(report.date.slice(5, 7));
+    monthTotals[month] = (monthTotals[month] ?? 0) + 1;
+    if (!byProject.has(report.project_id)) byProject.set(report.project_id, new Map());
+    const months = byProject.get(report.project_id)!;
+    months.set(month, [...(months.get(month) ?? []), report]);
+  }
   const maxCompare = Math.max(1, ...data.compare.map((item) => item.total));
 
   return (
@@ -197,8 +273,7 @@ export default function Home() {
                   <tr>
                     <th>담당자</th>
                     <th>담당 과제</th>
-                    <th>진행중</th>
-                    <th>완료</th>
+                    <StatusHead meta={meta} />
                     <th>
                       기대효과
                       <span className="th-unit">억원/년</span>
@@ -218,8 +293,11 @@ export default function Home() {
                         <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
                       </td>
                       <td>{member.total}</td>
-                      <td>{member.in_progress}</td>
-                      <td>{member.done}</td>
+                      <StatusCells
+                        meta={meta}
+                        counts={member.by_status}
+                        link={(status) => listLink({ owner: member.name, status, year: yearParam })}
+                      />
                       <td>{money(member.effect_expected)}</td>
                       <td>{money(member.effect_verified)}</td>
                       <td>{member.reports}</td>
@@ -251,17 +329,17 @@ export default function Home() {
         <div className="card home-types">
           <h2>속성별</h2>
           <div className="table-scroll">
-            <table className="grid">
+            <table className="grid home-member-table">
               <thead>
                 <tr>
                   <th>속성</th>
                   <th>과제</th>
-                  <th>완료</th>
+                  <StatusHead meta={meta} />
                   <th>
-                    기대<span className="th-unit">억원/년</span>
+                    기대효과<span className="th-unit">억원/년</span>
                   </th>
                   <th>
-                    실증<span className="th-unit">억원/년</span>
+                    실증효과<span className="th-unit">억원/년</span>
                   </th>
                 </tr>
               </thead>
@@ -272,7 +350,11 @@ export default function Home() {
                       <a href={listLink({ type: item.key, year: yearParam })}>{item.label}</a>
                     </td>
                     <td>{item.count}</td>
-                    <td>{item.done}</td>
+                    <StatusCells
+                      meta={meta}
+                      counts={item.by_status}
+                      link={(status) => listLink({ type: item.key, status, year: yearParam })}
+                    />
                     <td>{money(item.effect_expected)}</td>
                     <td>{money(item.effect_verified)}</td>
                   </tr>
@@ -280,26 +362,101 @@ export default function Home() {
               </tbody>
             </table>
           </div>
+          <p className="hint">
+            과제마다 속성은 하나뿐이라 이 표의 합은 <b>팀 과제 수와 정확히 맞습니다.</b>
+            (담당 중복이 있는 위쪽 팀원별 표와 다른 점입니다)
+          </p>
         </div>
       )}
 
-      {/* ── 월별 보고 ──────────────────────────────────────────────
-          빈 달이 곧 관리 공백이다. 그래서 0인 달도 자리를 비워 둔다. */}
-      {data.monthly_reports.length > 0 && (
-        <div className="card home-monthly">
-          <h2>월별 보고 횟수</h2>
-          <div className="bar-row months">
-            {data.monthly_reports.map((item) => (
-              <div key={item.month} className="bar-col" title={`${item.month}월 ${item.count}회`}>
-                <span className="bar-value">{item.count || ""}</span>
-                <span className="bar" style={{ height: `${(item.count / maxMonthly) * 100}%` }} />
-                <span className="bar-label">{item.month}</span>
-              </div>
-            ))}
+      {/* ── 과제 × 월 보고 표 (TODO 77) ────────────────────────────
+          예전에는 막대 12개로 "그 달에 몇 번" 만 알려 줬다. 무엇을 언제 어디에
+          보고했는지가 빠져 있었다. 이제 칸을 누르면 그 보고로 바로 간다. */}
+      {yearParam && data.monthly_reports.projects.length > 0 && (
+        <div className="card home-monthly wide">
+          <div className="card-head">
+            <h2>
+              과제별 보고 — {year}년
+              <span className="hint"> · 확정된 보고 {data.monthly_reports.reports.length}건</span>
+            </h2>
+            <button className="ghost small" onClick={() => setGridOpen((prev) => !prev)}>
+              {gridOpen ? "접기" : "펼치기"}
+            </button>
           </div>
-          <p className="hint">확정된 보고만 셉니다. 비어 있는 달이 곧 관리 공백입니다.</p>
+          {gridOpen && (
+            <>
+              <div className="table-scroll">
+                <table className="grid month-grid">
+                  <thead>
+                    <tr>
+                      <th className="month-name">과제</th>
+                      {MONTHS.map((month) => (
+                        <th key={month}>
+                          {month}월
+                          {monthTotals[month] > 0 && (
+                            <span className="th-unit">{monthTotals[month]}건</span>
+                          )}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.monthly_reports.projects.map((project) => {
+                      const mine = byProject.get(project.id) ?? noReports;
+                      return (
+                        <tr key={project.id} className={mine.size ? undefined : "quiet-row"}>
+                          <td className="month-name">
+                            <a href={projectLink(project.id)} title={project.title}>
+                              {project.title}
+                            </a>
+                            <span className="project-id">{project.id}</span>
+                          </td>
+                          {MONTHS.map((month) => {
+                            const cell = mine.get(month) ?? [];
+                            return (
+                              <td key={month} className={cell.length ? "month-cell" : "month-cell zero"}>
+                                {cell.slice(0, CELL_LIMIT).map((report) => (
+                                  <a
+                                    key={report.id}
+                                    className="month-hit"
+                                    href={projectLink(project.id, { report: report.id })}
+                                    title={`${report.date}${report.audience ? ` · ${report.audience}` : ""} — 그때 보고한 내용 열기`}
+                                  >
+                                    <span className="month-date">{report.date.slice(5)}</span>
+                                    {report.audience && (
+                                      <span className="month-audience">{report.audience}</span>
+                                    )}
+                                  </a>
+                                ))}
+                                {cell.length > CELL_LIMIT && (
+                                  <a
+                                    className="month-more"
+                                    href={monthLink(year, month)}
+                                    title="이 달의 보고 이력을 모두 봅니다"
+                                  >
+                                    +{cell.length - CELL_LIMIT}
+                                  </a>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="hint">
+                <b>확정된 보고만</b> 셉니다 — 초안은 아직 보고한 것이 아닙니다. 칸을 누르면 그 과제의
+                그 보고가 열립니다. 줄은 <b>올해 번호의 과제</b>와 <b>올해 보고가 있었던 과제</b>를
+                합친 것이라, 지난해 번호 과제라도 올해 보고했다면 함께 섭니다.
+                한 줄이 통째로 비어 있으면 <b>올해 한 번도 보고하지 않은 과제</b>입니다.
+              </p>
+            </>
+          )}
         </div>
       )}
+
     </section>
   );
 }

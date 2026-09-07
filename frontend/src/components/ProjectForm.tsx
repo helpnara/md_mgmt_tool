@@ -169,7 +169,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           기대효과 (억원/년)
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             value={form.effect_expected}
             onChange={(event) => update("effect_expected", event.target.value)}
@@ -180,7 +180,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           실증효과 (억원/년)
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             value={form.effect_verified}
             onChange={(event) => update("effect_verified", event.target.value)}
@@ -188,6 +188,8 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           />
         </label>
         <p className="hint effect-hint">
+          <b>소수점 둘째 자리까지</b> 적을 수 있습니다 (억원/년 단위라 둘째 자리가 100만 원).
+          <br />
           정성적 효과와 산출 근거는 <b>과제 개요</b>에 적습니다.
           근거 자료(엑셀·PPT)는 개요의 [파일 첨부]로 붙일 수 있습니다.
         </p>

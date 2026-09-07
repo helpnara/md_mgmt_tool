@@ -51,10 +51,19 @@ META_ORDER = [
 ]
 
 
+# 효과 금액의 소수 자릿수. 단위가 **억원/년** 이므로 둘째 자리는 100만 원이다.
+# 한 자리(=천만 원)로는 1억 2,500만 원짜리 효과를 적을 수 없다 (TODO 76).
+EFFECT_DECIMALS = 2
+
+
 def normalize_effect(value: object) -> float | None:
     """효과 금액(억원/년)을 숫자로 맞춘다. 비우는 것은 정상이다.
 
     실증효과는 과제가 끝나야 나오므로 진행 중에는 대부분 비어 있다.
+
+    **여기서 소수 둘째 자리로 자른다.** 파일이 진실의 원천이므로, 화면이 두 자리로
+    보여 준다면 파일에도 두 자리만 있어야 한다. 그러지 않으면 API 로 넣은 `1.234` 가
+    화면에는 `1.23` 으로 보이면서 파일에는 그대로 남아 둘이 어긋난다.
     """
     if value is None or value == "":
         return None
@@ -64,7 +73,7 @@ def normalize_effect(value: object) -> float | None:
         raise ValueError(f"효과 금액은 숫자여야 합니다: {value!r}") from exc
     if number < 0:
         raise ValueError("효과 금액은 0보다 작을 수 없습니다.")
-    return number
+    return round(number, EFFECT_DECIMALS)
 
 
 def normalize_owners(value: object) -> list[str]:
