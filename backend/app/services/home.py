@@ -79,7 +79,9 @@ def _team(conn: sqlite3.Connection, year: str | None) -> dict:
         f"       SUM(CASE WHEN status = '{_DONE}' THEN 1 ELSE 0 END) AS done,"
         "       SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,"
         "       COALESCE(SUM(effect_expected), 0) AS effect_expected,"
-        "       COALESCE(SUM(effect_verified), 0) AS effect_verified"
+        "       COALESCE(SUM(effect_verified), 0) AS effect_verified,"
+        "       SUM(CASE WHEN COALESCE(effect_expected, 0) > 0 THEN 1 ELSE 0 END) AS ee_n,"
+        "       SUM(CASE WHEN COALESCE(effect_verified, 0) > 0 THEN 1 ELSE 0 END) AS ev_n"
         f" FROM project p WHERE 1=1{clause}",
         params,
     ).fetchone()
@@ -89,6 +91,11 @@ def _team(conn: sqlite3.Connection, year: str | None) -> dict:
         "in_progress": row["in_progress"] or 0,
         "effect_expected": round(row["effect_expected"] or 0, 2),
         "effect_verified": round(row["effect_verified"] or 0, 2),
+        # 효과 금액에는 **분모를 함께 보낸다** (TODO 86). 기대와 실증을 화살표로 잇기만 하면
+        # "42.9 중 10.5 달성 = 24%" 로 읽히는데, 실증은 끝난 과제에서만 나오므로 그 비율은
+        # 성립하지 않는다. 몇 건에서 나온 값인지 밝히면 오해가 생기지 않는다.
+        "effect_expected_projects": row["ee_n"] or 0,
+        "effect_verified_projects": row["ev_n"] or 0,
         "reports": _report_count(conn, year),
     }
 
@@ -106,9 +113,27 @@ def _report_count(conn: sqlite3.Connection, year: str | None, owner: str | None 
     return conn.execute(sql, params).fetchone()["n"]
 
 
+def _activity_counts(conn: sqlite3.Connection, year: str | None) -> dict[str, int]:
+    """사람별 역량 이력 건수. **연도는 활동한 날** 기준이다 (TODO 89).
+
+    면담 준비를 한 화면에서 끝내기 위한 것이다 — 지금까지는 홈(과제 성과)과
+    팀원 역량 두 화면을 오가야 "이 사람이 올해 무엇을 맡았고 무엇을 배웠나"가 나왔다.
+    """
+    sql = "SELECT person, COUNT(*) AS n FROM activity"
+    params: list = []
+    if year:
+        sql += " WHERE SUBSTR(date, 1, 4) = ?"
+        params.append(year)
+    return {row["person"]: row["n"] for row in conn.execute(sql + " GROUP BY person", params)}
+
+
 def _members(conn: sqlite3.Connection, year: str | None) -> list[dict]:
-    """팀원별 성과. 사용자가 정한 네 가지 — 담당 건수 · 완료 · 효과 금액 · 보고 횟수."""
+    """팀원별 성과. 사용자가 정한 네 가지 — 담당 건수 · 완료 · 효과 금액 · 보고 횟수.
+
+    여기에 **역량 이력 건수**를 한 칸 더 붙였다 (TODO 89).
+    """
     clause, params = _year_clause(year)
+    activities = _activity_counts(conn, year)
     rows = conn.execute(
         "SELECT po.name AS name, COUNT(*) AS total,"
         "       COALESCE(SUM(p.effect_expected), 0) AS effect_expected,"
@@ -147,6 +172,8 @@ def _members(conn: sqlite3.Connection, year: str | None) -> list[dict]:
                 "effect_expected": round(row["effect_expected"] or 0, 2),
                 "effect_verified": round(row["effect_verified"] or 0, 2),
                 "reports": _report_count(conn, year, owner=row["name"]),
+                # 과제가 아니라 사람에게 쌓인 것. 0 이면 그 자체가 면담 이야깃거리다.
+                "activities": activities.get(row["name"], 0),
                 # 마지막 보고는 연도를 걸지 않는다 — "이 사람이 마지막으로 보고한 때"가
                 # 궁금한 것이지 "올해 안에서 마지막"이 궁금한 것이 아니다.
                 "last_reported_at": last,
@@ -196,6 +223,53 @@ def _types(conn: sqlite3.Connection, year: str | None) -> list[dict]:
                 "effect_verified": round(row["ev"] or 0, 2),
             }
         )
+    return out
+
+
+def _groups(conn: sqlite3.Connection, year: str | None) -> list[dict]:
+    """그룹별 과제 수와 효과 금액 (TODO 90).
+
+    속성(R&D·투자…)은 과제의 *성격*이고 그룹(차세대전지·소재…)은 *주제*다.
+    목록에는 그룹 필터가 있는데 홈에만 이 축이 없어서, "올해 차세대전지 쪽이 어땠나"를
+    볼 자리가 없었다. 표 모양은 속성별과 같게 둔다 — 같은 화면에서 같은 것을
+    다르게 세지 않기 위해서다.
+
+    **그룹은 자유 입력이라 수가 늘 수 있다.** 화면이 접어서 보여 준다.
+    """
+    clause, params = _year_clause(year)
+    rows = conn.execute(
+        "SELECT COALESCE(NULLIF(TRIM(grp), ''), '') AS g, COUNT(*) AS n,"
+        "       COALESCE(SUM(effect_expected), 0) AS ee,"
+        "       COALESCE(SUM(effect_verified), 0) AS ev"
+        f" FROM project p WHERE 1=1{clause} GROUP BY g",
+        params,
+    ).fetchall()
+    statuses = _by_status(
+        conn.execute(
+            "SELECT COALESCE(NULLIF(TRIM(grp), ''), '') AS g, status, COUNT(*) AS n"
+            f" FROM project p WHERE 1=1{clause} GROUP BY g, status",
+            params,
+        ).fetchall(),
+        "g",
+    )
+    out = []
+    for row in rows:
+        by_status = _full(statuses.get(row["g"]))
+        out.append(
+            {
+                # 빈 그룹도 세고, 눌러서 거를 수 있게 키를 준다 (속성별과 같은 규칙).
+                "key": row["g"] or "none",
+                "label": row["g"] or "미지정",
+                "count": row["n"],
+                "by_status": by_status,
+                "done": by_status[_DONE],
+                "effect_expected": round(row["ee"] or 0, 2),
+                "effect_verified": round(row["ev"] or 0, 2),
+            }
+        )
+    # 많은 것부터. 이름순은 "어디가 큰가"를 묻는 자리에서 쓸모가 없다.
+    # **미지정은 언제나 맨 아래.** 속성별 표와 같은 규칙이라 두 표가 같게 읽힌다.
+    out.sort(key=lambda item: (item["key"] == "none", -item["count"], item["label"]))
     return out
 
 
@@ -253,6 +327,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
         "compare": _compare(conn),
         "members": _members(conn, year),
         "types": _types(conn, year),
+        "groups": _groups(conn, year),
     }
 
 

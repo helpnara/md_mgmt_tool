@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { api } from "../api";
-import type { Home as HomeData, Meta } from "../types";
+import type { Home as HomeData, HomeSlice, Meta } from "../types";
 import { projectLink } from "../nav";
 import { effectNumber } from "../util";
 import LoadError from "./LoadError";
@@ -70,6 +71,89 @@ function listLink(params: Record<string, string>): string {
   return `#/projects${text ? `?${text}` : ""}`;
 }
 
+/** 그룹 표는 자유 입력이라 길어질 수 있다. 이만큼만 세우고 나머지는 접는다. */
+const SLICE_LIMIT = 8;
+
+/**
+ * 속성별·그룹별 표 (TODO 90).
+ *
+ * 두 표가 **같은 부품**을 쓴다. 따로 짜면 언젠가 한쪽만 고치게 되고,
+ * 같은 화면의 두 표가 다르게 세기 시작한다 (팀원별·속성별에서 배운 것, TODO 75).
+ */
+function SliceTable({
+  meta,
+  title,
+  column,
+  rows,
+  param,
+  yearParam,
+  note,
+}: {
+  meta: Meta;
+  title: string;
+  /** 첫 열의 이름 — "속성" 또는 "그룹" */
+  column: string;
+  rows: HomeSlice[];
+  /** 목록을 거를 때 쓸 질의 이름 */
+  param: "type" | "group";
+  yearParam: string;
+  note: ReactNode;
+}) {
+  const [all, setAll] = useState(false);
+  if (rows.length === 0) return null;
+  const shown = all ? rows : rows.slice(0, SLICE_LIMIT);
+  const link = (item: HomeSlice, status?: string) =>
+    listLink({ [param]: item.key, ...(status ? { status } : {}), year: yearParam });
+
+  return (
+    // 속성별과 그룹별을 이름으로 가려낼 수 있어야 한다 — 시험이 둘을 헷갈리면
+    // 어느 표를 보고 있는지 모른 채 통과할 수 있다.
+    <div className={`card home-types home-slice-${param}`}>
+      <h2>{title}</h2>
+      <div className="table-scroll">
+        <table className="grid home-member-table">
+          <thead>
+            <tr>
+              <th>{column}</th>
+              <th>과제</th>
+              <StatusHead meta={meta} />
+              <th>
+                기대효과<span className="th-unit">억원/년</span>
+              </th>
+              <th>
+                실증효과<span className="th-unit">억원/년</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((item) => (
+              <tr key={item.key}>
+                <td>
+                  <a href={link(item)}>{item.label}</a>
+                </td>
+                <td>{item.count}</td>
+                <StatusCells
+                  meta={meta}
+                  counts={item.by_status}
+                  link={(status) => link(item, status)}
+                />
+                <td>{money(item.effect_expected)}</td>
+                <td>{money(item.effect_verified)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > SLICE_LIMIT && (
+        <button type="button" className="ghost small" onClick={() => setAll((on) => !on)}>
+          {all ? "접기" : `나머지 ${rows.length - SLICE_LIMIT}개 더 보기`}
+        </button>
+      )}
+      <p className="hint">{note}</p>
+    </div>
+  );
+}
+
 export default function Home({ meta }: { meta: Meta }) {
   const thisYear = String(new Date().getFullYear());
   const [year, setYear] = useState(thisYear);
@@ -93,6 +177,55 @@ export default function Home({ meta }: { meta: Meta }) {
 
   const yearParam = year === ALL_YEARS ? "" : year;
   const { team, this_week: week } = data;
+
+  // ── 아직 아무것도 없을 때 ──────────────────────────────────────────
+  // 0 이 여덟 개 늘어선 대시보드는 처음 켠 사람에게 아무것도 알려 주지 않는다.
+  // 이 도구는 다른 팀장에게 배포해 쓰는 것이 목표라, **첫 5분이 곧 채택 여부**다.
+  // 과제가 하나도 없는 동안에는 지표 대신 **다음에 할 일**을 세운다 (TODO 84).
+  if (data.years.length === 0 && team.total === 0) {
+    return (
+      <section className="home">
+        <div className="card home-start">
+          <h1>과제 이력 관리를 시작합니다</h1>
+          <p className="hint">
+            과제 하나가 폴더 하나입니다. 진행일지와 첨부가 그 안에 함께 쌓이고,
+            모두 <b>보통의 마크다운 파일</b>이라 이 도구 없이도 탐색기에서 그대로 읽힙니다.
+          </p>
+          <ol className="home-steps">
+            <li>
+              <b>작성자와 담당자 명부를 정합니다</b>
+              <span className="hint">
+                진행일지·보고에 누가 썼는지 남고, 담당자 칸에서 이름을 눌러 넣게 됩니다.
+              </span>
+              <a className="home-step-go" href="#/settings">
+                설정 열기 →
+              </a>
+            </li>
+            <li>
+              <b>첫 과제를 만듭니다</b>
+              <span className="hint">
+                제목만 있으면 됩니다. 상태·담당자·마감은 나중에 채워도 됩니다.
+              </span>
+              <a className="home-step-go primary" href="#/projects?new=1">
+                과제 만들기 →
+              </a>
+            </li>
+            <li>
+              <b>진행일지를 씁니다</b>
+              <span className="hint">
+                과제 상세에서 [기록 추가]. 그림은 Ctrl+V, 엑셀 표는 붙여넣으면 표로 바뀝니다.
+                기록이 쌓이면 보고 초안이 자동으로 만들어집니다.
+              </span>
+            </li>
+          </ol>
+          <p className="hint">
+            과제가 하나라도 생기면 이 자리에 <b>그 해 팀 현황과 팀원별 성과</b>가 들어섭니다.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   const memberSum = data.members.reduce((sum, item) => sum + item.total, 0);
   const maxCompare = Math.max(1, ...data.compare.map((item) => item.total));
   return (
@@ -183,6 +316,9 @@ export default function Home({ meta }: { meta: Meta }) {
             <span className="home-stat-label">보고 횟수</span>
             <strong>{team.reports}회</strong>
           </a>
+          {/* 화살표만 놓으면 "42.9 중 10.5 달성 = 24%" 로 읽힌다. 실증은 끝난 과제에서만
+              나오므로 그 비율은 성립하지 않는다. **몇 건에서 나온 값인지**를 함께 적어
+              분모를 드러낸다 (TODO 86). */}
           <div className="home-stat effect">
             <span className="home-stat-label">효과 금액 (억원/년)</span>
             <strong>
@@ -190,11 +326,16 @@ export default function Home({ meta }: { meta: Meta }) {
               <span className="home-arrow"> → </span>
               실증 {money(team.effect_verified)}
             </strong>
+            <span className="home-stat-note">
+              기대 {team.effect_expected_projects ?? 0}건 · 실증 {team.effect_verified_projects ?? 0}건에
+              입력됨 (전체 {team.total}건)
+            </span>
           </div>
         </div>
         <p className="hint">
           과제 수·완료·효과 금액은 <b>과제 번호의 연도</b>로, 보고 횟수는 <b>보고한 날의 연도</b>로 셉니다.
           {" "}보고 횟수는 <b>확정된 보고</b>만 셉니다 — 초안은 아직 보고한 것이 아닙니다.
+          {" "}<b>실증효과는 끝난 과제에서만 나오므로 기대 대비 달성률이 아닙니다.</b>
         </p>
       </div>
       </div>
@@ -252,6 +393,9 @@ export default function Home({ meta }: { meta: Meta }) {
                       <span className="th-unit">억원/년</span>
                     </th>
                     <th>보고 횟수</th>
+                    {/* 과제가 아니라 사람에게 쌓인 것. 면담 준비를 한 화면에서
+                        끝내기 위해 여기 세운다 (TODO 89). */}
+                    <th>역량 이력</th>
                     <th>마지막 보고</th>
                   </tr>
                 </thead>
@@ -270,6 +414,15 @@ export default function Home({ meta }: { meta: Meta }) {
                       <td>{money(member.effect_expected)}</td>
                       <td>{money(member.effect_verified)}</td>
                       <td>{member.reports}</td>
+                      <td className={member.activities ? undefined : "zero"}>
+                        {member.activities ? (
+                          <a href={`#/skills?person=${encodeURIComponent(member.name)}${yearParam ? `&year=${yearParam}` : ""}`}>
+                            {member.activities}
+                          </a>
+                        ) : (
+                          0
+                        )}
+                      </td>
                       <td className="muted">{member.last_reported_at ?? "—"}</td>
                     </tr>
                   ))}
@@ -287,56 +440,46 @@ export default function Home({ meta }: { meta: Meta }) {
                 </>
               )}{" "}
               <b>효과 금액도 마찬가지로 중복 합산</b>되므로, 팀 합계는 위의 &ldquo;팀 현황&rdquo;에 있는
-              과제 기준 숫자를 쓰십시오.
+              과제 기준 숫자를 쓰십시오. <b>역량 이력</b>은 과제와 무관한 그 해 교육·세미나
+              참여 건수입니다 — 눌러서 그 사람의 이력을 봅니다.
             </p>
           </>
         )}
       </div>
 
-      {/* ── 속성별 ─────────────────────────────────────────────────── */}
-      {data.types.length > 0 && (
-        <div className="card home-types">
-          <h2>속성별</h2>
-          <div className="table-scroll">
-            <table className="grid home-member-table">
-              <thead>
-                <tr>
-                  <th>속성</th>
-                  <th>과제</th>
-                  <StatusHead meta={meta} />
-                  <th>
-                    기대효과<span className="th-unit">억원/년</span>
-                  </th>
-                  <th>
-                    실증효과<span className="th-unit">억원/년</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.types.map((item) => (
-                  <tr key={item.key}>
-                    <td>
-                      <a href={listLink({ type: item.key, year: yearParam })}>{item.label}</a>
-                    </td>
-                    <td>{item.count}</td>
-                    <StatusCells
-                      meta={meta}
-                      counts={item.by_status}
-                      link={(status) => listLink({ type: item.key, status, year: yearParam })}
-                    />
-                    <td>{money(item.effect_expected)}</td>
-                    <td>{money(item.effect_verified)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="hint">
+      {/* ── 속성별 · 그룹별 ─────────────────────────────────────────
+          속성은 과제의 *성격*(R&D·투자…), 그룹은 *주제*(차세대전지·소재…)다.
+          목록에는 두 필터가 다 있는데 홈에는 그룹 축만 없었다 (TODO 90).
+          표 모양은 하나로 맞춘다 — 같은 화면에서 같은 것을 다르게 세지 않기 위해서다. */}
+      <SliceTable
+        meta={meta}
+        title="속성별"
+        column="속성"
+        rows={data.types}
+        param="type"
+        yearParam={yearParam}
+        note={
+          <>
             과제마다 속성은 하나뿐이라 이 표의 합은 <b>팀 과제 수와 정확히 맞습니다.</b>
             (담당 중복이 있는 위쪽 팀원별 표와 다른 점입니다)
-          </p>
-        </div>
-      )}
+          </>
+        }
+      />
+
+      <SliceTable
+        meta={meta}
+        title="그룹별"
+        column="그룹"
+        rows={data.groups}
+        param="group"
+        yearParam={yearParam}
+        note={
+          <>
+            그룹은 <b>자유 입력</b>이라 표기가 흔들리면 줄이 갈라집니다. 과제마다 그룹은
+            하나뿐이므로 이 표의 합도 <b>팀 과제 수와 맞습니다.</b>
+          </>
+        }
+      />
 
     </section>
   );

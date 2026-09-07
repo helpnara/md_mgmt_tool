@@ -228,7 +228,10 @@ export interface Dashboard {
   other_year_active: number;
   /** 오늘이 선정일·보고일일 때만 채워진다. 매일 뜨면 곧 안 보게 된다. */
   reminder: ReportReminder | null;
+  /** 화면에 세우는 상위 몇 건. 개수를 말할 때 이것을 세면 안 된다 */
   candidates: ReportCandidate[];
+  /** 자르기 전 **전체** 후보 수 (TODO 82). "N건 보기"는 이 수를 쓴다 */
+  candidate_total: number;
 }
 
 /** 보고 주기 알림 (T12). */
@@ -331,17 +334,23 @@ export interface HomeTeam {
   /** 억원/년. 기대와 실증을 절대 합치지 않는다 — 합치면 확정 여부를 알 수 없다. */
   effect_expected: number;
   effect_verified: number;
+  /** 그 금액이 **몇 건에서 나왔는지**. 없으면 화살표가 달성률로 읽힌다 (TODO 86) */
+  effect_expected_projects?: number;
+  effect_verified_projects?: number;
 }
 
 export interface HomeMember extends HomeTeam {
   name: string;
+  /** 그 해 역량 이력 건수. 0 이면 그 자체가 면담 이야깃거리다 (TODO 89) */
+  activities: number;
   /** 상태 여섯 칸 (예정·검토중·진행중·보류·완료·중단). 합은 total 과 같다. */
   by_status: Record<string, number>;
   /** 연도와 무관한 실제 마지막 보고일 */
   last_reported_at: string | null;
 }
 
-export interface HomeType {
+/** 속성별·그룹별 표의 한 줄. 두 표는 **같은 모양**이다 (TODO 90). */
+export interface HomeSlice {
   key: string;
   label: string;
   count: number;
@@ -377,12 +386,16 @@ export interface Home {
   compare: (HomeTeam & { year: string })[];
   /** 담당 중복 포함 — 합이 team 보다 클 수 있다 */
   members: HomeMember[];
-  types: HomeType[];
+  types: HomeSlice[];
+  /** 그룹(주제)별. 속성별과 같은 모양이고, 자유 입력이라 수가 늘 수 있다 (TODO 90) */
+  groups: HomeSlice[];
 }
 
 /** 팀원 역량 이력 한 건 (TODO 72). 기록 단위는 **사람**이다. */
 export interface Activity {
   id: number;
+  /** 같은 행사를 가리키는 열쇠 — 날짜·구분·제목이 같으면 한 행사다 (TODO 85) */
+  event_key: string;
   person: string;
   /** 시작일. 연도 집계도 이 날짜를 본다 */
   date: string;
@@ -426,6 +439,7 @@ export interface ActivitySummary {
   years: string[];
   trend_years: string[];
   quiet_days: number;
-  team: { count: number; hours: number; cost: number; people: number };
+  /** count 는 **참여 연인원**, events 는 **행사 수**다. 둘은 다르다 (TODO 85) */
+  team: { count: number; events: number; hours: number; cost: number; people: number };
   people: ActivityPerson[];
 }

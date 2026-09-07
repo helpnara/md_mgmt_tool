@@ -43,8 +43,8 @@ DATA = dict(
     days="6일", hours="36시간", mm_real="0.23 M/M", cost_real="약 313만 원",
     mm_out="19 M/M", period_out="5~6개월", cost_out="약 2.3억 원",
     saving="약 2억 2,687만 원", ratio="약 74배", fp="363 FP",
-    loc="15,758줄", api="64개", tests="457건", screens="8개",
-    tables="10개", todo_all="80건", todo_done="79건", todo_wait="1건",
+    loc="16,222줄", api="64개", tests="477건", screens="8개",
+    tables="10개", todo_all="90건", todo_done="89건", todo_wait="1건",
 )
 
 # ── 조판 상수 (mm) ────────────────────────────────────────────────────────
@@ -380,7 +380,7 @@ def build() -> Path:
         {"t": "코드부터 쓰지 않았습니다. 문제와 업무규칙을 먼저 정의하고 시험 기준을 확정한 뒤, "
               "구현·디버깅·시험을 AI와 반복했습니다. 실사용 결함은 보고 당일 수정했습니다.",
          "size": 13, "color": MUTED, "after": 2.5, "spacing": 1.2},
-        {"t": f"실사용 중 접수한 개선 요청 {DATA['todo_all']} 중 {DATA['todo_done']} 반영, "
+        {"t": f"접수·점검한 개선 {DATA['todo_all']} 중 {DATA['todo_done']} 반영, "
               f"{DATA['todo_wait']}은 판단 대기.",
          "size": 13, "color": MUTED, "spacing": 1.2},
     ])

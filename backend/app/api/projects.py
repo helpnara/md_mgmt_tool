@@ -179,8 +179,12 @@ def list_projects(
     elif type:
         where.append("p.type = ?")
         params.append(type)
-    if group:
-        where.append("p.grp = ?")
+    if group == "none":
+        # 그룹을 아직 안 정한 과제만. 홈의 그룹별 표 '미지정' 줄이 이 값을 쓴다 (TODO 90).
+        # 세는 수와 거르는 수는 같아야 한다 (DESIGN 5.8).
+        where.append("(p.grp IS NULL OR TRIM(p.grp) = '')")
+    elif group:
+        where.append("TRIM(p.grp) = ?")
         params.append(group)
     if tag:
         where.append(

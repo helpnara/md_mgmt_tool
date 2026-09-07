@@ -91,7 +91,10 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT, year: str | 
         (*FINISHED_STATUSES, *year_params),
     ).fetchone()["n"]
 
-    candidates = reports_service.candidates(conn)[:limit]
+    # 화면에는 상위 몇 건만 세우지만, **몇 건 중의 몇 건인지**는 함께 보낸다 (TODO 82).
+    # 자른 길이를 그대로 "보고 대상 N건" 이라 적으면 눌렀을 때 다른 수가 나온다 (5.8).
+    all_candidates = reports_service.candidates(conn)
+    candidates = all_candidates[:limit]
 
     return {
         "total": conn.execute(
@@ -130,6 +133,7 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT, year: str | 
         # 오늘이 선정일도 보고일도 아니면 None 이다. 화면은 그때 배너를 접는다.
         "reminder": reports_service.reminder(conn),
         "candidates": candidates,
+        "candidate_total": len(all_candidates),
     }
 
 

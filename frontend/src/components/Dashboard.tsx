@@ -219,7 +219,9 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
             <div className="dash-row dash-candidates">
               <span className="dash-label">{data.report_date} 보고</span>
               <a className="dash-mini go" href="#/reports">
-                보고 대상 {data.candidates.length}건 보기 →
+                {/* 세는 수와 누른 뒤 나오는 수가 같아야 한다 (DESIGN 5.8, TODO 82).
+                    화면에 세운 상위 몇 건의 길이가 아니라 **전체 후보 수**를 적는다. */}
+                보고 대상 {data.candidate_total ?? data.candidates.length}건 보기 →
               </a>
             </div>
           )}

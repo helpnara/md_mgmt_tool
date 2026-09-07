@@ -236,9 +236,23 @@ def delete(conn: sqlite3.Connection, activity_id: int) -> None:
 
 # ── 읽기 ──────────────────────────────────────────────────────────────
 
+def event_key(row) -> str:
+    """같은 행사를 가리키는 열쇠 (TODO 85).
+
+    한 교육에 세 명이 가면 **기록도 세 건**이다 (TODO 74 — 그래야 사람별 집계에서
+    빠지는 사람이 없다). 다만 그 셋은 *행사 하나*이므로, 팀장이 "올해 교육을 몇 번
+    보냈나" 라고 물으면 답은 3이 아니라 1이다. 날짜·구분·제목이 같으면 한 행사로 본다.
+    """
+    return "|".join(
+        [row["date"], row["end_date"] or "", row["kind"], (row["title"] or "").strip()]
+    )
+
+
 def _row(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     return {
         "id": row["id"],
+        # 화면이 같은 행사를 접어 보여 줄 때 쓴다.
+        "event_key": event_key(row),
         "person": row["person"],
         "date": row["date"],
         "end_date": row["end_date"],
@@ -370,7 +384,11 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
     params = [year] if year else []
     team = conn.execute(
         "SELECT COUNT(*) AS n, COALESCE(SUM(hours), 0) AS hours, COALESCE(SUM(cost), 0) AS cost,"
-        "       COUNT(DISTINCT person) AS people"
+        "       COUNT(DISTINCT person) AS people,"
+        # 기록 수는 **참여 연인원**이다. 행사 수를 함께 내지 않으면 화면의 "기록 11건"이
+        # "올해 교육을 열한 번 보냈다"로 읽힌다 (TODO 85).
+        "       COUNT(DISTINCT date || '|' || COALESCE(end_date, '') || '|' || kind"
+        "                     || '|' || TRIM(title)) AS events"
         f" FROM activity{clause}",
         params,
     ).fetchone()
@@ -382,6 +400,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
         "quiet_days": QUIET_DAYS,
         "team": {
             "count": team["n"],
+            "events": team["events"],
             "hours": round(team["hours"] or 0, 1),
             "cost": round(team["cost"] or 0),
             "people": team["people"],
@@ -390,4 +409,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
     }
 
 
-__all__ = ["create", "update", "delete", "listing", "summary", "years", "BODY_TEMPLATE"]
+__all__ = [
+    "create", "update", "delete", "listing", "summary", "years",
+    "event_key", "BODY_TEMPLATE",
+]

@@ -80,6 +80,13 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const kindLabel = (key: string) =>
     meta.activity_kinds.find((item) => item.key === key)?.label ?? key;
 
+  const remove = async (item: Activity) => {
+    if (!window.confirm(`${item.person} 님의 '${item.title}' 기록을 지울까요? 보관함으로 옮겨집니다.`))
+      return;
+    await api.deleteActivity(item.id);
+    load();
+  };
+
   /** 하루면 날짜 하나, 여러 날이면 기간. 같은 해면 뒤쪽은 월·일만 적는다. */
   const period = (item: Activity) => {
     if (!item.end_date) return item.date;
@@ -104,6 +111,19 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
     1,
     ...summary.people.flatMap((item) => Object.values(item.trend)),
   );
+
+  /** 같은 행사끼리 묶는다 (TODO 85). 목록은 이미 날짜순이라 순서는 그대로 지켜진다. */
+  const events: Activity[][] = [];
+  const seen = new Map<string, Activity[]>();
+  for (const row of rows) {
+    const group = seen.get(row.event_key);
+    if (group) group.push(row);
+    else {
+      const fresh = [row];
+      seen.set(row.event_key, fresh);
+      events.push(fresh);
+    }
+  }
 
   return (
     <section className="skills">
@@ -147,9 +167,13 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       <div className="card">
         <h2>{year === ALL_YEARS ? "전체" : `${year}년`} 합계</h2>
         <div className="home-stats">
+          {/* "기록 11건" 은 **참여 연인원**이다. 한 교육에 세 명이 가면 기록도 세 건이라
+              (TODO 74), 그대로 두면 "올해 교육을 열한 번 보냈다"로 읽힌다.
+              팀장이 실제로 묻는 수는 행사 수이므로 그쪽을 크게 세운다 (TODO 85). */}
           <div className="home-stat">
-            <span className="home-stat-label">기록</span>
-            <strong>{summary.team.count}건</strong>
+            <span className="home-stat-label">행사</span>
+            <strong>{summary.team.events}건</strong>
+            <span className="home-stat-note">참여 기록 {summary.team.count}건</span>
           </div>
           <div className="home-stat">
             <span className="home-stat-label">참여 인원</span>
@@ -165,7 +189,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           </div>
         </div>
         <p className="hint">
-          시간·비용은 <b>옵션</b>입니다. 채워 넣은 기록만 합계에 들어가므로, 이 수는
+          <b>행사</b>는 날짜·구분·제목이 같으면 한 건으로 셉니다. <b>참여 기록</b>은 사람 수만큼
+          늘어나므로 두 수는 다릅니다 — 사람별 집계에서 아무도 빠지지 않게 하려는 것입니다.
+          {" "}시간·비용은 <b>옵션</b>입니다. 채워 넣은 기록만 합계에 들어가므로, 이 수는
           &ldquo;쓴 돈 전부&rdquo;가 아니라 <b>적어 둔 만큼</b>입니다.
         </p>
       </div>
@@ -199,6 +225,15 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       {/* ── 사람별 ─────────────────────────────────────────────────── */}
       <div className="card wide">
         <h2>사람별</h2>
+        {/* 명부가 비어 있으면 머리행만 있는 빈 표가 남는다 — 무엇을 해야 하는지
+            알려 주지 않는 화면이다 (TODO 84). 이름이 먼저라는 것을 적어 준다. */}
+        {summary.people.length === 0 && (
+          <p className="empty">
+            아직 이름이 없습니다. <a href="#/settings">설정 → 담당자 명부</a> 에 팀원을 넣어 두면
+            기록이 없는 사람도 이 표에 서고, 그 빈칸이 곧 면담에서 꺼낼 이야깃거리가 됩니다.
+            {" "}명부 없이 <b>[기록 추가]</b> 로 바로 시작해도 됩니다.
+          </p>
+        )}
         {glued.length > 0 && (
           <p className="hint warn-text">
             <b>{glued.map((item) => item.name).join(", ")}</b> 처럼 한 칸에 여러 이름이 든 줄이 있습니다.
@@ -206,6 +241,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             <b>[사람별로 나누기]</b> 를 누르고 <b>[명부 저장]</b> 하시면 사라집니다.
           </p>
         )}
+        {summary.people.length > 0 && (
         <div className="table-scroll">
           <table className="grid skills-table">
             <thead>
@@ -266,18 +302,23 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             </tbody>
           </table>
         </div>
-        <p className="hint">
-          추이 막대는 {summary.trend_years.join(" · ") || "—"}년이며 <b>연도 조건을 따르지 않습니다</b> —
-          과거를 봐야 다음을 이야기할 수 있기 때문입니다. 시간·비용에 마우스를 올리면 그 합계가
-          몇 건에서 나온 값인지 보입니다.
-        </p>
+        )}
+        {summary.people.length > 0 && (
+          <p className="hint">
+            추이 막대는 {summary.trend_years.join(" · ") || "—"}년이며 <b>연도 조건을 따르지 않습니다</b> —
+            과거를 봐야 다음을 이야기할 수 있기 때문입니다. 시간·비용에 마우스를 올리면 그 합계가
+            몇 건에서 나온 값인지 보입니다. <b>기록</b>은 참여 건수이고, 한 행사에 여럿이 가면
+            사람마다 한 건씩 잡힙니다.
+          </p>
+        )}
       </div>
 
       {/* ── 기록 목록 ──────────────────────────────────────────────── */}
       <div className="card wide">
         <div className="card-head">
           <h2>
-            기록 {rows.length}건
+            행사 {events.length}건
+            <span className="hint"> · 참여 기록 {rows.length}건</span>
             {person && <span className="hint"> · {person}</span>}
           </h2>
           <div className="filters">
@@ -311,56 +352,101 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           <p className="empty">조건에 맞는 기록이 없습니다.</p>
         ) : (
           <ul className="activity-list">
-            {rows.map((item) => (
-              <li key={item.id}>
-                <div className="activity-head">
-                  <span className="activity-date">{period(item)}</span>
-                  <span className="tag">{kindLabel(item.kind)}</span>
-                  <strong className="activity-title">{item.title}</strong>
-                  <span className="activity-person">{item.person}</span>
-                  <span className="grow" />
-                  <button
-                    className={editingId === item.id ? "ghost small on" : "ghost small"}
-                    onClick={() => {
-                      setAdding(false);
-                      setEditingId(editingId === item.id ? null : item.id);
-                    }}
-                  >
-                    수정
-                  </button>
-                  <button
-                    className="ghost small danger"
-                    onClick={async () => {
-                      if (!window.confirm(`'${item.title}' 기록을 지울까요? 보관함으로 옮겨집니다.`)) return;
-                      await api.deleteActivity(item.id);
-                      load();
-                    }}
-                  >
-                    삭제
-                  </button>
-                </div>
-                <div className="activity-meta">
-                  {item.host && <span>{item.host}</span>}
-                  {item.place && <span>{item.place}</span>}
-                  {item.hours !== null && <span>{item.hours}시간</span>}
-                  {item.cost !== null && <span>{won(item.cost)}</span>}
-                  {item.link && (
-                    <span className="activity-link" title="수료증·자료 위치">
-                      {item.link}
-                    </span>
+            {events.map((group) => {
+              const first = group[0];
+              const shared = group.length > 1;
+              return (
+                <li key={first.event_key}>
+                  <div className="activity-head">
+                    <span className="activity-date">{period(first)}</span>
+                    <span className="tag">{kindLabel(first.kind)}</span>
+                    <strong className="activity-title">{first.title}</strong>
+                    {/* 한 행사에 여러 명이면 이름을 나란히 세운다. 줄이 사람 수만큼
+                        늘어나면 "올해 몇 번 갔나"를 눈으로 셀 수 없다 (TODO 85). */}
+                    {group.map((item) => (
+                      <span key={item.id} className="activity-person">
+                        {item.person}
+                      </span>
+                    ))}
+                    {shared && <span className="hint activity-count">{group.length}명</span>}
+                    <span className="grow" />
+                    {!shared && (
+                      <>
+                        <button
+                          className={editingId === first.id ? "ghost small on" : "ghost small"}
+                          onClick={() => {
+                            setAdding(false);
+                            setEditingId(editingId === first.id ? null : first.id);
+                          }}
+                        >
+                          수정
+                        </button>
+                        <button
+                          className="ghost small danger"
+                          onClick={() => remove(first)}
+                        >
+                          삭제
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <div className="activity-meta">
+                    {first.host && <span>{first.host}</span>}
+                    {first.place && <span>{first.place}</span>}
+                    {first.hours !== null && <span>{first.hours}시간</span>}
+                    {first.cost !== null && <span>{won(first.cost)}</span>}
+                    {first.link && (
+                      <span className="activity-link" title="수료증·자료 위치">
+                        {first.link}
+                      </span>
+                    )}
+                  </div>
+                  {/* 고치고 지우는 일은 **사람마다** 따로다 — 한 사람만 빠졌을 수도 있다. */}
+                  {shared && (
+                    <div className="activity-people">
+                      {group.map((item) => (
+                        <span key={item.id} className="activity-person-row">
+                          <b>{item.person}</b>
+                          <button
+                            className={editingId === item.id ? "ghost small on" : "ghost small"}
+                            onClick={() => {
+                              setAdding(false);
+                              setEditingId(editingId === item.id ? null : item.id);
+                            }}
+                          >
+                            수정
+                          </button>
+                          <button className="ghost small danger" onClick={() => remove(item)}>
+                            삭제
+                          </button>
+                        </span>
+                      ))}
+                    </div>
                   )}
-                </div>
-                {item.takeaway && <p className="activity-takeaway">{item.takeaway}</p>}
-                {editingId === item.id && (
-                  <ActivityForm
-                    meta={meta}
-                    activity={item}
-                    onClose={() => setEditingId(null)}
-                    onSaved={(message) => { setEditingId(null); say(message); load(); }}
-                  />
-                )}
-              </li>
-            ))}
+                  {group.map(
+                    (item) =>
+                      item.takeaway && (
+                        <p key={`t-${item.id}`} className="activity-takeaway">
+                          {shared && <b>{item.person} · </b>}
+                          {item.takeaway}
+                        </p>
+                      ),
+                  )}
+                  {group.map(
+                    (item) =>
+                      editingId === item.id && (
+                        <ActivityForm
+                          key={`f-${item.id}`}
+                          meta={meta}
+                          activity={item}
+                          onClose={() => setEditingId(null)}
+                          onSaved={(message) => { setEditingId(null); say(message); load(); }}
+                        />
+                      ),
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

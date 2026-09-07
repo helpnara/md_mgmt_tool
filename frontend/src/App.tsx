@@ -167,7 +167,8 @@ export default function App() {
             검색
           </button>
         </form>
-        <span className="vault-path" title="데이터 위치">
+        {/* 길면 잘린다 — 마우스를 올리면 전체 경로가 보인다 (TODO 88). */}
+        <span className="vault-path" title={`데이터 위치: ${meta.vault}`}>
           {meta.vault}
         </span>
       </header>

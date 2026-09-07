@@ -67,7 +67,18 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color:
   z-index: 5;
 }
 .brand { font-weight: 700; font-size: 16px; color: var(--text); text-decoration: none; }
-.vault-path { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+/* 공유 폴더·OneDrive 경로는 길다. 막아 두지 않으면 이 한 줄이 머리글 전체를 밀어내
+   메뉴가 글자 중간에서 줄바꿈되고 검색창이 찌그러진다 (TODO 88). */
+.vault-path {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;          /* 좁아지면 이 줄이 먼저 양보한다 */
+}
 
 main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px; }
 /* 넓은 화면에서는 본문을 넓게 쓴다 (좌우 여백 낭비 방지) */
@@ -92,7 +103,10 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px; }
 .card h2 { font-size: 15px; }
 
 .toolbar { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.filters { display: flex; gap: 8px; }
+/* 셀렉트 여덟 개가 한 줄에 다 서지 못하는 폭이 있다 — 1366×768 에 윈도우 125% 배율이면
+   뷰포트가 1093px 이고, 그 폭에서 마지막 셀렉트가 잘려 페이지가 옆으로 밀렸다 (TODO 83).
+   접히게 두면 줄이 하나 늘 뿐이고, 가로 스크롤은 생기지 않는다. */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
 .filters select { width: auto; min-width: 130px; }
 .toolbar-actions { display: flex; gap: 8px; }
 
@@ -841,9 +855,11 @@ button { white-space: nowrap; }
 }
 .home-stat strong { font-size: 20px; font-weight: 700; }
 .home-stat-label { font-size: 12px; color: var(--muted); }
+/* 큰 수 아래에 붙는 분모 한 줄 — "몇 건에서 나온 값인가" (TODO 85·86) */
+.home-stat-note { font-size: 11px; color: var(--muted-strong); }
 a.home-stat:hover { border-color: var(--accent); background: var(--accent-soft); }
 a.home-stat:hover strong { color: var(--accent-strong); }
-.home-stat.effect { min-width: 230px; }
+.home-stat.effect { min-width: 260px; }
 .home-stat.effect strong { font-size: 17px; }
 .home-arrow { color: var(--muted); font-weight: 400; }
 .home-stat.danger strong { color: var(--danger); }
@@ -1026,3 +1042,48 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 }
 .check-label input[type="checkbox"] { width: 15px; height: 15px; margin-top: 2px; flex: 0 0 auto; }
 .check-label .hint { display: block; margin-top: 2px; }
+
+
+/* ── 처음 켰을 때 (TODO 84) ─────────────────────────────────────────
+   과제가 하나도 없는 동안에는 0 이 늘어선 대시보드 대신 다음에 할 일을 세운다. */
+.home-start { max-width: 720px; }
+.home-start h1 { margin: 0 0 6px; font-size: 22px; }
+.home-steps { list-style: none; counter-reset: step; margin: 18px 0 6px; padding: 0; }
+.home-steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.home-steps li::before {
+  content: counter(step);
+  grid-row: 1 / span 2;
+  width: 24px; height: 24px; line-height: 24px;
+  border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-strong);
+  font-size: 12px; font-weight: 700; text-align: center;
+}
+.home-steps li > b { grid-column: 2; font-size: 14px; }
+.home-steps li > .hint { grid-column: 2; margin: 0; }
+.home-step-go {
+  grid-column: 3; grid-row: 1 / span 2;
+  align-self: center; white-space: nowrap;
+  padding: 7px 12px; border-radius: 8px; font-size: 13px;
+  border: 1px solid var(--border); color: var(--accent); text-decoration: none;
+}
+.home-step-go:hover { border-color: var(--accent); background: var(--accent-soft); }
+.home-step-go.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.home-step-go.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+
+/* ── 한 행사에 여러 명 (TODO 85) ────────────────────────────────────
+   고치고 지우는 일은 사람마다 따로라 이름별로 단추를 붙인다. */
+.activity-count { font-size: 11px; }
+.activity-people { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.activity-person-row {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+}
+.activity-person-row b { font-size: 12px; font-weight: 600; }

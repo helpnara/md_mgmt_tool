@@ -6,11 +6,11 @@
 from __future__ import annotations
 
 import posixpath
-from pathlib import Path
 import re
 import sqlite3
 from datetime import date as date_cls
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from ..config import get_settings
@@ -50,10 +50,16 @@ def report_doc_dir(rel_path: str) -> str:
     return posixpath.dirname(rel_path)
 
 
-def unreported_entries(conn: sqlite3.Connection, project_id: str) -> list[sqlite3.Row]:
-    """확정된 보고에 아직 담기지 않은 진행일지."""
-    return conn.execute(
-        """
+def unreported_entries(
+    conn: sqlite3.Connection, project_id: str, until: str | None = None
+) -> list[sqlite3.Row]:
+    """확정된 보고에 아직 담기지 않은 진행일지.
+
+    `until` 을 주면 **그 날짜까지만** 가져온다 (TODO 81). 보고 초안을 만들 때 쓴다 —
+    2026-09-02 자 보고가 2026-09-05 에 쓴 기록을 담을 수는 없기 때문이다.
+    미보고 '분량'을 셀 때는 날짜를 자르지 않는다. 앞으로 보고해야 할 양이 곧 그 수다.
+    """
+    sql = """
         SELECT e.* FROM entry e
          WHERE e.project_id = ?
            AND e.id NOT IN (
@@ -61,10 +67,25 @@ def unreported_entries(conn: sqlite3.Connection, project_id: str) -> list[sqlite
                    JOIN report r ON r.id = re.report_id
                   WHERE r.frozen_at IS NOT NULL
                )
-         ORDER BY e.date ASC, e.id ASC
-        """,
-        (project_id,),
-    ).fetchall()
+    """
+    params: list[object] = [project_id]
+    if until:
+        sql += " AND e.date <= ?"
+        params.append(until)
+    return conn.execute(sql + " ORDER BY e.date ASC, e.id ASC", params).fetchall()
+
+
+_DATE_HEAD = re.compile(r"^logs/(\d{4}-\d{2}-\d{2})")
+
+
+def _entry_date(rel_path: str) -> str | None:
+    """`logs/2026-09-01-제목.md` 에서 날짜만 떼어 낸다.
+
+    모양이 다르면 `None` 을 준다. 날짜를 못 읽었다고 **기록을 버리면 안 된다** —
+    거르는 쪽이 아니라 남기는 쪽으로 실패해야 보고에서 내용이 사라지지 않는다.
+    """
+    found = _DATE_HEAD.match(rel_path)
+    return found.group(1) if found else None
 
 
 def _draft_body(entries: list[sqlite3.Row]) -> str:
@@ -100,7 +121,8 @@ def create_draft(
     folder = paths.unique_path(directory / "reports", report_date, "")
     (folder / "assets").mkdir(parents=True, exist_ok=True)
 
-    entries = unreported_entries(conn, project_id)
+    # 보고일 이후에 쓴 기록은 이 보고에 담지 않는다 (TODO 81).
+    entries = unreported_entries(conn, project_id, until=report_date)
     meta: dict[str, Any] = {
         "report_date": report_date,
         "title": f"{report_date} 보고",
@@ -214,8 +236,14 @@ def freeze_report(conn: sqlite3.Connection, report_id: int) -> None:
     """보고 확정. 이 시점의 문서를 그대로 굳히고 포함된 진행일지를 기록한다."""
     row, path = report_path(conn, report_id)
     doc = md.load(path)
-    entries = unreported_entries(conn, row["project_id"])
+    entries = unreported_entries(conn, row["project_id"], until=row["report_date"])
     covered = doc.meta.get("covered_entries") or [entry["rel_path"] for entry in entries]
+    # 초안을 만든 뒤 보고일을 앞당겼다면 그 뒤 기록이 남아 있을 수 있다 (TODO 81).
+    covered = [
+        rel
+        for rel in covered
+        if (_entry_date(rel) or row["report_date"]) <= row["report_date"]
+    ]
 
     doc.meta = md.merge_meta(
         doc.meta,
@@ -555,9 +583,31 @@ def search(
     return results
 
 
+# 한 줄 발췌에서 걸러 낼 것들. 서식 기호는 화면에서 뜻을 잃고 자리만 차지한다 (TODO 87).
+_SKIP_LINE = re.compile(r"^\s*(#{1,6}\s|-{3,}\s*$|\|)")
+_INLINE_MARK = re.compile(r"[*_`>]+")
+
+
+def _readable_lines(body: str | None) -> list[str]:
+    """발췌용으로 읽을 만한 줄만 남긴다 — 제목·표·구분선을 뺀 본문."""
+    out = []
+    for line in (body or "").splitlines():
+        if _SKIP_LINE.match(line):
+            continue
+        text = _INLINE_MARK.sub("", line).strip()
+        text = text.lstrip("-•").strip() if text.startswith(("- ", "* ", "• ")) else text
+        if text:
+            out.append(text)
+    return out
+
+
 def _excerpt(body: str | None, query: str | None, width: int = 60) -> str:
-    """검색어 둘레를 잘라 낸다. 검색어가 없으면 첫 줄 몇 글자."""
-    text = " ".join((body or "").split())
+    """검색어 둘레를 잘라 낸다. 검색어가 없으면 첫 줄 몇 글자.
+
+    마크다운 제목(`## 보고 요약`)은 빼고 읽는다 — 어느 보고에나 똑같이 들어 있어
+    한 줄 발췌에서는 서로를 구별해 주지 못한다.
+    """
+    text = " ".join(_readable_lines(body))
     if not text:
         return ""
     if query:

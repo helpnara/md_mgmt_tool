@@ -71,7 +71,9 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
   const [view, setView] = useState<"table" | "board">(
     () => (localStorage.getItem("md-mgmt:view") === "board" ? "board" : "table"),
   );
-  const [creating, setCreating] = useState(false);
+  // 홈의 [첫 과제 만들기]가 `#/projects?new=1` 로 보낸다 (TODO 84).
+  // 조건이 아니라 한 번 쓰고 마는 신호라 filters 에 넣지 않는다 — 주소에도 남기지 않는다.
+  const [creating, setCreating] = useState(() => new URLSearchParams(query).get("new") === "1");
   const [error, setError] = useState<string | null>(null);
   const [problems, setProblems] = useState<{ path: string; reason: string }[]>([]);
   // 과제가 늘거나 다시 읽었을 때 대시보드도 같이 갱신한다.
