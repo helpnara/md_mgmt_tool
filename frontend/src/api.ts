@@ -1,4 +1,4 @@
-import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -143,9 +143,13 @@ export const api = {
     for (const key of ["status", "type", "owner", "sort", "order"] as const) {
       if (options[key]) params.set(key, options[key] as string);
     }
-    return request<{ cycle_days: number; default_report_date: string; items: ReportCandidate[] }>(
-      `/api/report-candidates?${params.toString()}`,
-    );
+    return request<{
+      cycle_days: number;
+      default_report_date: string;
+      /** 확정을 기다리는 초안. 후보보다 먼저 걸리는 일이라 함께 받는다 (TODO 91) */
+      drafts: OpenDraft[];
+      items: ReportCandidate[];
+    }>(`/api/report-candidates?${params.toString()}`);
   },
   spreadsheetPreview: (attachmentId: number) =>
     request<SpreadsheetPreview>(`/api/attachments/${attachmentId}/preview`),

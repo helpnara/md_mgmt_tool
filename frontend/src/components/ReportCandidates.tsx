@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import type { Meta, ReportCandidate } from "../types";
+import type { Meta, OpenDraft, ReportCandidate } from "../types";
 import { formatDate } from "../util";
 import { projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
@@ -29,6 +29,9 @@ interface Props {
 export default function ReportCandidates({ meta, query }: Props) {
   const initial = new URLSearchParams(query);
   const [items, setItems] = useState<ReportCandidate[]>([]);
+  // 확정을 기다리는 초안 (TODO 91). 후보를 고르는 일보다 **먼저 끝내야 하는 일**이라
+  // 화면 맨 위에 세운다. 배너에서 "초안 N건 확정하기" 로 오면 여기에 닿는다.
+  const [drafts, setDrafts] = useState<OpenDraft[]>([]);
   const [reportDate, setReportDate] = useState(() => initial.get("date") ?? "");
   const [includeInactive, setIncludeInactive] = useState(() => initial.get("all") === "1");
   // 거르기 (TODO 49). 과제 화면의 일곱 개를 다 세우지 않는다 — 이 화면의 물음은
@@ -48,6 +51,7 @@ export default function ReportCandidates({ meta, query }: Props) {
       .reportCandidates({ includeInactive, status, type, owner, sort, order })
       .then((data) => {
         setItems(data.items);
+        setDrafts(data.drafts ?? []);
         setReportDate((prev) => prev || data.default_report_date);
         setError(null);
       })
@@ -186,10 +190,44 @@ export default function ReportCandidates({ meta, query }: Props) {
         </div>
       </div>
 
-      {picks.length > 0 && (
-        <div className="card picked">
+      {/* ── 확정을 기다리는 초안 ──────────────────────────────────────
+          후보를 고르기 전에 끝내야 하는 일이라 맨 위다 (TODO 91). */}
+      {drafts.length > 0 && (
+        <div className="card drafts-waiting">
           <div className="card-head">
-            <h2>이번 주 보고 묶음 ({picked.length})</h2>
+            <h2>확정을 기다리는 초안 ({drafts.length})</h2>
+            <span className="hint">{reportDate} 보고</span>
+          </div>
+          <ul className="picked-list">
+            {drafts.map((draft) => (
+              <li key={draft.id}>
+                {/* 제목은 과제로, 단추는 초안으로 — 묶음 카드와 같은 짜임이다.
+                    확정하기 전에 과제를 한 번 훑어보는 길을 막지 않는다. */}
+                <a href={projectLink(draft.project_id)}>{draft.project_title}</a>
+                {draft.audience && <span className="hint">{draft.audience}</span>}
+                <a
+                  className="linkish-button"
+                  href={projectLink(draft.project_id, { report: draft.id })}
+                >
+                  초안 열기
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p className="hint">
+            정리를 마치고 <b>[보고 확정]</b>을 누르면 그 시점 문서가 그대로 굳고, 그 과제의
+            미보고 분량이 0으로 돌아갑니다.
+          </p>
+        </div>
+      )}
+
+      {/* ── 이번 주 보고 묶음 ────────────────────────────────────────
+          **비어 있을 때도 세운다** (TODO 91). 담긴 것이 없으면 카드가 통째로 사라져,
+          무엇을 해야 하는지 알려 줄 자리도 함께 사라졌다. 빈 상태가 곧 안내다. */}
+      <div className="card picked">
+        <div className="card-head">
+          <h2>이번 주 보고 묶음 ({picked.length})</h2>
+          {picks.length > 0 && (
             <button
               className="ghost"
               onClick={() => {
@@ -199,7 +237,14 @@ export default function ReportCandidates({ meta, query }: Props) {
             >
               묶음 비우기
             </button>
-          </div>
+          )}
+        </div>
+        {picked.length === 0 ? (
+          <p className="hint">
+            이번 주 보고할 대상을 아래 목록에서 골라 <b>[담기]</b>에 체크해 주세요.
+            담아 두면 보고하는 날 이 자리에서 <b>초안을 바로 만들 수 있습니다.</b>
+          </p>
+        ) : (
           <ul className="picked-list">
             {picked.map((item) => (
               <li key={item.id}>
@@ -210,8 +255,8 @@ export default function ReportCandidates({ meta, query }: Props) {
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
 
       {error && <LoadError message={error} onRetry={load} />}
 

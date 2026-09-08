@@ -234,6 +234,14 @@ export interface Dashboard {
   candidate_total: number;
 }
 
+/** 아직 확정되지 않은 보고 한 건. 배너와 보고 대상 화면이 여기로 곧장 간다 (TODO 91). */
+export interface OpenDraft {
+  id: number;
+  project_id: string;
+  project_title: string;
+  audience: string | null;
+}
+
 /** 보고 주기 알림 (T12). */
 export interface ReportReminder {
   /** select = 오늘 고르는 날, report = 오늘 보고하는 날 */
@@ -241,6 +249,8 @@ export interface ReportReminder {
   report_date: string;
   /** 그 날짜로 만들어 둔 초안 수 */
   drafts: number;
+  /** 그 초안들이 무엇인지. 개수만으로는 갈 곳을 만들 수 없다 (최대 10건) */
+  draft_items: OpenDraft[];
   /** 그 날짜로 이미 확정한 보고 수 */
   done: number;
   /** 아직 보고에 담기지 않은 진행일지를 가진 과제 수 */

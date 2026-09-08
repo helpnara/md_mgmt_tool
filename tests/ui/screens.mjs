@@ -117,6 +117,19 @@ const api = {
     if (!response.ok) throw new Error(`${path} → ${response.status}`);
     return response.json();
   },
+  async put(path, body) {
+    const response = await fetch(BASE + path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error(`${path} → ${response.status}`);
+    return response.json();
+  },
+  async delete(path) {
+    const response = await fetch(BASE + path, { method: "DELETE" });
+    if (!response.ok) throw new Error(`${path} → ${response.status}`);
+  },
   get: async (path) => (await fetch(BASE + path)).json(),
 };
 
@@ -1478,6 +1491,83 @@ async function main() {
       await rm(empty, { recursive: true, force: true });
       await rm(`${empty}-backup`, { recursive: true, force: true });
     }
+  });
+
+  console.log("\n[6] 배너가 말한 곳으로 데려가는가 (TODO 91)");
+
+  // 오늘을 보고일로 만들어 배너를 띄운다. (JS 는 일=0, 파이썬은 월=0)
+  await api.put("/api/settings", { report_weekday: (new Date().getDay() + 6) % 7 });
+
+  /** 그날의 열린 초안을 모두 치운다 — 시드가 만들어 둔 것이 섞이면 건수 갈래를 못 본다. */
+  async function clearDrafts() {
+    const { reminder } = await api.get("/api/dashboard");
+    for (const item of reminder?.draft_items ?? []) await api.delete(`/api/reports/${item.id}`);
+    return (await api.get("/api/dashboard")).reminder.report_date;
+  }
+
+  /** 초안을 원하는 건수만큼 만들고, 끝나면 지운다. */
+  async function withDrafts(projects, run) {
+    const date = await clearDrafts();
+    const made = [];
+    for (const project of projects) {
+      made.push(await api.post(`/api/projects/${project}/reports/draft`, { report_date: date }));
+    }
+    try {
+      await run(made);
+    } finally {
+      for (const draft of made) await api.delete(`/api/reports/${draft.id}`);
+    }
+  }
+
+  await check("초안 1건이면 그 초안 편집기로 곧장 간다", async () => {
+    await withDrafts([seeded.projectB], async ([draft]) => {
+      await go("#/projects");
+      const link = page.locator(".report-reminder .reminder-go");
+      const href = await link.getAttribute("href");
+      expect(href.includes(`report=${draft.id}`), `초안으로 가지 않는다: ${href}`);
+      expect((await link.innerText()).includes("공정 자동화"), "어느 과제인지 이름이 없다");
+      await link.click();
+      await page.waitForTimeout(900);
+      // 보고 편집기가 열려 있어야 한다 — 후보 목록이 아니다.
+      equal(await page.locator(".report-editor").count(), 1, "열린 보고 편집기");
+    });
+  });
+
+  await check("초안이 둘이면 이름을 칩으로 세운다", async () => {
+    await withDrafts([seeded.projectA, seeded.projectB], async () => {
+      await go("#/projects");
+      const chips = page.locator(".report-reminder .reminder-chip");
+      equal(await chips.count(), 2, "칩 수");
+      for (let i = 0; i < 2; i += 1) {
+        const href = await chips.nth(i).getAttribute("href");
+        expect(/report=\d+/.test(href), `칩이 초안을 가리키지 않는다: ${href}`);
+      }
+      // 이름을 적었으면 그 이름으로 데려간다 (DESIGN 5.8).
+      equal(await page.locator(".report-reminder .reminder-go").count(), 0, "칩 대신 뜬 단일 링크");
+    });
+  });
+
+  await check("초안이 없으면 보고 대상으로 보내고 무엇을 할지 알려 준다", async () => {
+    await clearDrafts();
+    await go("#/projects");
+    const link = page.locator(".report-reminder .reminder-go");
+    equal(await link.getAttribute("href"), "#/reports", "목적지");
+    await link.click();
+    await page.waitForTimeout(900);
+    // 묶음이 비어 있어도 카드가 서고, 그 자리가 안내가 된다.
+    const picked = await page.locator(".picked").innerText();
+    expect(picked.includes("담기"), `안내가 없다: ${picked}`);
+  });
+
+  await check("확정을 기다리는 초안이 보고 대상 화면 맨 위에 선다", async () => {
+    await withDrafts([seeded.projectA, seeded.projectB], async () => {
+      await go("#/reports");
+      const card = page.locator(".drafts-waiting");
+      equal(await card.count(), 1, "확정 대기 카드");
+      equal(await card.locator(".picked-list li").count(), 2, "카드 안의 줄 수");
+      const open = card.locator(".linkish-button").first();
+      expect(/report=\d+/.test(await open.getAttribute("href")), "[초안 열기]가 초안을 가리키지 않는다");
+    });
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

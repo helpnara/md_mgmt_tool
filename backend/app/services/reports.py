@@ -717,10 +717,13 @@ def reminder(conn: sqlite3.Connection, today: date_cls | None = None) -> dict | 
         return None
 
     report_date = default_report_date(today)
+    # 개수는 **자르기 전** 수여야 한다. 목록만 잘라 놓고 그 길이를 건수로 쓰면
+    # "초안 10건" 이라 적고 실제로는 15건인 일이 생긴다 (TODO 82 에서 같은 것을 고쳤다).
     drafts = conn.execute(
         "SELECT COUNT(*) AS n FROM report WHERE report_date = ? AND frozen_at IS NULL",
         (report_date,),
     ).fetchone()["n"]
+    items = open_drafts(conn, report_date)
     done = conn.execute(
         "SELECT COUNT(*) AS n FROM report WHERE report_date = ? AND frozen_at IS NOT NULL",
         (report_date,),
@@ -732,9 +735,40 @@ def reminder(conn: sqlite3.Connection, today: date_cls | None = None) -> dict | 
         "phase": phase,
         "report_date": report_date,
         "drafts": drafts,
+        # **개수만으로는 갈 곳을 만들 수 없다** (TODO 91). 배너가 "초안 1건이 확정을
+        # 기다립니다" 라고 적어 놓고 후보 목록으로 보내면, 방금 이름까지 들은 그 한 건을
+        # 사용자가 다시 찾아야 한다. 어디로 가야 하는지를 함께 준다.
+        "draft_items": items,
         "done": done,
         "pending": pending,
     }
+
+
+# 배너에 이름을 세우는 것은 몇 건까지인가 — 그 위는 목록 화면이 맡는다.
+DRAFT_LIST_LIMIT = 10
+
+
+def open_drafts(conn: sqlite3.Connection, report_date: str) -> list[dict]:
+    """그 날짜의 **아직 확정되지 않은** 보고. 화면이 그리로 곧장 갈 수 있게 이름까지 준다.
+
+    앞의 몇 건만 준다 — 이름을 세우는 것은 몇 건까지고, 그 위는 목록 화면이 맡는다.
+    **건수를 말할 때 이 길이를 세면 안 된다.** 자르기 전 수를 따로 센다.
+    """
+    return [
+        {
+            "id": row["id"],
+            "project_id": row["project_id"],
+            "project_title": row["project_title"],
+            "audience": row["audience"],
+        }
+        for row in conn.execute(
+            "SELECT r.id, r.project_id, r.audience, p.title AS project_title"
+            "  FROM report r JOIN project p ON p.id = r.project_id"
+            " WHERE r.report_date = ? AND r.frozen_at IS NULL"
+            " ORDER BY p.title, r.id LIMIT ?",
+            (report_date, DRAFT_LIST_LIMIT),
+        )
+    ]
 
 
 def month_grid(conn: sqlite3.Connection, year: str | None) -> dict:

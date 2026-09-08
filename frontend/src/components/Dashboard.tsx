@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import type { Dashboard as DashboardData } from "../types";
+import type { Dashboard as DashboardData, OpenDraft } from "../types";
+import { projectLink } from "../nav";
 
 const OPEN_KEY = "md-mgmt:dashboard";
 /** 리마인더를 닫은 날. 같은 날 다시 띄우지 않는다. */
 const REMINDER_KEY = "md-mgmt:reminder-closed";
 /** 담당 줄에 처음 세우는 사람 수. 넘치면 [+N명]으로 접어 둔다. */
 const OWNER_CHIPS = 8;
+/**
+ * 배너에 초안 **이름**을 세우는 것은 몇 건까지인가 (TODO 91).
+ *
+ * 실제 운영은 주 2~3건이라 평소에는 늘 이름이 보인다. 그 위는 배너가 두세 줄로
+ * 자라기 시작하므로 목록 화면(보고 대상)에 맡긴다.
+ */
+const DRAFT_CHIPS = 3;
 
 interface Filters {
   status: string;
@@ -15,6 +23,68 @@ interface Filters {
   due: string;
   /** 목록과 같은 연도를 봐야 수와 목록이 어긋나지 않는다 (DESIGN 5.8). */
   year: string;
+}
+
+/**
+ * 배너가 데려갈 곳 (TODO 91).
+ *
+ * | 상태 | 어디로 |
+ * |---|---|
+ * | 초안 1건 | **그 초안 편집기로 직행** |
+ * | 초안 2~3건 | 과제명을 칩으로 세우고, 각 칩이 그 초안으로 |
+ * | 초안 4건 이상 | 보고 대상 화면 — 맨 위에 확정 대기 목록이 있다 |
+ * | 오늘 보고를 마침 | 보고 이력(그날) |
+ * | 초안 0건 | 보고 대상 후보 — 거기서 이번 주 묶음을 고른다 |
+ */
+function ReminderGo({ reminder }: { reminder: NonNullable<DashboardData["reminder"]> }) {
+  // 개수는 reminder.drafts 가 맞고, 목록은 앞의 몇 건만 온다 — 이름을 세울 때만 쓴다.
+  const drafts: OpenDraft[] = reminder.draft_items ?? [];
+  // 온 곳을 함께 실어 준다 — 확정하고 나서 [← 돌아가기]가 제자리를 찾는다.
+  const go = (draft: OpenDraft) => projectLink(draft.project_id, { report: draft.id });
+
+  if (reminder.phase === "report") {
+    if (drafts.length === 1) {
+      return (
+        <a className="reminder-go" href={go(drafts[0])}>
+          {drafts[0].project_title} 초안 확정하러 가기 →
+        </a>
+      );
+    }
+    if (drafts.length > 1 && drafts.length <= DRAFT_CHIPS) {
+      return (
+        <span className="reminder-chips">
+          {drafts.map((draft) => (
+            <a key={draft.id} className="reminder-chip" href={go(draft)}>
+              {draft.project_title}
+            </a>
+          ))}
+        </span>
+      );
+    }
+    if (reminder.drafts > 0) {
+      return (
+        <a className="reminder-go" href="#/reports">
+          초안 {reminder.drafts}건 확정하기 →
+        </a>
+      );
+    }
+    if (reminder.done > 0) {
+      // 오늘 할 일은 끝났다. 여기서 볼 것은 후보가 아니라 **오늘 보고한 것**이다.
+      return (
+        <a
+          className="reminder-go"
+          href={`#/history?from=${reminder.report_date}&to=${reminder.report_date}`}
+        >
+          오늘 보고한 {reminder.done}건 보기 →
+        </a>
+      );
+    }
+  }
+  return (
+    <a className="reminder-go" href="#/reports">
+      보고 대상 고르러 가기 →
+    </a>
+  );
 }
 
 interface Props {
@@ -88,9 +158,10 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
               </>
             )}
           </span>
-          <a className="reminder-go" href="#/reports">
-            보고 대상 보기 →
-          </a>
+          {/* **말한 것과 데려가는 곳이 같아야 한다** (TODO 91).
+              "초안 1건이 확정을 기다립니다" 라고 적어 놓고 후보 목록으로 보내면,
+              방금 이름까지 들은 그 한 건을 사용자가 다시 찾아야 한다. */}
+          <ReminderGo reminder={reminder} />
           <button
             className="ghost small"
             title="오늘은 다시 띄우지 않습니다."

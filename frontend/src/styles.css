@@ -595,6 +595,41 @@ button { white-space: nowrap; }
 .report-reminder.report .reminder-go { color: var(--warn); }
 .reminder-go:hover { text-decoration: underline; }
 
+/* 초안이 두셋일 때는 이름을 그대로 세운다 — 어느 것을 누르는지 알고 눌러야 한다 (TODO 91). */
+.reminder-chips { flex: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.reminder-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--warn);
+  background: var(--surface);
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 12px;
+  text-decoration: none;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reminder-chip:hover { background: var(--warn); color: #fff; }
+
+/* 확정을 기다리는 초안 — 후보를 고르기 전에 끝내야 하는 일이라 눈에 먼저 들어와야 한다 */
+.drafts-waiting { border-color: var(--warn); }
+.drafts-waiting .picked-list li { border-color: #f0d9ae; background: #fffdf8; }
+/* 단추처럼 보이지만 링크다 — 새 탭으로 여는 길을 막지 않는다 */
+a.linkish-button {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+a.linkish-button:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ── 지난 보고 대비 변경분 (T11) ───────────────────────────────────────────── */
 .report-diff {
   border: 1px solid var(--border);

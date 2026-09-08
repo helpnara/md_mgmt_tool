@@ -257,10 +257,14 @@ def report_candidates(
     """
     from ..config import get_settings
 
+    report_date = svc.default_report_date()
     return {
         "cycle_days": get_settings().report_cycle_days,
-        "default_report_date": svc.default_report_date(),
+        "default_report_date": report_date,
         "sorts": list(svc.CANDIDATE_SORTS),
+        # 확정을 기다리는 초안도 함께 준다 (TODO 91). 이 화면의 물음이 "이번 주에 무엇을
+        # 보고할까" 하나라, 아직 안 끝난 초안은 후보보다 먼저 걸리는 일이다.
+        "drafts": svc.open_drafts(conn, report_date),
         "items": svc.candidates(
             conn, include_inactive, status=status, type=type, owner=owner, sort=sort, order=order
         ),
