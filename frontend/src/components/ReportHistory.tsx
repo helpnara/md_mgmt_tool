@@ -129,7 +129,9 @@ export default function ReportHistory({ meta, query }: Props) {
         </div>
       </div>
 
-      <MonthGrid year={gridYear} />
+      {/* 기간을 걸었으면 표에서도 그 보고들을 붉게 세운다 (TODO 93) — 배너의
+          "오늘 보고한 N건 보기"도 결국 from=to=오늘인 기간 조건이라 같은 길로 풀린다. */}
+      <MonthGrid year={gridYear} from={from} to={to} />
 
       {error && <LoadError message={error} onRetry={load} />}
       {items === null && <p className="hint">불러오는 중…</p>}

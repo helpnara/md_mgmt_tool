@@ -132,16 +132,16 @@ export default function App() {
             홈
           </a>
           <a href="#/projects" className={route.name === "list" ? "active" : undefined}>
-            과제
+            과제목록
           </a>
           <a href="#/reports" className={route.name === "reports" ? "active" : undefined}>
-            보고 대상
+            보고대상
           </a>
           <a href="#/history" className={route.name === "history" ? "active" : undefined}>
-            보고 이력
+            보고이력
           </a>
           <a href="#/skills" className={route.name === "skills" ? "active" : undefined}>
-            팀원 역량
+            팀원역량
           </a>
           <a href="#/settings" className={route.name === "settings" ? "active" : undefined}>
             설정

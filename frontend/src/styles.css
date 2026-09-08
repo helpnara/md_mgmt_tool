@@ -1013,6 +1013,13 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 /* ── 과제 × 월 보고 표 — TODO 77 ────────────────────
    열이 13개라 가로로 밀린다. 그때 어느 과제 줄인지 안 보이면 표를 읽을 수 없으므로
    과제명 열을 왼쪽에 붙여 둔다. */
+/* 과제명 열을 왼쪽에 붙이려면 **표 자신이 잘라내면 안 된다.** .grid 의 overflow:hidden 이
+   가장 가까운 "자르는 조상" 이 되어 버려, sticky 가 붙을 자리를 잃는다 (붙어 있는 줄 알았는데
+   가로로 밀면 과제명이 같이 밀려 나갔다). 둥근 모서리를 감싼 쪽으로 옮겨 해결한다. */
+.month-card .table-scroll {
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+}
+.month-grid { border: none; border-radius: 0; overflow: visible; }
 .month-grid th, .month-grid td { padding: 7px 9px; vertical-align: top; }
 .month-grid th:not(.month-name), .month-grid td:not(.month-name) { text-align: center; }
 .month-grid tbody tr { cursor: default; }
@@ -1046,6 +1053,34 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 }
 .month-more { display: block; font-size: 11px; color: var(--accent-strong); text-decoration: none; }
 .month-more:hover { text-decoration: underline; }
+
+/* ── 기간에 든 보고를 붉게 (TODO 93) ───────────────────────────────
+   보고 이력의 기간 조건에 든 보고는 표에서도 눈에 띄어야 한다. 표의 칸은 모두
+   같은 파랑이라, 배너의 [오늘 보고한 2건 보기]로 들어와도 그 두 건이 어디 있는지
+   한 해치 칸 속에서 찾아야 했다.
+
+   파랑을 진하게 하는 대신 **색 계열을 바꾼다** — 같은 계열의 농담 차이는
+   나란히 놓고 봐야 보이지만, 계열이 다르면 훑기만 해도 걸린다.
+   색만으로 알리지는 않는다: 날짜 앞에 점(●)을 하나 붙여 둔다. */
+.month-hit.marked {
+  background: #fdecea;
+  color: #b02a1b;
+  /* 흰 바탕에 연분홍만 얹으면 경계가 흐려 칸의 크기를 가늠하기 어렵다 */
+  box-shadow: inset 0 0 0 1px #f3c8c2;
+}
+.month-hit.marked:hover { background: #fad7d2; }
+.month-hit.marked .month-audience { color: #6b5b58; }
+.month-flag { font-size: 8px; vertical-align: 1px; margin-right: 3px; }
+/* 접힌 +N 안에 기간에 든 보고가 남아 있을 때 — 칸 자체는 앞으로 당겨 두므로
+   흔한 일은 아니지만, 한 달에 세 건 넘게 보고한 과제에서는 생긴다 */
+.month-more.marked { color: #b02a1b; font-weight: 700; }
+.month-cell.marked { background: #fff6f5; }
+/* 머리글 옆의 건수 — 표를 펼치기 전에도 몇 건이 걸렸는지 알 수 있다 */
+.month-marked-count {
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  background: #fdecea; color: #b02a1b; font-size: 12px; font-weight: 700;
+}
+.month-legend { color: #b02a1b; font-weight: 700; }
 /* 상태 여섯 칸 — 0 은 흐리게. 어디가 비었는지가 요점이다 (TODO 75) */
 .home-member-table td.zero { color: #7f8894; }
 .home-member-table td a { color: var(--accent-strong); text-decoration: none; }

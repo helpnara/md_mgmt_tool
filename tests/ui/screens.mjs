@@ -1629,6 +1629,140 @@ async function main() {
     equal(groups.length, 2, "부서·담당자 두 묶음");
   });
 
+  console.log("\n[8] 기간에 든 보고를 표에서 알아본다 (TODO 93)");
+
+  /** 그 날짜에 **확정된** 보고를 하나 만든다 — 과제별 보고 표는 확정된 것만 센다. */
+  async function frozenReport(project, date) {
+    const draft = await api.post(`/api/projects/${project}/reports/draft`, { report_date: date });
+    await api.post(`/api/reports/${draft.id}/freeze`);
+    return draft;
+  }
+
+  /** 표가 접혀 있으면 펼친다 — 접힘은 브라우저에 기억되므로 앞 시험의 영향을 받는다. */
+  async function openGrid() {
+    if ((await page.locator(".month-grid").count()) === 0) {
+      await page.locator(".month-card .card-head button").click();
+      await page.waitForTimeout(300);
+    }
+  }
+
+  // 한 달에 세 건. 한 칸에 두 건까지만 세우므로 **접히는 자리**도 함께 본다.
+  for (const date of ["2026-06-05", "2026-06-12", "2026-06-19"]) {
+    await frozenReport(seeded.projectA, date);
+  }
+
+  await check("기간에 든 보고만 다른 색으로 선다", async () => {
+    await go("#/history?from=2026-06-19&to=2026-06-19");
+    await openGrid();
+    const marked = page.locator(".month-grid .month-hit.marked");
+    equal(await marked.count(), 1, "표시된 칸 수");
+    expect((await marked.innerText()).includes("06-19"), "표시된 것이 그날의 보고가 아니다");
+    // 표를 펼치기 전에도 몇 건이 걸렸는지 알 수 있어야 한다.
+    equal((await page.locator(".month-marked-count").innerText()).trim(),
+      "기간에 든 보고 1건", "머리글 옆 건수");
+    // 나머지는 그대로 파랗다 — 다 붉으면 표시가 아니다.
+    expect(await page.locator(".month-grid .month-hit:not(.marked)").count() > 0,
+      "견줄 파란 칸이 없습니다 (시험 자료 문제)");
+  });
+
+  await check("한 칸이 접혀도 찾는 그 건은 맨 앞에 선다", async () => {
+    await go("#/history?from=2026-06-19&to=2026-06-19");
+    await openGrid();
+    const cell = page.locator(".month-grid td.month-cell.marked").first();
+    equal(await cell.locator(".month-hit").count(), 2, "칸에 세운 수");
+    expect((await cell.locator(".month-hit").first().innerText()).includes("06-19"),
+      "찾는 건이 +N 밑에 숨었습니다");
+    equal((await cell.locator(".month-more").innerText()).trim(), "+1", "접힌 수");
+  });
+
+  await check("기간을 안 걸면 아무것도 표시하지 않는다", async () => {
+    await go("#/history");
+    await openGrid();
+    equal(await page.locator(".month-hit.marked").count(), 0, "표시된 칸 수");
+    equal(await page.locator(".month-marked-count").count(), 0, "머리글 옆 건수");
+  });
+
+  await check("표시된 칸의 글자도 읽힌다", async () => {
+    await go("#/history?from=2026-06-19&to=2026-06-19");
+    await openGrid();
+    const value = await contrastOf(".month-hit.marked .month-date");
+    expect(value >= AA, `표시된 칸의 날짜 ${value} < ${AA}`);
+    const hovered = await contrastOf(".month-hit.marked .month-date", { hover: true });
+    expect(hovered >= AA, `마우스 올린 표시 칸 ${hovered} < ${AA}`);
+    // 파란 칸과 **색 계열이 달라야** 한다 — 같은 계열의 농담 차이는 훑어서 안 걸린다.
+    const color = (selector) =>
+      page.locator(selector).first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(await color(".month-hit.marked") !== await color(".month-hit:not(.marked)"),
+      "표시된 칸과 보통 칸의 색이 같습니다");
+  });
+
+  await check("오늘 보고한 건도 같은 길로 찾아진다", async () => {
+    // 배너의 [오늘 보고한 N건 보기] 는 결국 from=to=오늘인 기간 조건이다 (TODO 93).
+    const date = await clearDrafts();
+    // projectB 는 앞 시험에서 [별도 보고 불필요] 가 되어 이 표에서 빠진다.
+    await frozenReport(seeded.projectA, date);
+    await go("#/projects");
+    const link = page.locator(".report-reminder .reminder-go");
+    const href = await link.getAttribute("href");
+    expect(href.includes(`from=${date}`) && href.includes(`to=${date}`),
+      `오늘로 거르지 않는다: ${href}`);
+    await link.click();
+    await page.waitForTimeout(900);
+    await openGrid();
+    expect(await page.locator(".month-hit.marked").count() >= 1, "오늘 보고한 건이 표시되지 않았습니다");
+  });
+
+  await check("가로로 밀어도 과제명 열은 왼쪽에 남는다", async () => {
+    // 열두 달이 좁은 화면에 다 안 들어간다. 밀었을 때 어느 과제 줄인지 안 보이면 표를 못 읽는다.
+    // (표 자신에게 걸린 overflow:hidden 때문에 붙어 있는 줄 알았던 열이 같이 밀려 나갔었다.)
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await go("#/history");
+    await openGrid();
+    const moved = await page.evaluate(() => {
+      const box = document.querySelector(".month-card .table-scroll");
+      box.scrollLeft = 400;
+      const name = document.querySelector(".month-grid td.month-name");
+      return {
+        scrolled: box.scrollLeft,
+        gap: name.getBoundingClientRect().left - box.getBoundingClientRect().left,
+      };
+    });
+    expect(moved.scrolled > 100, "표가 가로로 밀리지 않습니다 (시험 자료 문제)");
+    expect(Math.abs(moved.gap) < 4, `과제명 열이 같이 밀려 나갔습니다 (${moved.gap}px)`);
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  await check("표시한 칸이 화면 밖이면 가로로 밀어 준다", async () => {
+    // 12월 것을 붉게 칠해 놓아도 그 열이 오른쪽 밖이면 여전히 찾아야 한다.
+    await frozenReport(seeded.projectA, "2026-12-08");
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await go("#/history?from=2026-12-08&to=2026-12-08");
+    await openGrid();
+    await page.waitForTimeout(400);
+    const seen = await page.evaluate(() => {
+      const box = document.querySelector(".month-card .table-scroll");
+      const cell = box.querySelector(".month-cell.marked");
+      if (!cell) return null;
+      const a = cell.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      return { scrolled: box.scrollLeft, inside: a.left >= b.left - 1 && a.right <= b.right + 1 };
+    });
+    expect(seen !== null, "표시된 칸을 찾지 못했습니다");
+    expect(seen.scrolled > 0, "가로로 밀어 주지 않았습니다");
+    expect(seen.inside, "밀었는데도 표시된 칸이 화면 밖입니다");
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  console.log("\n[9] 상단 메뉴 이름");
+
+  await check("메뉴 이름은 붙여 쓴다", async () => {
+    // 한 줄에 여섯 칸이라, 이름 안에 띄어쓰기가 있으면 좁은 화면에서 그 자리에서 줄이 꺾인다.
+    await go("#/");
+    const names = await page.locator(".nav a").allInnerTexts();
+    equal(names.map((name) => name.trim()).join("|"),
+      "홈|과제목록|보고대상|보고이력|팀원역량|설정", "메뉴 이름");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
