@@ -88,6 +88,44 @@ def _sync_owners(conn: sqlite3.Connection, project_id: str, owners: list[str]) -
         )
 
 
+def _sync_partners(conn: sqlite3.Connection, project_id: str, partners: list[dict]) -> None:
+    """유관부서 (TODO 92). (팀, 사람) 한 쌍이 한 줄이다.
+
+    담당자가 비어 있는 팀은 `person = ''` 한 줄로 남긴다 — 팀만 정해진 상태도 사실이라
+    검색과 필터에서 찾을 수 있어야 한다.
+    """
+    conn.execute("DELETE FROM project_partner WHERE project_id = ?", (project_id,))
+    position = 0
+    for row in partners:
+        team = str(row.get("team") or "").strip()
+        if not team:
+            continue
+        people = [str(name).strip() for name in (row.get("people") or [])]
+        for person in people or [""]:
+            conn.execute(
+                "INSERT OR IGNORE INTO project_partner(project_id, team, person, position)"
+                " VALUES (?, ?, ?, ?)",
+                (project_id, team, person, position),
+            )
+            position += 1
+
+
+def _as_partners(value: object) -> list[dict]:
+    """front matter 의 `partners` 를 읽는다. 손으로 고친 문서도 삼키지 않는다."""
+    if not isinstance(value, list):
+        return []
+    out = []
+    for row in value:
+        if isinstance(row, dict):
+            team = _as_str(row.get("team"))
+            if team:
+                out.append({"team": team, "people": _as_list(row.get("people"))})
+        elif isinstance(row, str) and row.strip():
+            # 팀 이름만 적어 둔 줄도 받아 준다.
+            out.append({"team": row.strip(), "people": []})
+    return out
+
+
 def _index_entries(
     conn: sqlite3.Connection,
     project_id: str,
@@ -230,6 +268,7 @@ def index_project(
     )
     _sync_tags(conn, "project_tag", "project_id", project_id, _as_list(doc.meta.get("tags")))
     _sync_owners(conn, project_id, owners)
+    _sync_partners(conn, project_id, _as_partners(doc.meta.get("partners")))
 
     latest_entry = _index_entries(conn, project_id, project_dir, problems)
     if latest_entry and (updated_at is None or latest_entry > updated_at):
@@ -416,6 +455,14 @@ def _rebuild_search(conn: sqlite3.Connection, project_id: str) -> None:
             "SELECT t.name FROM tag t JOIN project_tag pt ON pt.tag_id = t.id"
             " WHERE pt.project_id = ?", (project_id,)
         )]
+        # 유관부서와 그 담당자 (TODO 92). "설비기술팀" 이나 "김철수" 로 찾으면
+        # 함께 일하는 과제가 나와야 한다 — 담당자로 찾는 것과 같은 이치다.
+        for row in conn.execute(
+            "SELECT team, person FROM project_partner WHERE project_id = ?", (project_id,)
+        ):
+            extras.append(row["team"])
+            if row["person"]:
+                extras.append(row["person"])
         body = "\n".join([project["body"] or "", *extras])
         conn.execute(
             "INSERT INTO search_fts(kind, ref_id, project_id, title, body) VALUES ('project', ?, ?, ?, ?)",

@@ -113,6 +113,23 @@ def _owners(conn: sqlite3.Connection, project_id: str) -> list[str]:
     ]
 
 
+def _partners(conn: sqlite3.Connection, project_id: str) -> list[dict]:
+    """유관부서를 팀 단위로 묶어 돌려준다 (TODO 92).
+
+    저장은 (팀, 사람) 한 쌍이 한 줄이지만, 화면과 문서는 **팀 하나에 사람 여럿**으로 본다.
+    담당자가 없는 팀은 `person` 이 빈 줄 하나로 들어 있으므로 사람 목록이 비어 나간다.
+    """
+    grouped: dict[str, dict] = {}
+    for row in conn.execute(
+        "SELECT team, person FROM project_partner WHERE project_id = ? ORDER BY position, team",
+        (project_id,),
+    ):
+        entry = grouped.setdefault(row["team"], {"team": row["team"], "people": []})
+        if row["person"]:
+            entry["people"].append(row["person"])
+    return list(grouped.values())
+
+
 def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     return {
         "id": row["id"],
@@ -121,6 +138,8 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "type": row["type"],
         "group": row["grp"],
         "owners": _owners(conn, row["id"]),
+        # 함께 일하는 팀과 그쪽 담당자 (TODO 92)
+        "partners": _partners(conn, row["id"]),
         "start_date": row["start_date"],
         "due_date": row["due_date"],
         "created_at": row["created_at"],
@@ -161,6 +180,7 @@ def list_projects(
     group: str | None = None,
     tag: str | None = None,
     owner: str | None = None,
+    partner: str | None = None,
     q: str | None = None,
     due: str | None = None,
     # 과제 번호의 연도 (2026-001 → 2026). 비우면 전체.
@@ -179,6 +199,13 @@ def list_projects(
     elif type:
         where.append("p.type = ?")
         params.append(type)
+    if partner:
+        # 팀 이름으로도, 그쪽 담당자 이름으로도 걸린다 — 어느 쪽을 기억하고 있든 찾힌다.
+        where.append(
+            "p.id IN (SELECT pp.project_id FROM project_partner pp"
+            "          WHERE pp.team = ? OR pp.person = ?)"
+        )
+        params.extend([partner, partner])
     if group == "none":
         # 그룹을 아직 안 정한 과제만. 홈의 그룹별 표 '미지정' 줄이 이 값을 쓴다 (TODO 90).
         # 세는 수와 거르는 수는 같아야 한다 (DESIGN 5.8).

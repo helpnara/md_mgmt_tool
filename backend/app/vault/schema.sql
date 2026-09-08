@@ -85,6 +85,25 @@ CREATE TABLE IF NOT EXISTS project_owner (
   PRIMARY KEY(project_id, name)
 );
 
+-- 유관부서와 그 담당자 (TODO 92).
+--
+-- **팀과 사람을 한 칸에 묶어 적지 않는다.** "설비기술팀: 김철수, 박민수" 처럼 한 문자열로
+-- 두면 집계도 검색도 그 문자열을 다시 쪼개야 하고, 쪼개는 규칙이 어긋나는 순간
+-- 없는 사람이 생긴다 (TODO 74 에서 겪은 것). 그래서 (팀, 사람) 한 쌍이 한 줄이다.
+--
+-- 담당자를 아직 모르면 person 이 빈 문자열인 줄 하나로 팀만 남는다 —
+-- 팀은 정해졌는데 사람은 나중에 정해지는 일이 흔하다.
+CREATE TABLE IF NOT EXISTS project_partner (
+  project_id TEXT REFERENCES project(id) ON DELETE CASCADE,
+  team       TEXT NOT NULL,
+  person     TEXT NOT NULL DEFAULT '',
+  position   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(project_id, team, person)
+);
+
+CREATE INDEX IF NOT EXISTS idx_partner_team ON project_partner(team);
+CREATE INDEX IF NOT EXISTS idx_partner_person ON project_partner(person);
+
 CREATE TABLE IF NOT EXISTS tag (
   id   INTEGER PRIMARY KEY,
   name TEXT NOT NULL UNIQUE

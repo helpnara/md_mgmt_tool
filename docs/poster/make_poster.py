@@ -43,8 +43,8 @@ DATA = dict(
     days="6일", hours="36시간", mm_real="0.23 M/M", cost_real="약 313만 원",
     mm_out="19 M/M", period_out="5~6개월", cost_out="약 2.3억 원",
     saving="약 2억 2,687만 원", ratio="약 74배", fp="363 FP",
-    loc="16,415줄", api="64개", tests="486건", screens="8개",
-    tables="10개", todo_all="91건", todo_done="90건", todo_wait="1건",
+    loc="16,746줄", api="64개", tests="499건", screens="8개",
+    tables="11개", todo_all="92건", todo_done="91건", todo_wait="1건",
 )
 
 # ── 조판 상수 (mm) ────────────────────────────────────────────────────────

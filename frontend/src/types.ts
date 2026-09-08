@@ -18,6 +18,9 @@ export interface Meta {
   groups: string[];
   tags: string[];
   owners: string[];
+  /** 지금까지 적어 둔 유관부서와 그쪽 담당자 — 자동완성과 거르기에 쓴다 (TODO 92) */
+  partner_teams: string[];
+  partner_people: string[];
   audiences: string[];
   /** 담당자 명부 — 자동완성이 먼저 쓰는 표준 이름 목록 */
   people: string[];
@@ -29,6 +32,13 @@ export interface Meta {
   report_cycle_days: number;
 }
 
+/** 함께 일하는 팀 하나와 그쪽 담당자들 (TODO 92). */
+export interface Partner {
+  team: string;
+  /** 아직 정해지지 않았으면 빈 목록 — 팀만 정해진 상태도 사실이다 */
+  people: string[];
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -36,6 +46,8 @@ export interface Project {
   type: string | null;
   group: string | null;
   owners: string[];
+  /** 유관부서와 그쪽 담당자 (TODO 92) */
+  partners: Partner[];
   start_date: string | null;
   due_date: string | null;
   created_at: string | null;

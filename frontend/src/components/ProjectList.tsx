@@ -21,7 +21,7 @@ interface Props {
 const THIS_YEAR = String(new Date().getFullYear());
 
 const DEFAULT_FILTERS = {
-  status: "", type: "", group: "", tag: "", owner: "", due: "",
+  status: "", type: "", group: "", tag: "", owner: "", partner: "", due: "",
   year: THIS_YEAR, sort: "updated", order: "",
 };
 
@@ -169,6 +169,32 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               </option>
             ))}
           </select>
+          {/* 유관부서 (TODO 92). **아직 아무 데도 안 적었으면 세우지 않는다** —
+              쓰지 않는 팀에게까지 고를 것 없는 선택 상자를 늘릴 이유가 없다.
+              팀과 그쪽 담당자를 한 상자에 담는다. 어느 쪽을 기억하든 찾힌다. */}
+          {(meta.partner_teams?.length || meta.partner_people?.length) > 0 && (
+            <select value={filters.partner} onChange={(event) => setFilter("partner", event.target.value)}>
+              <option value="">유관부서 전체</option>
+              {meta.partner_teams?.length > 0 && (
+                <optgroup label="부서">
+                  {meta.partner_teams.map((team) => (
+                    <option key={team} value={team}>
+                      {team}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {meta.partner_people?.length > 0 && (
+                <optgroup label="담당자">
+                  {meta.partner_people.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          )}
           {/* 첫 화면이 늘 전체면 해가 갈수록 쓸모가 떨어진다. 기본은 올해다. */}
           <select value={filters.year} onChange={(event) => setFilter("year", event.target.value)}>
             <option value={ALL_YEARS}>연도 전체</option>

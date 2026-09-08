@@ -28,6 +28,13 @@ interface Props {
   back?: string | null;
 }
 
+/** 그 조건으로 걸러진 과제 목록. 홈의 것과 같은 규칙이다. */
+function listLink(params: Record<string, string>): string {
+  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value));
+  const text = query.toString();
+  return `#/projects${text ? `?${text}` : ""}`;
+}
+
 export default function ProjectDetail({
   projectId,
   meta,
@@ -280,6 +287,27 @@ export default function ProjectDetail({
               {project.owners.length > 0 && <span>담당 {project.owners.join(", ")}</span>}
               <span>최근 업데이트 {formatDate(project.updated_at)}</span>
             </div>
+            {/* 유관부서 (TODO 92). 누르면 그 팀·사람과 함께 하는 과제만 걸러 본다 —
+                "설비기술팀이랑 뭐뭐 하고 있더라" 가 실제로 자주 하는 물음이다. */}
+            {(project.partners ?? []).length > 0 && (
+              <div className="meta-line partner-line">
+                <span className="muted">유관부서</span>
+                {project.partners.map((partner) => (
+                  <span key={partner.team} className="partner-chip">
+                    <a href={listLink({ partner: partner.team })}>{partner.team}</a>
+                    {partner.people.length > 0 ? (
+                      partner.people.map((name) => (
+                        <a key={name} className="partner-person" href={listLink({ partner: name })}>
+                          {name}
+                        </a>
+                      ))
+                    ) : (
+                      <span className="partner-person muted">담당자 미정</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="detail-actions">
             <ExportMenu projectId={project.id} />

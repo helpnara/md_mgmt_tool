@@ -1570,6 +1570,65 @@ async function main() {
     });
   });
 
+  console.log("\n[7] 유관부서 (TODO 92)");
+
+  await check("화면에서 부서를 여럿 넣고, 팀·사람으로 찾는다", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.getByRole("button", { name: "과제 정보 수정" }).click();
+    await page.waitForSelector(".partner-field");
+
+    // 두 팀을 넣는다 — 한 팀에는 담당자 둘, 다른 팀은 담당자 미정.
+    for (const [team, people] of [["설비기술팀", "김철수, 박민수"], ["구매팀", ""]]) {
+      await page.getByRole("button", { name: "+ 부서 추가" }).click();
+      const rows = page.locator(".partner-rows li");
+      const last = rows.nth((await rows.count()) - 1);
+      await last.locator("input").first().fill(team);
+      if (people) await last.locator("input").nth(1).fill(people);
+    }
+    await page.locator("form").getByRole("button", { name: /저장|수정/ }).first().click();
+    await page.waitForTimeout(1400);
+
+    // 저장은 (팀, 사람) 쌍으로 나뉘어야 한다 — 한 덩이로 굳으면 안 된다 (TODO 74).
+    const saved = await api.get(`/api/projects/${seeded.projectA}`);
+    const 설비 = saved.partners.find((row) => row.team === "설비기술팀");
+    equal(설비.people.join(","), "김철수,박민수", "나뉜 담당자");
+    equal(saved.partners.find((row) => row.team === "구매팀").people.length, 0, "담당자 미정 팀");
+
+    // 상세 화면에 팀과 사람이 보인다.
+    await go(`#/projects/${seeded.projectA}`);
+    const line = await page.locator(".partner-line").innerText();
+    for (const word of ["설비기술팀", "김철수", "박민수", "구매팀"]) {
+      expect(line.includes(word), `유관부서 줄에 "${word}" 가 없다: ${line}`);
+    }
+
+    // 팀 이름을 누르면 그 팀과 일하는 과제만 남는다 (세는 수 = 거르는 수).
+    await page.locator(".partner-line a", { hasText: "설비기술팀" }).first().click();
+    await page.waitForTimeout(900);
+    expect(page.url().includes("partner="), `조건이 주소에 없다: ${page.url()}`);
+    equal(await page.locator(".grid tbody tr").count(), 1, "설비기술팀으로 거른 과제 수");
+
+    // 사람 이름으로도 걸린다.
+    await go("#/projects?partner=" + encodeURIComponent("박민수"));
+    equal(await page.locator(".grid tbody tr").count(), 1, "박민수로 거른 과제 수");
+  });
+
+  await check("유관부서·담당자로 통합 검색이 된다", async () => {
+    for (const query of ["설비기술팀", "박민수"]) {
+      await go("#/search?q=" + encodeURIComponent(query));
+      const text = await page.locator(".search-results, main").first().innerText();
+      expect(text.includes("고강도 소재 개발"), `"${query}" 로 과제를 찾지 못했다`);
+    }
+  });
+
+  await check("유관부서 거르기 상자가 목록에 선다", async () => {
+    await go("#/projects");
+    const select = page.locator(".filters select").filter({ hasText: "유관부서 전체" });
+    equal(await select.count(), 1, "유관부서 선택 상자");
+    // 부서와 담당자를 나눠 담는다 — 어느 쪽을 기억하든 고를 수 있게.
+    const groups = await select.locator("optgroup").allTextContents();
+    equal(groups.length, 2, "부서·담당자 두 묶음");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

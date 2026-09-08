@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Meta, Project } from "../types";
+import type { Meta, Partner, Project } from "../types";
 import TagSuggestions from "./TagSuggestions";
 import UnknownOwners from "./UnknownOwners";
 
@@ -28,6 +28,19 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
     effect_verified: initial?.effect_verified?.toString() ?? "",
     tags: (initial?.tags ?? []).join(", "),
   });
+  /**
+   * 유관부서 (TODO 92). 한 줄이 팀 하나이고, 담당자는 그 줄 안에서 쉼표로 적는다.
+   *
+   * **팀과 사람을 한 칸에 섞어 적게 하지 않는다.** "설비기술팀 김철수" 처럼 한 칸에 두면
+   * 어디까지가 팀이고 어디부터가 사람인지 아무도 모른다. 줄을 나누는 편이 입력은
+   * 한 번 더지만, 그 뒤로 집계·검색·표시가 전부 흔들리지 않는다.
+   */
+  const [partners, setPartners] = useState<{ team: string; people: string }[]>(
+    () => (initial?.partners ?? []).map((row) => ({ team: row.team, people: row.people.join(", ") })),
+  );
+  const setPartner = (index: number, key: "team" | "people", value: string) =>
+    setPartners((prev) => prev.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +70,10 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
         effect_expected: effect(form.effect_expected),
         effect_verified: effect(form.effect_verified),
         no_report: noReport,
+        // 팀 이름이 빈 줄은 보내지 않는다. 사람 이름을 나누는 일은 **서버가** 한다 (TODO 74).
+        partners: partners
+          .filter((row) => row.team.trim())
+          .map((row) => ({ team: row.team.trim(), people: row.people })) as unknown as Partner[],
         tags: form.tags
           .split(",")
           .map((tag) => tag.trim())
@@ -136,6 +153,62 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           />
         </label>
       </div>
+      {/* ── 유관부서 (TODO 92) ────────────────────────────────────────
+          두 팀 이상이 함께 하고, 팀마다 담당자가 여럿인 일이 흔하다.
+          팀은 줄로, 사람은 그 줄 안에서 쉼표로 나눈다. */}
+      <div className="partner-field">
+        <div className="partner-head">
+          <span>유관부서</span>
+          <span className="hint">함께 일하는 팀과 그쪽 담당자입니다. 담당자는 나중에 채워도 됩니다.</span>
+        </div>
+        {partners.length > 0 && (
+          <ul className="partner-rows">
+            {partners.map((row, index) => (
+              <li key={index}>
+                <input
+                  list="partner-team-options"
+                  value={row.team}
+                  onChange={(event) => setPartner(index, "team", event.target.value)}
+                  placeholder="부서 (예: 설비기술팀)"
+                  aria-label={`유관부서 ${index + 1} 부서명`}
+                />
+                <input
+                  list="partner-person-options"
+                  value={row.people}
+                  onChange={(event) => setPartner(index, "people", event.target.value)}
+                  placeholder="담당자 (여러 명은 쉼표로)"
+                  aria-label={`유관부서 ${index + 1} 담당자`}
+                />
+                <button
+                  type="button"
+                  className="ghost small danger"
+                  onClick={() => setPartners((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  삭제
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button
+          type="button"
+          className="ghost small"
+          onClick={() => setPartners((prev) => [...prev, { team: "", people: "" }])}
+        >
+          + 부서 추가
+        </button>
+        <datalist id="partner-team-options">
+          {meta.partner_teams?.map((team) => (
+            <option key={team} value={team} />
+          ))}
+        </datalist>
+        <datalist id="partner-person-options">
+          {meta.partner_people?.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </div>
+
       <div className="form-row">
         <label>
           시작일

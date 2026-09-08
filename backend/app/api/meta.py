@@ -31,6 +31,19 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         row["name"]
         for row in conn.execute("SELECT DISTINCT name FROM project_owner ORDER BY name")
     ]
+    # 유관부서 (TODO 92). 지금까지 적어 둔 팀·사람을 모아 자동완성과 거르기에 쓴다.
+    partner_teams = [
+        row["team"]
+        for row in conn.execute(
+            "SELECT DISTINCT team FROM project_partner WHERE team <> '' ORDER BY team"
+        )
+    ]
+    partner_people = [
+        row["person"]
+        for row in conn.execute(
+            "SELECT DISTINCT person FROM project_partner WHERE person <> '' ORDER BY person"
+        )
+    ]
     audiences = [
         row["audience"]
         for row in conn.execute(
@@ -49,6 +62,9 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "groups": groups,
         "tags": tags,
         "owners": owners,
+        # 유관부서 — 팀과 그쪽 담당자를 나눠 준다. 거르기는 둘 중 어느 쪽으로도 된다.
+        "partner_teams": partner_teams,
+        "partner_people": partner_people,
         "audiences": audiences,
         # 담당자 명부 — 자동완성이 이것을 먼저 쓰고, 없는 이름이면 화면에서 물어본다.
         "people": settings_service.known_names(),

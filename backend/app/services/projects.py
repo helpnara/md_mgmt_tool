@@ -10,6 +10,7 @@ from ..config import DEFAULT_STATUS, STATUS_KEYS, TYPE_KEYS, get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
+from . import activities as activities_service
 from . import settings as settings_service
 from . import trash as trash_service
 
@@ -47,7 +48,7 @@ INDEX_TEMPLATE = """## 배경
 META_ORDER = [
     "id", "title", "status", "type", "group", "tags", "owners",
     "start_date", "due_date", "effect_expected", "effect_verified",
-    "no_report", "created_by", "created_at", "updated_at",
+    "no_report", "partners", "created_by", "created_at", "updated_at",
 ]
 
 
@@ -88,6 +89,53 @@ def normalize_owners(value: object) -> list[str]:
         if name and name not in seen:
             seen.append(name)
     return seen
+
+
+def normalize_partners(value: object) -> list[dict]:
+    """유관부서와 그 담당자 (TODO 92).
+
+    `[{"team": "설비기술팀", "people": "김철수, 박민수"}, …]` 을 받아
+    `[{"team": "설비기술팀", "people": ["김철수", "박민수"]}, …]` 으로 맞춘다.
+
+    **사람 이름을 나누는 일은 여기(서버)에서 한다.** 화면만 고치면 API 를 직접 부르는
+    길로 `"김철수,박민수"` 한 덩이가 사람 하나로 굳는다 — 역량 이력에서 실제로 겪은
+    사고다 (TODO 74). 팀 이름은 나누지 않는다. 부서명에 쉼표가 들어갈 수 있고,
+    무엇보다 **팀은 줄마다 하나**라는 것이 이 구조의 약속이다.
+
+    담당자가 비어 있어도 줄은 남긴다 — 팀은 정해졌는데 사람은 나중에 정해지는 일이 흔하다.
+    """
+    if not value:
+        return []
+    rows = value if isinstance(value, list) else [value]
+    out: list[dict] = []
+    seen: dict[str, dict] = {}
+    for row in rows:
+        if isinstance(row, str):
+            team, people = row, []
+        elif isinstance(row, dict):
+            team = str(row.get("team") or "").strip()
+            people = activities_service.split_people(
+                row.get("people") if isinstance(row.get("people"), str) else None
+            ) or [
+                name
+                for name in (str(item).strip() for item in (row.get("people") or []))
+                if name
+            ]
+        else:
+            continue
+        team = str(team).strip()
+        if not team:
+            continue
+        # 같은 팀을 두 줄로 적었으면 한 줄로 합친다 — 표와 검색에서 두 번 세지 않는다.
+        if team in seen:
+            for name in people:
+                if name not in seen[team]["people"]:
+                    seen[team]["people"].append(name)
+            continue
+        entry = {"team": team, "people": list(dict.fromkeys(people))}
+        seen[team] = entry
+        out.append(entry)
+    return out
 
 
 def now_iso() -> str:
@@ -159,6 +207,8 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "group": data.get("group") or None,
         "tags": data.get("tags") or [],
         "owners": normalize_owners(data.get("owners") or data.get("owner")),
+        # 유관부서와 그 담당자. 팀 하나에 사람 여럿, 팀도 여럿일 수 있다 (TODO 92).
+        "partners": normalize_partners(data.get("partners")),
         "start_date": data.get("start_date") or None,
         "due_date": data.get("due_date") or None,
         "effect_expected": normalize_effect(data.get("effect_expected")),
@@ -196,6 +246,8 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
             updates[field] = normalize_effect(updates[field])
     if "no_report" in updates:
         updates["no_report"] = bool(updates["no_report"])
+    if "partners" in updates:
+        updates["partners"] = normalize_partners(updates["partners"])
     if "owners" in updates or "owner" in updates:
         updates["owners"] = normalize_owners(updates.pop("owners", None) or updates.pop("owner", None))
     changes = {k: v for k, v in updates.items() if k in META_ORDER or k == "group"}
