@@ -1,15 +1,14 @@
 <!-- AX 성과공유회 썸네일 (16:10). make_thumbnail.py 가 이 파일을 열어 갈무리한다. -->
 <meta charset="utf-8">
 <style>
-  @font-face { font-family: "Nanum"; src: local("NanumGothic"); }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     width: 1280px; height: 800px; overflow: hidden;
     font-family: "NanumGothic", "맑은 고딕", "Malgun Gothic", sans-serif;
     color: #fff;
     background:
-      radial-gradient(1100px 700px at 78% 18%, rgba(31,111,235,.30), transparent 62%),
-      radial-gradient(760px 520px at 8% 96%, rgba(11,138,95,.22), transparent 60%),
+      radial-gradient(1100px 700px at 80% 16%, rgba(31,111,235,.30), transparent 62%),
+      radial-gradient(760px 520px at 6% 98%, rgba(11,138,95,.22), transparent 60%),
       linear-gradient(158deg, #0f2a47 0%, #091b2e 100%);
     position: relative;
   }
@@ -21,87 +20,103 @@
     background-size: 64px 64px;
     mask-image: linear-gradient(115deg, #000 0%, transparent 68%);
   }
-  .wrap { position: relative; padding: 66px 84px 0; height: 100%; display: flex; flex-direction: column; }
-  .top { display: flex; gap: 44px; align-items: flex-start; }
-  .left { width: 53%; flex: none; }
-  /* 오른쪽에 실제 화면을 놓는다 — 표지에서 "무엇을 만들었는지"가 한눈에 보여야 한다 */
-  .shot {
-    flex: 1; margin-top: 24px;
-    border-radius: 14px; overflow: hidden;
-    border: 1px solid rgba(156,195,238,.34);
-    box-shadow: 0 26px 60px rgba(0,0,0,.42);
-    transform: perspective(1400px) rotateY(-13deg) rotateX(3deg);
-  }
-  .shot img { display: block; width: 100%; }
+  .wrap { position: relative; height: 100%; padding: 58px 72px 0; display: flex; flex-direction: column; }
 
   .kicker {
     align-self: flex-start;
-    font-size: 17px; letter-spacing: .10em; font-weight: 700;
+    font-size: 16px; letter-spacing: .10em; font-weight: 700;
     color: #cfe2fa; background: rgba(156,195,238,.14);
     border: 1px solid rgba(156,195,238,.34);
-    padding: 9px 20px; border-radius: 999px;
+    padding: 8px 18px; border-radius: 999px;
   }
-  /* 한글은 단어 안에서 끊으면 읽기가 나빠진다 — keep-all 로 어절을 지킨다 */
-  h1 { font-size: 76px; font-weight: 800; letter-spacing: -.035em; line-height: 1.08;
-       margin-top: 26px; word-break: keep-all; }
-  h1 .accent { color: #7db4ff; }
-  .rule { width: 88px; height: 5px; background: #1f6feb; border-radius: 3px; margin: 26px 0 22px; }
-  .sub { font-size: 24px; line-height: 1.5; color: #cbd9ea; font-weight: 400; }
-  .sub b { color: #fff; font-weight: 700; }
 
-  /* 표지에서 딱 한 문장만 기억된다면 이것이어야 한다 */
-  .quote {
-    margin-top: 34px; padding-left: 22px;
-    border-left: 3px solid rgba(35,199,141,.75);
-    font-size: 25px; line-height: 1.5; color: #dfe9f5; font-weight: 400;
-    word-break: keep-all;
+  /* 제목은 두 층으로 나눈다 — 한 줄로 길게 늘어놓으면 작게 줄였을 때 아무것도 안 읽힌다 */
+  h1 { font-size: 82px; font-weight: 800; letter-spacing: -.035em; line-height: 1.0; margin-top: 26px; }
+  h1 .vibe { color: #7db4ff; }
+  .lede {
+    font-size: 30px; font-weight: 700; color: #e6eefa; margin-top: 18px;
+    letter-spacing: -.01em; word-break: keep-all;
   }
-  .quote b { color: #4bdca6; font-weight: 700; }
+  .lede b { color: #7db4ff; }
 
-  .stats { display: flex; gap: 16px; margin-top: auto; margin-bottom: 24px; }
-  .stat {
-    flex: 1; padding: 20px 24px 22px;
-    background: rgba(255,255,255,.055); border: 1px solid rgba(156,195,238,.22);
-    border-radius: 16px; border-top: 3px solid #1f6feb;
+  .body { display: flex; gap: 40px; margin-top: 34px; flex: 1; }
+
+  /* 왼쪽 — 무엇을 만들었고 무엇이 달라지는가 */
+  .points { width: 44%; flex: none; display: flex; flex-direction: column; gap: 15px; }
+  .point { display: grid; grid-template-columns: 24px 1fr; gap: 12px; align-items: start; }
+  .point::before {
+    content: ""; width: 9px; height: 9px; margin: 9px 0 0 7px;
+    border-radius: 2px; background: #1f6feb; transform: rotate(45deg);
   }
-  .stat.hi { border-top-color: #23c78d; background: rgba(35,199,141,.11); border-color: rgba(35,199,141,.36); }
-  .stat .label { font-size: 16px; color: #9db4cd; font-weight: 600; }
-  .stat .value { font-size: 46px; font-weight: 800; letter-spacing: -.02em; margin-top: 8px; }
-  .stat.hi .value { color: #4bdca6; }
-  .stat .note { font-size: 15px; color: #8fa6bf; margin-top: 7px; }
+  .point.good::before { background: #23c78d; }
+  .point .what { font-size: 20px; font-weight: 700; color: #fff; line-height: 1.35; word-break: keep-all; }
+  .point .so { font-size: 17px; color: #a8bdd4; line-height: 1.45; margin-top: 3px; word-break: keep-all; }
+
+  /* 오른쪽 — 실제 화면 두 장. 앞뒤로 겹쳐 놓아 "여러 화면이 있다"가 한눈에 보이게 */
+  .shots { flex: 1; position: relative; }
+  .shot {
+    position: absolute; border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(156,195,238,.34);
+    box-shadow: 0 24px 56px rgba(0,0,0,.46);
+  }
+  .shot img { display: block; width: 100%; }
+  .shot-a { top: 4px;   left: 0;   width: 78%; transform: perspective(1600px) rotateY(-14deg) rotateX(3deg); }
+  .shot-b { top: 168px; left: 20%; width: 74%; transform: perspective(1600px) rotateY(-14deg) rotateX(3deg); }
 
   .foot {
+    margin-top: auto;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 20px 0 26px; border-top: 1px solid rgba(156,195,238,.20);
-    font-size: 18px; color: #9db4cd;
+    padding: 18px 0 24px; border-top: 1px solid rgba(156,195,238,.20);
+    font-size: 17px; color: #9db4cd;
   }
   .foot b { color: #e8f0fa; font-weight: 700; }
+  .foot .tag { color: #4bdca6; font-weight: 700; }
 </style>
 <div class="wrap">
-  <div class="top">
-    <div class="left">
-      <span class="kicker">2026 사내 AX 성과공유회</span>
-      <h1>개발을 <span class="accent">기다리지</span> 않았다</h1>
-      <div class="rule"></div>
-      <p class="sub">
-        개발 리소스 없이 <b>엿새</b> 만에 만든<br><b>팀 과제관리 · 보고지원 시스템</b>
-      </p>
-      <p class="quote">
-        만들 사람이 매일 쓸 사람이면<br><b>요구정의도, 검수도, 재작업도 없습니다</b>
-      </p>
-    </div>
-    <div class="shot"><img src="screen-home.png" alt="홈 화면"></div>
-  </div>
+  <span class="kicker">2026 사내 AX 성과공유회</span>
+  <h1><span class="vibe">Vibe</span> 팀장</h1>
+  <p class="lede">AI와 함께 <b>2주 만에</b> 구축한 업무관리 자동화 툴</p>
 
-  <div class="stats">
-    <div class="stat"><div class="label">구축 기간</div><div class="value">6일</div><div class="note">실작업 36시간 · 1명</div></div>
-    <div class="stat"><div class="label">투입 공수</div><div class="value">0.23 M/M</div><div class="note">외주 추정 19 M/M</div></div>
-    <div class="stat"><div class="label">소요 비용</div><div class="value">313만 원</div><div class="note">외주 추정 약 2.3억 원</div></div>
-    <div class="stat hi"><div class="label">절감 효과</div><div class="value">약 74배</div><div class="note">약 2억 2,687만 원 절감</div></div>
+  <div class="body">
+    <div class="points">
+      <div class="point">
+        <div>
+          <div class="what">과제 하나가 폴더 하나</div>
+          <div class="so">진행 이력 · 첨부 · 보고가 한자리에 쌓여 몇 달 뒤에도 맥락이 남습니다</div>
+        </div>
+      </div>
+      <div class="point">
+        <div>
+          <div class="what">이번 주 보고 대상을 도구가 골라 줍니다</div>
+          <div class="so">미보고 경과일과 쌓인 분량으로 순서를 매겨, 기억이 아니라 기록으로 판단합니다</div>
+        </div>
+      </div>
+      <div class="point">
+        <div>
+          <div class="what">보고 초안 자동 생성 · 확정본은 스냅샷</div>
+          <div class="so">지난 보고 이후 내용만 모아 초안을 만들고, 확정하면 그때 문서가 그대로 남습니다</div>
+        </div>
+      </div>
+      <div class="point good">
+        <div>
+          <div class="what">팀 현황과 팀원 역량을 한 화면에서</div>
+          <div class="so">연도별 · 팀원별 수행 현황과 교육 이력이 모여 면담과 성과 정리가 한자리에서 끝납니다</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="shots">
+      <div class="shot shot-a">
+        <img src="screen-home.png" alt="홈 — 팀 수행 현황">
+      </div>
+      <div class="shot shot-b">
+        <img src="screen-reports.png" alt="보고 대상 후보">
+      </div>
+    </div>
   </div>
 
   <div class="foot">
     <span><b>선강DX개발팀</b> &nbsp;·&nbsp; 발표자 권경락</span>
-    <span>363 기능점수 · API 64개 · 자동 시험 477건</span>
+    <span class="tag">데이터는 표준 마크다운 파일 · 사내망 안에서만</span>
   </div>
 </div>
