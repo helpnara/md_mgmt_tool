@@ -1201,3 +1201,56 @@ a.partner-person:hover { background: var(--accent-soft); color: var(--accent); }
 /* 저장하면 붙을 과제 번호 — 적어 두기보다 번호를 그대로 보여 준다 (TODO 95) */
 .next-id-hint { margin: -2px 0 10px; }
 .next-id { font-family: ui-monospace, monospace; color: var(--accent-strong); }
+
+/* ── 설정 화면 묶음 (TODO 98) ────────────────────────────────
+   카드가 열넷이 되자 한 칸에 죽 늘어놓은 화면에서는 무엇이 어디 있는지 눈으로 찾아야
+   했다. 하는 일이 같은 것끼리 묶고, 묶음마다 제목을 세운다. 제목은 카드가 아니라
+   **구분선**이다 — 카드처럼 보이면 묶음이 또 하나의 항목으로 읽힌다. */
+.settings-group { margin-top: 22px; }
+.settings-group:first-of-type { margin-top: 10px; }
+.settings-group-title {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 10px; padding-bottom: 6px;
+  border-bottom: 2px solid var(--border);
+  font-size: 15px; color: var(--text);
+}
+.settings-group-title .hint { margin: 0; font-weight: 400; }
+/* 묶음 안에서는 카드 제목이 한 단 아래로 읽혀야 한다 */
+.settings-group .card > h2 { font-size: 15px; }
+
+/* ── 폴더 고르기 (TODO 97) ───────────────────────────────────
+   브라우저는 고른 폴더의 실제 경로를 주지 않는다. 그래서 서버가 목록을 주고
+   여기서 눌러 들어간다. 카드 안에 펼쳐지는 작은 창이다. */
+.input-with-button { display: flex; gap: 6px; align-items: stretch; }
+.input-with-button > input { flex: 1 1 auto; min-width: 0; }
+.input-with-button > button { flex: none; white-space: nowrap; }
+
+.folder-picker {
+  margin: 10px 0 4px; padding: 10px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: #fafbfc;
+}
+.folder-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.folder-at {
+  flex: 1 1 260px; min-width: 0; padding: 5px 8px; border-radius: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 12px; word-break: break-all;
+}
+.folder-find { flex: 0 1 220px; }
+.folder-list {
+  list-style: none; margin: 8px 0 0; padding: 4px;
+  max-height: 260px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+}
+.folder-row {
+  display: block; width: 100%; text-align: left;
+  padding: 5px 8px; border: none; border-radius: 6px;
+  background: none; color: var(--text); font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.folder-row:hover { background: var(--accent-soft); color: var(--accent-strong); filter: none; }
+.folder-icon { margin-right: 6px; }
+.folder-empty { padding: 10px 8px; color: var(--muted); font-size: 13px; }
+.folder-actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.folder-actions .grow { flex: 1 1 auto; }
+.folder-new { display: flex; gap: 6px; align-items: center; }
+.folder-new input { width: 180px; }

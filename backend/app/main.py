@@ -14,8 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (activities, attachments, dashboard, entries, errors, export, home, meta,
-                  people, projects, reports, search, settings, trash, versions)
+from .api import (activities, attachments, dashboard, entries, errors, export, folders, home,
+                  meta, people, projects, reports, search, settings, trash, versions)
 from .services import errorlog
 from .config import REPO_ROOT, get_settings
 from .vault.paths import safe_join
@@ -159,6 +159,7 @@ app.include_router(people.router)
 app.include_router(trash.router)
 app.include_router(errors.router)
 app.include_router(versions.router)
+app.include_router(folders.router)
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

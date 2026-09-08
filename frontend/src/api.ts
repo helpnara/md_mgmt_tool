@@ -1,4 +1,4 @@
-import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem, YearFix } from "./types";
+import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem, YearFix, FolderListing } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -132,6 +132,17 @@ export const api = {
     const query = params.toString();
     return request<ReportHistoryItem[]>(`/api/reports${query ? `?${query}` : ""}`);
   },
+  /**
+   * 폴더 고르기 (TODO 97) — 브라우저는 고른 폴더의 실제 경로를 주지 않으므로
+   * 서버가 목록을 주고 화면에서 눌러 들어간다. 내주는 것은 폴더 이름과 경로뿐이다.
+   */
+  listFolders: (path: string) =>
+    request<FolderListing>(`/api/folders${path ? `?path=${encodeURIComponent(path)}` : ""}`),
+  createFolder: (parent: string, name: string) =>
+    request<{ path: string }>("/api/folders", {
+      method: "POST",
+      body: JSON.stringify({ parent, name }),
+    }),
   /** 과제 번호를 새 팀 코드로 한 번에 맞춘다. preview 는 파일을 건드리지 않는다. */
   renumberPreview: (code: string) =>
     request<RenumberPlan>("/api/settings/project-code/renumber/preview", {

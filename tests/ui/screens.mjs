@@ -1849,6 +1849,152 @@ async function main() {
       "옛 번호가 남아 있습니다");
   });
 
+  console.log("\n[11] 거르기 상자에는 있는 것만 선다 (TODO 96)");
+
+  /** 과제 목록의 거르기 상자 하나를 골라, 그 안의 선택지 글자를 모두 읽는다. */
+  async function optionsOf(label) {
+    const select = page.locator(".filters select").filter({ hasText: label });
+    expect(await select.count() === 1, `"${label}" 상자를 찾지 못했습니다`);
+    return (await select.first().locator("option").allInnerTexts()).map((text) => text.trim());
+  }
+
+  await check("연도 상자에 과제가 없는 해는 서지 않는다", async () => {
+    await go("#/projects");
+    const listed = await optionsOf("연도 전체");
+    const real = new Set((await api.get("/api/projects")).map((row) => row.id.slice(0, 4)));
+    const thisYear = String(new Date().getFullYear());
+    for (const text of listed) {
+      if (text === "연도 전체") continue;
+      const year = text.replace("년", "");
+      // 올해는 과제가 없어도 남는다 — 기본값이고, "올해만 보기" 는 뜻이 통해야 한다.
+      expect(real.has(year) || year === thisYear, `과제가 없는 ${year}년이 서 있습니다`);
+    }
+    // 자료에 있는 해는 빠짐없이 서야 한다.
+    for (const year of real) {
+      expect(listed.includes(`${year}년`), `${year}년이 빠졌습니다: ${listed.join(", ")}`);
+    }
+  });
+
+  await check("주소가 가리키는 해는 과제가 없어도 남는다", async () => {
+    // 즐겨찾기해 둔 ?year=2019 가 빈칸으로 보이면 지금 무엇으로 걸렀는지 알 수 없다.
+    await go("#/projects?year=2019");
+    const listed = await optionsOf("연도 전체");
+    expect(listed.includes("2019년"), `주소의 해가 빠졌습니다: ${listed.join(", ")}`);
+    const select = page.locator(".filters select").filter({ hasText: "연도 전체" }).first();
+    equal(await select.inputValue(), "2019", "고른 값");
+  });
+
+  await check("태그 상자에는 과제에 붙은 태그만 선다", async () => {
+    // 진행일지에만 붙인 태그로 과제를 거르면 늘 0건이다.
+    const project = await api.post("/api/projects", { title: "태그 시험 과제", tags: ["과제태그"] });
+    await api.post(`/api/projects/${project.id}/entries`, {
+      date: "2026-04-01", title: "기록", body: "## 내용\n\n적었다\n", tags: ["일지태그"],
+    });
+    await go("#/projects");
+    const listed = await optionsOf("태그 전체");
+    expect(listed.includes("과제태그"), `과제 태그가 빠졌습니다: ${listed.join(", ")}`);
+    expect(!listed.includes("일지태그"), `진행일지 태그가 서 있습니다: ${listed.join(", ")}`);
+
+    // 떼어 낸 태그도 사라져야 한다 — `tag` 표에는 남아 있다.
+    await api.patch(`/api/projects/${project.id}`, { tags: [] });
+    await go("#/projects");
+    expect(!(await optionsOf("태그 전체")).includes("과제태그"), "떼어 낸 태그가 남아 있습니다");
+  });
+
+  await check("그룹을 안 적은 과제가 있으면 [미지정]으로 고를 수 있다", async () => {
+    await go("#/projects?year=all");
+    const listed = await optionsOf("그룹 전체");
+    expect(listed.includes("미지정"), `[미지정] 이 없습니다: ${listed.join(", ")}`);
+    // 상자에만 있고 걸리지 않으면 더 나쁘다 — 홈의 그룹별 표가 이리로 이어 준다.
+    const select = page.locator(".filters select").filter({ hasText: "그룹 전체" }).first();
+    await select.selectOption("none");
+    await page.waitForTimeout(800);
+    const rows = await page.locator(".grid tbody tr").count();
+    const api_rows = (await api.get("/api/projects?group=none")).length;
+    equal(rows, api_rows, "미지정으로 거른 과제 수");
+  });
+
+  await check("상태·속성처럼 고르는 말은 좁히지 않는다", async () => {
+    await go("#/projects");
+    // "보류인 게 있나?" 에 없다고 답하는 것도 거르기의 쓸모다.
+    const listed = await optionsOf("상태 전체");
+    const known = await api.get("/api/meta");
+    equal(listed.length, known.statuses.length + 1, "상태 선택지 수");
+  });
+
+  console.log("\n[12] 설정 화면 — 묶음과 폴더 고르기 (TODO 97 · 98)");
+
+  await check("설정이 기능별로 묶여 있다", async () => {
+    await go("#/settings");
+    const titles = await page.locator(".settings-group-title").allInnerTexts();
+    const names = titles.map((text) => text.split("\n")[0].trim());
+    equal(names.join("|"), "기본|보고|서식|보관과 백업|점검", "묶음 이름");
+    // 묶음마다 카드가 하나 이상 들어 있어야 한다 — 빈 묶음은 어수선함만 늘린다.
+    for (const group of await page.locator(".settings-group").all()) {
+      expect(await group.locator(".card").count() > 0, "카드가 없는 묶음이 있습니다");
+    }
+    // 백업 관련은 한 묶음에 모여 있다.
+    const backup = page.locator(".settings-group").filter({ hasText: "보관과 백업" });
+    const cards = (await backup.locator(".card > h2").allInnerTexts()).map((t) => t.trim());
+    for (const name of ["데이터 위치", "전체 백업", "자동 백업"]) {
+      expect(cards.includes(name), `"${name}" 이 보관과 백업 묶음에 없습니다: ${cards.join(", ")}`);
+    }
+  });
+
+  /**
+   * 자동 백업 카드에서 폴더 고르기를 펼치고 **처음 자리(드라이브·내 폴더)** 까지 올라간다.
+   * 앞선 시험이 백업 폴더를 정해 둔 채라 그 자리에서 열리는데, 그 안에 하위 폴더가
+   * 없으면 세울 줄도 없다 — 어디서 열리든 같은 자리에서 시작하게 맞춘다.
+   */
+  async function openPicker() {
+    const card = page.locator(".card").filter({ hasText: "자동 백업" }).first();
+    await card.getByRole("button", { name: "폴더 고르기" }).click();
+    await page.waitForSelector(".folder-picker");
+    const up = page.locator(".folder-picker .folder-head button");
+    for (let step = 0; step < 12 && !(await up.isDisabled()); step += 1) {
+      await up.click();
+      await page.waitForTimeout(250);
+    }
+    return { card, up };
+  }
+
+  await check("백업 폴더를 눌러서 고른다", async () => {
+    await go("#/settings");
+    const { card, up } = await openPicker();
+    // 처음 자리에서는 위로 갈 곳이 없다.
+    expect(await up.isDisabled(), "처음 자리인데 [위로]가 켜져 있습니다");
+
+    await page.locator(".folder-picker .folder-row").first().click();
+    await page.waitForTimeout(700);
+    const at = (await page.locator(".folder-at").innerText()).trim();
+    expect(at.length > 0 && at !== "내 PC", `들어간 자리가 표시되지 않습니다: ${at}`);
+
+    // 고르면 경로 칸이 채워진다 — 손으로 치지 않아도 된다.
+    const pick = page.locator(".folder-actions button").last();
+    expect(!(await pick.isDisabled()), `쓸 수 있는 폴더인데 고를 수 없습니다: ${at}`);
+    await pick.click();
+    await page.waitForTimeout(600);
+    equal((await card.locator(".input-with-button input").inputValue()).trim(), at, "칸에 들어간 값");
+    // 고른 것만으로는 아직 아무 일도 일어나지 않는다는 것을 말해 준다.
+    expect((await card.innerText()).includes("[저장]"), "저장하라는 안내가 없습니다");
+  });
+
+  await check("폴더 고르기에서 새 폴더를 만든다", async () => {
+    await go("#/settings");
+    await openPicker();
+    await page.locator(".folder-picker .folder-row").first().click();
+    await page.waitForTimeout(700);
+
+    const name = `백업시험-${Date.now()}`;
+    await page.getByRole("button", { name: "+ 새 폴더" }).click();
+    await page.locator(".folder-new input").fill(name);
+    await page.getByRole("button", { name: "만들기" }).click();
+    await page.waitForTimeout(1000);
+    // 만들면 그 안으로 들어가 있다 — 탐색기를 따로 열지 않아도 된다.
+    const at = await page.locator(".folder-at").innerText();
+    expect(at.includes(name), `만든 폴더로 들어가지 않았습니다: ${at}`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

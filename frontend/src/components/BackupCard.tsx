@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { BackupStatus } from "../types";
 import { formatBytes } from "../upload";
+import FolderPicker from "./FolderPicker";
 
 /**
  * 자동 백업 — 바깥쪽 안전망.
@@ -16,6 +17,8 @@ export default function BackupCard() {
   const [keep, setKeep] = useState(10);
   const [hours, setHours] = useState(24);
   const [busy, setBusy] = useState(false);
+  /** 폴더 고르기를 펼쳤나 (TODO 97). 경로를 손으로 치지 않아도 되게 한다. */
+  const [picking, setPicking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,13 +64,21 @@ export default function BackupCard() {
 
       <div className="form-row">
         <label className="grow">
-          백업 폴더 (전체 경로)
-          <input
-            value={dir}
-            onChange={(event) => setDir(event.target.value)}
-            placeholder="예: D:\\백업\\과제이력  또는  \\\\공유서버\\백업"
-            spellCheck={false}
-          />
+          백업 폴더
+          <span className="input-with-button">
+            {/* placeholder 를 중괄호로 감싼 이유 — JSX 의 따옴표 문자열은 이스케이프를
+                풀지 않아 "\\" 가 화면에 두 글자로 그대로 보였다. */}
+            <input
+              value={dir}
+              onChange={(event) => setDir(event.target.value)}
+              placeholder={"예: D:\\백업\\과제이력  또는  \\\\공유서버\\백업"}
+              spellCheck={false}
+            />
+            {/* 경로를 손으로 치면 오타 한 글자에 막힌다. 눌러서 고르는 길을 연다 (TODO 97). */}
+            <button className="ghost small" onClick={() => setPicking((open) => !open)}>
+              {picking ? "닫기" : "폴더 고르기"}
+            </button>
+          </span>
         </label>
         <label>
           남겨 둘 개수
@@ -90,6 +101,19 @@ export default function BackupCard() {
           />
         </label>
       </div>
+
+      {picking && (
+        <FolderPicker
+          value={dir}
+          onClose={() => setPicking(false)}
+          onPick={(path) => {
+            setDir(path);
+            setPicking(false);
+            // 고른 것만으로는 아직 아무 일도 일어나지 않는다. 다음 걸음을 말해 준다.
+            setNotice("폴더를 골랐습니다. [저장]을 눌러야 적용됩니다.");
+          }}
+        />
+      )}
 
       {notice && <p className="hint notice">{notice}</p>}
       {error && <p className="form-error">{error}</p>}

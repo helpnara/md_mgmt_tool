@@ -16,7 +16,14 @@ export interface Meta {
   /** 역량 이력의 구분 (교육·세미나·박람회·학회·자격). 과제의 속성과 다른 축이다. */
   activity_kinds: TypeInfo[];
   groups: string[];
+  /** 그룹을 안 적은 과제가 있는가 — 거르기 상자에 [미지정] 을 세울지 정한다 (TODO 96) */
+  groups_none: boolean;
+  /** 어디든(과제·진행일지) 실제로 붙어 있는 태그 — 자동완성용 */
   tags: string[];
+  /** **과제에** 붙어 있는 태그만 — 과제 목록의 거르기 상자용 (TODO 96) */
+  project_tags: string[];
+  /** 과제가 실제로 있는 해, 최근 것부터. 거르기 상자는 이것만 세운다 (TODO 96) */
+  years: string[];
   owners: string[];
   /** 지금까지 적어 둔 유관부서와 그쪽 담당자 — 자동완성과 거르기에 쓴다 (TODO 92) */
   partner_teams: string[];
@@ -485,4 +492,26 @@ export interface YearFix {
   renumbered?: boolean;
   reason: string | null;
   done?: boolean;
+}
+
+/** 폴더 하나 (TODO 97). */
+export interface FolderEntry {
+  name: string;
+  path: string;
+}
+
+/**
+ * 그 자리에서 보이는 폴더들 (TODO 97).
+ *
+ * `path` 가 비면 처음 자리(드라이브·내 폴더)다. `parent` 가 빈 문자열이면 한 단계 위가
+ * 처음 자리라는 뜻이고, null 이면 이미 처음 자리다.
+ */
+export interface FolderListing {
+  path: string;
+  parent: string | null;
+  /** 그 폴더에 쓸 수 있나 — 백업 폴더는 쓸 수 있어야 뜻이 있다 */
+  writable: boolean;
+  folders: FolderEntry[];
+  /** 폴더가 너무 많아 앞의 것만 실었다 */
+  truncated: boolean;
 }

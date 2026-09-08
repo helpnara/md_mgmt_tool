@@ -25,8 +25,23 @@ const DEFAULT_FILTERS = {
   year: THIS_YEAR, sort: "updated", order: "",
 };
 
-/** 고를 수 있는 연도 — 올해부터 5년 전까지. 그 이전은 [전체]로 본다. */
-const YEARS = Array.from({ length: 6 }, (_, index) => String(Number(THIS_YEAR) - index));
+/**
+ * 고를 수 있는 연도 (TODO 96).
+ *
+ * 예전에는 *올해부터 5년 전까지* 를 그냥 세웠다. 그래서 **과제가 한 건도 없는 해**가
+ * 목록에 서고, 골라 보면 0건이었다 — 홈과 팀원 역량은 이미 "과제가 있는 해" 만 세우고
+ * 있었으니 화면마다 말이 달랐다.
+ *
+ * 세우는 것은 셋을 합친 것이다.
+ * - 과제가 실제로 있는 해 (`meta.years` — 서버가 과제 번호 앞 네 자리로 센다)
+ * - **올해** — 아직 올해 과제가 없어도 "올해만 보기" 는 뜻이 통해야 하고, 그것이 기본값이다
+ * - 지금 주소가 가리키는 해 — 즐겨찾기해 둔 `?year=2019` 가 빈칸으로 보이면 안 된다
+ */
+function yearOptions(available: string[] | undefined, selected: string): string[] {
+  const years = new Set([...(available ?? []), THIS_YEAR]);
+  if (selected && selected !== ALL_YEARS) years.add(selected);
+  return [...years].sort((a, b) => Number(b) - Number(a));
+}
 
 /**
  * [전체]를 나타내는 값.
@@ -146,6 +161,9 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           </select>
           <select value={filters.group} onChange={(event) => setFilter("group", event.target.value)}>
             <option value="">그룹 전체</option>
+            {/* 홈의 그룹별 표가 [미지정] 줄을 세우고 이리로 이어 준다 — 상자도 그 말을
+                할 수 있어야 한다. 안 적은 과제가 하나도 없으면 세우지 않는다 (TODO 96). */}
+            {meta.groups_none && <option value="none">미지정</option>}
             {meta.groups.map((group) => (
               <option key={group} value={group}>
                 {group}
@@ -154,7 +172,8 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           </select>
           <select value={filters.tag} onChange={(event) => setFilter("tag", event.target.value)}>
             <option value="">태그 전체</option>
-            {meta.tags.map((tag) => (
+            {/* 진행일지에만 붙은 태그로 과제를 거르면 늘 0건이다 (TODO 96) */}
+            {(meta.project_tags ?? meta.tags).map((tag) => (
               <option key={tag} value={tag}>
                 {tag}
               </option>
@@ -195,10 +214,11 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               )}
             </select>
           )}
-          {/* 첫 화면이 늘 전체면 해가 갈수록 쓸모가 떨어진다. 기본은 올해다. */}
+          {/* 첫 화면이 늘 전체면 해가 갈수록 쓸모가 떨어진다. 기본은 올해다.
+              세우는 해는 **과제가 실제로 있는 해**뿐이다 (TODO 96). */}
           <select value={filters.year} onChange={(event) => setFilter("year", event.target.value)}>
             <option value={ALL_YEARS}>연도 전체</option>
-            {YEARS.map((year) => (
+            {yearOptions(meta.years, filters.year).map((year) => (
               <option key={year} value={year}>
                 {year}년
               </option>
