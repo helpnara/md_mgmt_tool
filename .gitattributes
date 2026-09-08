@@ -1,3 +1,8 @@
 # 윈도우 cmd는 LF만 있는 배치 파일에서 goto/라벨을 잘못 해석한다
 *.bat text eol=crlf
 *.py text eol=lf
+
+# 발표 자료(포스터·썸네일·소개 영상)는 배포본에 담지 않는다.
+# `git archive` 가 이 표시를 보고 뺀다 (tools/make_dist.py). 사내 PC 에 설치하는 것은
+# 도구지 발표물이 아니고, 영상 하나가 배포본을 10MB 넘게 불린다.
+docs/poster/ export-ignore
