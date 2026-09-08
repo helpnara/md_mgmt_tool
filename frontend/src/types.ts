@@ -465,3 +465,24 @@ export interface ActivitySummary {
   team: { count: number; events: number; hours: number; cost: number; people: number };
   people: ActivityPerson[];
 }
+
+/**
+ * 과제 번호의 연도를 착수년도에 맞추기 (TODO 95).
+ *
+ * 옮길 것이 없으면 `new_id` 가 null 이고 `reason` 이 왜 그런지 말한다
+ * ("이미 맞습니다." · "시작일이 비어 있습니다." · "번호 형태가 아니라 옮길 수 없습니다.").
+ */
+export interface YearFix {
+  id: string;
+  title?: string;
+  new_id: string | null;
+  dir_name?: string;
+  new_dir_name?: string;
+  start_date?: string;
+  from_year?: string;
+  to_year?: string;
+  /** 옮겨 갈 해에 그 번호가 이미 있어서 일련번호까지 밀린 경우 */
+  renumbered?: boolean;
+  reason: string | null;
+  done?: boolean;
+}

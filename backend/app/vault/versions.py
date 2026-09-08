@@ -236,3 +236,30 @@ def forget(rel_path: str) -> int:
     removed = len(_stamps(bucket))
     shutil.rmtree(bucket, ignore_errors=True)
     return removed
+
+
+def move_folder(old_rel: str, new_rel: str) -> bool:
+    """과제 폴더 이름이 바뀌면 보관본도 따라 옮긴다 (TODO 95).
+
+    보관본은 **경로를 열쇠로 쓴다**. 그래서 폴더 이름만 바뀌어도 그때까지 쌓인 이전
+    버전이 통째로 미아가 된다 — 남아 있지만 어느 문서 것인지 화면이 찾지 못한다.
+    번호를 옮기는 길이 생겼으니(과제 번호의 연도 고치기) 여기서 함께 옮긴다.
+
+    **실패해도 본 작업을 막지 않는다** — 안전망 때문에 번호 옮기기가 멈추면
+    본말이 뒤바뀐다 (`keep` 과 같은 원칙).
+    """
+    if old_rel == new_rel:
+        return False
+    try:
+        source = _bucket(old_rel)
+        if not source.is_dir():
+            return False
+        target = _bucket(new_rel)
+        if target.exists():
+            # 이미 그 이름의 보관본이 있다 — 덮지 않고 그대로 둔다. 잃는 것보다 낫다.
+            return False
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(target))
+        return True
+    except OSError:
+        return False

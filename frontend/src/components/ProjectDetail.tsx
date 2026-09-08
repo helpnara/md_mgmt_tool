@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
 import { backTarget, projectLink } from "../nav";
-import type { Entry, Meta, Project, Report } from "../types";
+import type { Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
 import { pasteAsTable } from "../table";
@@ -33,6 +33,73 @@ function listLink(params: Record<string, string>): string {
   const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value));
   const text = query.toString();
   return `#/projects${text ? `?${text}` : ""}`;
+}
+
+/**
+ * 번호의 연도가 시작일과 어긋났다는 알림 (TODO 95).
+ *
+ * 지난해 과제를 올해 뒤늦게 등록하면 그때까지는 `2026-…` 이 붙었다. 연도를 가르는 기준이
+ * **번호 앞 네 자리**라, 그 과제는 홈·대시보드·목록에서 전부 올해 것으로 세인다.
+ * 만들 때는 이제 시작일을 보지만, **시작일을 나중에 채우거나 고치는 일**이 남는다.
+ *
+ * 그때 번호를 소리 없이 따라 움직이게 하지 않는다 — 번호는 이미 보고 자리에서 불린
+ * 이름이다. 어긋났다는 사실만 알리고, 옮기는 것은 사용자가 누를 때만 한다.
+ */
+function YearFixNote({ project, onMoved }: { project: Project; onMoved: (newId: string) => void }) {
+  const [plan, setPlan] = useState<YearFix | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .yearFixPlan(project.id)
+      // 옮길 것이 없으면 (이미 맞거나 시작일이 비었으면) 아무것도 띄우지 않는다.
+      .then((row) => alive && setPlan(row.new_id ? row : null))
+      .catch(() => alive && setPlan(null));
+    return () => {
+      alive = false;
+    };
+  }, [project.id, project.start_date]);
+
+  if (!plan?.new_id) return null;
+
+  return (
+    <div className="year-fix">
+      <span className="year-fix-text">
+        과제 번호는 <b>{plan.from_year}년</b>인데 시작일은 <b>{plan.to_year}년</b>입니다.
+        번호의 연도는 <b>착수년도</b>라, 이대로 두면 이 과제가 {plan.from_year}년 것으로 세입니다.
+        {plan.renumbered && (
+          <> 옮기면 일련번호도 {plan.to_year}년의 다음 번호로 다시 붙습니다.</>
+        )}
+      </span>
+      <button
+        className="ghost small"
+        disabled={busy}
+        onClick={async () => {
+          const ok = window.confirm(
+            `과제 번호를 ${plan.id} → ${plan.new_id} 로 옮깁니다.\n\n` +
+              "과제 폴더 이름도 함께 바뀝니다. 진행일지·보고·첨부는 폴더째 따라옵니다.\n" +
+              "다만 이미 보고 문서에 적어 둔 옛 번호는 그대로 남습니다.\n\n계속할까요?",
+          );
+          if (!ok) return;
+          setBusy(true);
+          setError(null);
+          try {
+            const done = await api.yearFixApply(project.id);
+            if (done.new_id) onMoved(done.new_id);
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "옮기는 중…" : `${plan.new_id} 로 옮기기`}
+      </button>
+      {error && <span className="year-fix-error">{error}</span>}
+    </div>
+  );
 }
 
 export default function ProjectDetail({
@@ -327,6 +394,16 @@ export default function ProjectDetail({
             </button>
           </div>
         </div>
+
+        {/* 번호의 연도가 시작일과 어긋났으면 여기서 알린다 (TODO 95) */}
+        <YearFixNote
+          project={project}
+          onMoved={(newId) => {
+            // projectLink 가 지금 주소의 back 을 그대로 실어 준다 — 온 곳을 잃지 않는다.
+            window.location.hash = projectLink(newId);
+            onMetaChange();
+          }}
+        />
 
         <dl className="summary-bar">
           <div>

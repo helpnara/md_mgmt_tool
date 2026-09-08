@@ -1182,3 +1182,22 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
   padding: 1px 7px; border-radius: 999px; background: #f1f5f9;
 }
 a.partner-person:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* ── 번호의 연도가 시작일과 어긋났을 때 (TODO 95) ────────────────────
+   지난해 과제를 올해 뒤늦게 등록하면 번호가 올해로 붙던 시절의 자료가 남아 있고,
+   시작일을 나중에 고치는 일도 있다. 잘못된 것이 아니라 **어긋난 것**이므로
+   빨강(위험)이 아니라 보고일 배너와 같은 주황을 쓴다. */
+.year-fix {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 10px 0 0; padding: 9px 12px;
+  border: 1px solid var(--warn); border-radius: var(--radius);
+  background: #fef6e7; font-size: 13px;
+}
+.year-fix-text { flex: 1 1 320px; color: var(--text); }
+.year-fix button { flex: none; border-color: var(--warn); color: var(--warn); background: #fff; }
+.year-fix button:hover:not(:disabled) { background: #fdeed3; filter: none; }
+.year-fix-error { flex: 1 1 100%; color: var(--danger); }
+
+/* 저장하면 붙을 과제 번호 — 적어 두기보다 번호를 그대로 보여 준다 (TODO 95) */
+.next-id-hint { margin: -2px 0 10px; }
+.next-id { font-family: ui-monospace, monospace; color: var(--accent-strong); }

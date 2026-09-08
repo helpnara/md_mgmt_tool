@@ -1,4 +1,4 @@
-import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem } from "./types";
+import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem, YearFix } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -46,6 +46,18 @@ export const api = {
   updateProject: (id: string, payload: Partial<Project>) =>
     request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   archiveProject: (id: string) => request<void>(`/api/projects/${id}/archive`, { method: "POST" }),
+  /**
+   * 이 시작일로 만들면 어떤 번호가 붙는지 (TODO 95).
+   * 번호의 연도는 **등록한 날이 아니라 착수년도**다 — 적어 두기보다 실제 번호를 보여 준다.
+   */
+  nextProjectId: (startDate: string) =>
+    request<{ id: string; year: number }>(
+      `/api/projects/next-id${startDate ? `?start_date=${encodeURIComponent(startDate)}` : ""}`,
+    ),
+  /** 번호의 연도가 시작일과 어긋났는지, 옮기면 몇 번이 되는지. 파일은 건드리지 않는다. */
+  yearFixPlan: (id: string) => request<YearFix>(`/api/projects/${id}/year-fix`),
+  /** 미리보기대로 이 과제 하나의 번호를 옮긴다. */
+  yearFixApply: (id: string) => request<YearFix>(`/api/projects/${id}/year-fix`, { method: "POST" }),
   listEntries: (projectId: string) => request<Entry[]>(`/api/projects/${projectId}/entries`),
   createEntry: (projectId: string, payload: Partial<Entry>) =>
     request<Entry>(`/api/projects/${projectId}/entries`, {

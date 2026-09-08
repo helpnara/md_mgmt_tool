@@ -1763,6 +1763,92 @@ async function main() {
       "홈|과제목록|보고대상|보고이력|팀원역량|설정", "메뉴 이름");
   });
 
+  console.log("\n[10] 과제 번호의 연도는 착수년도 (TODO 95)");
+
+  /** 과제 만들기 폼을 열고 과제명·시작일을 채운다. */
+  async function fillNew(title, startDate) {
+    await go("#/projects?new=1");
+    await page.waitForSelector("form .next-id-hint");
+    await page.getByLabel("과제명").fill(title);
+    if (startDate) await page.getByLabel("시작일").fill(startDate);
+    // 미리보기는 서버에 물어 오므로 잠깐 기다린다.
+    await page.waitForTimeout(600);
+  }
+
+  await check("저장하기 전에 붙을 번호를 보여 준다", async () => {
+    await fillNew("2025년에 한 과제", "2025-04-01");
+    const shown = (await page.locator("form .next-id").innerText()).trim();
+    expect(shown.startsWith("2025-"), `미리보기가 2025 번호가 아니다: ${shown}`);
+
+    // 시작일을 올해로 바꾸면 미리보기도 따라온다 — 붙을 번호를 그때그때 보여 준다.
+    const thisYear = String(new Date().getFullYear());
+    await page.getByLabel("시작일").fill(`${thisYear}-04-01`);
+    await page.waitForTimeout(600);
+    const now = (await page.locator("form .next-id").innerText()).trim();
+    expect(now.startsWith(`${thisYear}-`), `올해 번호가 아니다: ${now}`);
+  });
+
+  await check("지난해 시작일로 만들면 지난해 번호가 붙는다", async () => {
+    await fillNew("지난해에 수행한 과제", "2025-01-01");
+    const preview = (await page.locator("form .next-id").innerText()).trim();
+    // 이름을 정확히 짚는다 — 폼 안에는 [+ 부서 추가] 도 있어서 느슨하게 고르면 그쪽이 걸린다.
+    await page.locator("form").getByRole("button", { name: "만들기", exact: true }).click();
+    await page.waitForTimeout(1400);
+    // 만든 과제가 그 번호로 열려야 한다.
+    const made = (await api.get("/api/projects")).find((row) => row.title === "지난해에 수행한 과제");
+    expect(made !== undefined, "만든 과제를 찾지 못했습니다");
+    equal(made.id, preview, "미리보기와 실제로 붙은 번호");
+    expect(made.id.startsWith("2025-"), `지난해 번호가 아니다: ${made.id}`);
+    // 연도를 가르는 기준은 번호 앞 네 자리다 — 2025 목록에 선다.
+    const listed = await api.get("/api/projects?year=2025");
+    expect(listed.some((row) => row.id === made.id), "2025년 목록에 없습니다");
+  });
+
+  await check("시작일을 고쳐도 번호는 저절로 움직이지 않고, 어긋난 것을 알려 준다", async () => {
+    const late = await api.post("/api/projects", { title: "뒤늦게 등록한 지난해 과제" });
+    const thisYear = String(new Date().getFullYear());
+    expect(late.id.startsWith(`${thisYear}-`), `올해 번호가 아니다: ${late.id}`);
+
+    await api.patch(`/api/projects/${late.id}`, { start_date: "2025-02-02" });
+    await go(`#/projects/${late.id}`);
+    // 번호는 그대로다 — 이미 보고 자리에서 불린 이름을 소리 없이 바꾸지 않는다.
+    equal((await api.get(`/api/projects/${late.id}`)).id, late.id, "고친 뒤의 번호");
+
+    const note = page.locator(".year-fix");
+    equal(await note.count(), 1, "어긋났다는 안내");
+    const text = await note.innerText();
+    expect(text.includes("2025"), `안내에 옮겨 갈 해가 없다: ${text}`);
+  });
+
+  await check("누르면 그 번호로 옮겨 가고 진행일지도 따라온다", async () => {
+    const late = await api.post("/api/projects", { title: "옮길 지난해 과제" });
+    await api.post(`/api/projects/${late.id}/entries`, {
+      date: "2025-03-10", title: "지난해 시험", body: "## 내용\n\n돌려 봤다\n",
+    });
+    await api.patch(`/api/projects/${late.id}`, { start_date: "2025-03-01" });
+
+    await go(`#/projects/${late.id}`);
+    const button = page.locator(".year-fix button");
+    const label = (await button.innerText()).trim();
+    const wanted = label.split(" ")[0];
+    expect(wanted.startsWith("2025-"), `단추가 2025 번호를 말하지 않는다: ${label}`);
+
+    // 확인 창은 위쪽에 걸어 둔 page.on("dialog") 가 이미 받아 준다.
+    await button.click();
+    await page.waitForTimeout(1600);
+
+    // 새 번호의 화면으로 데려간다.
+    expect(page.url().includes(wanted), `새 번호로 가지 않았다: ${page.url()}`);
+    equal(await page.locator(".year-fix").count(), 0, "옮긴 뒤에도 남은 안내");
+    // 진행일지는 폴더째 따라온다.
+    const entries = await api.get(`/api/projects/${wanted}/entries`);
+    equal(entries.length, 1, "따라온 진행일지 수");
+    equal(entries[0].title, "지난해 시험", "따라온 진행일지");
+    // 옛 번호는 더 이상 없다.
+    expect((await api.get("/api/projects")).every((row) => row.id !== late.id),
+      "옛 번호가 남아 있습니다");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

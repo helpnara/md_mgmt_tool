@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../api";
 import type { Meta, Partner, Project } from "../types";
 import TagSuggestions from "./TagSuggestions";
 import UnknownOwners from "./UnknownOwners";
@@ -43,6 +44,28 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * 저장하면 붙을 과제 번호 (TODO 95).
+   *
+   * 번호의 연도는 **등록한 날이 아니라 착수년도**다. 그 사실은 문장으로 적어 두는 것보다
+   * **실제 번호를 미리 보여 주는 편**이 확실하다 — 지난해 과제를 등록하면서 시작일을
+   * 비워 둔 채 저장하면 올해 번호가 붙는데, 저장 뒤에는 알아채기 어렵다.
+   * 고칠 때는 띄우지 않는다 — 이미 붙은 번호는 이 폼이 바꾸지 않는다.
+   */
+  const creating = !initial?.id;
+  const [nextId, setNextId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!creating) return;
+    let alive = true;
+    api
+      .nextProjectId(form.start_date)
+      .then((row) => alive && setNextId(row.id))
+      .catch(() => alive && setNextId(null));
+    return () => {
+      alive = false;
+    };
+  }, [creating, form.start_date]);
 
   const update = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -226,6 +249,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             onChange={(event) => update("due_date", event.target.value)}
           />
         </label>
+
         <label>
           태그(예 : 공정, 쉼표 구분)
           <input
@@ -240,6 +264,19 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           />
         </label>
       </div>
+      {/* 번호의 연도는 등록한 날이 아니라 **착수년도**다 (TODO 95).
+          적어 두기보다 붙을 번호를 그대로 보여 주는 편이 확실하다. */}
+      {creating && (
+        <p className="hint next-id-hint">
+          과제 번호는 <b>시작일의 연도</b>로 붙습니다
+          {nextId && (
+            <>
+              {" "}— 지금 저장하면 <b className="next-id">{nextId}</b>
+            </>
+          )}
+          .{!form.start_date && " 시작일을 비워 두면 올해로 붙습니다."}
+        </p>
+      )}
       <div className="form-row">
         <label>
           기대효과 (억원/년)

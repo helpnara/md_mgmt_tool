@@ -9,6 +9,7 @@ from ..deps import get_db
 from ..vault.markdown import ExternalChangeError
 from ..vault.paths import FileInUseError
 from ..services import projects as svc
+from ..services import renumber as renumber_service
 from ..services import search as search_svc
 from ..services import settings as settings_service
 from ..schemas import ProjectCreate, ProjectUpdate
@@ -255,6 +256,18 @@ def create_project(payload: ProjectCreate, conn: sqlite3.Connection = Depends(ge
     return _serialize(conn, row)
 
 
+@router.get("/next-id")
+def next_id(start_date: str | None = Query(None)) -> dict:
+    """이 시작일로 만들면 어떤 번호가 붙는지 (TODO 95).
+
+    화면이 저장 전에 미리 보여 준다 — 번호의 연도가 **등록한 날이 아니라 착수년도**라는
+    사실은 적어 두는 것보다 실제 번호를 보여 주는 편이 확실하다.
+    `/{project_id}` 보다 **먼저** 서야 한다. 아니면 `next-id` 가 과제 번호로 잡힌다.
+    """
+    year = svc.project_year(start_date)
+    return {"id": svc.next_project_id(year), "year": year}
+
+
 @router.get("/{project_id}")
 def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     row = conn.execute("SELECT * FROM project WHERE id = ?", (project_id,)).fetchone()
@@ -296,6 +309,32 @@ def update_project(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return get_project(project_id, conn)
+
+
+# ── 과제 번호의 연도를 착수년도에 맞추기 (TODO 95) ──────────────────────────
+#
+# **자동으로 바꾸지 않는다.** 번호는 이미 보고 자리에서 불린 이름이라, 시작일을 고쳤다고
+# 소리 없이 따라 움직이면 그 편이 더 위험하다. 화면이 어긋난 사실을 알리고,
+# 사용자가 눌렀을 때만 옮긴다. 미리보기와 실행을 나눈 것도 같은 이유다.
+
+@router.get("/{project_id}/year-fix")
+def year_fix_plan(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    try:
+        return renumber_service.year_plan(conn, project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+
+
+@router.post("/{project_id}/year-fix")
+def year_fix_apply(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    try:
+        return renumber_service.year_apply(conn, project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
 
 
 @router.post("/{project_id}/archive", status_code=204)

@@ -142,15 +142,36 @@ def now_iso() -> str:
     return datetime.now().astimezone().replace(microsecond=0).isoformat()
 
 
+def project_year(start_date: str | None = None) -> int:
+    """과제 번호에 쓸 연도 — **착수년도**다 (TODO 95).
+
+    지난해에 한 과제를 올해 뒤늦게 등록하는 일이 실제로 있다. 그때 번호가 `2026-…` 으로
+    붙으면 그 과제는 홈·대시보드·목록에서 전부 올해 것으로 세인다 — 연도를 가르는 기준이
+    **과제 번호 앞 네 자리**이기 때문이다 (DESIGN 5.8). 그래서 **등록한 날이 아니라
+    시작일**을 본다.
+
+    시작일을 비워 두면 올해다 — 지금 착수하는 과제라고 보는 것이 가장 흔한 경우다.
+    """
+    text = (start_date or "").strip()
+    if len(text) >= 4 and text[:4].isdigit():
+        year = int(text[:4])
+        # 오타로 `0025-01-01` 같은 값이 들어오면 없는 연도의 번호가 생긴다. 그때는 올해로.
+        if 1900 <= year <= 2999:
+            return year
+    return datetime.now().year
+
+
 def next_project_id(year: int | None = None, code: str | None = None) -> str:
     """다음 과제 번호.
 
     팀 코드를 비워 두면 `2026-001`, `소재` 를 넣으면 `2026-소재-001` 이 된다.
     일련번호는 **코드별로 따로 센다** — 팀마다 자기 번호를 갖는 편이 자연스럽고,
     코드가 다르면 번호가 같아도 과제 번호는 겹치지 않는다.
+    연도는 **착수년도**다 (`project_year`) — 등록한 날이 아니다.
 
     **이미 만든 과제의 번호는 바꾸지 않는다.** 번호는 식별자라 섞여도 되고,
     바꾸면 폴더명과 문서 안의 링크가 모두 흔들린다.
+    (시작일을 잘못 적어 연도가 어긋난 과제만은 사용자가 눌러서 옮긴다 — `renumber.year_*`)
     """
     settings = get_settings()
     settings.ensure_dirs()
@@ -191,7 +212,8 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     if project_type and project_type not in TYPE_KEYS:
         raise ValueError(f"알 수 없는 속성: {project_type}")
 
-    project_id = next_project_id()
+    # 번호의 연도는 **등록한 날이 아니라 착수년도**다 (TODO 95).
+    project_id = next_project_id(project_year(data.get("start_date")))
     dir_name = paths.project_dir_name(project_id, title)
     directory = paths.safe_join(settings.projects_dir, dir_name)
     (directory / "logs").mkdir(parents=True, exist_ok=True)

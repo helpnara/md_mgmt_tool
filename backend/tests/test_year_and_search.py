@@ -48,10 +48,18 @@ def test_a_year_keeps_only_that_years_projects(client):
 
 
 def test_the_year_comes_from_the_project_number(client):
-    """시작일이 아니라 번호의 연도를 쓴다 — 번호는 만들 때 정해져 흔들리지 않는다."""
-    make(client, "2026 번호인데 시작일은 작년", start_date="2025-01-05")
-    assert len(client.get("/api/projects", params={"year": "2026"}).json()) == 1
-    assert client.get("/api/projects", params={"year": "2025"}).json() == []
+    """시작일이 아니라 **번호의 연도**를 쓴다 — 번호는 만들 때 정해져 흔들리지 않는다.
+
+    번호를 지을 때 시작일을 보므로(TODO 95) 둘은 대개 같다. 다른 것은 시작일을
+    **나중에 고쳤을 때**다. 그때도 번호가 기준이고, 번호는 사용자가 옮기기 전까지
+    그대로다 — 그래야 "그 해에 시작한 과제" 라는 뜻이 저절로 흔들리지 않는다.
+    """
+    project = make(client, "지난해 착수", start_date="2025-01-05")
+    assert project["id"].startswith("2025-")
+
+    client.patch(f"/api/projects/{project['id']}", json={"start_date": "2026-01-05"})
+    assert len(client.get("/api/projects", params={"year": "2025"}).json()) == 1
+    assert client.get("/api/projects", params={"year": "2026"}).json() == []
 
 
 def test_the_dashboard_follows_the_same_year(client):
