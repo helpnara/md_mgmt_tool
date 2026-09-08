@@ -2,6 +2,10 @@
 
 FTS5 trigram은 3글자 이상에서만 매칭되므로, 짧은 질의는 LIKE로 처리한다.
 한국어는 형태소 분석 없이도 부분 문자열 검색이면 대부분 충분하다.
+
+**두 길이 같은 곳을 봐야 한다.** FTS 색인에는 담당자·태그·유관부서가 본문 뒤에
+덧붙어 있으므로, LIKE 쪽도 그 자리를 함께 훑는다. 그러지 않으면 "이준" 같은 두 글자
+이름이 짧다는 이유만으로 안 찾힌다.
 """
 from __future__ import annotations
 
@@ -54,15 +58,29 @@ def _refs_for(
             pass  # trigram 미지원 등 — LIKE로 물러난다
 
     pattern = f"%{query}%"
+    # 두 글자 이하로 찾을 때 오는 길이다. FTS 색인에는 담당자·태그·유관부서가 본문 뒤에
+    # 덧붙어 있는데, 여기서 제목·본문만 훑으면 **짧은 이름은 영영 안 찾힌다** —
+    # "이준" 같은 두 글자 이름이나 "구매" 같은 부서가 그렇다 (TODO 92).
+    # FTS 가 보는 것과 같은 자리를 보게 맞춘다.
     sql = {
-        "project": "SELECT id AS ref_id FROM project WHERE title LIKE ? OR body LIKE ?",
+        "project": (
+            "SELECT id AS ref_id FROM project p"
+            " WHERE p.title LIKE ? OR p.body LIKE ?"
+            "    OR EXISTS (SELECT 1 FROM project_owner po"
+            "                WHERE po.project_id = p.id AND po.name LIKE ?)"
+            "    OR EXISTS (SELECT 1 FROM project_tag pt JOIN tag t ON t.id = pt.tag_id"
+            "                WHERE pt.project_id = p.id AND t.name LIKE ?)"
+            "    OR EXISTS (SELECT 1 FROM project_partner pp"
+            "                WHERE pp.project_id = p.id"
+            "                  AND (pp.team LIKE ? OR pp.person LIKE ?))"
+        ),
         "entry": "SELECT CAST(id AS TEXT) AS ref_id FROM entry WHERE title LIKE ? OR body LIKE ?",
         "report": (
             "SELECT CAST(id AS TEXT) AS ref_id FROM report"
             " WHERE title LIKE ? OR body LIKE ? OR audience LIKE ?"
         ),
     }[kind]
-    params = [pattern] * (3 if kind == "report" else 2)
+    params = [pattern] * {"project": 6, "entry": 2, "report": 3}[kind]
     rows = conn.execute(f"{sql} LIMIT ?", (*params, limit + 1)).fetchall()
     return [row["ref_id"] for row in rows[:limit]], len(rows) > limit
 

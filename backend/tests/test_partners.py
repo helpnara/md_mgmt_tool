@@ -127,3 +127,27 @@ def test_projects_without_partners_are_unaffected(client):
     project = make(client, "예전 과제")
     assert project["partners"] == []
     assert client.get("/api/meta").json()["partner_teams"] == []
+
+
+def test_short_names_are_found_too(client):
+    """두 글자 이름·부서도 찾혀야 한다.
+
+    FTS5 trigram 은 세 글자부터라 짧은 질의는 LIKE 로 물러난다. 그런데 그 LIKE 가
+    제목·본문만 훑고 있어서 **짧은 이름은 영영 안 찾혔다.** 두 길이 같은 자리를 본다.
+    """
+    project = make(client, "짧은 이름", partners=[{"team": "구매", "people": "이준"}])
+    make(client, "관계 없는 과제", owners=["박서연"])
+
+    for query in ("구매", "이준"):
+        found = client.get("/api/search", params={"q": query}).json()["projects"]
+        assert [row["id"] for row in found] == [project["id"]], f"'{query}' 로 찾지 못했다"
+
+
+def test_short_owner_and_tag_names_are_found_too(client):
+    """같은 구멍이 담당자·태그에도 있었다 — 함께 막는다."""
+    project = make(client, "짧은 담당자", owners=["이준"], tags=["기존"])
+    make(client, "관계 없는 과제 둘")
+
+    for query in ("이준", "기존"):
+        found = client.get("/api/search", params={"q": query}).json()["projects"]
+        assert [row["id"] for row in found] == [project["id"]], f"'{query}' 로 찾지 못했다"
