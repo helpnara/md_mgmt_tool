@@ -25,6 +25,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
     owners: (initial?.owners ?? []).join(", "),
     start_date: initial?.start_date ?? "",
     due_date: initial?.due_date ?? "",
+    completed_at: initial?.completed_at ?? "",
     effect_expected: initial?.effect_expected?.toString() ?? "",
     effect_verified: initial?.effect_verified?.toString() ?? "",
     tags: (initial?.tags ?? []).join(", "),
@@ -90,6 +91,8 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           .filter(Boolean),
         start_date: form.start_date || null,
         due_date: form.due_date || null,
+        // 완료 상태가 아니면 완료일을 보내지 않는다 — 서버가 비운다 (TODO 104).
+        ...(form.status === "done" ? { completed_at: form.completed_at || null } : {}),
         effect_expected: effect(form.effect_expected),
         effect_verified: effect(form.effect_verified),
         no_report: noReport,
@@ -249,6 +252,19 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             onChange={(event) => update("due_date", event.target.value)}
           />
         </label>
+        {/* 완료일 (TODO 104) — 상태가 완료일 때만 선다. 비워 두면 오늘로 남는다.
+            지난 과제를 뒤늦게 넣을 때는 여기서 실제 끝난 날을 적는다. */}
+        {form.status === "done" && (
+          <label>
+            완료일
+            <input
+              type="date"
+              value={form.completed_at ?? ""}
+              onChange={(event) => update("completed_at", event.target.value)}
+            />
+            <span className="hint">비워 두면 오늘 날짜로 남습니다</span>
+          </label>
+        )}
 
         <label>
           태그(예 : 공정, 쉼표 구분)

@@ -98,7 +98,20 @@ def _team(conn: sqlite3.Connection, year: str | None) -> dict:
         "effect_expected_projects": row["ee_n"] or 0,
         "effect_verified_projects": row["ev_n"] or 0,
         "reports": _report_count(conn, year),
+        # 완료일 기준 (TODO 104). 위의 done 은 **번호의 연도**로 세어, 지난해 시작해 올해
+        # 끝낸 과제가 올해 성과에 잡히지 않는다. 어느 쪽이 "성과" 인지는 사용자가 정할
+        # 일이라 둘을 나란히 준다. 연도가 없으면(전체) 완료일이 적힌 것 전부.
+        "done_in_year": _done_in_year(conn, year),
     }
+
+
+def _done_in_year(conn: sqlite3.Connection, year: str | None) -> int:
+    sql = "SELECT COUNT(*) AS n FROM project WHERE completed_at IS NOT NULL AND status = ?"
+    params: list = [_DONE]
+    if year:
+        sql += " AND SUBSTR(completed_at, 1, 4) = ?"
+        params.append(year)
+    return conn.execute(sql, params).fetchone()["n"]
 
 
 def _report_count(conn: sqlite3.Connection, year: str | None, owner: str | None = None) -> int:

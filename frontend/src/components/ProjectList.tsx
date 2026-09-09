@@ -23,6 +23,9 @@ const THIS_YEAR = String(new Date().getFullYear());
 const DEFAULT_FILTERS = {
   status: "", type: "", group: "", tag: "", owner: "", partner: "", due: "",
   year: THIS_YEAR, sort: "updated", order: "",
+  // 홈에서만 거는 조건 — 상자는 없고 주소로만 온다. 완료일의 연도(TODO 104)와
+  // "완료했는데 실증효과를 안 적은 것"(TODO 106-C).
+  done_year: "", verified: "",
 };
 
 /**

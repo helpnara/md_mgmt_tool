@@ -56,7 +56,7 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
 
 # 인덱스 구조를 바꿀 때마다 하나씩 올린다.
 # 값이 달라지면 인덱스를 통째로 다시 만든다 — 원본은 md 파일이므로 잃을 것이 없다.
-SCHEMA_VERSION = 10  # 10: 유관부서와 담당자(project_partner) (TODO 92)
+SCHEMA_VERSION = 11  # 11: 완료일(completed_at) · 보고 지시사항(feedback) (TODO 104 · 107)
 
 
 def _drop_everything(conn: sqlite3.Connection) -> None:

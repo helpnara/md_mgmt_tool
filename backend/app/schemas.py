@@ -27,6 +27,8 @@ class ProjectCreate(BaseModel):
     partners: list[PartnerIn] = Field(default_factory=list)
     start_date: str | None = None
     due_date: str | None = None
+    # 완료일 (TODO 104). 완료 상태로 만들면 오늘이 기본, 지난 과제면 손으로 적는다.
+    completed_at: str | None = None
     # 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다.
     effect_expected: float | None = None
     effect_verified: float | None = None
@@ -47,6 +49,7 @@ class ProjectUpdate(BaseModel):
     partners: list[PartnerIn] | None = None
     start_date: str | None = None
     due_date: str | None = None
+    completed_at: str | None = None
     effect_expected: float | None = None
     effect_verified: float | None = None
     no_report: bool | None = None

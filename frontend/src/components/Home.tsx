@@ -367,6 +367,16 @@ export default function Home({ meta }: { meta: Meta }) {
             <span className="home-stat-label">완료</span>
             <strong>{team.done}건</strong>
           </a>
+          {/* 완료일 기준 (TODO 104). 위 [완료]는 번호의 연도라, 지난해 시작해 올해 끝낸 과제가
+              올해 성과에 안 잡힌다. 어느 쪽이 "성과" 인지는 사용자가 정할 일이라 둘 다 세운다. */}
+          <a
+            className="home-stat"
+            href={yearParam ? `#/projects?done_year=${yearParam}&year=all` : listLink({ status: "done" })}
+            title="완료일이 그 해인 과제 — 시작 연도와 무관하게"
+          >
+            <span className="home-stat-label">{yearParam ? "그해 끝낸 과제" : "끝낸 과제"}</span>
+            <strong>{team.done_in_year ?? 0}건</strong>
+          </a>
           <a className="home-stat" href={`#/history${yearParam ? `?from=${yearParam}-01-01&to=${yearParam}-12-31` : ""}`}>
             <span className="home-stat-label">보고 횟수</span>
             <strong>{team.reports}회</strong>

@@ -149,6 +149,7 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         # 효과 금액 (억원/년). 실증효과는 과제가 끝나야 나오므로 대개 비어 있다.
         "effect_expected": row["effect_expected"],
         "effect_verified": row["effect_verified"],
+        "completed_at": row["completed_at"],
         # 별도 보고가 필요 없는 과제 — 보고 대상 후보에서만 빠진다 (TODO 80).
         "no_report": bool(row["no_report"]),
         # 과제를 등록한 사람 (담당자와 다르다). 로그인이 생기면 자동으로 채워진다.
@@ -186,6 +187,10 @@ def list_projects(
     due: str | None = None,
     # 과제 번호의 연도 (2026-001 → 2026). 비우면 전체.
     year: str | None = Query(None, pattern=r"^(\d{4})?$"),
+    # **완료일**의 연도 (TODO 104). 홈의 "올해 끝낸 과제" 가 이리로 이어 준다.
+    done_year: str | None = Query(None, pattern=r"^(\d{4})?$"),
+    # 완료했는데 실증효과를 안 적은 과제만 (TODO 106-C). "none" 하나만 받는다.
+    verified: str | None = Query(None, pattern="^(none)?$"),
     sort: str = Query("updated"),
     # 열 머리글을 눌러 방향을 뒤집는다 (TODO 57). 정렬 키는 SORTS 가 정의한다.
     order: str | None = Query(None, pattern="^(asc|desc)$"),
@@ -230,6 +235,11 @@ def list_projects(
     if year:
         where.append(year_clause())
         params.append(year)
+    if done_year:
+        where.append("p.status = 'done' AND SUBSTR(p.completed_at, 1, 4) = ?")
+        params.append(done_year)
+    if verified == "none":
+        where.append("p.status = 'done' AND (p.effect_verified IS NULL OR p.effect_verified <= 0)")
     if q and q.strip():
         # 과제 본문뿐 아니라 진행일지·첨부 파일명에 걸려도 그 과제를 남긴다.
         matched = search_svc.project_ids_matching(conn, q.strip())
@@ -280,6 +290,14 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     from ..services.reports import unreported_entries
 
     data["unreported_entries"] = len(unreported_entries(conn, project_id))
+    # 지난 보고에서 받고 아직 답하지 않은 지시 (TODO 107) — 상세 위쪽에 세운다.
+    from ..services.reports import open_feedback
+
+    data["open_feedback"] = [
+        {"id": row["id"], "report_date": row["report_date"], "audience": row["audience"],
+         "feedback": row["feedback"]}
+        for row in open_feedback(conn, project_id)
+    ]
     data["report_count"] = conn.execute(
         "SELECT COUNT(*) AS n FROM report WHERE project_id = ?", (project_id,)
     ).fetchone()["n"]

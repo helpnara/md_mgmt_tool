@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS project (
   -- 과제를 등록한 사람. 담당자(누가 하는가)와 다르다 (누가 등록했는가).
   -- 나중에 넣으면 그 전 과제는 영영 빈칸이라 지금부터 남긴다.
   created_by       TEXT,
+  -- 과제가 끝난 날 (TODO 104). 상태가 완료가 되는 순간 자동으로 남고, 손으로 고칠 수 있다.
+  -- 홈의 "올해 끝낸 과제" 가 이 날짜로 센다 — 번호의 연도로는 지난해 시작해 올해 끝낸
+  -- 과제가 올해 성과에 잡히지 않는다. 나중에 넣으면 그 전 과제는 영영 빈칸이다.
+  completed_at     TEXT,
   body             TEXT,
   file_mtime       REAL
 );
@@ -53,6 +57,10 @@ CREATE TABLE IF NOT EXISTS report (
   frozen_at   TEXT,
   report_type TEXT,
   audience    TEXT,
+  -- 보고 뒤에 받은 지시·질문 (TODO 107). 확정된 보고에서 유일하게 쓸 수 있는 본문이다.
+  -- feedback_done 은 다음 보고에서 답한 날 — 비어 있으면 아직 답하지 않은 지시다.
+  feedback      TEXT,
+  feedback_done TEXT,
   file_mtime  REAL,
   UNIQUE(project_id, rel_path)
 );

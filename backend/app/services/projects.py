@@ -47,9 +47,12 @@ INDEX_TEMPLATE = """## 배경
 
 META_ORDER = [
     "id", "title", "status", "type", "group", "tags", "owners",
-    "start_date", "due_date", "effect_expected", "effect_verified",
+    "start_date", "due_date", "completed_at", "effect_expected", "effect_verified",
     "no_report", "partners", "created_by", "created_at", "updated_at",
 ]
+
+# 상태가 이것이 되는 순간 완료일이 남는다 (TODO 104).
+DONE_STATUS = "done"
 
 
 # 효과 금액의 소수 자릿수. 단위가 **억원/년** 이므로 둘째 자리는 100만 원이다.
@@ -233,6 +236,10 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "partners": normalize_partners(data.get("partners")),
         "start_date": data.get("start_date") or None,
         "due_date": data.get("due_date") or None,
+        # 완료 상태로 등록하면 완료일이 곧 등록일이다 — 지난 과제를 뒤늦게 넣을 때는
+        # 폼에서 손으로 고친다 (TODO 104).
+        "completed_at": normalize_day(data.get("completed_at"))
+        or (date_today() if status == DONE_STATUS else None),
         "effect_expected": normalize_effect(data.get("effect_expected")),
         "effect_verified": normalize_effect(data.get("effect_verified")),
         # 단순 현황 관리를 과제로 세운 경우가 있다. 그런 과제는 보고 대상 후보에서 뺀다
@@ -248,6 +255,54 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     index_project(conn, directory)
     conn.commit()
     return project_id
+
+
+def date_today() -> str:
+    return datetime.now().date().isoformat()
+
+
+def normalize_day(value: object) -> str | None:
+    """`YYYY-MM-DD` 만 받는다. 비우면 None — "모른다" 를 "0000-00-00" 으로 적지 않는다."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return paths.validate_date(text, text)
+
+
+# 상태 변경 기록에 붙는 태그. 화면이 이 태그로 알아보고 흐리게 세운다.
+STATUS_CHANGE_TAG = "상태변경"
+
+
+def _log_status_change(directory: Path, old: str, new: str) -> None:
+    """상태가 바뀔 때 진행일지에 한 줄 (TODO 105).
+
+    "이 과제 언제 보류됐지?" 에 답할 자리가 없었다. 기록은 사람이 쓴 진행일지와 같은
+    폴더에 같은 형식으로 남는다 — 별도 표를 두면 타임라인에서 안 보이고 검색도 안 된다.
+    **실패해도 상태 변경 자체를 막지 않는다.** 이력을 남기려다 본 작업이 막히면 본말이
+    뒤바뀐다.
+    """
+    from ..config import STATUS_LABELS
+    from . import entries as entries_service
+
+    try:
+        today = date_today()
+        title = f"(상태) {STATUS_LABELS.get(old, old)} → {STATUS_LABELS.get(new, new)}"
+        logs_dir = directory / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        target = paths.unique_path(logs_dir, entries_service.entry_stem(today, title), ".md")
+        stamp = now_iso()
+        meta = {
+            "date": today,
+            "title": title,
+            "author": settings_service.current_author(None) or None,
+            "tags": [STATUS_CHANGE_TAG],
+            "attachments": [],
+            "created_at": stamp,
+            "updated_at": stamp,
+        }
+        md.save(target, md.MarkdownDoc(meta, f"상태를 **{STATUS_LABELS.get(old, old)}** 에서 **{STATUS_LABELS.get(new, new)}** 로 바꿨다.\n"))
+    except OSError:
+        pass
 
 
 def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str, Any]) -> None:
@@ -272,13 +327,30 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         updates["partners"] = normalize_partners(updates["partners"])
     if "owners" in updates or "owner" in updates:
         updates["owners"] = normalize_owners(updates.pop("owners", None) or updates.pop("owner", None))
+    if "completed_at" in updates:
+        updates["completed_at"] = normalize_day(updates["completed_at"])
     changes = {k: v for k, v in updates.items() if k in META_ORDER or k == "group"}
     # 예전 문서의 owner(단수) 키가 남아 있으면 owners로 옮겨 적는다.
     if "owners" in changes and "owner" in doc.meta:
         doc.meta.pop("owner")
+
+    # ── 완료일 (TODO 104) ── 상태가 완료가 되는 순간 남기고, 완료에서 벗어나면 비운다.
+    # 손으로 적은 완료일이 함께 오면 그것이 이긴다.
+    old_status = str(doc.meta.get("status") or "")
+    new_status = str(changes.get("status") or old_status)
+    if new_status == DONE_STATUS and old_status != DONE_STATUS and not changes.get("completed_at"):
+        changes["completed_at"] = doc.meta.get("completed_at") or date_today()
+    if new_status != DONE_STATUS and old_status == DONE_STATUS and "completed_at" not in changes:
+        changes["completed_at"] = None
+
     meta = md.merge_meta(doc.meta, changes)
     meta["updated_at"] = now_iso()
     md.save(index_md, md.MarkdownDoc(meta, body if body is not None else doc.body))
+
+    # ── 상태 변경 이력 (TODO 105) ── 진행일지에 한 줄 남긴다. 파일이 원본이라는 원칙에
+    # 맞고, 타임라인에 그대로 보이며, 다음 보고 초안에 "이 기간에 보류됐음" 이 저절로 든다.
+    if new_status != old_status and old_status:
+        _log_status_change(directory, old_status, new_status)
 
     new_title = meta.get("title")
     if new_title:

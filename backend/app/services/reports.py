@@ -123,6 +123,9 @@ def create_draft(
 
     # 보고일 이후에 쓴 기록은 이 보고에 담지 않는다 (TODO 81).
     entries = unreported_entries(conn, project_id, until=report_date)
+    # 지난 보고에서 받고 아직 답하지 않은 지시가 있으면 초안 맨 위에 딸려 들어간다 (TODO 107).
+    # 답했는지는 팀장 머릿속에만 있었다 — 다음 초안이 먼저 물어보게 한다.
+    pending = open_feedback(conn, project_id)
     meta: dict[str, Any] = {
         "report_date": report_date,
         "title": f"{report_date} 보고",
@@ -136,7 +139,7 @@ def create_draft(
         "audience": (audience or "").strip() or None,
         "created_at": now_iso(),
     }
-    md.save(folder / "report.md", md.MarkdownDoc(meta, _draft_body(entries)))
+    md.save(folder / "report.md", md.MarkdownDoc(meta, _feedback_head(pending) + _draft_body(entries)))
     index_project(conn, directory)
     conn.commit()
 
@@ -147,6 +150,35 @@ def create_draft(
     if row is None:
         raise RuntimeError(f"보고 문서를 인덱싱하지 못했습니다: {rel_path}")
     return int(row["id"])
+
+
+def open_feedback(conn: sqlite3.Connection, project_id: str) -> list[sqlite3.Row]:
+    """이 과제의 확정된 보고 중 **지시를 받았는데 아직 답하지 않은** 것. 오래된 것 먼저."""
+    return conn.execute(
+        "SELECT id, report_date, audience, feedback FROM report"
+        " WHERE project_id = ? AND frozen_at IS NOT NULL"
+        "   AND feedback IS NOT NULL AND TRIM(feedback) <> ''"
+        "   AND (feedback_done IS NULL OR feedback_done = '')"
+        " ORDER BY report_date, id",
+        (project_id,),
+    ).fetchall()
+
+
+def _feedback_head(pending: list[sqlite3.Row]) -> str:
+    """초안 맨 위에 붙는 '지난 보고 지시사항' 절. 없으면 빈 문자열."""
+    if not pending:
+        return ""
+    lines = ["## 지난 보고 지시사항", ""]
+    for row in pending:
+        head = f"{row['report_date']}" + (f" · {row['audience']}" if row["audience"] else "")
+        lines.append(f"- **{head}** — {str(row['feedback']).strip()}")
+    lines += ["", "> 위 지시에 답한 뒤 그 보고의 [답변함] 을 눌러 두세요. 다음 초안에 다시 나오지 않습니다.", ""]
+    return "\n".join(lines) + "\n"
+
+
+def mark_feedback_done(conn: sqlite3.Connection, report_id: int, done: bool) -> None:
+    """지시에 답했다 / 아직이다. 답한 날을 남긴다 — 언제 닫았는지도 사실이다."""
+    update_report(conn, report_id, {"feedback_done": date_cls.today().isoformat() if done else None})
 
 
 def report_row(conn: sqlite3.Connection, report_id: int) -> sqlite3.Row:
@@ -164,8 +196,10 @@ def report_path(conn: sqlite3.Connection, report_id: int):
 # 확정 뒤에도 고칠 수 있는 항목. 보고 '내용'이 아니라 꼬리표에 해당한다.
 # 보고일은 여기 없다 — 확정된 보고의 날짜는 "언제 보고했는가"라는 사실이므로,
 # 고치려면 확정을 먼저 풀어야 한다.
-EDITABLE_WHEN_FROZEN = {"audience", "title", "report_type"}
-META_FIELDS = {"title", "report_type", "audience", "report_date"}
+# 지시사항(feedback)은 **확정된 보고에서 유일하게 쓸 수 있는 본문**이다 (TODO 107).
+# 보고를 하고 나면 지시나 질문이 돌아오는데, 그것을 적을 자리가 잠긴 문서 안에는 없었다.
+EDITABLE_WHEN_FROZEN = {"audience", "title", "report_type", "feedback", "feedback_done"}
+META_FIELDS = {"title", "report_type", "audience", "report_date", "feedback", "feedback_done"}
 
 
 def _move_report_folder(
@@ -511,6 +545,7 @@ def search(
     query: str | None = None,
     project_id: str | None = None,
     state: str | None = None,
+    feedback: str | None = None,
     limit: int = SEARCH_LIMIT,
 ) -> list[dict]:
     """조건에 맞는 보고 문서를 최근 순으로 돌려준다.
@@ -534,6 +569,10 @@ def search(
     if project_id:
         where.append("r.project_id = ?")
         params.append(project_id)
+    if feedback == "open":
+        # 지시를 받았는데 아직 답하지 않은 보고만 (TODO 107).
+        where.append("r.frozen_at IS NOT NULL AND r.feedback IS NOT NULL AND TRIM(r.feedback) <> ''"
+                     " AND (r.feedback_done IS NULL OR r.feedback_done = '')")
     if state == "frozen":
         where.append("r.frozen_at IS NOT NULL")
     elif state == "draft":

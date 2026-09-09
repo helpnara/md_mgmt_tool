@@ -1296,3 +1296,7 @@ a.partner-person:hover { background: var(--accent-soft); color: var(--accent); }
 /* 확정 대기 카드의 날짜 (TODO 103-A) — 홈의 쓰다 만 보고 줄과 같은 눈 */
 .drafts-waiting .due { font-size: 12px; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
 .drafts-waiting .due.due-danger { color: var(--danger); font-weight: 600; }
+
+/* 상태 변경 기록 (TODO 105) — 사람이 쓴 기록이 아니라 도구가 남긴 한 줄이다. 흐리게. */
+.entry.status-change { background: #fafbfc; border-style: dashed; }
+.entry.status-change h3 { font-weight: 500; color: var(--muted-strong); }

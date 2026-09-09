@@ -26,6 +26,8 @@ class ReportUpdate(BaseModel):
     body: str | None = None
     audience: str | None = None  # 피보고자 또는 회의체명
     report_date: str | None = None  # 바꾸면 문서가 든 폴더도 함께 옮긴다
+    # 보고 뒤에 받은 지시 (TODO 107). 확정된 보고에서도 쓸 수 있는 유일한 본문이다.
+    feedback: str | None = None
 
     def changes(self) -> dict:
         return {k: v for k, v in self.model_dump().items() if v is not None}
@@ -45,6 +47,9 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, with_body: bool = Tru
         "covers_to": row["covers_to"],
         "frozen_at": row["frozen_at"],
         "frozen": bool(row["frozen_at"]),
+        # 보고 뒤에 받은 지시 (TODO 107). feedback_done 은 답한 날 — 비면 아직 답하지 않았다.
+        "feedback": row["feedback"],
+        "feedback_done": row["feedback_done"],
         "entry_count": conn.execute(
             "SELECT COUNT(*) AS n FROM report_entry WHERE report_id = ?", (row["id"],)
         ).fetchone()["n"],
@@ -62,6 +67,8 @@ def search_reports(
     q: str | None = None,
     project_id: str | None = None,
     state: str | None = Query(None, pattern="^(frozen|draft)$"),
+    # 지시를 받았는데 아직 답하지 않은 보고만 (TODO 107)
+    feedback: str | None = Query(None, pattern="^(open)?$"),
     limit: int = Query(svc.SEARCH_LIMIT, ge=1, le=500),
     conn: sqlite3.Connection = Depends(get_db),
 ) -> list[dict]:
@@ -74,8 +81,27 @@ def search_reports(
         query=q,
         project_id=project_id,
         state=state,
+        feedback=feedback,
         limit=limit,
     )
+
+
+class FeedbackDone(BaseModel):
+    done: bool = True
+
+
+@router.post("/api/reports/{report_id}/feedback-done")
+def feedback_done(
+    report_id: int, payload: FeedbackDone, conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
+    """지시에 답했다(또는 아직이다). 다음 초안에 그 지시가 다시 나오지 않게 한다 (TODO 107)."""
+    try:
+        svc.mark_feedback_done(conn, report_id, payload.done)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="보고 문서를 찾을 수 없습니다.") from exc
+    except (PermissionError, ExternalChangeError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _serialize(conn, svc.report_row(conn, report_id))
 
 
 @router.get("/api/projects/{project_id}/reports")

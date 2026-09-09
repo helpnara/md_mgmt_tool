@@ -350,6 +350,7 @@ export default function ProjectDetail({
             </div>
             <div className="meta-line muted">
               <span>{periodText(project.start_date, project.due_date)}</span>
+              {project.completed_at && <span>완료 {project.completed_at}</span>}
               {due && <span className={`due due-${due.tone}`}>{due.text}</span>}
               {project.owners.length > 0 && <span>담당 {project.owners.join(", ")}</span>}
               <span>최근 업데이트 {formatDate(project.updated_at)}</span>
@@ -819,7 +820,7 @@ export default function ProjectDetail({
               id={`entry-${entry.id}`}
               className={`card entry${isOpen(entry, index) ? "" : " collapsed"}${
                 highlightEntryId === entry.id ? " highlight" : ""
-              }`}
+              }${entry.tags.includes("상태변경") ? " status-change" : ""}`}
             >
               <div
                 className="entry-head"

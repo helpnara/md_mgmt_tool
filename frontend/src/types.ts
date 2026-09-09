@@ -57,6 +57,8 @@ export interface Project {
   partners: Partner[];
   start_date: string | null;
   due_date: string | null;
+  /** 완료일 (TODO 104). 상태가 완료가 되는 순간 자동으로 남고, 손으로 고칠 수 있다. */
+  completed_at?: string | null;
   created_at: string | null;
   updated_at: string | null;
   last_reported_at: string | null;
@@ -78,6 +80,16 @@ export interface Project {
   attachment_bytes?: number;
   /** 새 진행일지를 시작할 서식 (설정에서 속성별로 바꿀 수 있다) */
   entry_template?: string;
+  /** 지난 보고에서 받고 아직 답하지 않은 지시 (TODO 107) */
+  open_feedback?: OpenFeedback[];
+}
+
+/** 확정된 보고에 적어 둔 지시 중 아직 답하지 않은 것 (TODO 107). */
+export interface OpenFeedback {
+  id: number;
+  report_date: string;
+  audience: string | null;
+  feedback: string;
 }
 
 export interface Entry {
@@ -152,6 +164,10 @@ export interface Report {
   frozen: boolean;
   entry_count: number;
   body?: string;
+  /** 보고 뒤에 받은 지시 (TODO 107). 확정된 보고에서도 쓸 수 있다. */
+  feedback?: string | null;
+  /** 지시에 답한 날. 비어 있으면 아직 답하지 않은 지시다. */
+  feedback_done?: string | null;
 }
 
 export interface ReportCandidate {
@@ -369,6 +385,8 @@ export interface HomeTeam {
   /** 그 금액이 **몇 건에서 나왔는지**. 없으면 화살표가 달성률로 읽힌다 (TODO 86) */
   effect_expected_projects?: number;
   effect_verified_projects?: number;
+  /** 완료일 기준으로 센 완료 수 (TODO 104). done 은 번호의 연도 기준이라 둘이 다르다. */
+  done_in_year?: number;
 }
 
 export interface HomeMember extends HomeTeam {
