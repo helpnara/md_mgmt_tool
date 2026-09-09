@@ -51,6 +51,9 @@ PROJECT_TYPES: list[tuple[str, str]] = [
     ("investment", "투자"),
     ("plan_report", "기획보고"),
     ("national", "국책과제"),
+    # 이미 돌아가는 것을 고쳐 가며 유지하는 일. 시작과 끝이 뚜렷한 위 넷과 성격이 다르지만
+    # 팀이 실제로 시간을 쓰는 축이라 과제로 세운다 (TODO 99).
+    ("maintenance", "유지보수"),
 ]
 TYPE_KEYS: list[str] = [key for key, _ in PROJECT_TYPES]
 

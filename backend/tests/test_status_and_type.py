@@ -71,3 +71,26 @@ def test_report_candidates_cover_the_early_stages(client):
 
     titles = [item["title"] for item in client.get("/api/report-candidates").json()["items"]]
     assert sorted(titles) == sorted(["planned 과제", "reviewing 과제", "in_progress 과제"])
+
+
+def test_maintenance_is_a_type_you_can_pick_and_filter(client):
+    """유지보수 (TODO 99).
+
+    시작과 끝이 뚜렷한 나머지 넷과 성격이 다르지만, 팀이 실제로 시간을 쓰는 축이다.
+    새 속성 하나를 더하는 일은 목록에 이름을 넣는 것으로 끝나야 한다 —
+    거르기·대시보드·홈이 모두 같은 목록을 보기 때문이다.
+    """
+    labels = [item["label"] for item in client.get("/api/meta").json()["types"]]
+    assert "유지보수" in labels
+
+    made = client.post("/api/projects", json={"title": "설비 제어 SW 유지보수", "type": "maintenance"})
+    assert made.status_code == 201
+    assert made.json()["type"] == "maintenance"
+
+    # 골라서 거를 수 있어야 한다 — 목록에만 있고 안 걸리면 더 나쁘다.
+    listed = client.get("/api/projects", params={"type": "maintenance"}).json()
+    assert [row["title"] for row in listed] == ["설비 제어 SW 유지보수"]
+
+    # 대시보드도 같은 목록을 보므로 칸이 저절로 하나 는다.
+    counts = {row["key"]: row["count"] for row in client.get("/api/dashboard").json()["types"]}
+    assert counts["maintenance"] == 1

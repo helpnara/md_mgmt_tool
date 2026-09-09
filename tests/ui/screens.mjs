@@ -1995,6 +1995,37 @@ async function main() {
     expect(at.includes(name), `만든 폴더로 들어가지 않았습니다: ${at}`);
   });
 
+  console.log("\n[13] 속성에 유지보수 (TODO 99)");
+
+  await check("유지보수를 골라 만들고, 그 속성으로 거른다", async () => {
+    await go("#/projects?new=1");
+    await page.waitForSelector("form .next-id-hint");
+    await page.getByLabel("과제명").fill("설비 제어 SW 유지보수");
+    await page.getByLabel("속성").selectOption({ label: "유지보수" });
+    await page.locator("form").getByRole("button", { name: "만들기", exact: true }).click();
+    await page.waitForTimeout(1400);
+
+    const made = (await api.get("/api/projects")).find((row) => row.title === "설비 제어 SW 유지보수");
+    expect(made !== undefined, "만든 과제를 찾지 못했습니다");
+    equal(made.type, "maintenance", "저장된 속성");
+
+    // 거르기 상자에도 서고, 골라서 걸러야 한다 — 목록에만 있고 안 걸리면 더 나쁘다.
+    await go("#/projects");
+    const select = page.locator(".filters select").filter({ hasText: "속성 전체" }).first();
+    expect((await select.locator("option").allInnerTexts()).some((text) => text.trim() === "유지보수"),
+      "속성 상자에 유지보수가 없습니다");
+    await select.selectOption("maintenance");
+    await page.waitForTimeout(800);
+    equal(await page.locator(".grid tbody tr").count(),
+      (await api.get("/api/projects?type=maintenance")).length, "유지보수로 거른 과제 수");
+  });
+
+  await check("유지보수 딱지의 글자가 읽힌다", async () => {
+    await go("#/projects?type=maintenance");
+    const value = await contrastOf(".type-maintenance");
+    expect(value >= AA, `유지보수 딱지 ${value} < ${AA}`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

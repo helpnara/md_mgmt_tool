@@ -134,7 +134,7 @@ def test_meta_exposes_statuses_and_types_separately(client):
         "예정", "검토중", "진행중", "보류", "완료", "중단",
     ]
     assert [item["label"] for item in meta["types"]] == [
-        "스마트과제", "R&D", "투자", "기획보고", "국책과제",
+        "스마트과제", "R&D", "투자", "기획보고", "국책과제", "유지보수",
     ]
 
 
