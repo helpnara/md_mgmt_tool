@@ -275,7 +275,54 @@ export default function Home({ meta }: { meta: Meta }) {
             <span className="home-stat-label">마감 임박 (7일)</span>
             <strong>{week.due_soon}건</strong>
           </a>
+          {/* 쓰다 만 보고 (TODO 101). 배너는 보고하는 날에만 뜨므로, 지난주에 쓰다 만
+              것은 다음 보고일까지 아무 데도 보이지 않았다. 여기서 계속 들고 있는다. */}
+          <a
+            className={week.drafts_overdue ? "home-stat go danger" : "home-stat go"}
+            href="#/reports"
+            title="보고 대상 화면 맨 위의 [확정을 기다리는 초안] 으로 갑니다"
+          >
+            <span className="home-stat-label">작성 중인 보고</span>
+            <strong>{week.drafts}건</strong>
+          </a>
         </div>
+
+        {week.drafts > 0 && (
+          <>
+            <p className="hint">
+              <b>아직 확정하지 않은 보고</b> — 확정해야 보고 이력에 남고, 그 진행일지가
+              미보고에서 빠집니다.
+              {week.drafts_overdue > 0 && (
+                <>
+                  {" "}그중 <b className="warn-text">{week.drafts_overdue}건</b>은 보고일이
+                  이미 지났습니다.
+                </>
+              )}
+            </p>
+            <ul className="home-drafts">
+              {week.draft_items.map((item) => (
+                <li key={item.id}>
+                  {/* 이름을 적어 놓고 목록으로 보내면 그 한 건을 다시 찾아야 한다 (TODO 91) */}
+                  <a href={projectLink(item.project_id, { report: item.id })}>
+                    {item.project_title}
+                  </a>
+                  <span className={item.overdue_days > 0 ? "due due-danger" : "due"}>
+                    {item.report_date}
+                    {item.overdue_days > 0 && ` · D+${item.overdue_days}`}
+                  </span>
+                  {item.audience && <span className="muted">{item.audience}</span>}
+                </li>
+              ))}
+            </ul>
+            {week.drafts > week.draft_items.length && (
+              <p className="hint">
+                <a href="#/reports">
+                  나머지 {week.drafts - week.draft_items.length}건도 보고 대상 화면에서 보기 →
+                </a>
+              </p>
+            )}
+          </>
+        )}
         {week.stale.length > 0 && (
           <>
             <p className="hint">

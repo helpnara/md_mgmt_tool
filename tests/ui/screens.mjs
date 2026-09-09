@@ -2131,6 +2131,109 @@ async function main() {
     equal(options[2], moved, "거르기 상자의 첫 속성");
   });
 
+  console.log("\n[15] 쓰다 만 보고를 홈이 들고 있는다 (TODO 101)");
+
+  /** 확정하지 않은 보고를 **전부** 치운다 — 앞 시험이 남긴 것이 섞이면 건수를 못 본다. */
+  async function clearAllDrafts() {
+    for (const item of await api.get("/api/reports?state=draft")) {
+      await api.delete(`/api/reports/${item.id}`);
+    }
+  }
+
+  /** 오늘 기준 며칠 뒤(음수면 며칠 전) 날짜. */
+  function dayFromToday(offset) {
+    const now = new Date();
+    now.setDate(now.getDate() + offset);
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  await check("확정 안 한 보고가 이번 주 할 일에 선다", async () => {
+    await clearAllDrafts();
+    const made = await api.post(`/api/projects/${seeded.projectA}/reports/draft`, {
+      report_date: dayFromToday(2), audience: "전사 주요업무 보고",
+    });
+    try {
+      await go("#/");
+      const card = page.locator(".home-week");
+      const tile = card.locator(".home-stat").filter({ hasText: "작성 중인 보고" });
+      equal(await tile.count(), 1, "작성 중인 보고 칸");
+      expect((await tile.innerText()).includes("1건"), `건수가 다릅니다: ${await tile.innerText()}`);
+
+      // 개수만 적어 놓으면 그 한 건을 다시 찾아야 한다 — 이름과 갈 곳을 함께 준다.
+      const rows = card.locator(".home-drafts li");
+      equal(await rows.count(), 1, "세운 줄 수");
+      const href = await rows.first().locator("a").getAttribute("href");
+      expect(href.includes(`report=${made.id}`), `그 초안으로 가지 않습니다: ${href}`);
+      await rows.first().locator("a").click();
+      await page.waitForTimeout(1000);
+      equal(await page.locator(".report-editor").count(), 1, "열린 보고 편집기");
+    } finally {
+      await api.delete(`/api/reports/${made.id}`);
+    }
+  });
+
+  await check("여러 건이면 여러 줄로 서고, 지난 보고일은 붉게 센다", async () => {
+    await clearAllDrafts();
+    const made = [];
+    for (const [project, offset] of [
+      [seeded.projectA, -9], [seeded.projectB, -2], [seeded.projectA, 3],
+    ]) {
+      made.push(await api.post(`/api/projects/${project}/reports/draft`, {
+        report_date: dayFromToday(offset),
+      }));
+    }
+    try {
+      await go("#/");
+      const card = page.locator(".home-week");
+      expect((await card.locator(".home-stat").filter({ hasText: "작성 중인 보고" }).innerText())
+        .includes("3건"), "건수가 3건이 아닙니다");
+      equal(await card.locator(".home-drafts li").count(), 3, "세운 줄 수");
+
+      // 보고일이 지난 것만 붉다 — 아직 안 온 것은 지금 하는 일이지 밀린 일이 아니다.
+      equal(await card.locator(".home-drafts .due-danger").count(), 2, "붉게 선 줄 수");
+      const text = await card.innerText();
+      expect(text.includes("2건은 보고일이 이미 지났습니다"), `안내가 없습니다: ${text}`);
+
+      // 오래된 것이 맨 앞이다.
+      const first = await card.locator(".home-drafts li").first().innerText();
+      expect(first.includes(dayFromToday(-9)), `오래된 것이 앞에 없습니다: ${first}`);
+    } finally {
+      for (const item of made) await api.delete(`/api/reports/${item.id}`);
+    }
+  });
+
+  await check("확정하면 그 자리에서 사라진다", async () => {
+    await clearAllDrafts();
+    const made = await api.post(`/api/projects/${seeded.projectA}/reports/draft`, {
+      report_date: dayFromToday(0),
+    });
+    await go("#/");
+    equal(await page.locator(".home-week .home-drafts li").count(), 1, "확정 전 줄 수");
+    await api.post(`/api/reports/${made.id}/freeze`);
+    await go("#/");
+    equal(await page.locator(".home-week .home-drafts li").count(), 0, "확정 뒤 줄 수");
+    equal(await page.locator(".home-week .home-drafts").count(), 0, "빈 목록은 세우지 않는다");
+  });
+
+  await check("연도를 바꿔도 쓰다 만 보고는 그대로 보인다", async () => {
+    // 연도는 과제를 가르는 조건이지, 지금 손에 쥔 일을 가리는 조건이 아니다.
+    await clearAllDrafts();
+    const made = await api.post(`/api/projects/${seeded.projectA}/reports/draft`, {
+      report_date: dayFromToday(-4),
+    });
+    try {
+      await go("#/");
+      equal(await page.locator(".home-week .home-drafts li").count(), 1, "기본 연도");
+      // 홈은 연도를 주소에 싣지 않는다 — 화면의 상자로 바꾼다.
+      const select = page.locator(".home-year select");
+      await select.selectOption("all");
+      await page.waitForTimeout(900);
+      equal(await page.locator(".home-week .home-drafts li").count(), 1, "연도 전체");
+    } finally {
+      await api.delete(`/api/reports/${made.id}`);
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

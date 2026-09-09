@@ -315,6 +315,10 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
     ).fetchone()["n"]
 
     candidates = reports_service.candidates(conn)
+    # 쓰다 만 보고는 보고일이 지나도 사라지지 않고 조용히 쌓인다 (TODO 101).
+    # 배너(TODO 91)는 보고하는 날에만 뜨므로, 지난주에 쓰다 만 것은 다음 보고일까지
+    # 아무 데도 보이지 않았다. [이번 주 할 일]이 그것을 계속 들고 있는다.
+    drafts = reports_service.unfinished_drafts(conn)
     return {
         "year": year,
         "years": available,
@@ -325,6 +329,11 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
             "due_soon": due_soon,
             "overdue": overdue,
             "stale": _stale(conn),
+            # 아직 확정하지 않은 보고 — 날짜를 가리지 않는다.
+            # 건수는 자르기 전 수고, 목록은 앞의 몇 건이다 (TODO 82 와 같은 규칙).
+            "drafts": drafts["total"],
+            "drafts_overdue": drafts["overdue"],
+            "draft_items": drafts["items"],
         },
         "team": _team(conn, year),
         "compare": _compare(conn),

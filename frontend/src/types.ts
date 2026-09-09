@@ -409,6 +409,12 @@ export interface Home {
     due_soon: number;
     overdue: number;
     stale: ReportCandidate[];
+    /** 아직 확정하지 않은 보고 수 — 날짜를 가리지 않는다 (TODO 101) */
+    drafts: number;
+    /** 그중 **보고일이 이미 지난** 것 — 진짜 밀린 것이다 */
+    drafts_overdue: number;
+    /** 앞의 몇 건. 건수를 말할 때 이 길이를 세면 안 된다 */
+    draft_items: UnfinishedDraft[];
   };
   team: HomeTeam;
   /** 최근 몇 해를 나란히. 왼쪽이 과거다. */
@@ -524,4 +530,15 @@ export interface ProjectTypeRow {
   label: string;
   /** 이 속성을 쓰는 과제 수 — 0건일 때만 뺄 수 있다. */
   count: number;
+}
+
+/** 쓰다 만 보고 한 건 (TODO 101). 홈이 그 편집기로 곧장 데려간다. */
+export interface UnfinishedDraft {
+  id: number;
+  project_id: string;
+  project_title: string;
+  audience: string | null;
+  report_date: string;
+  /** 보고일이 지났으면 며칠이나 지났는지. 아직 안 지났으면 0 */
+  overdue_days: number;
 }

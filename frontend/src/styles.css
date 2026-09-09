@@ -918,6 +918,19 @@ a.home-stat:hover strong { color: var(--accent-strong); }
 .home-stale a { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
 .home-stale a:hover { text-decoration: underline; }
 .home-stale .muted { font-size: 12px; color: var(--muted); }
+/* 쓰다 만 보고 (TODO 101) — 오래 방치된 과제 목록과 같은 모양이다. 뜻이 다르므로
+   줄만 같고 자리는 나눈다: 저쪽은 *보고를 못 한 것*, 이쪽은 *써 놓고 안 굳힌 것*. */
+.home-drafts { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.home-drafts li {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd;
+}
+.home-drafts a { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+.home-drafts a:hover { text-decoration: underline; }
+.home-drafts .muted { font-size: 12px; color: var(--muted); }
+/* 보고일이 아직 안 지난 초안 — 지금 하는 일이지 밀린 일이 아니다. 흐리게 둔다. */
+.home-drafts .due { font-size: 12px; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+.home-drafts .due.due-danger { color: var(--danger); font-weight: 600; }
 
 /* 막대는 라이브러리 없이 div 로 그린다 — 사내 오프라인 배포라 의존성을 늘리지 않는다. */
 .bar-row { display: flex; align-items: flex-end; gap: 10px; height: 130px; padding-top: 6px; }

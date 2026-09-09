@@ -771,6 +771,60 @@ def open_drafts(conn: sqlite3.Connection, report_date: str) -> list[dict]:
     ]
 
 
+# 홈에 이름을 세우는 초안은 몇 건까지인가. 그 위는 보고 대상 화면이 맡는다.
+UNFINISHED_LIST_LIMIT = 6
+
+
+def unfinished_drafts(conn: sqlite3.Connection, limit: int = UNFINISHED_LIST_LIMIT) -> dict:
+    """**아직 확정하지 않은 보고 전부** — 날짜를 가리지 않는다 (TODO 101).
+
+    `open_drafts` 와 다른 점은 *그 날짜*가 아니라 *모든 날짜*를 본다는 것이다.
+    쓰다 만 초안은 보고일이 지나도 사라지지 않고 조용히 쌓인다. 배너(TODO 91)는
+    **보고하는 날에만** 뜨므로, 지난주에 쓰다 만 것은 그 다음 보고일까지 아무 데도
+    보이지 않았다. 홈의 [이번 주 할 일]이 그것을 계속 들고 있게 한다.
+
+    보고일이 **이미 지난** 초안을 앞에 세운다 — 그것이 진짜 밀린 것이다.
+    건수는 자르기 전 수를 따로 센다 (TODO 82 에서 같은 것을 고쳤다).
+    """
+    today = date_cls.today().isoformat()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM report WHERE frozen_at IS NULL"
+    ).fetchone()["n"]
+    overdue = conn.execute(
+        "SELECT COUNT(*) AS n FROM report WHERE frozen_at IS NULL AND report_date < ?",
+        (today,),
+    ).fetchone()["n"]
+    items = [
+        {
+            "id": row["id"],
+            "project_id": row["project_id"],
+            "project_title": row["project_title"],
+            "audience": row["audience"],
+            "report_date": row["report_date"],
+            # 보고일이 지났는데 아직 확정하지 않았다 — 며칠이나 지났는지 함께 준다.
+            "overdue_days": max(0, (date_cls.today() - _date(row["report_date"])).days)
+            if row["report_date"] < today
+            else 0,
+        }
+        for row in conn.execute(
+            "SELECT r.id, r.project_id, r.report_date, r.audience, p.title AS project_title"
+            "  FROM report r JOIN project p ON p.id = r.project_id"
+            " WHERE r.frozen_at IS NULL"
+            " ORDER BY r.report_date ASC, p.title, r.id LIMIT ?",
+            (limit,),
+        )
+    ]
+    return {"total": total, "overdue": overdue, "items": items}
+
+
+def _date(text: str) -> date_cls:
+    """`YYYY-MM-DD` → 날짜. 손으로 고친 파일에 이상한 값이 있어도 화면을 멈추지 않는다."""
+    try:
+        return date_cls.fromisoformat(text)
+    except (TypeError, ValueError):
+        return date_cls.today()
+
+
 def month_grid(conn: sqlite3.Connection, year: str | None) -> dict:
     """과제 × 월 표의 재료 (TODO 77 · 79).
 
