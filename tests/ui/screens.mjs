@@ -2026,6 +2026,111 @@ async function main() {
     expect(value >= AA, `유지보수 딱지 ${value} < ${AA}`);
   });
 
+  console.log("\n[14] 과제 속성을 설정에서 다룬다 (TODO 100)");
+
+  /** 설정의 [과제 속성] 카드. */
+  function typeCard() {
+    return page.locator(".card").filter({ hasText: "과제 속성" }).first();
+  }
+
+  /** 줄 하나를 더하고 이름을 적는다. 저장은 하지 않는다. */
+  async function addType(label) {
+    const card = typeCard();
+    await card.getByRole("button", { name: "+ 속성 추가" }).click();
+    await card.locator(".type-rows li input").last().fill(label);
+    return card;
+  }
+
+  await check("속성을 더하면 과제 만들기 화면에 곧바로 선다", async () => {
+    await go("#/settings");
+    const card = await addType("설비투자");
+    await card.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForTimeout(1200);
+
+    // 서버가 이름에서 열쇠를 지어 붙인다.
+    const saved = (await api.get("/api/settings/project-types")).types;
+    const made = saved.find((row) => row.label === "설비투자");
+    expect(made !== undefined, `저장되지 않았습니다: ${saved.map((r) => r.label).join(", ")}`);
+    expect(made.key.length > 0, "열쇠가 비어 있습니다");
+
+    // 과제 만들기 화면의 속성 상자에 선다 — 같은 목록을 보기 때문이다.
+    await go("#/projects?new=1");
+    await page.waitForSelector("form .next-id-hint");
+    const options = await page.getByLabel("속성").locator("option").allInnerTexts();
+    expect(options.map((t) => t.trim()).includes("설비투자"), `상자에 없습니다: ${options.join(", ")}`);
+
+    // 골라서 만들면 그 속성으로 저장되고 딱지가 선다.
+    await page.getByLabel("과제명").fill("압연기 교체");
+    await page.getByLabel("속성").selectOption({ label: "설비투자" });
+    await page.locator("form").getByRole("button", { name: "만들기", exact: true }).click();
+    await page.waitForTimeout(1400);
+    const project = (await api.get("/api/projects")).find((row) => row.title === "압연기 교체");
+    equal(project.type, made.key, "저장된 속성");
+    await go(`#/projects/${project.id}`);
+    equal((await page.locator(".type-badge").first().innerText()).trim(), "설비투자", "딱지 글자");
+  });
+
+  await check("이름을 고쳐도 그 속성을 쓰던 과제는 속성을 잃지 않는다", async () => {
+    const before = (await api.get("/api/projects")).find((row) => row.title === "압연기 교체");
+    await go("#/settings");
+    const card = typeCard();
+    const row = card.locator(".type-rows li").filter({ hasText: "설비투자" }).first();
+    await row.locator("input").fill("설비 투자·개선");
+    await card.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForTimeout(1200);
+
+    const after = (await api.get("/api/projects")).find((row) => row.title === "압연기 교체");
+    // 과제 파일에 남는 것은 이름이 아니라 열쇠다.
+    equal(after.type, before.type, "이름을 고친 뒤의 속성");
+    // 화면에 보이는 이름만 바뀐다.
+    await go(`#/projects/${after.id}`);
+    equal((await page.locator(".type-badge").first().innerText()).trim(), "설비 투자·개선", "딱지 글자");
+  });
+
+  await check("쓰고 있는 속성은 빼지 못하게 잠겨 있다", async () => {
+    await go("#/settings");
+    const used = typeCard().locator(".type-rows li").filter({ hasText: "설비 투자·개선" }).first();
+    expect((await used.innerText()).includes("1건"), `쓰는 과제 수가 없습니다: ${await used.innerText()}`);
+    expect(await used.getByRole("button", { name: "빼기" }).isDisabled(), "[빼기]가 켜져 있습니다");
+  });
+
+  await check("안 쓰는 속성은 뺄 수 있고, 빼면 상자에서도 사라진다", async () => {
+    await go("#/settings");
+    const card = await addType("잠깐 쓸 속성");
+    await card.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForTimeout(1200);
+
+    const row = card.locator(".type-rows li").filter({ hasText: "잠깐 쓸 속성" }).first();
+    await row.getByRole("button", { name: "빼기" }).click();
+    await card.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForTimeout(1200);
+
+    const left = (await api.get("/api/settings/project-types")).types.map((r) => r.label);
+    expect(!left.includes("잠깐 쓸 속성"), `아직 남아 있습니다: ${left.join(", ")}`);
+    await go("#/projects");
+    const options = await page.locator(".filters select").filter({ hasText: "속성 전체" })
+      .first().locator("option").allInnerTexts();
+    expect(!options.map((t) => t.trim()).includes("잠깐 쓸 속성"), "거르기 상자에 남아 있습니다");
+  });
+
+  await check("순서를 바꾸면 거르기 상자도 따라온다", async () => {
+    await go("#/settings");
+    const card = typeCard();
+    const first = (await card.locator(".type-rows li input").first().inputValue()).trim();
+    // 둘째 줄을 맨 위로 올린다.
+    await card.locator(".type-rows li").nth(1).getByTitle("위로").click();
+    await card.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForTimeout(1200);
+    const moved = (await api.get("/api/settings/project-types")).types[0].label;
+    expect(moved !== first, `순서가 그대로입니다: ${moved}`);
+
+    await go("#/projects");
+    const options = (await page.locator(".filters select").filter({ hasText: "속성 전체" })
+      .first().locator("option").allInnerTexts()).map((t) => t.trim());
+    // [속성 전체]·[미지정] 다음이 첫 속성이다.
+    equal(options[2], moved, "거르기 상자의 첫 속성");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

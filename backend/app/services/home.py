@@ -23,7 +23,8 @@ from __future__ import annotations
 import sqlite3
 from datetime import date as date_cls
 
-from ..config import FINISHED_STATUSES, PROJECT_TYPES, STATUS_KEYS
+from ..config import FINISHED_STATUSES, STATUS_KEYS
+from . import settings as settings_service
 from . import reports as reports_service
 
 # 연도 비교 막대에 세우는 해의 수. 더 늘리면 막대가 얇아지기만 한다.
@@ -205,7 +206,9 @@ def _types(conn: sqlite3.Connection, year: str | None) -> list[dict]:
         "type",
     )
     out = []
-    for key, label in [*PROJECT_TYPES, ("none", "미지정")]:
+    # 속성 목록은 설정에서 온다 — 화면·거르기·대시보드가 모두 같은 목록을 본다 (TODO 100).
+    types = [(item["key"], item["label"]) for item in settings_service.project_types()]
+    for key, label in [*types, ("none", "미지정")]:
         stored = "" if key == "none" else key
         row = rows.get(stored)
         if not row:

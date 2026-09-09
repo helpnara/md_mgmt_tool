@@ -13,7 +13,8 @@ import sqlite3
 import zipfile
 from pathlib import Path
 
-from ..config import STATUS_LABELS, TYPE_LABELS
+from ..config import STATUS_LABELS
+from . import settings as settings_service
 from .attachments import ENTRY_DOC_DIR, PROJECT_DOC_DIR, resolve_link
 from .projects import project_dir
 from .reports import report_doc_dir
@@ -99,6 +100,8 @@ def merged_markdown(
         return _rewrite_links(body, doc_dir, mode, directory, dir_name)
 
     tags = _tags(conn, project_id)
+    # 속성 이름은 설정에서 온다 — 사용자가 고친 이름이 내보내는 문서에도 그대로 나가야 한다.
+    type_labels = settings_service.type_labels()
     header = [
         f"# {project['title']}",
         "",
@@ -108,7 +111,8 @@ def merged_markdown(
                 None,
                 [
                     f"상태: {STATUS_LABELS.get(project['status'], project['status'])}",
-                    f"속성: {TYPE_LABELS[project['type']]}" if project["type"] in TYPE_LABELS else None,
+                    # 속성 이름은 설정에서 온다 — 사용자가 고친 이름이 그대로 나가야 한다 (TODO 100).
+                    f"속성: {type_labels[project['type']]}" if project["type"] in type_labels else None,
                     f"기간: {project['start_date'] or '—'} ~ {project['due_date'] or '—'}",
                     f"그룹: {project['grp']}" if project["grp"] else None,
                     f"태그: {', '.join(tags)}" if tags else None,

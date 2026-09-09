@@ -1,4 +1,4 @@
-import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, TrashItem, YearFix, FolderListing } from "./types";
+import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -143,6 +143,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ parent, name }),
     }),
+  /**
+   * 과제 속성 목록 (TODO 100). 줄마다 **그 속성을 쓰는 과제 수**가 함께 온다 —
+   * 쓰고 있는 속성은 뺄 수 없으므로 화면이 그 사실을 알아야 한다.
+   */
+  projectTypes: () =>
+    request<{ types: ProjectTypeRow[]; orphans: { key: string; count: number }[] }>(
+      "/api/settings/project-types",
+    ),
+  saveProjectTypes: (types: { key: string; label: string }[]) =>
+    request<{ types: ProjectTypeRow[]; orphans: { key: string; count: number }[] }>(
+      "/api/settings/project-types",
+      { method: "PUT", body: JSON.stringify({ types }) },
+    ),
   /** 과제 번호를 새 팀 코드로 한 번에 맞춘다. preview 는 파일을 건드리지 않는다. */
   renumberPreview: (code: string) =>
     request<RenumberPlan>("/api/settings/project-code/renumber/preview", {

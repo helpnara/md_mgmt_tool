@@ -515,3 +515,13 @@ export interface FolderListing {
   /** 폴더가 너무 많아 앞의 것만 실었다 */
   truncated: boolean;
 }
+
+/** 설정에서 다루는 과제 속성 한 줄 (TODO 100). */
+export interface ProjectTypeRow {
+  /** 과제 파일에 남는 값. 새 줄은 비어 있고 저장할 때 서버가 이름에서 짓는다. */
+  key: string;
+  /** 화면에 보이는 이름. 고쳐도 과제가 속성을 잃지 않는다. */
+  label: string;
+  /** 이 속성을 쓰는 과제 수 — 0건일 때만 뺄 수 있다. */
+  count: number;
+}

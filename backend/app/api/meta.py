@@ -4,7 +4,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends
 
-from ..config import ACTIVITY_KINDS, COLLAPSED_STATUSES, PROJECT_TYPES, STATUSES, get_settings
+from ..config import ACTIVITY_KINDS, COLLAPSED_STATUSES, STATUSES, get_settings
 from ..deps import get_db
 from ..services import home as home_service
 from ..services import settings as settings_service
@@ -79,7 +79,8 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
             {"key": key, "label": label, "candidate": candidate, "collapsed": key in COLLAPSED_STATUSES}
             for key, label, candidate in STATUSES
         ],
-        "types": [{"key": key, "label": label} for key, label in PROJECT_TYPES],
+        # 과제 속성은 설정에서 더하고 빼고 고칠 수 있다 (TODO 100).
+        "types": settings_service.project_types(),
         # 팀원 역량 이력의 구분 (TODO 72). 과제의 속성과 다른 축이다.
         "activity_kinds": [{"key": key, "label": label} for key, label in ACTIVITY_KINDS],
         "groups": groups,

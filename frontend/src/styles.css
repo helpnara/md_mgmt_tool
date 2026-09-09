@@ -339,6 +339,13 @@ button { white-space: nowrap; }
 /* 유지보수 (TODO 99) — 앞의 다섯이 청록·남색·주황·보라·초록을 쓰고 있어
    남은 자리는 무채색이다. 흐리지 않게 글자를 진하게 둔다 (명암비 9.45). */
 .type-maintenance { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
+/* 설정에서 **더한** 속성이 받는 색 (TODO 100). 열쇠로 고르므로 순서를 바꿔도 색은 그대로다.
+   위의 여섯(청록·남색·주황·보라·초록·무채)과 겹치지 않는 다섯을 둔다. 모두 AA 통과. */
+.type-c0 { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+.type-c1 { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.type-c2 { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
+.type-c3 { background: #f0f9ff; color: #0369a1; border-color: #bae6fd; }
+.type-c4 { background: #f7fee7; color: #4d7c0f; border-color: #d9f99d; }
 
 /* 새 상태 값 색 */
 .status-planned { background: #f1f5f9; color: #475569; }
@@ -1257,3 +1264,16 @@ a.partner-person:hover { background: var(--accent-soft); color: var(--accent); }
 .folder-actions .grow { flex: 1 1 auto; }
 .folder-new { display: flex; gap: 6px; align-items: center; }
 .folder-new input { width: 180px; }
+
+/* ── 과제 속성 고치기 (TODO 100) ─────────────────────────────
+   줄마다 [딱지] [이름] [쓰는 과제 수] [↑↓] [빼기]. 딱지를 함께 세우는 이유는,
+   목록에서 고른 이름이 과제 화면에서 어떤 색으로 보일지 여기서 바로 알게 하려는 것이다. */
+.type-rows { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.type-rows li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.type-rows li > input { flex: 1 1 160px; min-width: 0; }
+.type-rows .type-badge { flex: none; min-width: 84px; text-align: center; }
+.type-used { flex: none; font-size: 12px; min-width: 84px; }
+.type-move { display: flex; gap: 2px; flex: none; }
+.type-move button { padding: 4px 8px; }
+.type-empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+.form-actions.left { justify-content: flex-start; }

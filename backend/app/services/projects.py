@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..config import DEFAULT_STATUS, STATUS_KEYS, TYPE_KEYS, get_settings
+from ..config import DEFAULT_STATUS, STATUS_KEYS, get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
@@ -209,7 +209,7 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         raise ValueError(f"알 수 없는 상태: {status}")
 
     project_type = data.get("type") or None
-    if project_type and project_type not in TYPE_KEYS:
+    if project_type and project_type not in settings_service.type_keys():
         raise ValueError(f"알 수 없는 속성: {project_type}")
 
     # 번호의 연도는 **등록한 날이 아니라 착수년도**다 (TODO 95).
@@ -259,7 +259,7 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
 
     if "status" in updates and updates["status"] not in STATUS_KEYS:
         raise ValueError(f"알 수 없는 상태: {updates['status']}")
-    if updates.get("type") and updates["type"] not in TYPE_KEYS:
+    if updates.get("type") and updates["type"] not in settings_service.type_keys():
         raise ValueError(f"알 수 없는 속성: {updates['type']}")
 
     body = updates.pop("body", None)

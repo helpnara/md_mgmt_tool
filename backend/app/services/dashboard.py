@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import sqlite3
 
-from ..config import FINISHED_STATUSES, PROJECT_TYPES, STATUSES, TYPE_LABELS
+from ..config import FINISHED_STATUSES, STATUSES
+from . import settings as settings_service
 from . import reports as reports_service
 
 # 대시보드에 세우는 보고 대상 후보 수. 주간 회의에서 훑을 만큼만 보여 준다.
@@ -120,7 +121,7 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT, year: str | 
         ],
         "types": [
             {"key": key, "label": label, "count": type_counts[key]}
-            for key, label in PROJECT_TYPES
+            for key, label in _types()
             if type_counts.get(key)
         ]
         # 속성을 안 정한 과제도 세고, 눌러서 거를 수 있게 키를 준다.
@@ -135,6 +136,11 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT, year: str | 
         "candidates": candidates,
         "candidate_total": len(all_candidates),
     }
+
+
+def _types() -> list[tuple[str, str]]:
+    """대시보드가 세는 속성 — 설정 목록 그대로다 (TODO 100)."""
+    return [(item["key"], item["label"]) for item in settings_service.project_types()]
 
 
 __all__ = ["summary", "CANDIDATE_LIMIT", "DUE_SOON_DAYS", "TYPE_LABELS"]

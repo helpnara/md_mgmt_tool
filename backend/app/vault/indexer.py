@@ -12,7 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from ..config import TYPE_KEYS, get_settings, normalize_status
+from ..config import get_settings, normalize_status
+from ..services import settings as settings_service
 from . import markdown as md
 
 
@@ -227,7 +228,9 @@ def index_project(
     # 예전에 상태로 쓰이던 '기획보고' 같은 값은 상태+속성으로 나눠 읽는다.
     status, implied_type = normalize_status(_as_str(doc.meta.get("status")))
     project_type = _as_str(doc.meta.get("type")) or implied_type
-    if project_type not in TYPE_KEYS:
+    # 설정에 없는 속성은 색인에서만 비운다 — **파일은 그대로 둔다** (TODO 100).
+    # 설정을 되돌리면 다음 색인에서 그대로 살아난다.
+    if project_type not in settings_service.type_keys():
         project_type = None
     updated_at = _as_str(doc.meta.get("updated_at"))
 

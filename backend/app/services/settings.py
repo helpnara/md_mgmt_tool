@@ -22,6 +22,11 @@ DEFAULTS: dict[str, Any] = {
     # 담당자 명부. 표기 흔들림(권경락 / 권 경락)을 막고, 나중에 계정을 붙일 자리다.
     # [{"name": "권경락", "employee_id": "", "account": ""}]
     "people": [],
+    # 과제 속성 (TODO 100). **null 이면 아직 정한 적이 없다는 뜻**이고, 그때는 코드에 든
+    # 기본 여섯을 쓴다. 빈 목록 `[]` 은 "속성을 쓰지 않는다" 는 **정한 값**이라 다르다 —
+    # 둘을 같게 두면 속성을 다 뺀 팀에게 다음 실행에서 여섯이 되살아난다.
+    # [{"key": "smart", "label": "스마트과제"}, …]
+    "project_types": None,
     # 과제 번호의 팀·부문 코드. 비우면 2026-001, "소재" 를 넣으면 2026-소재-001.
     # 여러 팀장이 함께 쓰게 될 때 번호가 겹치지 않게 하는 자리다.
     "project_code": "",
@@ -75,6 +80,8 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = backup_service.validate_dir(str(updates[key] or ""))
         elif key in ("backup_keep", "backup_every_hours"):
             current[key] = _positive_int(key, updates[key])
+        elif key == "project_types":
+            current[key] = validate_project_types(updates[key])
         elif key == "entry_templates":
             # 빈 서식은 저장하지 않는다 — 비우면 "기본 서식으로 되돌린다"는 뜻이다.
             current[key] = {
@@ -260,3 +267,103 @@ def _positive_int(key: str, value: object) -> int:
     if number > 999:
         raise ValueError(f"{labels.get(key, key)}가 너무 큽니다.")
     return number
+
+
+# ── 과제 속성 (TODO 100) ──────────────────────────────
+#
+# 속성은 오래 **코드에 박힌 다섯**이었다 (스마트과제·R&D·투자·기획보고·국책과제).
+# 팀마다 쓰는 말이 다르고, 하나 더하려면 개발자를 불러야 했다. 설정으로 옮긴다.
+#
+# 다루는 규칙 셋.
+#
+# 1. **열쇠(key)와 이름(label)을 나눈다.** 과제 파일에 남는 것은 열쇠고, 화면에 보이는
+#    것은 이름이다. 그래서 이름을 고쳐도 이미 만든 과제가 속성을 잃지 않는다.
+# 2. **쓰고 있는 속성은 뺄 수 없다.** 빼면 그 과제들이 색인에서 미지정이 된다.
+#    몇 건이 쓰고 있는지 말해 주고, 옮겨 놓은 뒤에 빼게 한다 (API 가 막는다).
+# 3. **비워 두면 기본 여섯.** 설정 파일이 없는 vault, 예전 vault 가 그대로 열린다.
+
+MAX_TYPE_LABEL = 20
+MAX_TYPES = 24
+
+
+def project_types() -> list[dict[str, str]]:
+    """과제 속성 목록 — 설정에 있으면 그것, 없으면 코드의 기본값.
+
+    **여기가 유일한 출처다.** 거르기 상자도, 대시보드 칩도, 홈의 속성별 표도,
+    진행일지 서식의 속성별 갈래도 이 목록을 본다.
+    """
+    from ..config import PROJECT_TYPES
+
+    stored = load().get("project_types")
+    # 아직 정한 적이 없으면(null) 기본 여섯. 빈 목록은 정해서 비운 것이므로 그대로 둔다.
+    if not isinstance(stored, list):
+        return [{"key": key, "label": label} for key, label in PROJECT_TYPES]
+    found: list[dict[str, str]] = []
+    for item in stored:
+        # 설정 파일을 손으로 고치다 깨졌어도 도구가 멈출 이유는 없다.
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "").strip()
+        label = str(item.get("label") or "").strip()
+        if key and label:
+            found.append({"key": key, "label": label})
+    return found
+
+
+def type_keys() -> list[str]:
+    return [item["key"] for item in project_types()]
+
+
+def type_labels() -> dict[str, str]:
+    return {item["key"]: item["label"] for item in project_types()}
+
+
+def _type_key(label: str, taken: set[str]) -> str:
+    """이름에서 열쇠를 짓는다. 한글은 그대로 두고, 겹치면 뒤 번호를 붙인다."""
+    from ..vault.paths import slugify
+
+    base = slugify(label)
+    if base == "untitled":
+        base = "type"
+    candidate = base
+    number = 1
+    while candidate in taken:
+        number += 1
+        candidate = f"{base}-{number}"
+    return candidate
+
+
+def validate_project_types(items: Any) -> list[dict[str, str]]:
+    """화면이 보낸 속성 목록을 다듬는다.
+
+    새로 더한 줄은 열쇠가 비어 있다 — 이름에서 지어 붙인다.
+    이미 있는 줄은 **열쇠를 그대로 둔다.** 그래야 이름만 고쳐도 과제가 속성을 잃지 않는다.
+    """
+    if not isinstance(items, list):
+        raise ValueError("과제 속성 목록의 형태가 올바르지 않습니다.")
+    if len(items) > MAX_TYPES:
+        raise ValueError(f"과제 속성은 {MAX_TYPES}개까지 둘 수 있습니다.")
+
+    found: list[dict[str, str]] = []
+    keys: set[str] = set()
+    labels: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("과제 속성 목록의 형태가 올바르지 않습니다.")
+        label = str(item.get("label") or "").strip()
+        if not label:
+            raise ValueError("속성 이름을 적어 주세요. 빈 이름은 둘 수 없습니다.")
+        if len(label) > MAX_TYPE_LABEL:
+            raise ValueError(f"속성 이름은 {MAX_TYPE_LABEL}자 이내여야 합니다: {label}")
+        if label in labels:
+            raise ValueError(f"같은 이름의 속성이 둘 있습니다: {label}")
+        labels.add(label)
+
+        key = str(item.get("key") or "").strip()
+        if not key:
+            key = _type_key(label, keys)
+        if key in keys:
+            raise ValueError(f"같은 열쇠의 속성이 둘 있습니다: {key}")
+        keys.add(key)
+        found.append({"key": key, "label": label})
+    return found

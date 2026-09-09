@@ -7,6 +7,7 @@ import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
 import PeopleCard from "./PeopleCard";
 import ProjectCodeCard from "./ProjectCodeCard";
+import ProjectTypeCard from "./ProjectTypeCard";
 import ReportDayCard from "./ReportDayCard";
 import ErrorLogCard from "./ErrorLogCard";
 import VersionsCard from "./VersionsCard";
@@ -66,7 +67,7 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
       <div className="settings-group">
         <h2 className="settings-group-title">
           기본
-          <span className="hint">누가 쓰는가 · 과제 번호를 어떻게 붙이는가</span>
+          <span className="hint">누가 쓰는가 · 과제를 무엇으로 가르는가</span>
         </h2>
         <div className="settings-grid">
           <div className="card">
@@ -108,6 +109,7 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
           </div>
 
           <PeopleCard onChanged={onSaved} />
+          <ProjectTypeCard onSaved={onSaved} />
           <ProjectCodeCard onSaved={onSaved} />
         </div>
       </div>

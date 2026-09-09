@@ -80,6 +80,83 @@ def read_defaults() -> dict:
     }
 
 
+# ── 과제 속성 (TODO 100) ──────────────────────────────
+#
+# 속성은 오래 코드에 박혀 있었다. 팀마다 쓰는 말이 다르고, 하나 더하려면 개발자를
+# 불러야 했다. 여기서 더하고 빼고 고친다.
+#
+# **쓰고 있는 속성은 뺄 수 없다.** 빼면 그 과제들이 색인에서 미지정이 된다.
+# 몇 건이 쓰고 있는지는 화면이 이미 알고 있어야 하므로 목록과 함께 준다.
+
+class ProjectTypeIn(BaseModel):
+    """열쇠를 비워 보내면 새로 짓는다 — 화면에서 갓 더한 줄이다."""
+
+    key: str = ""
+    label: str
+
+
+class ProjectTypesUpdate(BaseModel):
+    types: list[ProjectTypeIn]
+
+
+def _type_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    return {
+        row["type"]: row["n"]
+        for row in conn.execute(
+            "SELECT type, COUNT(*) AS n FROM project WHERE type IS NOT NULL AND type <> ''"
+            " GROUP BY type"
+        )
+    }
+
+
+@router.get("/project-types")
+def read_project_types(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """지금 목록과 **각 속성을 쓰는 과제 수**. 뺄 수 있는지 화면이 알아야 한다."""
+    counts = _type_counts(conn)
+    return {
+        "types": [{**item, "count": counts.get(item["key"], 0)} for item in svc.project_types()],
+        # 목록에 없는 열쇠를 쓰는 과제 — 설정 파일을 손으로 고쳤거나 예전 값이다.
+        # 그대로 두면 그 과제들이 미지정으로 보이므로 사실을 알려 준다.
+        "orphans": [
+            {"key": key, "count": count}
+            for key, count in sorted(counts.items())
+            if key not in {item["key"] for item in svc.project_types()}
+        ],
+    }
+
+
+@router.put("/project-types")
+def save_project_types(
+    payload: ProjectTypesUpdate, conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
+    try:
+        wanted = svc.validate_project_types([item.model_dump() for item in payload.types])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # 쓰고 있는 속성이 사라지면 그 과제들이 색인에서 미지정이 된다. 먼저 옮기게 한다.
+    counts = _type_counts(conn)
+    labels = svc.type_labels()
+    keeping = {item["key"] for item in wanted}
+    lost = [
+        f"{labels.get(key, key)}({count}건)"
+        for key, count in sorted(counts.items())
+        if key not in keeping and count > 0 and key in labels
+    ]
+    if lost:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "아직 쓰고 있는 속성은 뺄 수 없습니다: "
+                + ", ".join(lost)
+                + ". 그 과제들의 속성을 먼저 바꾼 뒤에 빼 주세요."
+            ),
+        )
+
+    svc.save({"project_types": wanted})
+    return read_project_types(conn)
+
+
 class RenumberRequest(BaseModel):
     """과제 번호를 새 팀 코드로 한 번에 맞춘다."""
 
