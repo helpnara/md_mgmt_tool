@@ -315,6 +315,12 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             onChange={(event) => update("effect_verified", event.target.value)}
             placeholder="과제가 끝난 뒤 채웁니다"
           />
+          {/* 완료로 바꾸는 순간 한 번 묻는다 (TODO 106-C). 막지는 않는다 — 아직 모를 수 있다. */}
+          {form.status === "done" && form.effect_verified.trim() === "" && (
+            <span className="hint warn-text">
+              완료 과제입니다. 실증효과를 적어 두면 홈의 실증 합계에 잡힙니다. (모르면 비워 두어도 됩니다)
+            </span>
+          )}
         </label>
         <p className="hint effect-hint">
           <b>소수점 둘째 자리까지</b> 적을 수 있습니다 (억원/년 단위라 둘째 자리가 100만 원).

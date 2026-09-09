@@ -145,6 +145,8 @@ export default function ProjectDetail({
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [expandAll, setExpandAll] = useState(false);
   const [entryFind, setEntryFind] = useState("");
+  // 요약 바의 [미보고 N건] 을 누르면 미보고 기록만 남는다 (TODO 106-D).
+  const [onlyUnreported, setOnlyUnreported] = useState(false);
   const [highlightEntryId, setHighlightEntryId] = useState<number | null>(null);
 
   const load = useCallback(() => {
@@ -306,7 +308,9 @@ export default function ProjectDetail({
     `${entry.title} ${entry.body ?? ""} ${entry.tags.join(" ")} ${entry.date}`
       .toLowerCase()
       .includes(needle);
-  const visibleEntries = needle ? kept.filter(matches) : kept;
+  const visibleEntries = (needle ? kept.filter(matches) : kept).filter(
+    (entry) => !onlyUnreported || !entry.reported_on,
+  );
   // 가장 최근 확정 보고에 담긴 기록 중 목록에서 맨 위에 오는 것 — 그 위에 선을 긋는다.
   const latestReportBoundary = project.last_reported_at
     ? visibleEntries.find((entry) => entry.reported_on === project.last_reported_at)?.id ?? null
@@ -414,7 +418,17 @@ export default function ProjectDetail({
           <div>
             <dt>미보고</dt>
             <dd className={(project.unreported_entries ?? 0) > 0 ? "accent" : undefined}>
-              {project.unreported_entries ?? 0}건
+              {(project.unreported_entries ?? 0) > 0 ? (
+                <button
+                  className={`linkish${onlyUnreported ? " on" : ""}`}
+                  title={onlyUnreported ? "모든 기록 보기" : "미보고 기록만 보기"}
+                  onClick={() => setOnlyUnreported((value) => !value)}
+                >
+                  {project.unreported_entries}건
+                </button>
+              ) : (
+                "0건"
+              )}
             </dd>
           </div>
           <div>
@@ -488,7 +502,15 @@ export default function ProjectDetail({
         }}
       >
         <div className="card-head">
-          <h2>과제 개요</h2>
+          <h2>
+            과제 개요
+            {/* 서식 그대로면 진짜 내용처럼 보인다 — 아직 안 썼다고 말해 준다 (TODO 106-B) */}
+            {project.overview_blank && !editingOverview && (
+              <span className="tag blank-tag" title="아래 안내 문장은 서식입니다. [수정]을 눌러 채워 주세요.">
+                아직 작성 전
+              </span>
+            )}
+          </h2>
           <div className="overview-actions">
             <input
               ref={overviewFileRef}
@@ -714,6 +736,11 @@ export default function ProjectDetail({
         <h2>
           수행 이력 ({entries.length}건)
           {needle && <span className="muted"> · 찾은 것 {visibleEntries.length}건</span>}
+          {onlyUnreported && !needle && (
+            <button className="linkish small" onClick={() => setOnlyUnreported(false)}>
+              · 미보고만 보는 중 — 모두 보기
+            </button>
+          )}
         </h2>
         <div className="timeline-actions">
           {/* 이 과제 안에서만 찾는다. 상단 검색은 전체를 훑지만, 여기서는

@@ -1300,3 +1300,20 @@ a.partner-person:hover { background: var(--accent-soft); color: var(--accent); }
 /* 상태 변경 기록 (TODO 105) — 사람이 쓴 기록이 아니라 도구가 남긴 한 줄이다. 흐리게. */
 .entry.status-change { background: #fafbfc; border-style: dashed; }
 .entry.status-change h3 { font-weight: 500; color: var(--muted-strong); }
+
+/* 홈 위 자동 백업 경고 (TODO 106-A) — 문제가 있을 때만 선다 */
+.home-backup-warn {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 12px; padding: 8px 12px; border-radius: var(--radius);
+  border: 1px solid var(--danger); background: #fdecea; font-size: 13px; color: #7f1d1d;
+}
+.home-backup-warn a { color: #b02a1b; font-weight: 600; text-decoration: none; margin-left: auto; }
+.home-backup-warn a:hover { text-decoration: underline; }
+/* 개요 서식 그대로 (TODO 106-B) */
+.blank-tag { margin-left: 8px; background: #fef6e7; color: var(--warn); font-weight: 600; }
+/* 요약 바 안의 눌리는 수 (TODO 106-D) */
+.summary-bar .linkish { font: inherit; font-weight: 600; padding: 0; border: none; background: none; color: var(--accent-strong); cursor: pointer; text-decoration: underline dotted; }
+.summary-bar .linkish.on { color: var(--danger); }
+.timeline-head .linkish.small { font-size: 12px; font-weight: 500; }
+a.home-stat-note.warn-text { text-decoration: none; }
+a.home-stat-note.warn-text:hover { text-decoration: underline; }

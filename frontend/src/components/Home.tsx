@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
-import type { Home as HomeData, HomeSlice, Meta } from "../types";
+import type { BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
 import { projectLink } from "../nav";
 import { effectNumber } from "../util";
 import LoadError from "./LoadError";
@@ -154,11 +154,37 @@ function SliceTable({
   );
 }
 
+/**
+ * 자동 백업에 문제가 있을 때만 돌려주는 한 줄 (TODO 106-A). 정상이면 null — 홈에 늘
+ * "백업 정상" 이 떠 있으면 곧 안 보게 된다.
+ *
+ * 문제로 보는 것 셋: 폴더에 닿지 않는다 · 마지막 시도가 실패했다 · 마지막 성공이
+ * 주기의 두 배를 넘겼다(프로그램을 안 켜 둔 날이 이어졌다는 뜻이라 알려 줄 일이다).
+ */
+function backupWarning(status: BackupStatus | null): string | null {
+  if (!status || !status.enabled) return null;
+  if (!status.reachable) return "폴더에 닿지 않습니다 — 네트워크 드라이브가 끊겼거나 폴더가 사라졌을 수 있습니다.";
+  if (status.last && !status.last.ok) return `마지막 시도가 실패했습니다 (${status.last.at.slice(0, 16)}).`;
+  if (status.last && status.last.ok) {
+    const hours = (Date.now() - new Date(status.last.at).getTime()) / 36e5;
+    if (hours > status.every_hours * 2) {
+      const days = Math.floor(hours / 24);
+      return `마지막 백업이 ${days >= 1 ? `${days}일` : `${Math.floor(hours)}시간`} 전입니다 (주기 ${status.every_hours}시간).`;
+    }
+  }
+  return null;
+}
+
 export default function Home({ meta }: { meta: Meta }) {
   const thisYear = String(new Date().getFullYear());
   const [year, setYear] = useState(thisYear);
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 자동 백업이 죽어 있어도 홈은 몰랐다 (TODO 106-A). 문제가 있을 때만 한 줄 띄운다.
+  const [backup, setBackup] = useState<BackupStatus | null>(null);
+  useEffect(() => {
+    api.backupStatus().then(setBackup).catch(() => setBackup(null));
+  }, []);
 
   const load = useCallback(() => {
     api
@@ -230,6 +256,12 @@ export default function Home({ meta }: { meta: Meta }) {
   const maxCompare = Math.max(1, ...data.compare.map((item) => item.total));
   return (
     <section className="home">
+      {backupWarning(backup) && (
+        <div className="home-backup-warn">
+          <b>자동 백업</b> {backupWarning(backup)}
+          <a href="#/settings">설정에서 보기 →</a>
+        </div>
+      )}
       <div className="home-head">
         <h1>과제 수행 현황</h1>
         <label className="home-year">
@@ -395,6 +427,15 @@ export default function Home({ meta }: { meta: Meta }) {
               기대 {team.effect_expected_projects ?? 0}건 · 실증 {team.effect_verified_projects ?? 0}건에
               입력됨 (전체 {team.total}건)
             </span>
+            {/* 완료했는데 실증효과가 빈 과제 (TODO 106-C). 연말에 빈칸을 만나기 전에 여기서 본다. */}
+            {(team.done_unverified ?? 0) > 0 && (
+              <a
+                className="home-stat-note warn-text"
+                href={`#/projects?verified=none${yearParam ? `&year=${yearParam}` : "&year=all"}`}
+              >
+                완료했는데 실증효과 미입력 {team.done_unverified}건 →
+              </a>
+            )}
           </div>
         </div>
         <p className="hint">

@@ -80,6 +80,8 @@ export interface Project {
   attachment_bytes?: number;
   /** 새 진행일지를 시작할 서식 (설정에서 속성별로 바꿀 수 있다) */
   entry_template?: string;
+  /** 개요가 아직 서식 그대로인가 (TODO 106-B) */
+  overview_blank?: boolean;
   /** 지난 보고에서 받고 아직 답하지 않은 지시 (TODO 107) */
   open_feedback?: OpenFeedback[];
 }
@@ -387,6 +389,8 @@ export interface HomeTeam {
   effect_verified_projects?: number;
   /** 완료일 기준으로 센 완료 수 (TODO 104). done 은 번호의 연도 기준이라 둘이 다르다. */
   done_in_year?: number;
+  /** 완료했는데 실증효과를 안 적은 과제 수 (TODO 106-C) */
+  done_unverified?: number;
 }
 
 export interface HomeMember extends HomeTeam {

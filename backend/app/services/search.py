@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from .projects import overview_is_blank
+
 SNIPPET_RADIUS = 70
 MIN_FTS_LENGTH = 3
 
@@ -125,7 +127,8 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None) -> di
                     "status": row["status"],
                     "group": row["grp"],
                     "updated_at": row["updated_at"],
-                    "snippet": make_snippet(row["body"], query),
+                    # 서식 그대로인 개요는 발췌하지 않는다 — 안내 문장이 본문인 양 실린다 (TODO 106-B).
+                    "snippet": "" if overview_is_blank(row["body"]) else make_snippet(row["body"], query),
                 }
             )
 

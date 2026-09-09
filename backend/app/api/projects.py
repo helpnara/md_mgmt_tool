@@ -286,6 +286,8 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     data = _serialize(conn, row)
     data["body"] = row["body"]
     data["dir_name"] = row["dir_name"]
+    # 개요가 서식 그대로인지 — 화면이 "아직 작성 전" 을 세운다 (TODO 106-B).
+    data["overview_blank"] = svc.overview_is_blank(row["body"])
     # 상단 요약에 쓸 값 — 펼쳐 보지 않아도 상태를 알 수 있게 한다.
     from ..services.reports import unreported_entries
 

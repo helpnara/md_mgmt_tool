@@ -418,6 +418,7 @@ def candidates(
                 "status": project["status"],
                 "type": project["type"],
                 "group": project["grp"],
+                "start_date": project["start_date"],
                 "due_date": project["due_date"],
                 "owners": [row["name"] for row in conn.execute(
                     "SELECT name FROM project_owner WHERE project_id = ? ORDER BY position, name",
@@ -466,8 +467,16 @@ def _default_key(item: dict) -> tuple:
     착수 전 과제는 보고 이력이 없더라도 맨 뒤에 둔다. 시작하지 않은 과제가
     "가장 오래 방치된 과제" 자리를 차지하면 목록의 뜻이 흐려진다 (TODO 70).
     """
+    # 시작일 없는 `예정` 과제에 미보고 기록도 없으면 **아직 보고할 일이 없는 것**이다.
+    # 그런 과제가 "보고 이력 없음" 규칙으로 맨 위에 서면 목록이 시작도 안 한 것들로
+    # 시작한다 (TODO 106-F). 기록이 생기는 순간 제자리(맨 위)로 온다.
+    idle_planned = (
+        item.get("status") == "planned"
+        and not item.get("start_date")
+        and not item["unreported_entries"]
+    )
     return (
-        2 if item.get("not_started") else (0 if item["never_reported"] else 1),
+        2 if item.get("not_started") or idle_planned else (0 if item["never_reported"] else 1),
         # 오래된 것이 먼저이므로 경과일은 큰 것이 앞. 날짜를 못 읽으면 뒤로 보낸다.
         -(item["days_since_report"] if item["days_since_report"] is not None else -1),
         -item["unreported_entries"],

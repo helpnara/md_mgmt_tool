@@ -257,6 +257,18 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     return project_id
 
 
+def overview_is_blank(body: str | None) -> bool:
+    """개요가 아직 서식 그대로인가 (TODO 106-B).
+
+    서식 그대로인 개요는 화면에서 진짜 내용처럼 보이고, 검색 발췌에도 안내 문장이
+    본문인 양 실린다. 공백·줄바꿈 차이는 무시한다 — 저장하며 끝의 개행이 흔들린다.
+    """
+    def squash(text: str | None) -> str:
+        return " ".join((text or "").split())
+
+    return squash(body) == "" or squash(body) == squash(INDEX_TEMPLATE)
+
+
 def date_today() -> str:
     return datetime.now().date().isoformat()
 
