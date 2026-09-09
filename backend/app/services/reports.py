@@ -588,6 +588,15 @@ _SKIP_LINE = re.compile(r"^\s*(#{1,6}\s|-{3,}\s*$|\|)")
 _INLINE_MARK = re.compile(r"[*_`>]+")
 
 
+def readable_text(body: str | None) -> str:
+    """발췌용 한 줄 — 제목·표·구분선·서식 기호를 뺀 본문 (TODO 87 · 103-C).
+
+    보고 이력의 발췌와 통합 검색의 발췌가 **같은 것**을 써야 한다. 87 에서 보고 이력만
+    고치고 검색은 두었더니, 검색 결과에 `## 배경 >` 같은 기호가 그대로 남았다.
+    """
+    return " ".join(_readable_lines(body))
+
+
 def _readable_lines(body: str | None) -> list[str]:
     """발췌용으로 읽을 만한 줄만 남긴다 — 제목·표·구분선을 뺀 본문."""
     out = []
@@ -607,7 +616,7 @@ def _excerpt(body: str | None, query: str | None, width: int = 60) -> str:
     마크다운 제목(`## 보고 요약`)은 빼고 읽는다 — 어느 보고에나 똑같이 들어 있어
     한 줄 발췌에서는 서로를 구별해 주지 못한다.
     """
-    text = " ".join(_readable_lines(body))
+    text = readable_text(body)
     if not text:
         return ""
     if query:
@@ -773,6 +782,8 @@ def open_drafts(conn: sqlite3.Connection, report_date: str) -> list[dict]:
 
 # 홈에 이름을 세우는 초안은 몇 건까지인가. 그 위는 보고 대상 화면이 맡는다.
 UNFINISHED_LIST_LIMIT = 6
+# 보고 대상 화면의 확정 대기 카드는 목록 화면이라 넉넉히 세운다.
+WAITING_LIST_LIMIT = 100
 
 
 def unfinished_drafts(conn: sqlite3.Connection, limit: int = UNFINISHED_LIST_LIMIT) -> dict:

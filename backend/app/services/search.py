@@ -28,7 +28,10 @@ def _fts_query(text: str) -> str:
 
 
 def make_snippet(body: str, query: str) -> str:
-    body = (body or "").replace("\n", " ").strip()
+    """검색어 둘레의 한 줄. **서식 기호는 뺀다** (TODO 103-C) — 보고 이력의 발췌와 같은 눈으로."""
+    from .reports import readable_text
+
+    body = readable_text(body)
     if not body:
         return ""
     position = body.lower().find(query.lower())

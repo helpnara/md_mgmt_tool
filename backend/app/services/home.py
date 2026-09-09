@@ -284,15 +284,19 @@ def _compare(conn: sqlite3.Connection) -> list[dict]:
     ][::-1]  # 화면에는 왼쪽이 과거
 
 
-def _stale(conn: sqlite3.Connection, limit: int = STALE_LIMIT) -> list[dict]:
-    """오래 방치된 과제. 보고 대상과 겹쳐 보이지만 뜻이 다르다 —
-    저쪽은 *이번 주에 할 일*, 이쪽은 *이미 새어 나간 것*."""
+def _stale(conn: sqlite3.Connection, limit: int = STALE_LIMIT) -> tuple[list[dict], int]:
+    """오래 방치된 과제와 **자르기 전 수**. 보고 대상과 겹쳐 보이지만 뜻이 다르다 —
+    저쪽은 *이번 주에 할 일*, 이쪽은 *이미 새어 나간 것*.
+
+    앞의 몇 건만 세우되 전체 수를 함께 준다 (TODO 103-B). 세 건만 세워 놓고 잘렸다고
+    말하지 않으면 세 건만 있는 줄 안다 — TODO 82 와 같은 결함이 같은 카드에 남아 있었다.
+    """
     items = [
         item
         for item in reports_service.candidates(conn)
         if not item["not_started"] and (item["days_since_report"] or 0) > 0
     ]
-    return items[:limit]
+    return items[:limit], len(items)
 
 
 def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
@@ -319,6 +323,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
     # 배너(TODO 91)는 보고하는 날에만 뜨므로, 지난주에 쓰다 만 것은 다음 보고일까지
     # 아무 데도 보이지 않았다. [이번 주 할 일]이 그것을 계속 들고 있는다.
     drafts = reports_service.unfinished_drafts(conn)
+    stale, stale_total = _stale(conn)
     return {
         "year": year,
         "years": available,
@@ -328,7 +333,8 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
             "candidates": len(candidates),
             "due_soon": due_soon,
             "overdue": overdue,
-            "stale": _stale(conn),
+            "stale": stale,
+            "stale_total": stale_total,
             # 아직 확정하지 않은 보고 — 날짜를 가리지 않는다.
             # 건수는 자르기 전 수고, 목록은 앞의 몇 건이다 (TODO 82 와 같은 규칙).
             "drafts": drafts["total"],

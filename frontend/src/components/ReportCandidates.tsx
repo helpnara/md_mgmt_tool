@@ -32,6 +32,8 @@ export default function ReportCandidates({ meta, query }: Props) {
   // 확정을 기다리는 초안 (TODO 91). 후보를 고르는 일보다 **먼저 끝내야 하는 일**이라
   // 화면 맨 위에 세운다. 배너에서 "초안 N건 확정하기" 로 오면 여기에 닿는다.
   const [drafts, setDrafts] = useState<OpenDraft[]>([]);
+  /** 서버가 정한 다음 보고일. 주소에 날짜가 없을 때 되돌아갈 값이다. */
+  const [defaultDate, setDefaultDate] = useState("");
   const [reportDate, setReportDate] = useState(() => initial.get("date") ?? "");
   const [includeInactive, setIncludeInactive] = useState(() => initial.get("all") === "1");
   // 거르기 (TODO 49). 과제 화면의 일곱 개를 다 세우지 않는다 — 이 화면의 물음은
@@ -52,6 +54,7 @@ export default function ReportCandidates({ meta, query }: Props) {
       .then((data) => {
         setItems(data.items);
         setDrafts(data.drafts ?? []);
+        setDefaultDate(data.default_report_date);
         setReportDate((prev) => prev || data.default_report_date);
         setError(null);
       })
@@ -65,7 +68,9 @@ export default function ReportCandidates({ meta, query }: Props) {
     "reports",
     { date: reportDate, all: includeInactive ? "1" : "", status, type, owner, sort, order },
     (params) => {
-      setReportDate(params.get("date") ?? "");
+      // 주소에 날짜가 없으면 빈칸이 아니라 기본 보고일이다 (TODO 103-D). `?date=` 가 붙은
+      // 채로 즐겨찾기의 `#/reports` 를 다시 열면 칸이 비어 보이던 것.
+      setReportDate(params.get("date") || defaultDate);
       setIncludeInactive(params.get("all") === "1");
       setStatus(params.get("status") ?? "");
       setType(params.get("type") ?? "");
@@ -196,7 +201,8 @@ export default function ReportCandidates({ meta, query }: Props) {
         <div className="card drafts-waiting">
           <div className="card-head">
             <h2>확정을 기다리는 초안 ({drafts.length})</h2>
-            <span className="hint">{reportDate} 보고</span>
+            {/* 날짜를 가리지 않는다 (TODO 103-A) — 지난주에 쓰다 만 것도 여기 선다. */}
+            <span className="hint">오래된 것부터 · 날짜를 가리지 않습니다</span>
           </div>
           <ul className="picked-list">
             {drafts.map((draft) => (
@@ -204,6 +210,12 @@ export default function ReportCandidates({ meta, query }: Props) {
                 {/* 제목은 과제로, 단추는 초안으로 — 묶음 카드와 같은 짜임이다.
                     확정하기 전에 과제를 한 번 훑어보는 길을 막지 않는다. */}
                 <a href={projectLink(draft.project_id)}>{draft.project_title}</a>
+                {draft.report_date && (
+                  <span className={draft.overdue_days ? "due due-danger" : "due"}>
+                    {draft.report_date}
+                    {draft.overdue_days ? ` · D+${draft.overdue_days}` : ""}
+                  </span>
+                )}
                 {draft.audience && <span className="hint">{draft.audience}</span>}
                 <a
                   className="linkish-button"

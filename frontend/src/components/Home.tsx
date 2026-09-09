@@ -339,6 +339,14 @@ export default function Home({ meta }: { meta: Meta }) {
                 </li>
               ))}
             </ul>
+            {/* 세 건만 세우고 잘렸다고 말하지 않으면 세 건만 있는 줄 안다 (TODO 103-B) */}
+            {week.stale_total > week.stale.length && (
+              <p className="hint">
+                <a href="#/reports">
+                  나머지 {week.stale_total - week.stale.length}건도 보고 대상 화면에서 보기 →
+                </a>
+              </p>
+            )}
           </>
         )}
       </div>

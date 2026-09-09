@@ -160,7 +160,7 @@ export default function App() {
             type="search"
             value={term}
             onChange={(event) => setTerm(event.target.value)}
-            placeholder="과제·진행일지·첨부 파일명 검색"
+            placeholder="과제·진행일지·보고·첨부·담당자·유관부서 검색"
             aria-label="검색"
           />
           <button type="submit" className="ghost">

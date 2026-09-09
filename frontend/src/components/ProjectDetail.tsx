@@ -637,15 +637,11 @@ export default function ProjectDetail({
                   <span className="muted">진행일지 {report.entry_count}건</span>
                 </button>
                 {/* 확정된 보고는 여기서도 못 지운다 — 편집기와 말이 맞아야 한다 (TODO 61).
-                    지우려면 [확정 해제] 를 먼저 누르게 한다. */}
+                    비활성 단추로 두면 "지울 수 있나?" 를 한 번 생각하게 하므로 아예 세우지
+                    않는다 (TODO 103-F). 지우려면 [확정 해제] 를 먼저 누르게 한다. */}
+                {!report.frozen && (
                 <button
                   className="ghost small danger"
-                  disabled={report.frozen}
-                  title={
-                    report.frozen
-                      ? "확정된 보고는 지울 수 없습니다. 열어서 [확정 해제]를 먼저 눌러 주세요."
-                      : undefined
-                  }
                   onClick={async () => {
                     if (!window.confirm(`${report.report_date} 보고를 보관함으로 옮길까요?`)) return;
                     try {
@@ -659,6 +655,7 @@ export default function ProjectDetail({
                 >
                   삭제
                 </button>
+                )}
               </li>
             ))}
           </ul>

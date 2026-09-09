@@ -280,16 +280,24 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                   <td title={`비용을 적어 둔 기록 ${item.with_cost}건`}>{won(item.cost)}</td>
                   <td>
                     {/* 한 해만 보면 늘고 주는 것을 알 수 없다. 최근 몇 해를 나란히 놓는다. */}
-                    <span className="spark" aria-label="최근 연도별 건수">
-                      {summary.trend_years.map((y) => (
-                        <span
-                          key={y}
-                          className="spark-bar"
-                          title={`${y}년 ${item.trend[y] ?? 0}건`}
-                          style={{ height: `${((item.trend[y] ?? 0) / maxTrend) * 100 || 4}%` }}
-                        />
-                      ))}
-                    </span>
+                    {summary.trend_years.length >= 3 ? (
+                      <span className="spark" aria-label="최근 연도별 건수">
+                        {summary.trend_years.map((y) => (
+                          <span
+                            key={y}
+                            className="spark-bar"
+                            title={`${y}년 ${item.trend[y] ?? 0}건`}
+                            style={{ height: `${((item.trend[y] ?? 0) / maxTrend) * 100 || 4}%` }}
+                          />
+                        ))}
+                      </span>
+                    ) : (
+                      /* 해가 둘뿐이면 6px 막대 두 개라 부스러기처럼 보인다 (TODO 103-E).
+                         셋이 쌓일 때까지는 숫자로 쓴다. */
+                      <span className="spark-text muted">
+                        {summary.trend_years.map((y) => `${y.slice(2)}년 ${item.trend[y] ?? 0}`).join(" · ") || "—"}
+                      </span>
+                    )}
                   </td>
                   <td className="muted">
                     {item.last_date ?? "—"}

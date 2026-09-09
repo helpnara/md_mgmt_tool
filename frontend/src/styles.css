@@ -1290,3 +1290,9 @@ a.partner-person:hover { background: var(--accent-soft); color: var(--accent); }
 .type-move button { padding: 4px 8px; }
 .type-empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
 .form-actions.left { justify-content: flex-start; }
+
+/* 추이 막대 대신 숫자 (TODO 103-E) — 해가 셋 쌓이기 전까지 */
+.spark-text { font-size: 11px; white-space: nowrap; }
+/* 확정 대기 카드의 날짜 (TODO 103-A) — 홈의 쓰다 만 보고 줄과 같은 눈 */
+.drafts-waiting .due { font-size: 12px; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+.drafts-waiting .due.due-danger { color: var(--danger); font-weight: 600; }

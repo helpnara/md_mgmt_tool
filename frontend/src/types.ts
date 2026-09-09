@@ -259,6 +259,9 @@ export interface OpenDraft {
   project_id: string;
   project_title: string;
   audience: string | null;
+  /** 보고 대상의 확정 대기 카드는 모든 날짜의 초안을 세우므로 날짜가 함께 온다 (TODO 103-A) */
+  report_date?: string;
+  overdue_days?: number;
 }
 
 /** 보고 주기 알림 (T12). */
@@ -409,6 +412,8 @@ export interface Home {
     due_soon: number;
     overdue: number;
     stale: ReportCandidate[];
+    /** 오래 방치된 과제의 **자르기 전** 수 — 위 목록은 앞의 몇 건이다 (TODO 103-B) */
+    stale_total: number;
     /** 아직 확정하지 않은 보고 수 — 날짜를 가리지 않는다 (TODO 101) */
     drafts: number;
     /** 그중 **보고일이 이미 지난** 것 — 진짜 밀린 것이다 */

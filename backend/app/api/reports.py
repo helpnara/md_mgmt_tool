@@ -264,7 +264,9 @@ def report_candidates(
         "sorts": list(svc.CANDIDATE_SORTS),
         # 확정을 기다리는 초안도 함께 준다 (TODO 91). 이 화면의 물음이 "이번 주에 무엇을
         # 보고할까" 하나라, 아직 안 끝난 초안은 후보보다 먼저 걸리는 일이다.
-        "drafts": svc.open_drafts(conn, report_date),
+        # **날짜를 가리지 않는다** (TODO 103-A). 홈이 모든 날짜의 초안을 세우고 이리로
+        # 보내는데, 여기서 그날 것만 보이면 "1건이라더니?" 가 된다. 오래된 것이 먼저다.
+        "drafts": svc.unfinished_drafts(conn, limit=svc.WAITING_LIST_LIMIT)["items"],
         "items": svc.candidates(
             conn, include_inactive, status=status, type=type, owner=owner, sort=sort, order=order
         ),
