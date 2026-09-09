@@ -151,3 +151,58 @@ def delete_entry(conn: sqlite3.Connection, entry_id: int) -> None:
     )
     index_project(conn, project_dir(conn, row["project_id"]))
     conn.commit()
+
+
+# ── 다음 할 일 (TODO 112) ──────────────────────────────────────────────────
+#
+# 진행일지 서식에 `## 계획` 이 있다. 거기 쓴 것이 다음 기록을 쓸 때까지 어디에도 안 보였다.
+# 마지막 기록의 계획 절만 뽑아 과제 상세와 홈이 **표시**한다 — 체크박스도 마감도 두지
+# 않는다. 할 일 관리 도구가 되려 하면 이력 도구로서도 어중간해진다.
+
+import re as _re
+
+_PLAN_HEAD = _re.compile(r"^\s{0,3}#{2,3}\s*(다음\s*)?(계획|할\s*일)\s*$|^\s{0,3}#{2,3}\s*다음\s*$")
+_ANY_HEAD = _re.compile(r"^\s{0,3}#{1,6}\s")
+
+
+def plan_section(body: str | None) -> str:
+    """본문에서 `## 계획`(또는 `## 다음 계획`·`## 다음`·`## 할 일`) 아래의 글만.
+
+    다음 제목이 나올 때까지다. 빈 줄과 서식 부호(`-`·`*`)는 정리하고, 아무것도 없으면 빈 문자열.
+    """
+    lines = (body or "").splitlines()
+    out: list[str] = []
+    taking = False
+    for line in lines:
+        if _PLAN_HEAD.match(line):
+            taking = True
+            continue
+        if taking and _ANY_HEAD.match(line):
+            break
+        if taking:
+            text = line.strip()
+            if text.startswith(("- ", "* ", "• ")):
+                text = text[2:].strip()
+            if text and not text.startswith(">"):
+                out.append(text)
+    return "\n".join(out)
+
+
+def latest_plan(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
+    """가장 최근 진행일지의 계획 절. 없거나 비어 있으면 None.
+
+    상태 변경 기록(도구가 남긴 한 줄)은 건너뛴다 — 거기에는 계획이 없다.
+    """
+    rows = conn.execute(
+        "SELECT id, date, title, body FROM entry WHERE project_id = ?"
+        " ORDER BY date DESC, id DESC LIMIT 3",
+        (project_id,),
+    ).fetchall()
+    for row in rows:
+        if str(row["title"] or "").startswith("(상태)"):
+            continue
+        text = plan_section(row["body"])
+        if text:
+            return {"entry_id": row["id"], "date": row["date"], "text": text}
+        return None
+    return None

@@ -8,6 +8,7 @@ import LoadError from "./LoadError";
 import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
+import CopyTableButton from "./CopyTableButton";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
 
 interface Props {
@@ -265,6 +266,28 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               </button>
             ))}
           </div>
+          {/* 지금 걸러진 줄 그대로 엑셀로 (TODO 108). 화면의 표와 열이 같다. */}
+          <CopyTableButton
+            headers={["번호", "과제", "상태", "속성", "그룹", "담당자", "유관부서", "태그", "시작", "마감", `기대효과(${EFFECT_UNIT})`, `실증효과(${EFFECT_UNIT})`, "기록", "미보고"]}
+            rows={() =>
+              projects.map((project) => [
+                project.id,
+                project.title,
+                meta.statuses.find((status) => status.key === project.status)?.label ?? project.status,
+                meta.types.find((type) => type.key === project.type)?.label ?? project.type ?? "",
+                project.group ?? "",
+                project.owners.join(", "),
+                project.partners.map((partner) => partner.team).join(", "),
+                project.tags.join(", "),
+                project.start_date ?? "",
+                project.due_date ?? "",
+                project.effect_expected ?? "",
+                project.effect_verified ?? "",
+                project.entry_count,
+                project.unreported_entries ?? "",
+              ])
+            }
+          />
           <button
             className="ghost"
             onClick={async () => {

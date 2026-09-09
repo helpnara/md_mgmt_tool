@@ -26,6 +26,8 @@ interface Props {
   openEntryId?: number;
   /** 어느 화면에서 들어왔는지 (nav.ts). 뒤로 가기가 그리로 돌아간다. */
   back?: string | null;
+  /** 과제 복제 직후처럼 정보 수정 칸을 열어 둔 채 들어온다 (TODO 109). */
+  edit?: boolean;
 }
 
 /** 그 조건으로 걸러진 과제 목록. 홈의 것과 같은 규칙이다. */
@@ -109,10 +111,11 @@ export default function ProjectDetail({
   openReportId,
   openEntryId,
   back,
+  edit,
 }: Props) {
   const [project, setProject] = useState<Project | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [editingProject, setEditingProject] = useState(false);
+  const [editingProject, setEditingProject] = useState(Boolean(edit));
   const [editingOverview, setEditingOverview] = useState(false);
   const [showOverviewVersions, setShowOverviewVersions] = useState(false);
   const [preview, togglePreview] = usePreview();
@@ -168,6 +171,10 @@ export default function ProjectDetail({
 
   useEffect(load, [load]);
   useEffect(() => setOpenReport(openReportId ?? null), [openReportId]);
+  // 복제 직후 새 과제로 옮겨 오면 같은 부품이 그대로 쓰이므로 첫 상태만으로는 안 열린다 (TODO 109).
+  useEffect(() => {
+    if (edit) setEditingProject(true);
+  }, [projectId, edit]);
 
   // 다음 보고 예정일을 기본값으로 채워 둔다 (서버가 주간 주기로 계산한다).
   useEffect(() => {
@@ -386,6 +393,24 @@ export default function ProjectDetail({
             <button className="ghost" onClick={() => setEditingProject((value) => !value)}>
               {editingProject ? "닫기" : "과제 정보 수정"}
             </button>
+            {/* 끝난 과제의 후속 과제 (TODO 109). 개요·담당자·태그가 넘어오고 이력은 남지 않는다. */}
+            <button
+              className="ghost"
+              title="이 과제의 개요·담당자·태그를 가져와 새 과제를 만듭니다. 진행일지·보고는 넘어오지 않습니다."
+              onClick={async () => {
+                if (!window.confirm(`"${project.title}" 을(를) 바탕으로 새 과제를 만들까요?\n개요·담당자·태그가 넘어오고, 진행일지와 보고는 넘어오지 않습니다.`))
+                  return;
+                try {
+                  const created = await api.cloneProject(project.id);
+                  onMetaChange();
+                  window.location.hash = projectLink(created.id, { edit: 1 });
+                } catch (err) {
+                  setError((err as Error).message);
+                }
+              }}
+            >
+              이 과제로 새 과제
+            </button>
             <button
               className="ghost danger"
               onClick={async () => {
@@ -409,6 +434,35 @@ export default function ProjectDetail({
             onMetaChange();
           }}
         />
+
+        {/* 지난 보고에서 받고 아직 답하지 않은 지시 (TODO 107). 다음 초안이 이것을 맨 위에 문다. */}
+        {(project.open_feedback?.length ?? 0) > 0 && (
+          <div className="feedback-band" data-testid="open-feedback">
+            <b>답하지 않은 지시 {project.open_feedback!.length}건</b>
+            <ul>
+              {project.open_feedback!.map((item) => (
+                <li key={item.id}>
+                  <a href={projectLink(project.id, { report: item.id })}>
+                    {formatDate(item.report_date)}
+                    {item.audience && ` · ${item.audience}`}
+                  </a>
+                  <span className="feedback-excerpt">{item.feedback}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 최근 진행일지의 계획 칸 — 다음 할 일 (TODO 112). 진행일지가 알려 주는 것을 위로 올린다. */}
+        {project.next_plan && (
+          <p className="next-plan" data-testid="next-plan">
+            <span className="muted">다음 할 일</span>{" "}
+            <a href={projectLink(project.id, { entry: project.next_plan.entry_id })} title={`${formatDate(project.next_plan.date)} 진행일지의 계획`}>
+              {project.next_plan.text}
+            </a>
+            <span className="muted"> · {formatDate(project.next_plan.date)}</span>
+          </p>
+        )}
 
         <dl className="summary-bar">
           <div>

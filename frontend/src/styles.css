@@ -1317,3 +1317,66 @@ a.partner-person:hover { background: var(--accent-soft); color: var(--accent); }
 .timeline-head .linkish.small { font-size: 12px; font-weight: 500; }
 a.home-stat-note.warn-text { text-decoration: none; }
 a.home-stat-note.warn-text:hover { text-decoration: underline; }
+
+/* ── 4단계 새 기능 (TODO 107~112) ───────────────────────────── */
+
+/* [표 복사] (TODO 108) — 제목 오른쪽에 조용히. 누르면 잠깐 "복사됨" */
+.copy-table { margin-left: auto; font-weight: 400; }
+h2 .copy-table, h1 .copy-table { margin-left: 10px; vertical-align: middle; }
+.copy-table.on { border-color: var(--accent-strong); color: var(--accent-strong); }
+.home .card h2:has(.copy-table) { display: flex; align-items: center; }
+
+/* 보고 결과 · 지시사항 (TODO 107) — 굳은 문서 아래 유일하게 살아 있는 칸 */
+.feedback-box {
+  margin-top: 12px; padding: 10px 12px;
+  border: 1px solid var(--border); border-left: 4px solid var(--warn);
+  border-radius: var(--radius); background: #fffaf0;
+}
+.feedback-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; font-size: 13px; }
+.feedback-head .hint { margin: 0; }
+.feedback-state { font-size: 12px; }
+.feedback-state.open { color: var(--warn); font-weight: 600; }
+.feedback-state.done { color: var(--muted-strong); }
+.feedback-text { width: 100%; min-height: 64px; font: inherit; font-size: 13px; resize: vertical; }
+.feedback-actions { margin-top: 6px; justify-content: flex-start; }
+
+/* 과제 위쪽의 "답하지 않은 지시" 띠 — 번호 연도 안내(.year-fix)와 같은 무게 */
+.feedback-band {
+  margin: 10px 0 0; padding: 9px 12px;
+  border: 1px solid var(--warn); border-radius: var(--radius);
+  background: #fef6e7; font-size: 13px;
+}
+.feedback-band ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.feedback-band li { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.feedback-band a { color: var(--accent-strong); text-decoration: none; font-weight: 600; white-space: nowrap; }
+.feedback-band a:hover { text-decoration: underline; }
+.feedback-excerpt { flex: 1 1 240px; white-space: pre-line; }
+.tag.feedback-tag { background: #fef6e7; color: var(--warn); border: 1px solid #f0d9a8; }
+
+/* 다음 할 일 (TODO 112) — 과제 위쪽 한 줄, 홈의 목록 */
+.next-plan { margin: 10px 0 0; font-size: 13px; }
+.next-plan a { color: var(--text); text-decoration: none; font-weight: 600; }
+.next-plan a:hover { text-decoration: underline; }
+.home-plans { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.home-plans li {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd;
+}
+.home-plans a { color: var(--accent-strong); text-decoration: none; font-weight: 600; white-space: nowrap; }
+.home-plans a:hover { text-decoration: underline; }
+.home-plans .plan-text { flex: 1 1 200px; }
+.home-plans .muted { font-size: 12px; color: var(--muted); }
+
+/* 기간 (TODO 110) — 기준 연도 상자와 같은 모양, 다른 이름 */
+.home-period { flex-direction: row; align-items: center; gap: 8px; }
+.home-period select { width: auto; min-width: 110px; }
+.home-period-note { margin: -4px 0 10px; }
+
+/* 도움말 (TODO 111) — 설정 묶음과 같은 옷을 입는다 */
+.help .hint { line-height: 1.55; }
+.help-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; line-height: 1.55; }
+.help-steps code, .help-faq code { font-family: ui-monospace, monospace; font-size: 12px; background: #f1f3f5; padding: 1px 5px; border-radius: 4px; }
+.help-faq { margin: 0; }
+.help-faq dt { font-weight: 600; margin-top: 12px; }
+.help-faq dt:first-child { margin-top: 0; }
+.help-faq dd { margin: 4px 0 0; color: var(--muted-strong); line-height: 1.55; }

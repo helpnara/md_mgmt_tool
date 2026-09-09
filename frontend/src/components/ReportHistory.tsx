@@ -27,18 +27,20 @@ export default function ReportHistory({ meta, query }: Props) {
   const [to, setTo] = useState(() => initial.get("to") ?? "");
   const [q, setQ] = useState(() => initial.get("q") ?? "");
   const [state, setState] = useState(() => initial.get("state") ?? "");
+  // 답하지 않은 지시가 적힌 보고만 (TODO 107). 주소에는 feedback=open 으로 실린다.
+  const [feedback, setFeedback] = useState(() => initial.get("feedback") ?? "");
   const [items, setItems] = useState<ReportHistoryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
-      .searchReports({ audience, from, to, q, state })
+      .searchReports({ audience, from, to, q, state, feedback })
       .then((rows) => {
         setItems(rows);
         setError(null);
       })
       .catch((err: Error) => setError(err.message));
-  }, [audience, from, to, q, state]);
+  }, [audience, from, to, q, state, feedback]);
 
   // 조건을 고르는 대로 바로 반영한다. 다만 검색어는 타자를 멈춘 뒤에 — 글자마다 부르면 낭비다.
   useEffect(() => {
@@ -47,15 +49,16 @@ export default function ReportHistory({ meta, query }: Props) {
   }, [load, q]);
 
   // 고른 조건과 주소를 맞춘다. 자주 보는 조건은 즐겨찾기해 두어도 된다.
-  useAddressBar("history", { audience, from, to, q, state }, (params) => {
+  useAddressBar("history", { audience, from, to, q, state, feedback }, (params) => {
     setAudience(params.get("audience") ?? "");
     setFrom(params.get("from") ?? "");
     setTo(params.get("to") ?? "");
     setQ(params.get("q") ?? "");
     setState(params.get("state") ?? "");
+    setFeedback(params.get("feedback") ?? "");
   });
 
-  const filtered = Boolean(audience || from || to || q || state);
+  const filtered = Boolean(audience || from || to || q || state || feedback);
   // 과제 × 월 표가 볼 연도. **기간 조건에서 받아 온다** — 화면 하나에 연도 고르는 곳이
   // 둘이면 어느 쪽이 이기는지 매번 헷갈린다 (TODO 79).
   const gridYear = (from || to || "").slice(0, 4) || String(new Date().getFullYear());
@@ -112,6 +115,14 @@ export default function ReportHistory({ meta, query }: Props) {
               <option value="draft">작성 중인 초안</option>
             </select>
           </label>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={feedback === "open"}
+              onChange={(event) => setFeedback(event.target.checked ? "open" : "")}
+            />
+            답하지 않은 지시만
+          </label>
           {filtered && (
             <button
               className="ghost small"
@@ -121,6 +132,7 @@ export default function ReportHistory({ meta, query }: Props) {
                 setTo("");
                 setQ("");
                 setState("");
+                setFeedback("");
               }}
             >
               조건 지우기
@@ -155,6 +167,7 @@ export default function ReportHistory({ meta, query }: Props) {
               </span>
               <span className="history-side">
                 {item.audience && <span className="history-audience">{item.audience}</span>}
+                {item.feedback_open && <span className="tag feedback-tag">지시 답 안 함</span>}
                 <span className="muted">
                   {item.frozen ? "보고 완료" : "작성 중"} · 진행일지 {item.entry_count}건
                 </span>

@@ -378,6 +378,38 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
     conn.commit()
 
 
+def clone_project(conn: sqlite3.Connection, source_id: str) -> str:
+    """이 과제를 바탕으로 새 과제 (TODO 109).
+
+    해마다 도는 과제("2025년 수명평가 표준화" → "2026년 …")는 속성·그룹·담당자·유관부서가
+    같다. 지금까지는 처음부터 다시 쳤다. **가져오는 것**은 그 정보와 개요 본문이고,
+    **가져오지 않는 것**은 진행일지·보고·첨부·효과 금액·날짜다 — 새 과제의 이력은 비어
+    있어야 하고, 효과와 기간은 새로 정할 일이다. 시작일을 비우므로 번호는 올해로 붙는다.
+    개요 맨 아래에 이전 과제 번호를 남겨 두 과제가 이어져 있음이 파일에도 보이게 한다.
+    """
+    row = conn.execute("SELECT * FROM project WHERE id = ?", (source_id,)).fetchone()
+    if row is None:
+        raise KeyError(source_id)
+    doc = md.load(project_dir(conn, source_id) / "index.md")
+    meta = doc.meta
+    body = (doc.body or "").rstrip("\n")
+    body += f"\n\n## 이전 과제\n\n- {source_id} {row['title']}\n"
+    return create_project(
+        conn,
+        {
+            "title": str(meta.get("title") or row["title"]),
+            "status": "planned",
+            "type": meta.get("type"),
+            "group": meta.get("group"),
+            "tags": list(meta.get("tags") or []),
+            "owners": list(meta.get("owners") or []),
+            "partners": meta.get("partners") or [],
+            "no_report": bool(meta.get("no_report")),
+            "body": body,
+        },
+    )
+
+
 def archive_project(conn: sqlite3.Connection, project_id: str) -> None:
     """삭제하지 않고 .trash/ 로 옮긴다."""
     settings = get_settings()

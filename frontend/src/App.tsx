@@ -8,6 +8,7 @@ import ReportHistory from "./components/ReportHistory";
 import ScrollTop from "./components/ScrollTop";
 import Settings from "./components/Settings";
 import Skills from "./components/Skills";
+import Help from "./components/Help";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
 import { BACK_PARAM } from "./nav";
@@ -17,12 +18,13 @@ type Route =
   | { name: "home" }
   // 목록 화면은 거른 조건을 주소에 두고 그대로 돌려받는다 (nav.ts).
   | { name: "list"; query: string }
-  | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null }
+  | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null; edit?: boolean }
   | { name: "search"; query: string }
   | { name: "reports"; query: string }
   | { name: "history"; query: string }
   | { name: "skills"; query: string }
-  | { name: "settings" };
+  | { name: "settings" }
+  | { name: "help" };
 
 function readRoute(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
@@ -38,6 +40,7 @@ function readRoute(): Route {
       reportId: reportId ? Number(reportId) : undefined,
       entryId: entryId ? Number(entryId) : undefined,
       back: params.get(BACK_PARAM),
+      edit: params.get("edit") === "1",
     };
   }
   if (path.startsWith("search")) return { name: "search", query: params.get("q") ?? "" };
@@ -45,6 +48,7 @@ function readRoute(): Route {
   if (path.startsWith("reports")) return { name: "reports", query: queryString ?? "" };
   if (path.startsWith("skills")) return { name: "skills", query: queryString ?? "" };
   if (path.startsWith("settings")) return { name: "settings" };
+  if (path.startsWith("help")) return { name: "help" };
   if (path.replace(/\/$/, "") === "projects") return { name: "list", query: queryString ?? "" };
   // 아는 주소가 아니면 홈으로. 손으로 고친 주소에서 빈 화면을 만나는 것보다 낫다.
   return { name: "home" };
@@ -146,6 +150,9 @@ export default function App() {
           <a href="#/settings" className={route.name === "settings" ? "active" : undefined}>
             설정
           </a>
+          <a href="#/help" className={route.name === "help" ? "active" : undefined}>
+            도움말
+          </a>
         </nav>
         <form
           className="search-box"
@@ -193,6 +200,7 @@ export default function App() {
             openReportId={route.reportId}
             openEntryId={route.entryId}
             back={route.back}
+            edit={route.edit}
           />
         )}
         {route.name === "reports" && <ReportCandidates meta={meta} query={route.query} />}
@@ -202,6 +210,7 @@ export default function App() {
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "home" && <Home meta={meta} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}
+        {route.name === "help" && <Help />}
       </main>
       {/* 화면마다 따로 두지 않는다 — 요청의 핵심이 "어디서나 같은 자리"다. */}
       <ScrollTop />

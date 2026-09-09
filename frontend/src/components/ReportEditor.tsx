@@ -46,6 +46,9 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   const [previewing, setPreviewing] = useState<Attachment | null>(null);
   // 보고일. 초안일 때만 고칠 수 있다 — 확정된 보고의 날짜는 "언제 보고했는가"라는 사실이다.
   const [reportDate, setReportDate] = useState(report.report_date);
+  // 보고 자리에서 받은 지시 (TODO 107). 확정된 보고에만 적고, 본문과 따로 저장한다.
+  const [feedback, setFeedback] = useState(report.feedback ?? "");
+  const [feedbackDirty, setFeedbackDirty] = useState(false);
   const [preview, togglePreview] = usePreview();
   // "지난주와 뭐가 달라졌나" — 보고 자리에서 가장 많이 받는 질문이다.
   const [showDiff, setShowDiff] = useState(false);
@@ -74,6 +77,10 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   useEffect(() => setBody(report.body ?? ""), [report.id, report.body]);
   useEffect(() => setAudience(report.audience ?? ""), [report.id, report.audience]);
   useEffect(() => setReportDate(report.report_date), [report.id, report.report_date]);
+  useEffect(() => {
+    setFeedback(report.feedback ?? "");
+    setFeedbackDirty(false);
+  }, [report.id, report.feedback]);
 
   async function save(): Promise<void> {
     // 보고일은 초안일 때만 보낸다. 바뀌면 서버가 문서 폴더도 함께 옮긴다.
@@ -311,7 +318,75 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       {showPrompt && <AiPromptPanel reportId={report.id} />}
 
       {frozen ? (
-        <div className="markdown snapshot" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />
+        <>
+          <div className="markdown snapshot" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />
+          {/* 보고 결과 · 지시사항 (TODO 107). 본문은 굳었지만 "그 자리에서 무슨 말을 들었는가"는
+              보고가 끝난 뒤에야 적을 수 있다. 다음 초안이 이 칸을 맨 위에 물고 나온다. */}
+          <section className="feedback-box" data-testid="report-feedback">
+            <div className="feedback-head">
+              <b>보고 결과 · 지시사항</b>
+              {report.feedback?.trim() ? (
+                report.feedback_done ? (
+                  <span className="feedback-state done">답변함 · {report.feedback_done}</span>
+                ) : (
+                  <span className="feedback-state open">답하지 않음 — 다음 초안 맨 위에 딸려 갑니다</span>
+                )
+              ) : (
+                <span className="hint">비워 두면 아무 데도 나타나지 않습니다.</span>
+              )}
+            </div>
+            <textarea
+              className="feedback-text"
+              rows={3}
+              value={feedback}
+              placeholder="보고 자리에서 받은 지시·질문·결정 사항"
+              onChange={(event) => {
+                setFeedback(event.target.value);
+                setFeedbackDirty(true);
+              }}
+            />
+            <div className="form-actions feedback-actions">
+              <button
+                className="small"
+                disabled={!feedbackDirty || busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await api.updateReport(report.id, { feedback });
+                    setFeedbackDirty(false);
+                    onChanged();
+                  } catch (err) {
+                    setError((err as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                지시사항 저장
+              </button>
+              {report.feedback?.trim() && (
+                <button
+                  className="ghost small"
+                  disabled={busy || feedbackDirty}
+                  title={feedbackDirty ? "먼저 지시사항을 저장하세요." : undefined}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await api.feedbackDone(report.id, !report.feedback_done);
+                      onChanged();
+                    } catch (err) {
+                      setError((err as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {report.feedback_done ? "아직 답하지 않음으로" : "답변함"}
+                </button>
+              )}
+            </div>
+          </section>
+        </>
       ) : (
         <>
         <PreviewToggle on={preview} onToggle={togglePreview} />

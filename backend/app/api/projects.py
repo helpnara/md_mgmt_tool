@@ -288,6 +288,10 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     data["dir_name"] = row["dir_name"]
     # 개요가 서식 그대로인지 — 화면이 "아직 작성 전" 을 세운다 (TODO 106-B).
     data["overview_blank"] = svc.overview_is_blank(row["body"])
+    # 마지막 진행일지의 계획 절 — 다음 할 일 (TODO 112). 표시만 한다.
+    from ..services.entries import latest_plan
+
+    data["next_plan"] = latest_plan(conn, project_id)
     # 상단 요약에 쓸 값 — 펼쳐 보지 않아도 상태를 알 수 있게 한다.
     from ..services.reports import unreported_entries
 
@@ -355,6 +359,19 @@ def year_fix_apply(project_id: str, conn: sqlite3.Connection = Depends(get_db)) 
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileInUseError as exc:
         raise HTTPException(status_code=423, detail=str(exc)) from exc
+
+
+@router.post("/{project_id}/clone", status_code=201)
+def clone_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """이 과제를 바탕으로 새 과제 (TODO 109). 이력·보고·첨부는 가져오지 않는다."""
+    try:
+        new_id = svc.clone_project(conn, project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    row = conn.execute("SELECT * FROM project WHERE id = ?", (new_id,)).fetchone()
+    return _serialize(conn, row)
 
 
 @router.post("/{project_id}/archive", status_code=204)

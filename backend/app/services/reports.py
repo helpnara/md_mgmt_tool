@@ -620,6 +620,8 @@ def search(
                 "author": row["author"],
                 "frozen_at": row["frozen_at"],
                 "frozen": bool(row["frozen_at"]),
+                # 지시를 받았는데 아직 답하지 않았는가 (TODO 107)
+                "feedback_open": bool(row["frozen_at"] and (row["feedback"] or "").strip() and not row["feedback_done"]),
                 "covers_from": row["covers_from"],
                 "covers_to": row["covers_to"],
                 "entry_count": conn.execute(

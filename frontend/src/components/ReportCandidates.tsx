@@ -6,6 +6,7 @@ import { projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
 import StatusBadge from "./StatusBadge";
+import CopyTableButton from "./CopyTableButton";
 
 const PICKS_KEY = "md-mgmt:report-picks";
 /** 이만큼 지나면 붉게 — 주간 보고 기준으로 두 주를 넘긴 것. */
@@ -178,6 +179,23 @@ export default function ReportCandidates({ meta, query }: Props) {
           )}
         </div>
         <div className="toolbar-actions sort-reset">
+          {/* 이번 주 보고 대상 표를 회의 안건으로 (TODO 108) */}
+          <CopyTableButton
+            headers={["번호", "과제", "상태", "담당자", "마지막 보고", "피보고자", "경과일", "미보고 기록", "최근 기록"]}
+            rows={() =>
+              items.map((item) => [
+                item.id,
+                item.title,
+                meta.statuses.find((status) => status.key === item.status)?.label ?? item.status,
+                item.owners.join(", "),
+                item.last_reported_at ?? (item.never_reported ? "없음" : ""),
+                item.last_report_audience ?? "",
+                item.not_started ? "" : item.days_since_report ?? "",
+                item.unreported_entries,
+                item.latest_entry_date ?? "",
+              ])
+            }
+          />
           {/* 열 머리글을 세 번 돌려 해제하는 방식은 세 번째를 못 찾는다. 길을 따로 낸다. */}
           {sort ? (
             <button

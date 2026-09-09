@@ -1428,7 +1428,8 @@ async function main() {
   await check("홈이 효과 금액의 분모를 함께 적는다", async () => {
     // 화살표만 있으면 "기대 대비 달성률" 로 읽힌다 (TODO 86).
     await go("#/");
-    const note = await page.locator(".home-stat.effect .home-stat-note").innerText();
+    // 완료했는데 실증효과가 없는 과제로 가는 링크도 같은 자리에 선다 (TODO 106-F) — 문구 줄만 본다.
+    const note = await page.locator(".home-stat.effect span.home-stat-note").innerText();
     expect(/기대 \d+건 · 실증 \d+건/.test(note), `분모가 안 보인다: ${note}`);
   });
 
@@ -1564,7 +1565,10 @@ async function main() {
       await go("#/reports");
       const card = page.locator(".drafts-waiting");
       equal(await card.count(), 1, "확정 대기 카드");
-      equal(await card.locator(".picked-list li").count(), 2, "카드 안의 줄 수");
+      // 날짜를 가리지 않으므로(TODO 101) 심어 둔 초안도 함께 선다. 서버가 세는 수와 같으면 된다.
+      const candidates = await api.get("/api/report-candidates");
+      equal(await card.locator(".picked-list li").count(), candidates.drafts.length, "카드 안의 줄 수");
+      expect(candidates.drafts.length >= 2, `초안 수: ${candidates.drafts.length}`);
       const open = card.locator(".linkish-button").first();
       expect(/report=\d+/.test(await open.getAttribute("href")), "[초안 열기]가 초안을 가리키지 않는다");
     });
@@ -1760,7 +1764,7 @@ async function main() {
     await go("#/");
     const names = await page.locator(".nav a").allInnerTexts();
     equal(names.map((name) => name.trim()).join("|"),
-      "홈|과제목록|보고대상|보고이력|팀원역량|설정", "메뉴 이름");
+      "홈|과제목록|보고대상|보고이력|팀원역량|설정|도움말", "메뉴 이름");
   });
 
   console.log("\n[10] 과제 번호의 연도는 착수년도 (TODO 95)");
@@ -2231,6 +2235,131 @@ async function main() {
       equal(await page.locator(".home-week .home-drafts li").count(), 1, "연도 전체");
     } finally {
       await api.delete(`/api/reports/${made.id}`);
+    }
+  });
+
+  console.log("\n[16] 전수 검토의 새 기능 여섯 (TODO 107~112)");
+  await check("메뉴 끝에 [도움말]이 있고 세 묶음이 선다 (TODO 111)", async () => {
+    await go("#/help");
+    equal(await page.locator(".help .settings-group").count(), 3, "묶음 수");
+    expect(await page.locator(".help-steps li").count() >= 4, "주간 흐름 단계");
+    expect(await page.locator(".help-faq dt").count() >= 5, "자주 묻는 것");
+    equal(await page.locator(".nav a.active").innerText(), "도움말", "활성 메뉴");
+  });
+
+  await check("확정된 보고에만 [보고 결과 · 지시사항] 칸이 있다 (TODO 107)", async () => {
+    const reports = await api.get(`/api/projects/${seeded.projectA}/reports`);
+    const frozen = reports.find((item) => item.frozen);
+    // [15] 가 초안을 모두 치웠으므로 하나 만들어 본다.
+    const draft = await api.post(`/api/projects/${seeded.projectA}/reports/draft`, {
+      report_date: dayFromToday(0),
+    });
+    try {
+      await go(`#/projects/${seeded.projectA}?report=${draft.id}`);
+      equal(await page.locator('[data-testid="report-feedback"]').count(), 0, "초안에는 없다");
+    } finally {
+      await api.delete(`/api/reports/${draft.id}`);
+    }
+    await go(`#/projects/${seeded.projectA}?report=${frozen.id}`);
+    equal(await page.locator('[data-testid="report-feedback"]').count(), 1, "확정 보고에는 있다");
+    await page.locator(".feedback-text").fill("원가 근거 자료를 다음 주까지 보완할 것");
+    await page.getByRole("button", { name: "지시사항 저장" }).click();
+    await page.waitForTimeout(600);
+    const saved = await api.get(`/api/reports/${frozen.id}`);
+    equal(saved.feedback, "원가 근거 자료를 다음 주까지 보완할 것", "저장된 지시");
+    expect((await page.locator(".feedback-state.open").count()) === 1, "답하지 않음 표시");
+  });
+
+  await check("답하지 않은 지시가 과제 위쪽 띠와 보고이력 필터에 선다", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    equal(await page.locator('[data-testid="open-feedback"]').count(), 1, "과제 위쪽 띠");
+    expect((await page.locator('[data-testid="open-feedback"]').innerText()).includes("1건"), "건수");
+    await go("#/history?feedback=open");
+    equal(await page.locator(".history-list li").count(), 1, "답하지 않은 지시만");
+    equal(await page.locator(".feedback-tag").count(), 1, "지시 표");
+    expect(await page.locator('.check-label input[type="checkbox"]').isChecked(), "체크 상태가 주소를 따른다");
+  });
+
+  await check("새 초안이 지시를 맨 위에 물고 오고, [답변함]이면 띠가 사라진다", async () => {
+    const made = await api.post(`/api/projects/${seeded.projectA}/reports/draft`, {
+      report_date: dayFromToday(1),
+    });
+    try {
+      expect(made.body.startsWith("## 지난 보고 지시사항"), `초안 머리: ${made.body.slice(0, 40)}`);
+      expect(made.body.includes("원가 근거 자료"), "지시 본문");
+    } finally {
+      await api.delete(`/api/reports/${made.id}`);
+    }
+    const reports = await api.get(`/api/projects/${seeded.projectA}/reports`);
+    const frozen = reports.find((item) => item.frozen);
+    await go(`#/projects/${seeded.projectA}?report=${frozen.id}`);
+    await page.getByRole("button", { name: "답변함", exact: true }).click();
+    await page.waitForTimeout(600);
+    equal(await page.locator(".feedback-state.done").count(), 1, "답변함 표시");
+    equal(await page.locator('[data-testid="open-feedback"]').count(), 0, "띠가 사라진다");
+  });
+
+  await check("[이 과제로 새 과제]가 개요·담당자를 넘기고 수정 칸을 연 채 들어간다 (TODO 109)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    // 확인 창은 위쪽의 page.on("dialog") 가 받아 준다.
+    await page.getByRole("button", { name: "이 과제로 새 과제" }).click();
+    await page.waitForTimeout(900);
+    const hash = page.url().split("#")[1] ?? "";
+    expect(hash.startsWith("/projects/") && hash.includes("edit=1"), `주소: ${hash}`);
+    const newId = hash.slice("/projects/".length).split("?")[0];
+    expect(newId !== seeded.projectA, "새 번호");
+    const created = await api.get(`/api/projects/${newId}`);
+    equal(created.status, "planned", "상태는 예정");
+    expect(created.owners.includes("권경락"), "담당자가 넘어온다");
+    expect(created.body.includes("## 이전 과제"), "이전 과제 표시");
+    equal(await page.locator(".project-form").count(), 1, "수정 칸이 열려 있다");
+    // 보관은 204 라 본문이 없다.
+    await fetch(`${BASE}/api/projects/${newId}/archive`, { method: "POST" });
+  });
+
+  await check("[표 복사]가 과제목록·보고대상·홈 표에 있다 (TODO 108)", async () => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
+    await go("#/projects");
+    equal(await page.locator(".toolbar .copy-table").count(), 1, "과제목록");
+    await page.locator(".toolbar .copy-table").click();
+    await page.waitForTimeout(200);
+    const text = await page.evaluate(() => navigator.clipboard.readText());
+    const lines = text.trim().split("\n");
+    expect(lines[0].startsWith("번호\t과제\t상태"), `머리글: ${lines[0]}`);
+    equal(lines.length - 1, await page.locator("table.grid tbody tr").count(), "줄 수가 표와 같다");
+    equal(await page.locator(".toolbar .copy-table").innerText(), "복사됨 ✓", "눌린 표시");
+    await go("#/reports");
+    equal(await page.locator(".toolbar .copy-table").count(), 1, "보고대상");
+    await go("#/");
+    expect((await page.locator(".home .copy-table").count()) >= 2, "홈 표들");
+  });
+
+  await check("기준 연도 옆 기간 상자 — 전체 연도에서는 사라진다 (TODO 110)", async () => {
+    await go("#/");
+    equal(await page.locator(".home-period select").count(), 1, "기간 상자");
+    await page.locator(".home-period select").selectOption("H1");
+    await page.waitForTimeout(700);
+    equal(await page.locator(".home-period-note").count(), 1, "기간 안내 한 줄");
+    expect((await page.locator(".home-period-note").innerText()).includes("상반기"), "상반기 표시");
+    await page.locator(".home-year select").first().selectOption("all");
+    await page.waitForTimeout(700);
+    equal(await page.locator(".home-period select").count(), 0, "연도 전체에서는 뜻이 없다");
+  });
+
+  await check("진행일지의 ## 계획이 과제 위쪽과 홈의 다음 할 일에 선다 (TODO 112)", async () => {
+    const entry = await api.post(`/api/projects/${seeded.projectB}/entries`, {
+      date: dayFromToday(0), title: "설비 점검",
+      body: "## 내용\n\n점검 완료\n\n## 계획\n\n- 다음 주 2차 점검\n- 보고서 초안 작성\n",
+    });
+    try {
+      await go(`#/projects/${seeded.projectB}`);
+      equal(await page.locator('[data-testid="next-plan"]').count(), 1, "과제 위쪽 한 줄");
+      expect((await page.locator('[data-testid="next-plan"]').innerText()).includes("다음 주 2차 점검"), "계획 본문");
+      await go("#/");
+      expect((await page.locator('[data-testid="home-plans"] li').count()) >= 1, "홈 목록");
+      expect((await page.locator('[data-testid="home-plans"]').innerText()).includes("공정 자동화"), "과제 이름");
+    } finally {
+      await api.delete(`/api/entries/${entry.id}`);
     }
   });
 

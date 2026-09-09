@@ -5,6 +5,23 @@ import type { BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
 import { projectLink } from "../nav";
 import { effectNumber } from "../util";
 import LoadError from "./LoadError";
+import CopyTableButton from "./CopyTableButton";
+
+/** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
+const PERIODS: [string, string][] = [
+  ["", "연도 전체"],
+  ["H1", "상반기"],
+  ["H2", "하반기"],
+  ["Q1", "1분기"],
+  ["Q2", "2분기"],
+  ["Q3", "3분기"],
+  ["Q4", "4분기"],
+];
+
+/** 상태별 칸을 표 복사용 숫자 줄로 (TODO 108). 화면의 열 순서와 같아야 한다. */
+function statusCells(meta: Meta, counts: Record<string, number>): number[] {
+  return meta.statuses.map((status) => counts?.[status.key] ?? 0);
+}
 
 /**
  * 홈(첫 화면) — TODO 56 · ROADMAP R1.
@@ -109,7 +126,21 @@ function SliceTable({
     // 속성별과 그룹별을 이름으로 가려낼 수 있어야 한다 — 시험이 둘을 헷갈리면
     // 어느 표를 보고 있는지 모른 채 통과할 수 있다.
     <div className={`card home-types home-slice-${param}`}>
-      <h2>{title}</h2>
+      <h2>
+        {title}
+        <CopyTableButton
+          headers={[column, "과제", ...meta.statuses.map((status) => status.label), "기대효과(억원/년)", "실증효과(억원/년)"]}
+          rows={() =>
+            rows.map((item) => [
+              item.label,
+              item.count,
+              ...statusCells(meta, item.by_status),
+              item.effect_expected,
+              item.effect_verified,
+            ])
+          }
+        />
+      </h2>
       <div className="table-scroll">
         <table className="grid home-member-table">
           <thead>
@@ -178,6 +209,8 @@ function backupWarning(status: BackupStatus | null): string | null {
 export default function Home({ meta }: { meta: Meta }) {
   const thisYear = String(new Date().getFullYear());
   const [year, setYear] = useState(thisYear);
+  // 반기·분기 (TODO 110). 연도 전체를 볼 때는 뜻이 없으므로 그때는 보내지 않는다.
+  const [period, setPeriod] = useState("");
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 자동 백업이 죽어 있어도 홈은 몰랐다 (TODO 106-A). 문제가 있을 때만 한 줄 띄운다.
@@ -188,13 +221,13 @@ export default function Home({ meta }: { meta: Meta }) {
 
   const load = useCallback(() => {
     api
-      .home(year === ALL_YEARS ? "" : year)
+      .home(year === ALL_YEARS ? "" : year, year === ALL_YEARS ? "" : period)
       .then((next) => {
         setData(next);
         setError(null);
       })
       .catch((err: Error) => setError(err.message));
-  }, [year]);
+  }, [year, period]);
 
   useEffect(load, [load]);
 
@@ -276,7 +309,25 @@ export default function Home({ meta }: { meta: Meta }) {
             <option value={ALL_YEARS}>전체</option>
           </select>
         </label>
+        {year !== ALL_YEARS && (
+          <label className="home-period">
+            기간
+            <select value={period} onChange={(event) => setPeriod(event.target.value)} title="보고 횟수·그해 끝낸 과제·역량 이력처럼 날짜가 있는 숫자만 이 기간을 따릅니다. 과제 수는 연도 기준 그대로입니다.">
+              {PERIODS.map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
+      {data.period && (
+        <p className="hint home-period-note">
+          <b>{PERIODS.find(([key]) => key === data.period)?.[1]}</b> — 보고 횟수·그해 끝낸 과제·역량 이력처럼{" "}
+          <b>날짜가 있는 숫자만</b> 이 기간을 따릅니다. 과제 수·상태별 수는 연도 기준 그대로입니다.
+        </p>
+      )}
 
       {/* ── 이번 주 할 일 · 팀 현황 ───────────────────────────────────────
           홈을 매일 여는 이유는 지표가 아니라 "이번 주 할 일" 이다. 그래서 맨 위에 둔다.
@@ -381,6 +432,26 @@ export default function Home({ meta }: { meta: Meta }) {
             )}
           </>
         )}
+        {/* 과제별 다음 할 일 — 최근 진행일지의 계획 칸 (TODO 112). 이미 적어 둔 것을 올릴 뿐이다. */}
+        {week.plans.length > 0 && (
+          <>
+            <p className="hint">
+              <b>다음 할 일</b> — 진행일지의 <code>## 계획</code>에 적어 둔 것입니다.
+            </p>
+            <ul className="home-plans" data-testid="home-plans">
+              {week.plans.map((item) => (
+                <li key={item.entry_id}>
+                  <a href={projectLink(item.project_id, { entry: item.entry_id })}>{item.project_title}</a>
+                  <span className="plan-text">{item.text}</span>
+                  <span className="muted">{item.date}</span>
+                </li>
+              ))}
+            </ul>
+            {week.plans_total > week.plans.length && (
+              <p className="hint">나머지 {week.plans_total - week.plans.length}건은 각 과제 위쪽에 있습니다.</p>
+            )}
+          </>
+        )}
       </div>
 
       {/* ── 팀 현황 ──────────────────────────────────────────────────── */}
@@ -450,7 +521,22 @@ export default function Home({ meta }: { meta: Meta }) {
           한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다. */}
       {data.compare.length > 1 && (
         <div className="card home-compare">
-          <h2>연도별 추이</h2>
+          <h2>
+            연도별 추이
+            <CopyTableButton
+              headers={["연도", "과제", "완료", "보고 횟수", "기대효과(억원/년)", "실증효과(억원/년)"]}
+              rows={() =>
+                data.compare.map((item) => [
+                  item.year,
+                  item.total,
+                  item.done,
+                  item.reports,
+                  item.effect_expected,
+                  item.effect_verified,
+                ])
+              }
+            />
+          </h2>
           <div className="bar-row">
             {data.compare.map((item) => (
               <a
@@ -478,7 +564,26 @@ export default function Home({ meta }: { meta: Meta }) {
 
       {/* ── 팀원별 성과 (ROADMAP R1 의 실체) ───────────────────────── */}
       <div className="card home-members wide">
-        <h2>팀원별 성과</h2>
+        <h2>
+          팀원별 성과
+          {data.members.length > 0 && (
+            <CopyTableButton
+              headers={["담당자", "담당 과제", ...meta.statuses.map((status) => status.label), "기대효과(억원/년)", "실증효과(억원/년)", "보고 횟수", "역량 이력", "마지막 보고"]}
+              rows={() =>
+                data.members.map((member) => [
+                  member.name,
+                  member.total,
+                  ...statusCells(meta, member.by_status),
+                  member.effect_expected,
+                  member.effect_verified,
+                  member.reports,
+                  member.activities,
+                  member.last_reported_at ?? "",
+                ])
+              }
+            />
+          )}
+        </h2>
         {data.members.length === 0 ? (
           <p className="hint">담당자가 지정된 과제가 없습니다.</p>
         ) : (

@@ -84,6 +84,15 @@ export interface Project {
   overview_blank?: boolean;
   /** 지난 보고에서 받고 아직 답하지 않은 지시 (TODO 107) */
   open_feedback?: OpenFeedback[];
+  /** 최근 진행일지의 `## 계획` — 다음 할 일 (TODO 112). 없으면 null */
+  next_plan?: NextPlan | null;
+}
+
+/** 진행일지 서식의 계획 칸에서 뽑은 다음 할 일 (TODO 112). */
+export interface NextPlan {
+  entry_id: number;
+  date: string;
+  text: string;
 }
 
 /** 확정된 보고에 적어 둔 지시 중 아직 답하지 않은 것 (TODO 107). */
@@ -314,6 +323,8 @@ export interface ReportHistoryItem {
   covers_to: string | null;
   entry_count: number;
   excerpt: string;
+  /** 지시가 적혀 있고 아직 답하지 않았다 (TODO 107) */
+  feedback_open?: boolean;
 }
 
 /** 지난 보고 대비 변경분 (T11). */
@@ -428,6 +439,8 @@ export interface Home {
   year: string | null;
   years: string[];
   today: string;
+  /** 반기·분기 (TODO 110). 연도 전체면 null. 날짜가 있는 숫자만 이것을 따른다 */
+  period: string | null;
   this_week: {
     report_date: string;
     candidates: number;
@@ -442,6 +455,9 @@ export interface Home {
     drafts_overdue: number;
     /** 앞의 몇 건. 건수를 말할 때 이 길이를 세면 안 된다 */
     draft_items: UnfinishedDraft[];
+    /** 과제별 다음 할 일 — 최근 진행일지의 계획 칸 (TODO 112). 앞의 몇 건 */
+    plans: HomePlan[];
+    plans_total: number;
   };
   team: HomeTeam;
   /** 최근 몇 해를 나란히. 왼쪽이 과거다. */
@@ -451,6 +467,12 @@ export interface Home {
   types: HomeSlice[];
   /** 그룹(주제)별. 속성별과 같은 모양이고, 자유 입력이라 수가 늘 수 있다 (TODO 90) */
   groups: HomeSlice[];
+}
+
+/** 홈에 서는 과제별 다음 할 일 (TODO 112). */
+export interface HomePlan extends NextPlan {
+  project_id: string;
+  project_title: string;
 }
 
 /** 팀원 역량 이력 한 건 (TODO 72). 기록 단위는 **사람**이다. */

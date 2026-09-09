@@ -23,7 +23,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date as date_cls
 
-from ..config import FINISHED_STATUSES, STATUS_KEYS
+from ..config import FINISHED_STATUSES, STATUS_KEYS, STATUSES
 from . import settings as settings_service
 from . import reports as reports_service
 
@@ -73,7 +73,7 @@ def years(conn: sqlite3.Connection) -> list[str]:
     return [row["y"] for row in rows]
 
 
-def _team(conn: sqlite3.Connection, year: str | None) -> dict:
+def _team(conn: sqlite3.Connection, year: str | None, period: str | None = None) -> dict:
     clause, params = _year_clause(year)
     row = conn.execute(
         "SELECT COUNT(*) AS total,"
@@ -100,57 +100,88 @@ def _team(conn: sqlite3.Connection, year: str | None) -> dict:
         "effect_expected_projects": row["ee_n"] or 0,
         "effect_verified_projects": row["ev_n"] or 0,
         "done_unverified": row["done_unverified"] or 0,
-        "reports": _report_count(conn, year),
+        "reports": _report_count(conn, year, period=period),
         # 완료일 기준 (TODO 104). 위의 done 은 **번호의 연도**로 세어, 지난해 시작해 올해
         # 끝낸 과제가 올해 성과에 잡히지 않는다. 어느 쪽이 "성과" 인지는 사용자가 정할
         # 일이라 둘을 나란히 준다. 연도가 없으면(전체) 완료일이 적힌 것 전부.
-        "done_in_year": _done_in_year(conn, year),
+        "done_in_year": _done_in_year(conn, year, period),
     }
 
 
-def _done_in_year(conn: sqlite3.Connection, year: str | None) -> int:
+def _done_in_year(conn: sqlite3.Connection, year: str | None, period: str | None = None) -> int:
     sql = "SELECT COUNT(*) AS n FROM project WHERE completed_at IS NOT NULL AND status = ?"
     params: list = [_DONE]
-    if year:
-        sql += " AND SUBSTR(completed_at, 1, 4) = ?"
-        params.append(year)
+    clause, more = _date_clause("completed_at", year, period)
+    sql += clause
+    params.extend(more)
     return conn.execute(sql, params).fetchone()["n"]
 
 
-def _report_count(conn: sqlite3.Connection, year: str | None, owner: str | None = None) -> int:
-    """확정된 보고의 수. 연도는 **보고일** 기준이다."""
+# ── 기간 (TODO 110) ────────────────────────────────────────────────────────
+#
+# 분기 실적·상반기 보고는 연도로 안 된다. 다만 **자를 수 있는 것만 자른다** — 보고 횟수
+# (보고일)·끝낸 과제(완료일)·역량 이력(활동일)처럼 날짜가 있는 수치다. 과제 수·효과 금액은
+# 번호의 연도에 매여 있어 분기로 나눌 수 없고, 화면이 그 사실을 적는다.
+
+PERIODS = {
+    "H1": ("01-01", "06-30"),
+    "H2": ("07-01", "12-31"),
+    "Q1": ("01-01", "03-31"),
+    "Q2": ("04-01", "06-30"),
+    "Q3": ("07-01", "09-30"),
+    "Q4": ("10-01", "12-31"),
+}
+
+
+def _date_range(year: str | None, period: str | None) -> tuple[str, str] | None:
+    """연도와 기간을 날짜 구간으로. 연도가 없으면 기간도 없다 — 어느 해의 1분기인지 모른다."""
+    if not year:
+        return None
+    if period in PERIODS:
+        start, end = PERIODS[period]
+        return f"{year}-{start}", f"{year}-{end}"
+    return f"{year}-01-01", f"{year}-12-31"
+
+
+def _date_clause(column: str, year: str | None, period: str | None) -> tuple[str, list]:
+    span = _date_range(year, period)
+    if span is None:
+        return "", []
+    return f" AND {column} BETWEEN ? AND ?", list(span)
+
+
+def _report_count(
+    conn: sqlite3.Connection, year: str | None, owner: str | None = None, period: str | None = None
+) -> int:
+    """확정된 보고의 수. 연도는 **보고일** 기준이다. 기간을 주면 그 안만 (TODO 110)."""
     sql = "SELECT COUNT(*) AS n FROM report r WHERE r.frozen_at IS NOT NULL"
-    params: list = []
-    if year:
-        sql += " AND SUBSTR(r.report_date, 1, 4) = ?"
-        params.append(year)
+    clause, params = _date_clause("r.report_date", year, period)
+    sql += clause
     if owner is not None:
         sql += " AND EXISTS (SELECT 1 FROM project_owner po WHERE po.project_id = r.project_id AND po.name = ?)"
         params.append(owner)
     return conn.execute(sql, params).fetchone()["n"]
 
 
-def _activity_counts(conn: sqlite3.Connection, year: str | None) -> dict[str, int]:
+def _activity_counts(conn: sqlite3.Connection, year: str | None, period: str | None = None) -> dict[str, int]:
     """사람별 역량 이력 건수. **연도는 활동한 날** 기준이다 (TODO 89).
 
     면담 준비를 한 화면에서 끝내기 위한 것이다 — 지금까지는 홈(과제 성과)과
     팀원 역량 두 화면을 오가야 "이 사람이 올해 무엇을 맡았고 무엇을 배웠나"가 나왔다.
     """
-    sql = "SELECT person, COUNT(*) AS n FROM activity"
-    params: list = []
-    if year:
-        sql += " WHERE SUBSTR(date, 1, 4) = ?"
-        params.append(year)
+    sql = "SELECT person, COUNT(*) AS n FROM activity WHERE 1=1"
+    clause, params = _date_clause("date", year, period)
+    sql += clause
     return {row["person"]: row["n"] for row in conn.execute(sql + " GROUP BY person", params)}
 
 
-def _members(conn: sqlite3.Connection, year: str | None) -> list[dict]:
+def _members(conn: sqlite3.Connection, year: str | None, period: str | None = None) -> list[dict]:
     """팀원별 성과. 사용자가 정한 네 가지 — 담당 건수 · 완료 · 효과 금액 · 보고 횟수.
 
     여기에 **역량 이력 건수**를 한 칸 더 붙였다 (TODO 89).
     """
     clause, params = _year_clause(year)
-    activities = _activity_counts(conn, year)
+    activities = _activity_counts(conn, year, period)
     rows = conn.execute(
         "SELECT po.name AS name, COUNT(*) AS total,"
         "       COALESCE(SUM(p.effect_expected), 0) AS effect_expected,"
@@ -188,7 +219,7 @@ def _members(conn: sqlite3.Connection, year: str | None) -> list[dict]:
                 "in_progress": by_status["in_progress"],
                 "effect_expected": round(row["effect_expected"] or 0, 2),
                 "effect_verified": round(row["effect_verified"] or 0, 2),
-                "reports": _report_count(conn, year, owner=row["name"]),
+                "reports": _report_count(conn, year, owner=row["name"], period=period),
                 # 과제가 아니라 사람에게 쌓인 것. 0 이면 그 자체가 면담 이야깃거리다.
                 "activities": activities.get(row["name"], 0),
                 # 마지막 보고는 연도를 걸지 않는다 — "이 사람이 마지막으로 보고한 때"가
@@ -315,8 +346,37 @@ def _stale(conn: sqlite3.Connection, limit: int = STALE_LIMIT) -> tuple[list[dic
     return items[:limit], len(items)
 
 
-def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
+# 홈에 세우는 '다음 할 일' 줄 수. 그 위는 과제 상세가 맡는다.
+PLAN_LIMIT = 6
+
+
+def _plans(conn: sqlite3.Connection) -> tuple[list[dict], int]:
+    """마지막 진행일지에 계획을 적어 둔 **진행 중인** 과제 (TODO 112). 최근 기록 순."""
+    from .entries import latest_plan
+
+    active = {key for key, _, candidate in STATUSES if candidate}
+    found = []
+    for project in conn.execute("SELECT id, title, status FROM project ORDER BY updated_at DESC"):
+        if project["status"] not in active:
+            continue
+        plan = latest_plan(conn, project["id"])
+        if plan:
+            found.append({
+                "project_id": project["id"],
+                "project_title": project["title"],
+                "entry_id": plan["entry_id"],
+                "date": plan["date"],
+                # 첫 줄만 — 홈은 훑는 자리다. 전부는 과제 상세에서.
+                "text": plan["text"].splitlines()[0],
+            })
+    found.sort(key=lambda item: item["date"], reverse=True)
+    return found[:PLAN_LIMIT], len(found)
+
+
+def summary(conn: sqlite3.Connection, year: str | None = None, period: str | None = None) -> dict:
     available = years(conn)
+    if period not in PERIODS:
+        period = None
 
     placeholders = ",".join("?" * len(FINISHED_STATUSES))
     clause, params = _year_clause(year)
@@ -340,8 +400,10 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
     # 아무 데도 보이지 않았다. [이번 주 할 일]이 그것을 계속 들고 있는다.
     drafts = reports_service.unfinished_drafts(conn)
     stale, stale_total = _stale(conn)
+    plans, plans_total = _plans(conn)
     return {
         "year": year,
+        "period": period,
         "years": available,
         "today": date_cls.today().isoformat(),
         "this_week": {
@@ -356,10 +418,13 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
             "drafts": drafts["total"],
             "drafts_overdue": drafts["overdue"],
             "draft_items": drafts["items"],
+            # 마지막 진행일지에 적어 둔 계획 (TODO 112). 표시만 한다.
+            "plans": plans,
+            "plans_total": plans_total,
         },
-        "team": _team(conn, year),
+        "team": _team(conn, year, period),
         "compare": _compare(conn),
-        "members": _members(conn, year),
+        "members": _members(conn, year, period),
         "types": _types(conn, year),
         "groups": _groups(conn, year),
     }

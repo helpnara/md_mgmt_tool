@@ -17,7 +17,13 @@ export const api = {
   meta: () => request<Meta>("/api/meta"),
   dashboard: (year?: string) =>
     request<Dashboard>(`/api/dashboard${year ? `?year=${year}` : ""}`),
-  home: (year?: string) => request<Home>(`/api/home${year ? `?year=${year}` : ""}`),
+  home: (year?: string, period?: string) => {
+    const params = new URLSearchParams();
+    if (year) params.set("year", year);
+    if (year && period) params.set("period", period);
+    const query = params.toString();
+    return request<Home>(`/api/home${query ? `?${query}` : ""}`);
+  },
   // 팀원 역량 이력 (TODO 72)
   activities: (params: Record<string, string>) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
@@ -58,6 +64,8 @@ export const api = {
   yearFixPlan: (id: string) => request<YearFix>(`/api/projects/${id}/year-fix`),
   /** 미리보기대로 이 과제 하나의 번호를 옮긴다. */
   yearFixApply: (id: string) => request<YearFix>(`/api/projects/${id}/year-fix`, { method: "POST" }),
+  /** 끝난 과제를 바탕으로 새 과제를 만든다 (TODO 109). 개요·담당자·태그가 넘어오고 이력은 남지 않는다. */
+  cloneProject: (id: string) => request<Project>(`/api/projects/${id}/clone`, { method: "POST" }),
   listEntries: (projectId: string) => request<Entry[]>(`/api/projects/${projectId}/entries`),
   createEntry: (projectId: string, payload: Partial<Entry>) =>
     request<Entry>(`/api/projects/${projectId}/entries`, {
@@ -108,11 +116,17 @@ export const api = {
   getReport: (id: number) => request<Report>(`/api/reports/${id}`),
   updateReport: (
     id: number,
-    payload: { title?: string; body?: string; audience?: string; report_date?: string },
+    payload: { title?: string; body?: string; audience?: string; report_date?: string; feedback?: string },
   ) =>
     request<Report>(`/api/reports/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   freezeReport: (id: number) => request<Report>(`/api/reports/${id}/freeze`, { method: "POST" }),
   unfreezeReport: (id: number) => request<Report>(`/api/reports/${id}/unfreeze`, { method: "POST" }),
+  /** 보고 지시사항에 답했다/아직 (TODO 107). */
+  feedbackDone: (id: number, done = true) =>
+    request<Report>(`/api/reports/${id}/feedback-done`, {
+      method: "POST",
+      body: JSON.stringify({ done }),
+    }),
   deleteReport: (id: number) => request<void>(`/api/reports/${id}`, { method: "DELETE" }),
   listReportAttachments: (id: number) => request<Attachment[]>(`/api/reports/${id}/attachments`),
   /** 지난 보고 대비 변경분 (T11). */
@@ -124,6 +138,7 @@ export const api = {
     to?: string;
     q?: string;
     state?: string;
+    feedback?: string;
   }) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(filters)) {

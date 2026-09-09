@@ -25,6 +25,7 @@ const LABELS: Record<string, string> = {
   history: "보고 이력",
   skills: "팀원 역량",
   search: "검색 결과",
+  help: "도움말",
 };
 
 /** 지금 주소에서 `#/` 를 뗀 부분. 되돌아갈 곳으로 그대로 쓴다. */
