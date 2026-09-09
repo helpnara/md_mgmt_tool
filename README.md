@@ -21,8 +21,12 @@ Python 3.10 이상이 필요하다. ([python.org](https://www.python.org/downloa
 * **배포본 ZIP** — 필요한 파이썬 패키지를 `vendor/` 폴더에 함께 담은 압축본.
   사내망에서 외부 접속(PyPI)이 막혀 있어도 설치된다.
 
+> **배포본 이름은 `과제이력관리-20260909-v1.zip` 꼴이다** — 날짜와 그날의 판 번호다.
+> 같은 날 두 번 만들면 `v2` 가 된다. 어느 파이썬용인지는 압축 안의
+> `배포본-정보.txt` 에 적혀 있다.
+
 > **`vendor/` 는 파이썬 버전을 탄다.** 세 패키지(Pillow · pydantic-core · PyYAML)가
-> 파이썬 버전마다 파일이 다르기 때문이다. 배포본 ZIP 이름에 적힌 버전과
+> 파이썬 버전마다 파일이 다르기 때문이다. `배포본-정보.txt` 의 *대상 파이썬* 과
 > `python --version` 결과가 같아야 `setup.bat` 이 오프라인으로 설치된다.
 > 다르면 아래처럼 그 버전용으로 다시 담으면 된다 (인터넷이 되는 PC에서).
 >
@@ -281,10 +285,13 @@ cd frontend && npm run dev                      # UI 개발 서버 (API는 8000�
 
 ```bash
 cd frontend && npm run build && cd ..     # 화면을 먼저 빌드한다
-python tools/make_dist.py                 # dist/ 에 ZIP 이 생긴다 (파이썬 3.14 · win_amd64)
+python tools/make_dist.py                 # dist/과제이력관리-<날짜>-v<판>.zip (파이썬 3.14 · win_amd64)
 python tools/make_dist.py --python 3.13   # 사내 PC 의 파이썬이 다를 때
 python tools/make_dist.py --no-vendor     # 인터넷이 되는 PC 용 (용량이 작다)
 ```
+
+이름의 판 번호는 **그날 이미 만든 것 다음 번호**로 붙는다 — 같은 날 다시 만들어도
+앞의 배포본을 덮지 않는다.
 
 담기는 파일은 **git 이 추적하는 것**으로 정해진다(`git archive`). 그래서 `vault`·`.venv`·
 `__pycache__` 가 딸려 갈 일이 없고, **커밋하지 않은 변경은 담기지 않는다.**

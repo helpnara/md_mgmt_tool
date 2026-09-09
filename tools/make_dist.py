@@ -6,8 +6,12 @@
   · `vendor/`        — 파이썬 패키지 wheel (PyPI 없이 설치되도록)
 
 **`vendor/` 는 파이썬 버전을 탄다.** Pillow · pydantic-core · PyYAML · watchdog 이
-버전마다 파일이 다르기 때문이다. 그래서 ZIP 이름에 대상 버전을 적는다 —
+버전마다 파일이 다르기 때문이다. 대상 버전은 ZIP 안의 `배포본-정보.txt` 에 적어 둔다 —
 받는 사람이 `python --version` 과 맞춰 볼 수 있어야 한다.
+
+이름은 `과제이력관리-20260909-v1.zip` 꼴이다. **같은 날 다시 만들면 판 번호가 오른다** —
+예전에는 날짜까지만 적어서 그날의 앞 배포본을 말없이 덮었고, "어제 받은 그것" 과
+"방금 받은 그것" 을 이름으로 구분할 수 없었다.
 
     python tools/make_dist.py                 # 기본: 파이썬 3.14 · win_amd64
     python tools/make_dist.py --python 3.13
@@ -65,12 +69,36 @@ def fetch_wheels(target: Path, python_version: str, platform: str) -> int:
     return len(list(target.glob("*.whl")))
 
 
-def write_build_info(target: Path, python_version: str, platform: str, wheels: int) -> None:
-    """무엇을 받았는지 한 장으로. 문의가 왔을 때 '어느 배포본인가'가 먼저 필요하다."""
+def next_version(stamp: str) -> int:
+    """그날의 다음 판 번호 (`…-20260909-v3.zip` → 4).
+
+    예전에는 이름이 날짜까지라, **같은 날 다시 만들면 앞의 것을 말없이 덮었다.**
+    하루에 두세 번 고쳐 내보내는 일이 실제로 있고, 그때 "어제 받은 그것" 과
+    "방금 받은 그것" 을 파일 이름으로 구분할 수 없었다.
+    """
+    head = f"{NAME}-{stamp}-v"
+    used = 0
+    for path in OUT_DIR.glob(f"{head}*.zip"):
+        # `-v2` 도 `-v2-no-vendor` 도 같은 날의 판이다. 번호는 하나로 센다.
+        number = path.stem[len(head):].split("-")[0]
+        if number.isdigit():
+            used = max(used, int(number))
+    return used + 1
+
+
+def write_build_info(
+    target: Path, name: str, python_version: str, platform: str, wheels: int
+) -> None:
+    """무엇을 받았는지 한 장으로. 문의가 왔을 때 '어느 배포본인가'가 먼저 필요하다.
+
+    **파이썬·플랫폼은 이름에서 빠졌으므로 여기에 남는다** — 이름은 날짜와 판 번호만
+    담고(과제이력관리-20260909-v1), 무엇을 위한 배포본인지는 이 파일이 말한다.
+    """
     (target / "배포본-정보.txt").write_text(
         "\n".join([
             f"과제 이력 관리 도구 — 배포본",
             "",
+            f"배포본 이름  {name}",
             f"만든 날      {date.today().isoformat()}",
             f"소스 버전    {git('rev-parse', '--short', 'HEAD')} ({git('rev-parse', '--abbrev-ref', 'HEAD')})",
             f"대상 파이썬  {python_version} ({platform})" if wheels else "대상 파이썬  제한 없음 (vendor 미포함)",
@@ -132,13 +160,14 @@ def main() -> int:
         wheels = fetch_wheels(payload / "vendor", args.python, args.platform)
         print(f"  wheel {wheels}개")
 
-    write_build_info(payload, args.python, args.platform, wheels)
-
     stamp = date.today().strftime("%Y%m%d")
-    suffix = f"py{args.python}-win64" if wheels else "no-vendor"
-    zip_path = OUT_DIR / f"{NAME}-{stamp}-{suffix}.zip"
-    if zip_path.exists():
-        zip_path.unlink()
+    version = next_version(stamp)
+    write_build_info(payload, f"{NAME}-{stamp}-v{version}", args.python, args.platform, wheels)
+
+    # vendor 없는 배포본은 이름으로 구분되어야 한다 — 받는 쪽에서 열어 보기 전에는
+    # 알 수 없고, 인터넷이 안 되는 PC 에서 설치가 막힌다.
+    tail = "" if wheels else "-no-vendor"
+    zip_path = OUT_DIR / f"{NAME}-{stamp}-v{version}{tail}.zip"
     make_zip(payload, zip_path, NAME)
     shutil.rmtree(stage)
 
