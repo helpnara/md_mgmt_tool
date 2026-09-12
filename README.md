@@ -292,6 +292,7 @@ vault/projects/2026-001-리튬전지-장수명-셀-설계/
 
 - [설계 문서](docs/DESIGN.md) — 무엇을 왜 그렇게 정했는지
 - [TODO — 접수한 개선 사항과 반영 결과](docs/TODO.md)
+- [Lessons Learned — 반복된 실수 열 가지와 다음 웹 첫날 점검표](docs/LESSONS-LEARNED.md)
 - [개발 로드맵 — 방향은 정해졌으나 나중에 만들 것](docs/ROADMAP.md)
 - [향후계획 브레인스토밍 — 로드맵을 실행 단위로 펼친 목록](docs/향후계획-브레인스토밍.md)
 - [외주 개발 시 비용 산정 — CRUD 기반 M/M 추정](docs/외주개발-비용산정.md)
