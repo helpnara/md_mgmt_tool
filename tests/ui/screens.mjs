@@ -2402,6 +2402,39 @@ async function main() {
     equal(await page.locator(".search-box input").inputValue(), "시제품", "돌아오면 주소의 검색어");
   });
 
+  await check("설정 → 점검의 [첨부 링크 정리]가 세고 고친다 (TODO 116)", async () => {
+    const entry = await api.post(`/api/projects/${seeded.projectB}/entries`, {
+      date: dayFromToday(0), title: "옛 링크", body: "## 내용\n\n사진\n",
+    });
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const form = new FormData();
+    form.append("file", new Blob([png], { type: "image/png" }), "옛 사진.png");
+    const saved = await (await fetch(`${BASE}/api/entries/${entry.id}/attachments`, { method: "POST", body: form })).json();
+    // 114 이전 모양을 손으로 심는다 — 감싸지 않은 링크.
+    const broken = saved.markdown.replace("](<", "](").replace(">)", ")");
+    await api.patch(`/api/entries/${entry.id}`, { body: `## 내용\n\n사진\n\n${broken}\n` });
+    try {
+      await go("#/settings");
+      const card = page.locator('[data-testid="link-fix"]');
+      await card.getByRole("button", { name: "점검하기" }).click();
+      await page.waitForTimeout(600);
+      expect((await card.innerText()).includes("문서 1건 · 링크 1개"), `센 결과: ${await card.innerText()}`);
+      await card.getByRole("button", { name: "고치기" }).click();
+      await page.waitForTimeout(900);
+      expect((await card.innerText()).includes("고쳤습니다"), "고친 뒤 안내");
+      const body = (await api.get(`/api/entries/${entry.id}`)).body;
+      expect(body.includes("](<../assets/"), `본문이 안 고쳐졌습니다: ${body}`);
+      await card.getByRole("button", { name: "다시 세기" }).click();
+      await page.waitForTimeout(600);
+      expect((await card.innerText()).includes("고칠 링크가 없습니다"), "두 번째는 0건");
+    } finally {
+      await api.delete(`/api/entries/${entry.id}`);
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

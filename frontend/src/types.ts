@@ -351,6 +351,23 @@ export interface RenumberPlan {
 }
 
 /** 오류 기록 한 줄. 과제 내용은 담기지 않는다 — 동작과 오류 종류뿐이다. */
+/** 깨진 첨부 링크 정리 결과 (TODO 116). applied=false 면 세기만 한 것이다. */
+export interface LinkFixReport {
+  applied: boolean;
+  documents: {
+    project_id: string;
+    project_title: string;
+    kind: "overview" | "entry" | "report";
+    rel_path: string;
+    links: number;
+    frozen: boolean;
+  }[];
+  document_count: number;
+  link_count: number;
+  /** 확정된 보고라 건너뛴 문서 수 — 포함하겠다고 하면 0 이 된다 */
+  skipped_frozen: number;
+}
+
 export interface ErrorEntry {
   at: string;
   /** 실패한 동작. 예: "PATCH /api/reports/3" */

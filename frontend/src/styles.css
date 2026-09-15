@@ -1380,3 +1380,11 @@ h2 .copy-table, h1 .copy-table { margin-left: 10px; vertical-align: middle; }
 .help-faq dt { font-weight: 600; margin-top: 12px; }
 .help-faq dt:first-child { margin-top: 0; }
 .help-faq dd { margin: 4px 0 0; color: var(--muted-strong); line-height: 1.55; }
+
+/* 첨부 링크 정리 (TODO 116) — 오류 기록 카드와 같은 무게 */
+.link-fix .check-label { margin: 6px 0 4px; }
+.link-fix-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.link-fix-list li { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.link-fix-list a { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+.link-fix-list a:hover { text-decoration: underline; }
+.link-fix-list .muted { font-size: 12px; }

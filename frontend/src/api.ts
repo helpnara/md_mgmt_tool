@@ -1,4 +1,4 @@
-import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing } from "./types";
+import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -229,6 +229,14 @@ export const api = {
       method: "POST",
     }),
   errors: () => request<{ items: ErrorEntry[]; keep_months: number }>("/api/errors"),
+  /** 깨진 첨부 링크 정리 (TODO 116). 먼저 세고, 그다음 고친다. */
+  linkFixScan: (includeFrozen: boolean) =>
+    request<LinkFixReport>(`/api/maintenance/link-fix${includeFrozen ? "?include_frozen=true" : ""}`),
+  linkFixApply: (includeFrozen: boolean) =>
+    request<LinkFixReport>("/api/maintenance/link-fix", {
+      method: "POST",
+      body: JSON.stringify({ include_frozen: includeFrozen }),
+    }),
   clearErrors: () => request<{ removed_files: number }>("/api/errors", { method: "DELETE" }),
   reindex: () =>
     request<{ indexed: number; problems: { path: string; reason: string }[] }>("/api/reindex", {
