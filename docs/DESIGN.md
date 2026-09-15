@@ -235,10 +235,25 @@ audience:                      # 팀회의 / 부서장 / 고객사 …
 | `investment` | 투자 |
 | `plan_report` | 기획보고 |
 | `national` | 국책과제 |
+| `maintenance` | 유지보수 (TODO 99) |
 
 * 보드의 칸은 **상태**를 따른다. 속성은 카드·목록에 배지로 표시하고 필터로 거른다.
-* 상태·속성 목록은 `config.py` 상수 한 곳에서 관리한다.
-* **예전 값 자동 변환**: 상태에 `기획보고`가 들어 있던 과제는 읽는 시점에 `상태=예정 + 속성=기획보고` 로, `제안`은 `예정`, `검토`는 `검토중`으로 옮긴다. 파일을 손댈 필요가 없다.
+* **상태는 `config.py` 상수**다. 끝나는 방식이 바뀌면 집계·보고 후보·마감 경고가 모두 흔들리므로
+  코드에 둔다.
+* **속성은 설정에서 더하고 빼고 고친다** (TODO 100, `settings.json` 의 `project_types` — 4.8).
+  팀마다 쓰는 말이 다르고, 그 말은 집계의 축일 뿐 규칙을 바꾸지 않는다. 위 여섯은 **아직 정한 적이
+  없을 때 쓰는 기본값**이다.
+
+속성을 설정으로 옮기면서 못 박은 것 셋.
+
+| 무엇 | 왜 |
+|---|---|
+| `null` 과 `[]` 은 다르다 | `null` 은 *아직 정한 적 없음*(기본 여섯을 쓴다), `[]` 은 *속성을 쓰지 않기로 정함*이다. 같게 두면 속성을 다 뺀 팀에게 다음 실행에서 여섯이 되살아난다 |
+| 이름을 고쳐도 과제는 속성을 잃지 않는다 | 과제 파일에 남는 것은 라벨이 아니라 **키**다. 라벨은 화면에서만 붙인다 |
+| 쓰고 있는 속성은 뺄 수 없다 | 몇 건이 쓰는지 설정 화면이 줄마다 적고, 서버가 거절한다. 빼면 그 과제들의 속성이 *없는 키*가 된다 |
+
+**예전 값 자동 변환** — 상태에 `기획보고`가 들어 있던 과제는 읽는 시점에 `상태=예정 + 속성=기획보고` 로,
+`제안`은 `예정`, `검토`는 `검토중`으로 옮긴다. 파일을 손댈 필요가 없다.
 
 ### 4.5.0 별도 보고 불필요 (`no_report`)
 
@@ -448,6 +463,27 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 **`project_partner` — 유관부서** (TODO 92). `(project_id, team, person)` 한 쌍이 한 줄이다.
 담당자가 없는 팀은 `person = ''` 한 줄로 남는다. 팀과 사람을 한 문자열로 묶지 않는
 이유는 4.5.3 에 적었다.
+
+### 4.8 설정 파일 (`vault/settings.json`)
+
+색인(`.index/`)은 언제든 다시 만들 수 있지만 **설정은 사용자가 정한 것이라 파생물이 아니다.**
+그래서 DB 가 아니라 vault 안의 JSON 한 개에 둔다 — vault 폴더만 복사하면 설정까지 따라온다.
+
+| 열쇠 | 뜻 | 관련 |
+|---|---|---|
+| `author` | 작성자. 진행일지·보고에 남는다 | TODO 8 |
+| `people` | 담당자 명부(이름·사번·계정 자리) | 38-2 |
+| `project_types` | 과제 속성 목록. `null` 이면 기본 여섯 | 99 · 100 |
+| `project_code` | 과제 번호의 팀 코드 (`2026-소재-001`) | 38-1 · 59 |
+| `report_weekday` | 주간 보고 요일(0=월). 보고 예정일·배너·초안 기본 날짜가 전부 이 값을 본다 | 5.7 |
+| `entry_templates` · `report_template` | 진행일지(속성별)·보고 초안 서식 | 29 |
+| `ai_prompt_prefix` · `ai_prompt_suffix` | AI 프롬프트 앞뒤 글 | 71 · 5.13 |
+| `backup_dir` · `backup_keep` · `backup_every_hours` | 자동 백업. 폴더를 비우면 꺼진다. **vault 안쪽은 넣을 수 없다** | T21 · 97 |
+
+읽을 때 기본값과 합치므로 **열쇠가 빠져 있어도 동작한다.** 새 항목을 더할 때 기존 파일을 고칠
+필요가 없고, 반대로 모르는 열쇠는 그대로 두고 지나간다(손으로 적어 둔 메모를 지우지 않는다).
+
+---
 
 ## 5. 핵심 기능 설계
 
@@ -747,10 +783,13 @@ score = elapsed + unreported_entries × 0.5
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET | `/api/projects` | 목록. `?status=&group=&tag=&owner=&q=&year=&sort=&order=` |
-| POST | `/api/projects` | 과제 생성 (폴더 + index.md 생성) |
-| GET | `/api/projects/{id}` | 개요 + 일지 목록 요약 |
+| GET | `/api/projects` | 목록. `?status=&type=&group=&tag=&owner=&partner=&q=&year=&done_year=&verified=&due=&sort=&order=` (`done_year` 완료일 기준 · `verified=none` 실증효과 미입력 — TODO 104 · 106) |
+| POST | `/api/projects` | 과제 생성 (폴더 + index.md 생성). 번호의 연도는 **시작일**을 따른다 (95) |
+| GET | `/api/projects/next-id` | 저장하면 붙을 번호를 미리 보여 준다 (`?start_date=`, 95) |
+| GET | `/api/projects/{id}` | 개요 + 일지 목록 요약. 답하지 않은 지시·다음 할 일·개요 작성 여부를 함께 준다 (107 · 112 · 106-B) |
 | PATCH | `/api/projects/{id}` | 메타 수정 → front matter 재작성 |
+| GET/POST | `/api/projects/{id}/year-fix` | 번호의 연도가 시작일과 어긋날 때 — 옮길 번호 미리보기 / 실제로 옮기기 (폴더·첨부·버전까지, 95) |
+| POST | `/api/projects/{id}/clone` | 이 과제를 바탕으로 새 과제. 개요·담당자·유관부서·태그만 넘어간다 (109) |
 | POST | `/api/projects/{id}/archive` | `.trash/`로 이동 |
 | GET | `/api/projects/{id}/export` | 단일 md 내보내기 (5.4) |
 
@@ -766,13 +805,14 @@ score = elapsed + unreported_entries × 0.5
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET | `/api/reports` | 전체 보고 이력 (`?year=&owner=&q=`) |
+| GET | `/api/reports` | 전체 보고 이력 (`?audience=&from=&to=&q=&state=&feedback=open` — `feedback=open` 은 답하지 않은 지시만, 107) |
 | GET | `/api/projects/{id}/reports` | 과제별 보고 이력(날짜 역순) |
 | POST | `/api/projects/{id}/reports/draft` | 미보고 진행일지로 보고 초안 생성 |
 | GET/PATCH | `/api/reports/{report_id}` | 보고 문서 조회/수정(확정 전에만 본문 수정) |
 | GET | `/api/reports/{report_id}/diff` | 지난 보고 대비 변경분 |
 | GET | `/api/reports/{report_id}/ai-prompt` | AI 요약용 프롬프트 생성 (5.13 — 호출은 하지 않는다) |
 | POST | `/api/reports/{report_id}/freeze` · `/unfreeze` | 보고 확정 / 확정 해제(이력에 표시) |
+| POST | `/api/reports/{report_id}/feedback-done` | 보고 뒤 받은 지시에 **답했다/아직** (107). 지시 본문은 `PATCH` 의 `feedback` 으로 — 확정 뒤에도 쓸 수 있는 유일한 칸이다 |
 | DELETE | `/api/reports/{report_id}` | 보고 삭제(`.trash/` 이동) |
 | GET/POST | `/api/reports/{report_id}/attachments` | 보고 자료(xlsx·이미지) 목록·업로드 |
 | GET | `/api/report-candidates` | 보고 대상 후보(경과일·미보고 건수·점수). `no_report` 과제는 뺀다 |
@@ -793,7 +833,7 @@ score = elapsed + unreported_entries × 0.5
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET | `/api/home` | 홈 대시보드(연도별 팀 현황, 팀원별·속성별 상태 여섯 칸, 효과 합계, 보고 횟수) |
+| GET | `/api/home` | 홈 대시보드(연도별 팀 현황, 팀원별·속성별·그룹별 상태 여섯 칸, 효과 합계, 보고 횟수, 이번 주 할 일). `?year=&period=H1\|H2\|Q1~Q4` — **날짜가 있는 숫자만** 기간을 따른다 (110, 5.15) |
 | GET | `/api/dashboard` | 과제 목록 상단 대시보드(상태별·속성별 과제 수, 마감 임박·초과, 보고 대상 상위 N건) |
 | GET | `/api/search?q=` | 통합 검색 (FTS5 trigram) |
 
@@ -812,11 +852,13 @@ score = elapsed + unreported_entries × 0.5
 |---|---|---|
 | GET/PUT/POST | `/api/people` | 담당자 명부 조회·저장·한 명 추가 |
 | POST | `/api/people/rename` | 담당자 표기 통일 (과제 파일까지 반영) |
-| GET/PUT | `/api/settings` | 설정 조회·저장(서식, 백업 설정, AI 프롬프트 머리말·꼬리말 포함) |
+| GET/PUT | `/api/settings` | 설정 조회·저장 (4.8 — 서식·백업·AI 프롬프트·보고 요일 등) |
+| GET/PUT | `/api/settings/project-types` | 과제 속성 목록. 줄마다 **몇 건이 쓰는지**가 함께 오고, 쓰는 속성은 뺄 수 없다 (100) |
+| GET/POST | `/api/folders` | 폴더 고르기 (`?path=`) — 하위 폴더 목록 / 새 폴더 만들기. 브라우저가 실제 경로를 주지 않아 서버가 목록을 준다 (97) |
 | GET | `/api/settings/defaults` | 설정을 비웠을 때 쓰이는 기본 서식 |
 | POST | `/api/settings/project-code/renumber/preview` | 과제번호 재부여 영향분석(바꾸지 않는다) |
 | POST | `/api/settings/project-code/renumber` | 과제번호 일괄 재부여 |
-| GET | `/api/meta` | 상태·태그·그룹·속성·회의체 등 필터용 목록 |
+| GET | `/api/meta` | 상태·태그·그룹·속성·유관부서·연도 등 **실제로 있는 것만** 담은 필터용 목록 (96) + 지금 실행 중인 배포본(`build`, 117) |
 | GET | `/api/health` | 상태 확인 |
 | POST | `/api/reindex` | 전체 재인덱싱 |
 
@@ -830,6 +872,7 @@ score = elapsed + unreported_entries × 0.5
 | GET | `/api/settings/backup/status` · POST `/api/settings/backup/run` | 백업 상태 · 지금 백업 |
 | GET | `/api/backup` | 전체 vault ZIP 내려받기 |
 | GET/DELETE | `/api/errors` | 오류 기록 조회·비우기 (5.10 — 과제 내용은 담지 않는다) |
+| GET/POST | `/api/maintenance/link-fix` | 쌓인 문서의 깨진 첨부 링크 — 세기(아무것도 바꾸지 않는다) / 한 번에 고치기 (116, 5.16) |
 
 ---
 
@@ -865,14 +908,20 @@ md_mgmt_tool/
 │   │   │   └── schema.sql       # 색인 스키마 (SCHEMA_VERSION 과 함께 움직인다)
 │   │   ├── api/                 # projects entries reports attachments activities
 │   │   │                        # home dashboard search export people settings
-│   │   │                        # meta trash versions errors
+│   │   │                        # meta trash versions errors folders linkfix
 │   │   └── services/            # projects entries reports attachments activities
 │   │                            # home dashboard search export people settings
 │   │                            # trash backup renumber errorlog ai_prompt
-│   │                            # thumbnails xlsx_preview
-│   └── tests/                   # pytest (백엔드 자동 시험)
+│   │                            # folders linkfix buildinfo
+│   └── tests/                   # pytest 50 파일 (백엔드 자동 시험)
 ├── frontend/
-│   ├── src/                     # components / api.ts / nav.ts / styles.css …
+│   ├── src/
+│   │   ├── api.ts               # 서버로 가는 길 한 곳
+│   │   ├── nav.ts               # 주소가 화면 상태를 든다 (5.12)
+│   │   ├── markdown.ts          # 렌더링 + 첨부 링크 기준 경로
+│   │   ├── plaintext.ts · table.ts · tsv.ts   # 엑셀 셀 복사 · 표 붙여넣기 · 표 복사 (108)
+│   │   ├── components/          # 화면 40여 개 — ProjectDetail Home Settings ReportEditor …
+│   │   └── styles.css           # 색·간격 토큰 한 곳
 │   └── dist/                    # 빌드 결과. Node 없는 PC 를 위해 저장소에 함께 둔다
 ├── tests/ui/                    # Playwright 화면 자동 시험 (screens.mjs, contrast.mjs)
 ├── tools/make_dist.py           # 오프라인 배포 ZIP 생성 (vendor/ wheel 동봉)
@@ -912,10 +961,14 @@ md_mgmt_tool/
 | **M5. 내보내기 & 백업** ✅ | 단일 md 병합(zip/inline/link), 보고 이력 포함, HTML, 전체 zip 백업 | 보고 직전 과제 이력을 md 한 개로 받아 그대로 붙여넣을 수 있다 |
 | **M5.5. 안전망 · 오프라인 배포** ✅ | 로컬 버전 보관(`.versions/`), 휴지통, 자동 백업, 오류 기록, 과제번호 일괄 재부여, `vendor/` wheel 을 동봉한 오프라인 설치 ZIP | 인터넷이 차단된 사내 PC 에서 압축을 풀고 `setup.bat` → `run.bat` 만으로 쓸 수 있다 |
 | **M5.6. 성과 집계 · 사람 관리** ✅ | 홈 대시보드(연도별 팀 현황 · 팀원별 · 속성별 상태 여섯 칸 · 효과 합계 · 보고 횟수), 과제 × 월 보고 표, AI 요약 프롬프트 생성, 팀원 역량 이력 | 팀장이 홈 화면 하나로 그 해 팀 현황을 읽고, 면담에서 볼 사람을 고를 수 있다 |
+| **M5.7. 실사용·전수 검토 반영** ✅ | 결함 고치기(81~83 · 91~96 · 103 · 114 · 117), 완료일·상태 변경 이력(104 · 105), 보고 지시사항(107), 표 복사(108), 과제 복제(109), 반기·분기(110), 도움말(111), 다음 할 일(112), 설정에서 속성 편집(100), 폴더 고르기(97), 점검 도구(116 · 117) | 쓰면서 나온 것과 **쓰기 전에 찾아낸 것**이 모두 TODO 로 들어와 배포본까지 간다. 한 묶음이 끝나면 그날 배포본을 만든다 |
 | **M6. 서버 확장 (선택)** ◀ 선택 | Docker 이미지, 간단 인증, 다중 사용자 대비 잠금 | 사내 서버에 올려 팀원이 조회 가능 |
 
 M1~M2까지가 첨부 관련 불편을 해소하는 최소 유용 제품(MVP)이고, **M4가 "보고 시점 예측"이라는 두 번째 핵심 가치**를 완성한다.
-M5.5·M5.6 은 로드맵에 없던 것이 아니라, M5 까지 만들어 놓고 실제로 쓰면서 필요해진 것을 TODO 로 받아 반영한 결과다(TODO 37~80). **남은 것은 M6 하나뿐이다.**
+M5.5·M5.6 은 로드맵에 없던 것이 아니라, M5 까지 만들어 놓고 실제로 쓰면서 필요해진 것을 TODO 로 받아 반영한 결과다(TODO 37~80).
+M5.7 도 같은 방식이되 출처가 둘이다 — **쓰면서 걸린 것**(91~102 · 114~117)과 2026-09-09 의
+[1인 팀장 관점 전수 검토](검토-1인팀장-2026-09-09.md)에서 **쓰기 전에 찾아낸 것**(103~112).
+**남은 것은 M6 하나뿐이다.**
 
 ---
 
@@ -1153,3 +1206,57 @@ vault 를 git 저장소로 두지 않기로 한 것과 같은 판단이다(§ R2
 상태별 수는 연도 기준 그대로다. 과제는 기간 안에 "있다/없다"로 자를 수 없기 때문이다 —
 3월에 시작해 9월까지 하는 과제는 1분기 것인가? 어떤 답을 골라도 그 수를 눌렀을 때 나오는
 목록과 어긋난다(5.8 의 첫 규칙). 자를 수 있는 것만 자르고, 화면이 그 사실을 한 줄로 적는다.
+
+## 5.16 첨부 링크와 파일 이름 — 사람이 읽는 이름을 지킨다 (TODO 114 · 116)
+
+첨부 파일 이름은 **공백과 한글을 일부러 남긴다.** 이 도구의 전제가 "탐색기에서 그대로 읽힌다" 라
+`측정 결과 (최종).png` 를 `chukjeong-gyeolgwa.png` 로 바꾸면 전제가 깨진다.
+
+그런데 마크다운은 링크 목적지를 **첫 공백까지**로 읽는다. `[이름](assets/측정 결과.png)` 은
+`측정` 에서 끊긴다. 둘 중 하나를 포기해야 하는 것처럼 보이지만, CommonMark 에 답이 있다 —
+목적지를 `<…>` 로 감싸면 공백과 괄호가 살아 있다. markdown-it·VS Code·GitHub·옵시디언이
+모두 그대로 읽는다.
+
+```
+![측정 결과.png](<../assets/2026-09-03/001-측정 결과.png>)
+```
+
+**감쌀 필요가 없으면 감싸지 않는다.** 이미 쌓인 문서와 같은 모양을 유지하는 편이, 모든 링크를
+한 번에 바꿔 diff 를 만드는 것보다 낫다. 판단은 `link_target()` 한 함수가 한다.
+
+그리고 **링크를 만드는 곳이 아니라 읽는 곳이 문제였다.** 감싼 링크를 못 읽는 자리가 하나라도
+남으면 그림은 뜨는데 고아 첨부로 세이거나 보고 초안에서 깨진다.
+
+| 읽는 자리 | 무엇을 하나 |
+|---|---|
+| `attachments.referenced_paths` | 고아 첨부 판정 — 감싼 링크도 참조로 센다 |
+| `reports._ENTRY_LINK_ANGLED` | 보고 초안이 진행일지 링크를 `../../` 로 옮길 때 |
+| `export.LINK_PATTERN` | 병합·zip·inline 내보내기. 다시 쓸 때도 감싼다 |
+| `plaintext.ts` | 엑셀 셀로 복사 — `[이미지: 이름]` 으로 접는다 |
+
+**이미 쌓인 문서는 자동으로 고치지 않는다.** 설정 → 점검의 **[첨부 링크 정리]**(TODO 116)가
+**먼저 세어 보여 주고**, 사용자가 누르면 고친다. 고치는 대상은 *그 과제의 실제 첨부 경로와
+글자가 정확히 같은 목적지*뿐이다 — 본문을 마크다운으로 해석해 "공백이 있으면 감싼다" 로 가면
+사람이 쓴 글 속의 괄호까지 건드린다. 확정된 보고는 기본으로 빼고(그 문서는 "그때 무엇을
+보고했는가"다), 저장 전 내용은 `.versions/` 에 남는다.
+
+## 5.17 지금 무엇이 돌고 있는가 (TODO 117)
+
+배포본을 덮어썼는데 새 기능이 안 보인다는 보고가 왔다. 압축 안에는 있었다. 원인은 셋 중
+하나였는데 — 브라우저가 옛 `index.html` 을 들고 있거나, 압축을 기존 폴더 *안에서* 풀었거나,
+도구를 켜 둔 채 덮어썼거나 — **어느 것인지 화면이 말해 주지 않아** 사용자도 나도 추측만 했다.
+(실제 원인은 첫 번째였다.)
+
+두 가지로 갈랐다.
+
+* **진입점은 캐시하지 않는다.** `index.html` 만 `Cache-Control: no-cache`. 묶음 파일은 이름에
+  해시가 있어 캐시해도 안전하고, 진입점만 매번 확인하면 새 배포본이 곧바로 보인다.
+  사용자가 Ctrl+F5 를 알아야 하는 설계는 설계가 아니다.
+* **설정 → 점검 맨 위에 실행 중인 배포본 이름.** `배포본-정보.txt`(make_dist 가 남긴다)를 읽어
+  `/api/meta` 의 `build` 로 준다. 저장소에서 바로 실행하면 그렇다고 적는다.
+  덮어쓴 뒤 이 줄이 옛 이름이면 남은 두 원인이고, 줄 자체가 안 바뀌면 캐시다.
+
+> 교훈은 기능이 아니라 **운영**에 있다. 배포하는 도구는 "지금 무엇이 돌고 있는가" 를 스스로
+> 말할 수 있어야 한다. 그 한 줄이 없으면 모든 문의가 추측으로 시작한다.
+> ([Lessons Learned](LESSONS-LEARNED.md) 4절에 점검표로 옮겨 두었다)
+
