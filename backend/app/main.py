@@ -174,4 +174,7 @@ if FRONTEND_DIST.exists():
             candidate = None
         if candidate is not None and candidate.is_file():
             return FileResponse(candidate)
-        return FileResponse(FRONTEND_DIST / "index.html")
+        # 진입점은 캐시하지 않는다 (TODO 117). 새 배포본을 덮어써도 브라우저가 옛 index.html 을
+        # 들고 있으면 옛 묶음(assets/index-<해시>.js)을 계속 부른다 — "새 기능이 안 보인다".
+        # 묶음 파일은 이름에 해시가 있어 캐시해도 안전하다. 진입점만 매번 확인하게 한다.
+        return FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})

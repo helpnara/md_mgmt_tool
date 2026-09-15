@@ -1388,3 +1388,6 @@ h2 .copy-table, h1 .copy-table { margin-left: 10px; vertical-align: middle; }
 .link-fix-list a { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
 .link-fix-list a:hover { text-decoration: underline; }
 .link-fix-list .muted { font-size: 12px; }
+
+/* 지금 실행 중인 배포본 (TODO 117) */
+.build-line { margin: -4px 0 10px; }

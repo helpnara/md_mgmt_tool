@@ -181,6 +181,19 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
           점검
           <span className="hint">뭔가 안 됐을 때 볼 자리</span>
         </h2>
+        {/* 지금 무엇이 돌고 있는가 (TODO 117). "덮어썼는데 새 기능이 없다" 를 여기서 가른다. */}
+        <p className="hint build-line" data-testid="build-line">
+          {meta.build ? (
+            <>
+              지금 실행 중인 배포본 <b>{meta.build.name}</b>
+              {meta.build.source && <span className="muted"> · 소스 {meta.build.source}</span>}
+              {meta.build.built && <span className="muted"> · 만든 날 {meta.build.built}</span>}
+            </>
+          ) : (
+            <>저장소에서 바로 실행 중입니다 (배포본 아님).</>
+          )}
+          {" "}새 배포본을 덮어쓴 뒤에도 이 이름이 그대로면 도구를 껐다 켜고 브라우저를 Ctrl+F5 로 새로고침하세요.
+        </p>
         <div className="settings-grid">
           <ErrorLogCard />
           <LinkFixCard />

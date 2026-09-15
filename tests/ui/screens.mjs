@@ -2435,6 +2435,15 @@ async function main() {
     }
   });
 
+  await check("설정 → 점검이 지금 무엇이 돌고 있는지 말한다 (TODO 117)", async () => {
+    await go("#/settings");
+    const line = await page.locator('[data-testid="build-line"]').innerText();
+    // 시험은 저장소에서 돌므로 "배포본 아님". 배포본에서는 배포본-정보.txt 의 이름이 선다.
+    expect(line.includes("저장소에서 바로 실행") || line.includes("지금 실행 중인 배포본"), `줄: ${line}`);
+    const html = await (await fetch(`${BASE}/`)).headers.get("cache-control");
+    expect(String(html).includes("no-cache"), `index.html 의 Cache-Control: ${html}`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

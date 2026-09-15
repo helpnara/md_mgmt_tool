@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from ..config import ACTIVITY_KINDS, COLLAPSED_STATUSES, STATUSES, get_settings
 from ..deps import get_db
+from ..services import buildinfo
 from ..services import home as home_service
 from ..services import settings as settings_service
 from ..vault.indexer import reindex_all
@@ -98,6 +99,8 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         # 유관부서 — 팀과 그쪽 담당자를 나눠 준다. 거르기는 둘 중 어느 쪽으로도 된다.
         "partner_teams": partner_teams,
         "partner_people": partner_people,
+        # 지금 돌고 있는 배포본 (TODO 117). 저장소에서 실행하면 None.
+        "build": buildinfo.read(),
         "audiences": audiences,
         # 담당자 명부 — 자동완성이 이것을 먼저 쓰고, 없는 이름이면 화면에서 물어본다.
         "people": settings_service.known_names(),

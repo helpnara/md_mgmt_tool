@@ -25,6 +25,8 @@ export interface Meta {
   /** 과제가 실제로 있는 해, 최근 것부터. 거르기 상자는 이것만 세운다 (TODO 96) */
   years: string[];
   owners: string[];
+  /** 지금 돌고 있는 배포본 — 배포본-정보.txt (TODO 117). 저장소에서 실행하면 null */
+  build?: { name: string; built?: string; source?: string } | null;
   /** 지금까지 적어 둔 유관부서와 그쪽 담당자 — 자동완성과 거르기에 쓴다 (TODO 92) */
   partner_teams: string[];
   partner_people: string[];
