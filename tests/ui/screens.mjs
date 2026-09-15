@@ -2363,6 +2363,45 @@ async function main() {
     }
   });
 
+  console.log("\n[17] 공백 있는 첨부 이름 · 검색창 비우기 (TODO 114 · 115)");
+  await check("이름에 공백·괄호가 있는 첨부가 본문에서 그대로 열린다", async () => {
+    const entry = await api.post(`/api/projects/${seeded.projectB}/entries`, {
+      date: dayFromToday(0), title: "공백 첨부", body: "## 내용\n\n측정 사진\n",
+    });
+    // 1×1 PNG. 시험은 그림이 아니라 링크가 살아 있는지를 본다.
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const form = new FormData();
+    form.append("file", new Blob([png], { type: "image/png" }), "측정 결과 (최종).png");
+    const uploaded = await fetch(`${BASE}/api/entries/${entry.id}/attachments`, { method: "POST", body: form });
+    expect(uploaded.status === 201, `업로드 ${uploaded.status}`);
+    const saved = await uploaded.json();
+    expect(saved.markdown.includes("](<../assets/"), `링크가 감싸이지 않았습니다: ${saved.markdown}`);
+    await api.patch(`/api/entries/${entry.id}`, { body: `## 내용\n\n측정 사진\n\n${saved.markdown}\n` });
+    try {
+      await go(`#/projects/${seeded.projectB}`);
+      const image = page.locator(".timeline .entry .markdown img").first();
+      expect((await image.count()) === 1, "본문에 그림이 서지 않았습니다");
+      const loaded = await image.evaluate((el) => el.complete && el.naturalWidth > 0);
+      expect(loaded, `그림이 열리지 않았습니다: ${await image.getAttribute("src")}`);
+      // 미리보기(평문)에서도 링크가 한 덩이로 읽혀야 한다.
+      expect(!(await page.locator(".timeline .entry .markdown").first().innerText()).includes("](<"), "링크 기호가 글자로 남았습니다");
+    } finally {
+      await api.delete(`/api/entries/${entry.id}`);
+    }
+  });
+
+  await check("검색 결과를 떠나면 검색창이 비워진다", async () => {
+    await go("#/search?q=" + encodeURIComponent("시제품"));
+    equal(await page.locator(".search-box input").inputValue(), "시제품", "검색 화면의 검색창");
+    await go("#/projects");
+    equal(await page.locator(".search-box input").inputValue(), "", "떠난 뒤 검색창");
+    await go("#/search?q=" + encodeURIComponent("시제품"));
+    equal(await page.locator(".search-box input").inputValue(), "시제품", "돌아오면 주소의 검색어");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

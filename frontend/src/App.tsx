@@ -108,7 +108,9 @@ export default function App() {
     const onHashChange = () => {
       const next = readRoute();
       setRoute(next);
-      if (next.name === "search") setTerm(next.query);
+      // 검색 결과를 떠나면 검색창을 비운다 (TODO 115). 지난 검색어가 남아 있으면
+      // 다음 화면에서 그것이 지금 걸린 조건처럼 보인다.
+      setTerm(next.name === "search" ? next.query : "");
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);

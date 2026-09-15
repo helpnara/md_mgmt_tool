@@ -30,7 +30,8 @@ PROJECT_DOC_DIR = ""
 MIN_FREE_BYTES = 200 * 1024 * 1024  # 여유 공간이 이보다 적으면 중단한다
 THUMB_MAX = 480
 _UNSAFE = re.compile(r"[\\/:*?\"<>|\x00-\x1f]+")
-_REF_PATTERN = re.compile(r"\]\(\s*([^)\s]+)")
+# 링크 목적지 둘 — `](<공백 있는 이름.png>)` 과 `](이름.png)`. 앞의 것이 있으면 그것.
+_REF_PATTERN = re.compile(r"\]\(\s*(?:<([^>\n]*)>|([^)\s]+))")
 
 
 def safe_filename(name: str) -> str:
@@ -291,7 +292,18 @@ def markdown_link(rel_path: str, orig_name: str, doc_dir: str, image: bool) -> s
     VS Code·GitHub·옵시디언 등 외부 뷰어에서도 파일을 찾는다.
     """
     link = posixpath.relpath(rel_path, doc_dir) if doc_dir else rel_path
-    return f"{'!' if image else ''}[{orig_name}]({link})"
+    return f"{'!' if image else ''}[{orig_name}]({link_target(link)})"
+
+
+def link_target(link: str) -> str:
+    """마크다운 링크의 목적지 자리에 넣을 글 (TODO 114).
+
+    파일 이름에 **공백이나 괄호**가 있으면 `[이름](assets/측정 결과.png)` 은 공백에서
+    끊겨 링크가 깨진다. CommonMark 는 그런 목적지를 `<…>` 로 감싸게 되어 있고,
+    markdown-it·VS Code·GitHub·옵시디언이 모두 그대로 읽는다. 감쌀 필요가 없는
+    이름은 그대로 둔다 — 이미 쌓인 문서와 같은 모양을 유지한다.
+    """
+    return f"<{link}>" if any(ch in link for ch in " ()") else link
 
 
 def resolve_link(link: str, doc_dir: str) -> str | None:
@@ -306,7 +318,8 @@ def referenced_paths(documents: Iterable[tuple[str, str]]) -> set[str]:
     """(본문, 문서 폴더) 목록에서 참조하는 첨부 경로를 과제 폴더 기준으로 모은다."""
     found: set[str] = set()
     for body, doc_dir in documents:
-        for link in _REF_PATTERN.findall(body or ""):
+        for angled, plain in _REF_PATTERN.findall(body or ""):
+            link = angled or plain
             resolved = resolve_link(link, doc_dir)
             if resolved:
                 found.add(resolved)

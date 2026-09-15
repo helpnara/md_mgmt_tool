@@ -23,6 +23,8 @@ from .projects import now_iso, project_dir
 
 # 진행일지 본문의 첨부 링크(../assets/…)를 보고 문서 위치에서 본 경로로 바꾼다.
 _ENTRY_LINK = re.compile(r"\]\(\s*\.\./(assets/[^)\s]+)")
+# 공백 있는 이름은 `](<../assets/…>)` 로 감싸여 있다 (TODO 114). 같은 자리로 옮긴다.
+_ENTRY_LINK_ANGLED = re.compile(r"\]\(<\.\./(assets/[^>\n]*)>")
 
 DRAFT_TEMPLATE = """## 보고 요약
 
@@ -97,6 +99,7 @@ def _draft_body(entries: list[sqlite3.Row]) -> str:
     for row in entries:
         # 진행일지에서 옮겨 온 첨부 링크가 보고 문서 위치에서도 열리게 경로를 고친다.
         body = _ENTRY_LINK.sub(r"](../../\1", row["body"] or "")
+        body = _ENTRY_LINK_ANGLED.sub(r"](<../../\1>", body)
         sections.append(f"### {row['date']} {row['title']}\n\n{body.strip()}")
 
     return (

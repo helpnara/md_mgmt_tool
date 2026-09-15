@@ -15,11 +15,12 @@ from pathlib import Path
 
 from ..config import STATUS_LABELS
 from . import settings as settings_service
-from .attachments import ENTRY_DOC_DIR, PROJECT_DOC_DIR, resolve_link
+from .attachments import ENTRY_DOC_DIR, PROJECT_DOC_DIR, resolve_link, link_target
 from .projects import project_dir
 from .reports import report_doc_dir
 
-LINK_PATTERN = re.compile(r"(!?)\[([^\]]*)\]\(\s*([^)\s]+)\s*\)")
+# 목적지가 `<…>` 로 감싸인 링크(공백 있는 파일 이름)도 잡는다 (TODO 114).
+LINK_PATTERN = re.compile(r"(!?)\[([^\]]*)\]\(\s*(?:<([^>\n]*)>|([^)\s]+))\s*\)")
 INLINE_LIMIT = 5 * 1024 * 1024  # 이보다 큰 이미지는 인라인하지 않는다 (파일이 감당 못 하게 커진다)
 
 
@@ -61,15 +62,16 @@ def _rewrite_links(body: str, doc_dir: str, mode: str, directory: Path, dir_name
     """문서마다 다른 상대 링크를, 병합 문서 하나에서도 통하도록 바꾼다."""
 
     def replace(match: re.Match[str]) -> str:
-        bang, text, link = match.groups()
+        bang, text, angled, plain = match.groups()
+        link = angled if angled is not None else plain
         target = resolve_link(link, doc_dir)
         if target is None:
             return match.group(0)  # 외부 링크는 그대로 둔다
 
         if mode == "zip":
-            return f"{bang}[{text}]({target})"
+            return f"{bang}[{text}]({link_target(target)})"
         if mode == "link":
-            return f"{bang}[{text}](/files/{dir_name}/{target})"
+            return f"{bang}[{text}]({link_target(f'/files/{dir_name}/{target}')})"
 
         # inline: 이미지는 data URI로 심고, 나머지 파일은 이름만 남긴다.
         path = directory / target
@@ -94,7 +96,8 @@ def merged_markdown(
 
     def convert(body: str, doc_dir: str) -> str:
         for match in LINK_PATTERN.finditer(body or ""):
-            target = resolve_link(match.group(3), doc_dir)
+            angled, plain = match.group(3), match.group(4)
+            target = resolve_link(angled if angled is not None else plain, doc_dir)
             if target:
                 used.append(target)
         return _rewrite_links(body, doc_dir, mode, directory, dir_name)
