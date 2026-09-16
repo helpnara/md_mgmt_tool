@@ -1391,3 +1391,29 @@ h2 .copy-table, h1 .copy-table { margin-left: 10px; vertical-align: middle; }
 
 /* 지금 실행 중인 배포본 (TODO 117) */
 .build-line { margin: -4px 0 10px; }
+
+/* ── 떠난 담당자 (TODO 122) ─────────────────────────────────── */
+.tag.left-tag { margin-left: 5px; background: #f1f3f5; color: var(--muted-strong); border: 1px solid var(--border); font-size: 11px; }
+.home-owner-gaps { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.home-owner-gaps li {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd;
+}
+.home-owner-gaps a { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+.home-owner-gaps a:hover { text-decoration: underline; }
+.home-owner-gaps .muted { font-size: 12px; }
+
+/* ── 담당자 명부 — 스크롤·찾기 (TODO 121) ────────────────────
+   인원이 늘어도 카드 키가 자라지 않게 목록 안에서만 스크롤한다. 머리글은 붙여 둔다 —
+   스크롤한 뒤에도 어느 칸이 사번인지 보여야 한다. */
+.people-scroll { max-height: 320px; overflow-y: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; }
+.people-scroll .people-table { margin: 0; }
+.people-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: 0 1px 0 var(--border); }
+.people-find { flex-direction: row; align-items: center; gap: 8px; margin-top: 8px; }
+.people-find input { max-width: 200px; }
+.people-find .muted { font-size: 12px; }
+.person-left td { color: var(--muted-strong); }
+.person-left-cell { display: flex; gap: 4px; align-items: center; }
+.person-left-cell input[type="date"] { width: 140px; }
+.person-left-cell select { width: auto; min-width: 70px; }
+.person-actions { display: flex; gap: 4px; white-space: nowrap; }

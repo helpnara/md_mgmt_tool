@@ -103,7 +103,10 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "build": buildinfo.read(),
         "audiences": audiences,
         # 담당자 명부 — 자동완성이 이것을 먼저 쓰고, 없는 이름이면 화면에서 물어본다.
+        # **떠난 사람도 여기 남는다** — 빼면 지난해 담당자가 "명부에 없는 이름" 으로 잡힌다.
         "people": settings_service.known_names(),
+        # 그중 떠난 사람 (TODO 122). 화면이 딱지를 붙이고 자동완성에서 뒤로 민다.
+        "people_left": settings_service.left_people(),
         "project_code": settings_service.project_code(),
         "vault": str(get_settings().vault_dir),
         "report_cycle_days": get_settings().report_cycle_days,

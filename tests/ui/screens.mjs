@@ -2444,6 +2444,96 @@ async function main() {
     expect(String(html).includes("no-cache"), `index.html 의 Cache-Control: ${html}`);
   });
 
+  console.log("\n[18] 전배·퇴사한 담당자 (TODO 122)");
+  await check("떠난 날을 적으면 홈이 대체 담당자를 찾으라고 알린다", async () => {
+    const made = await api.post("/api/projects", {
+      title: "담당자 공백 과제", status: "in_progress", owners: ["홍길동"],
+    });
+    const before = await api.get("/api/people");
+    try {
+      await api.put("/api/people", {
+        people: [...before.people, { name: "홍길동", left_on: "2026-09-30", left_reason: "전배" }],
+      });
+      // 명부를 API 로 바꿨으므로 meta 를 다시 읽게 한다
+      // (실제로는 설정 화면이 저장하면서 다시 읽는다).
+      await page.reload({ waitUntil: "networkidle" });
+      await go("#/");
+      const band = page.locator('[data-testid="owner-gaps"]');
+      equal(await band.count(), 1, "홈의 대체 담당자 줄");
+      expect((await band.innerText()).includes("담당자 공백 과제"), "과제 이름");
+      expect((await band.innerText()).includes("전배"), "사유 딱지");
+      // 말한 수와 데려가는 목록이 같아야 한다 (DESIGN 5.8)
+      const link = page.locator('.home-week a[href="#/projects?owner_left=1"]').first();
+      const said = Number((await link.innerText()).match(/(\d+)건/)[1]);
+      await link.click();
+      await page.waitForTimeout(900);
+      equal(await page.locator("table.grid tbody tr").count(), said, "목록 줄 수");
+      expect((await page.locator("table.grid tbody").innerText()).includes("전배"), "목록의 딱지");
+    } finally {
+      await api.put("/api/people", { people: before.people });
+      await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  });
+
+  await check("명부에서 넘기면 끝난 과제는 그대로 두고 홈의 알림이 사라진다", async () => {
+    const live = await api.post("/api/projects", {
+      title: "넘길 과제", status: "in_progress", owners: ["홍길동"],
+    });
+    const done = await api.post("/api/projects", {
+      title: "이미 끝난 과제", status: "done", owners: ["홍길동"],
+    });
+    const before = await api.get("/api/people");
+    try {
+      await api.put("/api/people", {
+        people: [...before.people, { name: "홍길동", left_on: "2026-09-30", left_reason: "퇴사" }],
+      });
+      await page.reload({ waitUntil: "networkidle" });
+      await go("#/settings");
+      const card = page.locator(".card", { hasText: "담당자 명부" }).first();
+      // 이름은 input 안에 있어 글자로는 찾히지 않는다 — 줄에 붙여 둔 이름으로 찾는다.
+      const row = card.locator('tr[data-name="홍길동"]').first();
+      expect((await row.innerText()).includes("남은 1건"), `남은 건수: ${await row.innerText()}`);
+      // 넘기기는 prompt(받을 사람) → confirm 순이다. 위쪽 전역 handler 는 글자 없이 accept 만
+      // 하므로 잠시 걷어내고 이 시험의 것으로 바꾼다 (끝나면 되돌린다).
+      page.removeAllListeners("dialog");
+      page.on("dialog", (dialog) =>
+        dialog.type() === "prompt" ? dialog.accept("김현우") : dialog.accept(),
+      );
+      await row.getByRole("button", { name: "넘기기" }).click();
+      await page.waitForTimeout(1500);
+      equal((await api.get(`/api/projects/${live.id}`)).owners.join(), "김현우", "넘어간 과제");
+      equal((await api.get(`/api/projects/${done.id}`)).owners.join(), "홍길동", "끝난 과제는 그대로");
+      await go("#/");
+      equal(await page.locator('[data-testid="owner-gaps"]').count(), 0, "알림이 사라진다");
+    } finally {
+      page.removeAllListeners("dialog");
+      page.on("dialog", (dialog) => dialog.accept());
+      await api.put("/api/people", { people: before.people });
+      for (const item of [live, done]) {
+        await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
+      }
+    }
+  });
+
+  await check("명부에 찾기 칸과 스크롤이 있다 (TODO 121)", async () => {
+    const before = await api.get("/api/people");
+    const many = Array.from({ length: 12 }, (_, i) => ({ name: `시험담당${i + 1}` }));
+    try {
+      await api.put("/api/people", { people: [...before.people, ...many] });
+      await go("#/settings");
+      const card = page.locator(".card", { hasText: "담당자 명부" }).first();
+      equal(await card.locator(".people-scroll").count(), 1, "스크롤 상자");
+      const box = await card.locator(".people-scroll").boundingBox();
+      expect(box.height <= 340, `목록 높이가 고정되지 않았습니다: ${box.height}`);
+      await card.locator(".people-find input").fill("시험담당1");
+      await page.waitForTimeout(300);
+      // 시험담당1 · 10 · 11 · 12 넷이 남는다
+      equal(await card.locator("tbody tr").count(), 4, "찾기 결과");
+    } finally {
+      await api.put("/api/people", { people: before.people });
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

@@ -94,6 +94,12 @@ export const api = {
     request<{ people: Person[] }>("/api/people", { method: "PUT", body: JSON.stringify({ people }) }),
   addPerson: (name: string) =>
     request<{ people: Person[] }>("/api/people", { method: "POST", body: JSON.stringify({ name }) }),
+  /** 담당자를 넘긴다 (TODO 122). 표기 통일과 달리 **명부는 그대로** 두고, 끝난 과제는 뺀다. */
+  handover: (old: string, next: string, includeFinished = false) =>
+    request<{ count: number; changed: string[] }>("/api/people/handover", {
+      method: "POST",
+      body: JSON.stringify({ old, new: next, include_finished: includeFinished }),
+    }),
   renameOwner: (old: string, next: string) =>
     request<{ count: number; changed: string[] }>("/api/people/rename", {
       method: "POST",

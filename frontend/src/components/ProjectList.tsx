@@ -9,6 +9,7 @@ import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
 import CopyTableButton from "./CopyTableButton";
+import { leftLabel } from "../people";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
 
 interface Props {
@@ -27,6 +28,8 @@ const DEFAULT_FILTERS = {
   // 홈에서만 거는 조건 — 상자는 없고 주소로만 온다. 완료일의 연도(TODO 104)와
   // "완료했는데 실증효과를 안 적은 것"(TODO 106-C).
   done_year: "", verified: "",
+  // 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 홈이 이리로 데려온다.
+  owner_left: "",
 };
 
 /**
@@ -389,7 +392,18 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                 </td>
                 <td>{project.group ?? "—"}</td>
                 <td className="owners">
-                  {project.owners.length > 0 ? project.owners.join(", ") : "—"}
+                  {project.owners.length > 0
+                    ? project.owners.map((name, i) => (
+                        <span key={name}>
+                          {i > 0 && ", "}
+                          {name}
+                          {/* 떠난 사람은 이름 옆에 딱지. 이름 자체는 지우지 않는다 (TODO 122) */}
+                          {leftLabel(meta, name) && (
+                            <span className="tag left-tag">{leftLabel(meta, name)}</span>
+                          )}
+                        </span>
+                      ))
+                    : "—"}
                 </td>
                 <td className="tags">
                   {project.tags.map((tag) => (

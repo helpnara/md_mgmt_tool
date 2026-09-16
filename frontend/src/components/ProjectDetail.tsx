@@ -15,6 +15,7 @@ import ReportEditor from "./ReportEditor";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import ProjectForm from "./ProjectForm";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
+import { leftLabel } from "../people";
 
 interface Props {
   projectId: string;
@@ -363,7 +364,21 @@ export default function ProjectDetail({
               <span>{periodText(project.start_date, project.due_date)}</span>
               {project.completed_at && <span>완료 {project.completed_at}</span>}
               {due && <span className={`due due-${due.tone}`}>{due.text}</span>}
-              {project.owners.length > 0 && <span>담당 {project.owners.join(", ")}</span>}
+              {project.owners.length > 0 && (
+                <span>
+                  담당{" "}
+                  {project.owners.map((name, i) => (
+                    <span key={name}>
+                      {i > 0 && ", "}
+                      {name}
+                      {/* 떠난 사람이면 딱지. 이름은 지우지 않는다 (TODO 122) */}
+                      {leftLabel(meta, name) && (
+                        <span className="tag left-tag">{leftLabel(meta, name)}</span>
+                      )}
+                    </span>
+                  ))}
+                </span>
+              )}
               <span>최근 업데이트 {formatDate(project.updated_at)}</span>
             </div>
             {/* 유관부서 (TODO 92). 누르면 그 팀·사람과 함께 하는 과제만 걸러 본다 —

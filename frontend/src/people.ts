@@ -12,3 +12,14 @@ export function splitPeople(value: string): string[] {
   }
   return names;
 }
+
+/**
+ * 떠난 사람이면 딱지 문구(전배·퇴사)를, 아니면 빈 글자를 돌려준다 (TODO 122).
+ *
+ * 이름을 지우지 않는 것이 이 기능의 요점이라 **화면 어디서나 같은 판단**을 써야 한다.
+ * 사유를 안 적었으면 `떠남` 으로 적는다 — 날짜만 넣고 사유를 비워 둘 수 있기 때문이다.
+ */
+export function leftLabel(meta: { people_left?: { name: string; left_reason?: string }[] }, name: string): string {
+  const found = meta.people_left?.find((person) => person.name === name);
+  return found ? found.left_reason || "떠남" : "";
+}

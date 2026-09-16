@@ -191,11 +191,25 @@ def list_projects(
     done_year: str | None = Query(None, pattern=r"^(\d{4})?$"),
     # 완료했는데 실증효과를 안 적은 과제만 (TODO 106-C). "none" 하나만 받는다.
     verified: str | None = Query(None, pattern="^(none)?$"),
+    # 떠난 담당자가 남아 있는 **끝나지 않은** 과제만 (TODO 122). 홈이 이리로 이어 준다.
+    owner_left: str | None = Query(None, pattern="^(1)?$"),
     sort: str = Query("updated"),
     # 열 머리글을 눌러 방향을 뒤집는다 (TODO 57). 정렬 키는 SORTS 가 정의한다.
     order: str | None = Query(None, pattern="^(asc|desc)$"),
 ) -> list[dict]:
     where, params = [], []
+    if owner_left:
+        names = [person["name"] for person in settings_service.left_people()]
+        if not names:
+            return []  # 떠난 사람이 없으면 조건에 맞는 과제도 없다
+        marks = ",".join("?" for _ in names)
+        unfinished = ",".join("?" for _ in FINISHED_STATUSES)
+        where.append(
+            f"p.status NOT IN ({unfinished})"
+            f" AND p.id IN (SELECT po.project_id FROM project_owner po WHERE po.name IN ({marks}))"
+        )
+        params.extend(FINISHED_STATUSES)
+        params.extend(names)
     if status:
         where.append("p.status = ?")
         params.append(status)

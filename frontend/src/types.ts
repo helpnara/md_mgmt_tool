@@ -27,6 +27,8 @@ export interface Meta {
   owners: string[];
   /** 지금 돌고 있는 배포본 — 배포본-정보.txt (TODO 117). 저장소에서 실행하면 null */
   build?: { name: string; built?: string; source?: string } | null;
+  /** 명부에서 떠난 사람 — 딱지와 자동완성 순서에 쓴다 (TODO 122) */
+  people_left?: Person[];
   /** 지금까지 적어 둔 유관부서와 그쪽 담당자 — 자동완성과 거르기에 쓴다 (TODO 92) */
   partner_teams: string[];
   partner_people: string[];
@@ -217,6 +219,12 @@ export interface Person {
   employee_id: string;
   account: string;
   used?: number;
+  /** 아직 끝나지 않은 과제 중 이 사람이 담당인 수 (TODO 122) */
+  unfinished?: number;
+  /** 떠난 날. 비어 있으면 지금 있는 사람이다 (TODO 122) */
+  left_on?: string;
+  /** 전배 · 퇴사 (TODO 122) */
+  left_reason?: string;
 }
 
 export interface AppSettings {
@@ -477,6 +485,9 @@ export interface Home {
     /** 과제별 다음 할 일 — 최근 진행일지의 계획 칸 (TODO 112). 앞의 몇 건 */
     plans: HomePlan[];
     plans_total: number;
+    /** 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 건수는 **과제 수** 다 */
+    owner_gaps: OwnerGap[];
+    owner_gaps_total: number;
   };
   team: HomeTeam;
   /** 최근 몇 해를 나란히. 왼쪽이 과거다. */
@@ -486,6 +497,16 @@ export interface Home {
   types: HomeSlice[];
   /** 그룹(주제)별. 속성별과 같은 모양이고, 자유 입력이라 수가 늘 수 있다 (TODO 90) */
   groups: HomeSlice[];
+}
+
+/** 대체 담당자를 정해야 하는 과제 한 줄 (TODO 122). */
+export interface OwnerGap {
+  id: string;
+  title: string;
+  status: string;
+  owner: string;
+  left_reason: string;
+  left_on: string;
 }
 
 /** 홈에 서는 과제별 다음 할 일 (TODO 112). */

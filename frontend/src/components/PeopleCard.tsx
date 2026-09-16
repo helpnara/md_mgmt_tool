@@ -16,6 +16,8 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [unregistered, setUnregistered] = useState<{ name: string; used: number }[]>([]);
   const [busy, setBusy] = useState(false);
+  // 스무 명이 넘으면 스크롤보다 이름 한 글자가 빠르다 (TODO 121)
+  const [find, setFind] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,11 +85,36 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
       const rest = prev.filter((_, i) => i !== index);
       const added = names
         .filter((name) => !rest.some((person) => person.name === name))
-        .map((name) => ({ name, employee_id: "", account: "" }));
+        .map((name) => ({ name, employee_id: "", account: "", left_on: "", left_reason: "" }));
       return [...rest, ...added].sort((a, b) => a.name.localeCompare(b.name, "ko"));
     });
 
+  /** 담당자를 넘긴다 (TODO 122). 표기 통일과 달리 **명부는 그대로** 둔다. */
+  const handover = (from: string, unfinished: number) => {
+    if (unfinished === 0) return;
+    const to = window.prompt(`"${from}" 의 과제를 누구에게 넘길까요?`, "");
+    if (!to || !to.trim()) return;
+    if (
+      !window.confirm(
+        `"${from}" 이(가) 담당인 **끝나지 않은 과제 ${unfinished}건**을 "${to.trim()}" 에게 넘깁니다.\n` +
+          "끝난 과제는 그대로 둡니다 — 그때 그 사람이 한 것은 사실이기 때문입니다.\n" +
+          "명부에서 이름이 사라지지는 않습니다.",
+      )
+    )
+      return;
+    void run(async () => {
+      const result = await api.handover(from, to.trim());
+      return `과제 ${result.count}건을 "${to.trim()}" 에게 넘겼습니다.`;
+    });
+  };
+
   const glued = people.filter((person) => splitPeople(person.name).length > 1);
+  const needle = find.trim();
+  // 찾기는 **보여 주는 것만** 거른다 — 저장은 늘 명부 전체를 보낸다.
+  const shown = needle
+    ? people.filter((person) => person.name.includes(needle) || (person.employee_id ?? "").includes(needle))
+    : people;
+  const leftCount = people.filter((person) => person.left_on).length;
 
   const update = (index: number, key: keyof Person, value: string) =>
     setPeople((prev) => prev.map((p, i) => (i === index ? { ...p, [key]: value } : p)));
@@ -95,10 +122,18 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
   return (
     <div className="card">
       <div className="card-head">
-        <h2>담당자 명부 {people.length}명</h2>
+        <h2>
+          담당자 명부 {people.length}명
+          {leftCount > 0 && <span className="muted"> · 떠난 사람 {leftCount}명</span>}
+        </h2>
         <button
           className="ghost"
-          onClick={() => setPeople((prev) => [...prev, { name: "", employee_id: "", account: "" }])}
+          onClick={() =>
+            setPeople((prev) => [
+              ...prev,
+              { name: "", employee_id: "", account: "", left_on: "", left_reason: "" },
+            ])
+          }
         >
           + 사람 추가
         </button>
@@ -108,9 +143,28 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         아래 <b>명부에 없는 이름</b>에 모여 보입니다.
         <br />
         사번·계정 칸은 지금 비워 두어도 됩니다 — 나중에 로그인이 생기면 그 칸만 채우면 됩니다.
+        <br />
+        전배·퇴사한 사람은 <b>빼지 말고 [떠난 날]을 적어 주세요.</b> 지우면 그 사람이 지난해 한 일이
+        &ldquo;명부에 없는 이름&rdquo;이 되어 오타와 뒤섞입니다. 날짜를 적으면 자동완성에서 빠지고,
+        아직 담당으로 남은 과제가 있으면 <b>홈이 대체 담당자를 정하라고 알려 줍니다.</b>
       </p>
 
+      {people.length > 8 && (
+        <label className="people-find">
+          찾기
+          <input
+            type="search"
+            value={find}
+            onChange={(event) => setFind(event.target.value)}
+            placeholder="이름·사번"
+          />
+          {needle && <span className="muted">{shown.length}명</span>}
+        </label>
+      )}
+
+      {/* 인원이 늘어도 카드 키가 자라지 않게 목록 안에서만 스크롤한다 (TODO 121) */}
       {people.length > 0 && (
+        <div className="people-scroll">
         <table className="people-table">
           <thead>
             <tr>
@@ -118,12 +172,19 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
               <th>사번</th>
               <th>계정</th>
               <th>과제</th>
+              <th>떠난 날</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {people.map((person, index) => (
-              <tr key={index}>
+            {shown.map((person) => {
+              const index = people.indexOf(person);
+              return (
+              <tr
+                key={index}
+                className={person.left_on ? "person-left" : undefined}
+                data-name={person.name}
+              >
                 <td>
                   <input value={person.name} onChange={(e) => update(index, "name", e.target.value)} />
                 </td>
@@ -141,8 +202,40 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                     placeholder="나중에"
                   />
                 </td>
-                <td className="muted">{person.used ?? 0}건</td>
-                <td>
+                <td className="muted">
+                  {person.used ?? 0}건
+                  {(person.unfinished ?? 0) > 0 && person.left_on && (
+                    <span className="warn-text"> · 남은 {person.unfinished}건</span>
+                  )}
+                </td>
+                <td className="person-left-cell">
+                  <input
+                    type="date"
+                    value={person.left_on ?? ""}
+                    onChange={(e) => update(index, "left_on", e.target.value)}
+                    title="전배·퇴사한 날. 비워 두면 지금 있는 사람입니다."
+                  />
+                  <select
+                    value={person.left_reason ?? ""}
+                    disabled={!person.left_on}
+                    onChange={(e) => update(index, "left_reason", e.target.value)}
+                  >
+                    <option value="">사유</option>
+                    <option value="전배">전배</option>
+                    <option value="퇴사">퇴사</option>
+                  </select>
+                </td>
+                <td className="person-actions">
+                  {person.left_on && (person.unfinished ?? 0) > 0 && (
+                    <button
+                      className="ghost small"
+                      disabled={busy}
+                      title="끝나지 않은 과제만 다른 사람에게 넘깁니다."
+                      onClick={() => handover(person.name, person.unfinished ?? 0)}
+                    >
+                      넘기기
+                    </button>
+                  )}
                   <button
                     className="ghost small danger"
                     onClick={() => setPeople((prev) => prev.filter((_, i) => i !== index))}
@@ -151,9 +244,11 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
+        </div>
       )}
 
       {glued.length > 0 && (

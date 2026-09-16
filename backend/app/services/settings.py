@@ -166,18 +166,52 @@ def normalize_people(value: object) -> list[dict[str, str]]:
                 "name": name,
                 "employee_id": str(item.get("employee_id", "")).strip(),
                 "account": str(item.get("account", "")).strip(),
+                # 떠난 날 (TODO 122). 비어 있으면 지금 있는 사람이다.
+                # **지우지 않고 날짜를 적는다** — 그해에 그 사람이 한 일은 사실이므로
+                # 명부에서 지우면 지난 성과가 "명부에 없는 이름" 이 되어 오타와 뒤섞인다.
+                "left_on": _left_on(item.get("left_on")),
+                "left_reason": _left_reason(item.get("left_reason")),
             }
         )
-    people.sort(key=lambda person: person["name"])
+    # 떠난 사람은 아래로. 자동완성·고르기에서 지금 있는 사람이 먼저 보여야 한다.
+    people.sort(key=lambda person: (bool(person["left_on"]), person["name"]))
     return people
+
+
+LEFT_REASONS = ("전배", "퇴사")
+
+
+def _left_on(value: object) -> str:
+    """떠난 날. `YYYY-MM-DD` 가 아니면 비운 것으로 본다 (손으로 고친 파일 대비)."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        from datetime import date
+
+        date.fromisoformat(text)
+    except ValueError:
+        return ""
+    return text
+
+
+def _left_reason(value: object) -> str:
+    text = str(value or "").strip()
+    return text if text in LEFT_REASONS else ""
 
 
 def people() -> list[dict[str, str]]:
     return normalize_people(load()["people"])
 
 
-def known_names() -> list[str]:
-    return [person["name"] for person in people()]
+def known_names(include_left: bool = True) -> list[str]:
+    """명부의 이름. `include_left=False` 면 **지금 있는 사람만** (자동완성용, TODO 122)."""
+    return [p["name"] for p in people() if include_left or not p["left_on"]]
+
+
+def left_people() -> list[dict[str, str]]:
+    """떠난 사람만. 화면의 딱지와 홈의 알림이 이것을 본다."""
+    return [person for person in people() if person["left_on"]]
 
 
 def add_person(name: str) -> list[dict[str, str]]:
@@ -188,7 +222,7 @@ def add_person(name: str) -> list[dict[str, str]]:
     current = people()
     if any(person["name"] == name for person in current):
         return current
-    current.append({"name": name, "employee_id": "", "account": ""})
+    current.append({"name": name, "employee_id": "", "account": "", "left_on": "", "left_reason": ""})
     return save({"people": current})["people"]
 
 

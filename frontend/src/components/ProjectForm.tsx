@@ -16,7 +16,13 @@ interface Props {
 
 export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCancel, onMetaChange = () => undefined }: Props) {
   // 자동완성은 명부를 먼저 보여 주고, 명부에 없지만 이미 쓰이는 이름을 뒤에 붙인다.
-  const ownerOptions = [...meta.people, ...meta.owners.filter((name) => !meta.people.includes(name))];
+  // 떠난 사람은 고르는 자리에서 뺀다 (TODO 122) — 새 과제에 실수로 들어가는 것을 막는다.
+  // 이미 그 사람이 담당인 과제를 고칠 때는 값이 그대로 있으므로 사라지지 않는다.
+  const left = new Set((meta.people_left ?? []).map((person) => person.name));
+  const ownerOptions = [
+    ...meta.people.filter((name) => !left.has(name)),
+    ...meta.owners.filter((name) => !meta.people.includes(name) && !left.has(name)),
+  ];
   const [form, setForm] = useState({
     title: initial?.title ?? "",
     status: initial?.status ?? "in_progress",

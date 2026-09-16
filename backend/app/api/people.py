@@ -25,6 +25,9 @@ class Person(BaseModel):
     name: str
     employee_id: str = ""
     account: str = ""
+    # 떠난 날과 사유 (TODO 122). 비어 있으면 지금 있는 사람이다.
+    left_on: str = ""
+    left_reason: str = ""
 
 
 class PeopleUpdate(BaseModel):
@@ -38,6 +41,13 @@ class AddPerson(BaseModel):
 class Rename(BaseModel):
     old: str
     new: str
+
+
+class Handover(BaseModel):
+    old: str
+    new: str
+    # 끝난 과제까지 바꿀지. 기본은 **바꾸지 않는다** — 지난 성과는 사실이다.
+    include_finished: bool = False
 
 
 @router.get("")
@@ -59,6 +69,19 @@ def add_person(payload: AddPerson) -> dict:
         return {"people": settings_service.add_person(payload.name)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/handover")
+def handover(payload: Handover, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """담당자를 넘긴다 (TODO 122). 표기 통일(`/rename`)과 뜻이 다르다."""
+    try:
+        return svc.handover(
+            conn, payload.old, payload.new, include_finished=payload.include_finished
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ExternalChangeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/rename")

@@ -25,6 +25,7 @@ from datetime import date as date_cls
 
 from ..config import FINISHED_STATUSES, STATUS_KEYS, STATUSES
 from . import settings as settings_service
+from . import settings as settings_service
 from . import reports as reports_service
 
 # 연도 비교 막대에 세우는 해의 수. 더 늘리면 막대가 얇아지기만 한다.
@@ -350,6 +351,43 @@ def _stale(conn: sqlite3.Connection, limit: int = STALE_LIMIT) -> tuple[list[dic
 PLAN_LIMIT = 6
 
 
+OWNER_GAP_LIMIT = 6
+
+
+def _owner_gaps(conn: sqlite3.Connection) -> tuple[list[dict], int]:
+    """떠난 담당자가 그대로 남아 있는 **끝나지 않은** 과제 (TODO 122).
+
+    연도를 따르지 않는다 — 지난해 과제라도 아직 안 끝났으면 오늘 정해야 할 일이다
+    (쓰다 만 보고와 같은 규칙, TODO 101).
+    """
+    left = {person["name"]: person for person in settings_service.left_people()}
+    if not left:
+        return [], 0
+    marks = ",".join("?" for _ in left)
+    unfinished = ",".join("?" for _ in FINISHED_STATUSES)
+    rows = conn.execute(
+        "SELECT p.id, p.title, p.status, po.name AS owner"
+        " FROM project p JOIN project_owner po ON po.project_id = p.id"
+        f" WHERE p.status NOT IN ({unfinished}) AND po.name IN ({marks})"
+        " ORDER BY p.id",
+        (*FINISHED_STATUSES, *left),
+    ).fetchall()
+    items = [
+        {
+            "id": row["id"],
+            "title": row["title"],
+            "status": row["status"],
+            "owner": row["owner"],
+            "left_reason": left[row["owner"]]["left_reason"],
+            "left_on": left[row["owner"]]["left_on"],
+        }
+        for row in rows
+    ]
+    # 한 과제에 떠난 사람이 둘이면 줄이 둘이 된다. 건수는 **과제 수**로 센다.
+    total = len({item["id"] for item in items})
+    return items[:OWNER_GAP_LIMIT], total
+
+
 def _plans(conn: sqlite3.Connection) -> tuple[list[dict], int]:
     """마지막 진행일지에 계획을 적어 둔 **진행 중인** 과제 (TODO 112). 최근 기록 순."""
     from .entries import latest_plan
@@ -401,6 +439,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
     drafts = reports_service.unfinished_drafts(conn)
     stale, stale_total = _stale(conn)
     plans, plans_total = _plans(conn)
+    owner_gaps, owner_gaps_total = _owner_gaps(conn)
     return {
         "year": year,
         "period": period,
@@ -421,6 +460,9 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
             # 마지막 진행일지에 적어 둔 계획 (TODO 112). 표시만 한다.
             "plans": plans,
             "plans_total": plans_total,
+            # 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 건수는 **과제 수**다.
+            "owner_gaps": owner_gaps,
+            "owner_gaps_total": owner_gaps_total,
         },
         "team": _team(conn, year, period),
         "compare": _compare(conn),

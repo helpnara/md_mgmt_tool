@@ -433,6 +433,36 @@ export default function Home({ meta }: { meta: Meta }) {
           </>
         )}
         {/* 과제별 다음 할 일 — 최근 진행일지의 계획 칸 (TODO 112). 이미 적어 둔 것을 올릴 뿐이다. */}
+        {/* 떠난 담당자가 그대로 남아 있는 끝나지 않은 과제 (TODO 122).
+            "지금 사람이 없는 일" 이라 보고보다 먼저 정해야 한다. */}
+        {week.owner_gaps_total > 0 && (
+          <>
+            <p className="hint">
+              <b>대체 담당자 지정 필요</b> —{" "}
+              <a href="#/projects?owner_left=1">
+                {week.owner_gaps_total}건 보기 →
+              </a>
+            </p>
+            <ul className="home-owner-gaps" data-testid="owner-gaps">
+              {week.owner_gaps.map((item) => (
+                <li key={`${item.id}-${item.owner}`}>
+                  <a href={projectLink(item.id)}>{item.title}</a>
+                  <span className="tag left-tag">
+                    {item.owner} {item.left_reason || "떠남"}
+                  </span>
+                  <span className="muted">{item.left_on}</span>
+                </li>
+              ))}
+            </ul>
+            {week.owner_gaps_total > week.owner_gaps.length && (
+              <p className="hint">
+                <a href="#/projects?owner_left=1">
+                  나머지 {week.owner_gaps_total - week.owner_gaps.length}건도 목록에서 보기 →
+                </a>
+              </p>
+            )}
+          </>
+        )}
         {week.plans.length > 0 && (
           <>
             <p className="hint">
