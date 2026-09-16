@@ -237,15 +237,16 @@ def index_project(
     conn.execute(
         """
         INSERT INTO project(id, dir_name, title, status, type, grp, owner, start_date, due_date,
-                            effect_expected, effect_verified, no_report, created_by,
+                            effect_expected, effect_verified, no_report, no_effect, created_by,
                             completed_at, created_at, updated_at, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
           type=excluded.type, grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
           due_date=excluded.due_date,
           effect_expected=excluded.effect_expected, effect_verified=excluded.effect_verified,
           no_report=excluded.no_report,
+          no_effect=excluded.no_effect,
           created_by=excluded.created_by, completed_at=excluded.completed_at,
           created_at=excluded.created_at,
           updated_at=excluded.updated_at, body=excluded.body, file_mtime=excluded.file_mtime
@@ -263,6 +264,7 @@ def index_project(
             _as_effect(doc.meta.get("effect_expected")),
             _as_effect(doc.meta.get("effect_verified")),
             1 if _as_bool(doc.meta.get("no_report")) else 0,
+            1 if _as_bool(doc.meta.get("no_effect")) else 0,
             _as_str(doc.meta.get("created_by")),
             _as_str(doc.meta.get("completed_at")),
             _as_str(doc.meta.get("created_at")),

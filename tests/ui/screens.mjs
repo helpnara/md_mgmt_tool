@@ -453,10 +453,13 @@ async function main() {
     await go(`#/projects/${seeded.projectB}`);
     await page.getByRole("button", { name: "과제 정보 수정" }).click();
     await page.waitForTimeout(500);
-    const box = page.locator(".check-label input[type=checkbox]");
-    expect(await box.count() > 0, "체크 칸이 없습니다");
+    // 체크 칸이 둘이 됐다(효과성 비대상 · 별도 보고 불필요, TODO 125) — 이름으로 집는다.
+    const box = page
+      .locator("label.check-label", { hasText: "별도 보고 불필요" })
+      .locator("input[type=checkbox]");
+    equal(await box.count(), 1, "체크 칸이 없습니다");
     await box.check();
-    await page.getByRole("button", { name: "저장" }).click();
+    await page.getByRole("button", { name: "저장" }).first().click();
     await page.waitForTimeout(1000);
     equal((await api.get(`/api/projects/${seeded.projectB}`)).no_report, true, "저장된 값");
     await api.patch(`/api/projects/${seeded.projectB}`, { no_report: false });
@@ -2572,6 +2575,54 @@ async function main() {
     // 속성별·그룹별은 나란히
     const slices = page.locator(".home-slices");
     equal(await slices.count(), 1, "속성별·그룹별 묶음");
+  });
+
+  console.log("\n[20] 효과 금액 분모 · 효과성 비대상 · 계정 칸 (TODO 124 · 125 · 126)");
+  await check("홈의 효과 분모를 누르면 그 과제만 나온다 (TODO 124)", async () => {
+    await go("#/");
+    const note = page.locator(".home-stat.effect span.home-stat-note").first();
+    const link = note.locator("a", { hasText: "기대" }).first();
+    const said = Number((await link.innerText()).match(/(\d+)건/)[1]);
+    await link.click();
+    await page.waitForTimeout(900);
+    equal(await page.locator("table.grid tbody tr").count(), said, "기대효과가 적힌 과제 수");
+  });
+
+  await check("효과성 관리 비대상은 [완료했는데 실증효과 미입력]에서 빠진다 (TODO 125)", async () => {
+    const made = await api.post("/api/projects", {
+      title: "유지보수 비대상 시험", status: "done", effect_expected: null,
+    });
+    try {
+      await go("#/");
+      const warn = page.locator(".home-stat.effect a.warn-text");
+      const before = Number((await warn.innerText()).match(/(\d+)건/)[1]);
+      // 과제 수정 화면에서 체크한다 — 서버만 고치면 화면을 안 본 것이 된다.
+      await go(`#/projects/${made.id}`);
+      await page.getByRole("button", { name: "과제 정보 수정" }).click();
+      await page.waitForTimeout(400);
+      await page.locator("label.check-label", { hasText: "효과성 관리 비대상" })
+        .locator("input").check();
+      await page.getByRole("button", { name: "저장" }).first().click();
+      await page.waitForTimeout(1200);
+      equal((await api.get(`/api/projects/${made.id}`)).no_effect, true, "저장된 값");
+      await go("#/");
+      const after = await page.locator(".home-stat.effect a.warn-text").count();
+      const now = after === 0 ? 0 : Number((await warn.innerText()).match(/(\d+)건/)[1]);
+      equal(now, before - 1, "경고에서 하나 빠진다");
+      // 분모도 "전체" 가 아니라 "관리 대상" 으로 바뀐다.
+      const note = await page.locator(".home-stat.effect span.home-stat-note").first().innerText();
+      expect(note.includes("관리 대상"), `분모 문구: ${note}`);
+    } finally {
+      await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  });
+
+  await check("담당자 명부에 계정 칸이 없다 (TODO 126)", async () => {
+    await go("#/settings");
+    const card = page.locator(".card", { hasText: "담당자 명부" }).first();
+    const heads = await card.locator("thead th").allInnerTexts();
+    expect(!heads.includes("계정"), `계정 열이 남아 있습니다: ${heads.join("|")}`);
+    expect(heads.includes("사번"), "사번 열은 그대로여야 한다");
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

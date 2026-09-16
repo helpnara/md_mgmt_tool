@@ -80,6 +80,9 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   const effect = (value: string): number | null => (value.trim() === "" ? null : Number(value));
   // 단순 현황 관리를 과제로 세운 경우. 보고 대상 후보에서만 빠진다 (TODO 80).
   const [noReport, setNoReport] = useState(Boolean(initial?.no_report));
+  // 금액으로 재지 않는 과제 (TODO 125). 유지보수·기획보고처럼 효과 금액을 적지 않는 일이
+  // "완료했는데 실증효과 미입력" 에 계속 남으면, 줄지 않는 그 숫자를 곧 안 보게 된다.
+  const [noEffect, setNoEffect] = useState(Boolean(initial?.no_effect));
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -102,6 +105,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
         effect_expected: effect(form.effect_expected),
         effect_verified: effect(form.effect_verified),
         no_report: noReport,
+        no_effect: noEffect,
         // 팀 이름이 빈 줄은 보내지 않는다. 사람 이름을 나누는 일은 **서버가** 한다 (TODO 74).
         partners: partners
           .filter((row) => row.team.trim())
@@ -334,6 +338,24 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           정성적 효과와 산출 근거는 <b>과제 개요</b>에 적습니다.
           근거 자료(엑셀·PPT)는 개요의 [파일 첨부]로 붙일 수 있습니다.
         </p>
+      </div>
+
+      <div className="form-row">
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={noEffect}
+            onChange={(event) => setNoEffect(event.target.checked)}
+          />
+          <span>
+            <b>효과성 관리 비대상 과제</b>
+            <span className="hint">
+              유지보수처럼 <b>금액으로 재지 않는</b> 과제입니다. 체크하면 홈의{" "}
+              <b>[완료했는데 실증효과 미입력]</b> 에서 빠지고, 효과 금액의 분모에도 들어가지 않습니다.
+              과제 자체는 그대로 관리됩니다.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="form-row">

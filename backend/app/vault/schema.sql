@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS project (
   -- 별도 보고가 필요 없는 과제 (단순 현황 관리를 과제로 세운 경우).
   -- 보고 대상 후보에서만 빠진다 — 손으로 보고를 남기는 길은 그대로 열려 있다.
   no_report  INTEGER NOT NULL DEFAULT 0,
+  -- 효과 금액으로 관리하지 않는 과제 (TODO 125). 유지보수·기획보고처럼 금액으로 재지
+  -- 않는 일이 "완료했는데 실증효과 미입력" 에 계속 남으면 그 경고는 곧 안 보게 된다.
+  no_effect  INTEGER NOT NULL DEFAULT 0,
   -- 과제를 등록한 사람. 담당자(누가 하는가)와 다르다 (누가 등록했는가).
   -- 나중에 넣으면 그 전 과제는 영영 빈칸이라 지금부터 남긴다.
   created_by       TEXT,

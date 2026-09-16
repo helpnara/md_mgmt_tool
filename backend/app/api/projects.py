@@ -152,6 +152,7 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "completed_at": row["completed_at"],
         # 별도 보고가 필요 없는 과제 — 보고 대상 후보에서만 빠진다 (TODO 80).
         "no_report": bool(row["no_report"]),
+        "no_effect": bool(row["no_effect"]),
         # 과제를 등록한 사람 (담당자와 다르다). 로그인이 생기면 자동으로 채워진다.
         "created_by": row["created_by"],
         "tags": _tags(conn, row["id"]),
@@ -191,6 +192,10 @@ def list_projects(
     done_year: str | None = Query(None, pattern=r"^(\d{4})?$"),
     # 완료했는데 실증효과를 안 적은 과제만 (TODO 106-C). "none" 하나만 받는다.
     verified: str | None = Query(None, pattern="^(none)?$"),
+    # 효과 금액이 적힌 과제만 (TODO 124). 홈의 "기대 N건 · 실증 N건에 입력됨" 이 이리로 온다.
+    effect: str | None = Query(None, pattern="^(expected|verified)?$"),
+    # 효과성 관리 비대상만/빼고 (TODO 125). "none" 은 비대상만, "only" 는 대상만.
+    no_effect: str | None = Query(None, pattern="^(none|only)?$"),
     # 떠난 담당자가 남아 있는 **끝나지 않은** 과제만 (TODO 122). 홈이 이리로 이어 준다.
     owner_left: str | None = Query(None, pattern="^(1)?$"),
     sort: str = Query("updated"),
@@ -198,6 +203,15 @@ def list_projects(
     order: str | None = Query(None, pattern="^(asc|desc)$"),
 ) -> list[dict]:
     where, params = [], []
+    if effect == "expected":
+        # 홈의 분모(ee_n)와 **같은 조건**이어야 한다 — 세는 수와 거르는 수가 같아야 한다.
+        where.append("COALESCE(p.effect_expected, 0) > 0")
+    elif effect == "verified":
+        where.append("COALESCE(p.effect_verified, 0) > 0")
+    if no_effect == "none":
+        where.append("p.no_effect = 1")  # 비대상만
+    elif no_effect == "only":
+        where.append("p.no_effect = 0")  # 관리 대상만
     if owner_left:
         names = [person["name"] for person in settings_service.left_people()]
         if not names:

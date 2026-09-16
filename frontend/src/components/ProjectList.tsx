@@ -30,6 +30,8 @@ const DEFAULT_FILTERS = {
   done_year: "", verified: "",
   // 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 홈이 이리로 데려온다.
   owner_left: "",
+  // 효과 금액이 적힌 과제 (TODO 124) · 효과성 관리 비대상 (TODO 125)
+  effect: "", no_effect: "",
 };
 
 /**
@@ -389,6 +391,12 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                 </td>
                 <td>
                   <TypeBadge type={project.type} meta={meta} />
+                  {/* 금액으로 재지 않는 과제 (TODO 125) */}
+                  {project.no_effect && (
+                    <span className="tag" title="효과성 관리 비대상 과제">
+                      효과 비대상
+                    </span>
+                  )}
                 </td>
                 <td>{project.group ?? "—"}</td>
                 <td className="owners">

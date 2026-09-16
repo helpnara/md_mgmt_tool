@@ -532,9 +532,28 @@ export default function Home({ meta }: { meta: Meta }) {
               <span className="home-arrow"> → </span>
               실증 {money(team.effect_verified)}
             </strong>
+            {/* 분모도 **눌린다** (TODO 124). 홈의 다른 모든 수가 그렇듯, 여기만 글자였다. */}
             <span className="home-stat-note">
-              기대 {team.effect_expected_projects ?? 0}건 · 실증 {team.effect_verified_projects ?? 0}건에
-              입력됨 (전체 {team.total}건)
+              <a href={listLink({ effect: "expected", year: yearParam })}>
+                기대 {team.effect_expected_projects ?? 0}건
+              </a>{" "}
+              ·{" "}
+              <a href={listLink({ effect: "verified", year: yearParam })}>
+                실증 {team.effect_verified_projects ?? 0}건
+              </a>
+              에 입력됨{" "}
+              {/* 비대상이 있으면 분모를 "전체" 라고 적을 수 없다 (TODO 125) */}
+              {(team.effect_managed ?? team.total) < team.total ? (
+                <>
+                  (관리 대상 {team.effect_managed}건 ·{" "}
+                  <a href={listLink({ no_effect: "none", year: yearParam })}>
+                    비대상 {team.total - (team.effect_managed ?? 0)}건
+                  </a>
+                  {" "}제외)
+                </>
+              ) : (
+                <>(전체 {team.total}건)</>
+              )}
             </span>
             {/* 완료했는데 실증효과가 빈 과제 (TODO 106-C). 연말에 빈칸을 만나기 전에 여기서 본다. */}
             {(team.done_unverified ?? 0) > 0 && (

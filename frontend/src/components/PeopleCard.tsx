@@ -85,7 +85,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
       const rest = prev.filter((_, i) => i !== index);
       const added = names
         .filter((name) => !rest.some((person) => person.name === name))
-        .map((name) => ({ name, employee_id: "", account: "", left_on: "", left_reason: "" }));
+        .map((name) => ({ name, employee_id: "", left_on: "", left_reason: "" }));
       return [...rest, ...added].sort((a, b) => a.name.localeCompare(b.name, "ko"));
     });
 
@@ -131,7 +131,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
           onClick={() =>
             setPeople((prev) => [
               ...prev,
-              { name: "", employee_id: "", account: "", left_on: "", left_reason: "" },
+              { name: "", employee_id: "", left_on: "", left_reason: "" },
             ])
           }
         >
@@ -142,7 +142,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         과제의 담당자 자동완성이 이 목록을 씁니다. 명부에 없는 이름도 <b>쓸 수는 있고</b>,
         아래 <b>명부에 없는 이름</b>에 모여 보입니다.
         <br />
-        사번·계정 칸은 지금 비워 두어도 됩니다 — 나중에 로그인이 생기면 그 칸만 채우면 됩니다.
+        사번 칸은 지금 비워 두어도 됩니다 — 나중에 로그인이 생기면 이름과 사번으로 확인합니다.
         <br />
         전배·퇴사한 사람은 <b>빼지 말고 [떠난 날]을 적어 주세요.</b> 지우면 그 사람이 지난해 한 일이
         &ldquo;명부에 없는 이름&rdquo;이 되어 오타와 뒤섞입니다. 날짜를 적으면 자동완성에서 빠지고,
@@ -170,7 +170,6 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
             <tr>
               <th>이름</th>
               <th>사번</th>
-              <th>계정</th>
               <th>과제</th>
               <th>떠난 날</th>
               <th />
@@ -192,13 +191,6 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                   <input
                     value={person.employee_id}
                     onChange={(e) => update(index, "employee_id", e.target.value)}
-                    placeholder="나중에"
-                  />
-                </td>
-                <td>
-                  <input
-                    value={person.account}
-                    onChange={(e) => update(index, "account", e.target.value)}
                     placeholder="나중에"
                   />
                 </td>

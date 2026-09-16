@@ -71,6 +71,8 @@ export interface Project {
   effect_verified: number | null;
   /** 별도 보고가 필요 없는 과제 — 보고 대상 후보에서만 빠진다 (TODO 80) */
   no_report?: boolean;
+  /** 효과 금액으로 관리하지 않는 과제 (TODO 125) */
+  no_effect?: boolean;
   /** 과제를 등록한 사람. 담당자(누가 하는가)와 다르다. */
   created_by?: string | null;
   tags: string[];
@@ -217,7 +219,8 @@ export interface SpreadsheetPreview {
 export interface Person {
   name: string;
   employee_id: string;
-  account: string;
+  /** 예전에 쓰던 칸 (TODO 126). 화면에서는 빼고 파일의 값은 그대로 둔다 */
+  account?: string;
   used?: number;
   /** 아직 끝나지 않은 과제 중 이 사람이 담당인 수 (TODO 122) */
   unfinished?: number;
@@ -434,6 +437,8 @@ export interface HomeTeam {
   effect_expected: number;
   effect_verified: number;
   /** 그 금액이 **몇 건에서 나왔는지**. 없으면 화살표가 달성률로 읽힌다 (TODO 86) */
+  /** 효과 금액으로 관리하는 과제 수 — total 과 같으면 비대상이 없다 (TODO 125) */
+  effect_managed?: number;
   effect_expected_projects?: number;
   effect_verified_projects?: number;
   /** 완료일 기준으로 센 완료 수 (TODO 104). done 은 번호의 연도 기준이라 둘이 다르다. */

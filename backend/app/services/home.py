@@ -85,7 +85,12 @@ def _team(conn: sqlite3.Connection, year: str | None, period: str | None = None)
         "       SUM(CASE WHEN COALESCE(effect_expected, 0) > 0 THEN 1 ELSE 0 END) AS ee_n,"
         "       SUM(CASE WHEN COALESCE(effect_verified, 0) > 0 THEN 1 ELSE 0 END) AS ev_n,"
         # 완료했는데 실증효과를 안 적은 과제 (TODO 106-C). 홈이 세어 두어야 연말에 빈칸을 만난다.
-        f"       SUM(CASE WHEN status = '{_DONE}' AND COALESCE(effect_verified, 0) <= 0 THEN 1 ELSE 0 END) AS done_unverified"
+        # **효과성 관리 비대상은 뺀다** (TODO 125) — 금액으로 재지 않는 과제가 여기 계속
+        # 남으면 숫자가 줄지 않고, 줄지 않는 경고는 곧 안 보게 된다.
+        f"       SUM(CASE WHEN status = '{_DONE}' AND no_effect = 0"
+        "             AND COALESCE(effect_verified, 0) <= 0 THEN 1 ELSE 0 END) AS done_unverified,"
+        # 효과 금액으로 관리하는 과제 수 — 분모를 "전체" 라고 적으면 비대상까지 센 것처럼 읽힌다.
+        "       SUM(CASE WHEN no_effect = 0 THEN 1 ELSE 0 END) AS managed_n"
         f" FROM project p WHERE 1=1{clause}",
         params,
     ).fetchone()
@@ -101,6 +106,8 @@ def _team(conn: sqlite3.Connection, year: str | None, period: str | None = None)
         "effect_expected_projects": row["ee_n"] or 0,
         "effect_verified_projects": row["ev_n"] or 0,
         "done_unverified": row["done_unverified"] or 0,
+        # 효과 금액으로 관리하는 과제 수 (TODO 125). total 과 같으면 비대상이 없다는 뜻이다.
+        "effect_managed": row["managed_n"] or 0,
         "reports": _report_count(conn, year, period=period),
         # 완료일 기준 (TODO 104). 위의 done 은 **번호의 연도**로 세어, 지난해 시작해 올해
         # 끝낸 과제가 올해 성과에 잡히지 않는다. 어느 쪽이 "성과" 인지는 사용자가 정할

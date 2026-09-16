@@ -24,7 +24,9 @@ router = APIRouter(prefix="/api/people", tags=["people"])
 class Person(BaseModel):
     name: str
     employee_id: str = ""
-    account: str = ""
+    # 화면에서 뺀 칸 (TODO 126). **보내지 않으면 지우지 않고 그대로 둔다** —
+    # 손으로 적어 둔 것이 있을 수 있고, 나중에 사내 인증을 붙이면 칸만 되살리면 된다.
+    account: str | None = None
     # 떠난 날과 사유 (TODO 122). 비어 있으면 지금 있는 사람이다.
     left_on: str = ""
     left_reason: str = ""
@@ -57,9 +59,15 @@ def list_people(conn: sqlite3.Connection = Depends(get_db)) -> dict:
 
 @router.put("")
 def replace_people(payload: PeopleUpdate) -> dict:
-    return {"people": settings_service.save(
-        {"people": [person.model_dump() for person in payload.people]}
-    )["people"]}
+    # 화면이 안 보내는 칸(account, TODO 126)은 지금 값을 물려준다.
+    kept = {person["name"]: person.get("account", "") for person in settings_service.people()}
+    rows = []
+    for person in payload.people:
+        row = person.model_dump()
+        if row.get("account") is None:
+            row["account"] = kept.get(row["name"], "")
+        rows.append(row)
+    return {"people": settings_service.save({"people": rows})["people"]}
 
 
 @router.post("", status_code=201)

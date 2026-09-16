@@ -255,7 +255,23 @@ audience:                      # 팀회의 / 부서장 / 고객사 …
 **예전 값 자동 변환** — 상태에 `기획보고`가 들어 있던 과제는 읽는 시점에 `상태=예정 + 속성=기획보고` 로,
 `제안`은 `예정`, `검토`는 `검토중`으로 옮긴다. 파일을 손댈 필요가 없다.
 
-### 4.5.0 별도 보고 불필요 (`no_report`)
+### 4.5.0 관리 축에서 빼는 두 칸 (`no_report` · `no_effect`)
+
+과제를 지우지 않고 **특정 관리 축에서만** 빼는 칸이 둘이다. 나란히 두는 이유는 뜻이 같은
+갈래이기 때문이다 — *"이 과제는 그 축으로 재지 않는다."*
+
+| 칸 | 어디서 빠지나 | 왜 |
+|---|---|---|
+| `no_report` | 보고 대상 후보 | 단순 현황 관리를 과제로 세운 경우. 손으로 보고를 남기는 길은 그대로 |
+| `no_effect` | 홈의 **[완료했는데 실증효과 미입력]** 과 효과 금액의 **분모** (TODO 125) | 유지보수·기획보고처럼 금액으로 재지 않는 일. 그런 과제가 경고에 계속 남으면 숫자가 줄지 않고, **줄지 않는 경고는 곧 안 보게 된다** |
+
+둘 다 **칸이 없으면 대상**이다. 빼는 것은 사람이 정하는 일이고, 없다고 빼 버리면 지금까지
+세던 수가 소리 없이 달라진다(4.8 의 설정 기본값과 같은 원칙).
+
+`no_effect` 는 효과 금액 **합계에서는 빼지 않는다** — 비대상 과제는 금액이 비어 있는 것이
+정상이라 뺄 것이 없고, 혹시 적혀 있다면 그것은 사실이므로 더한다. 분모만 바꾼다.
+
+### 별도 보고 불필요 (`no_report`) — 처음 도입할 때의 메모
 
 단순 현황 관리를 과제로 세우는 경우가 있다. 그런 과제가 매주 보고 대상 후보에 서면
 **눈으로 걸러 내는 일이 매주 생긴다.** 과제 정보의 체크 하나로 후보에서 뺀다.
@@ -481,6 +497,7 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 | `backup_dir` · `backup_every_hours` | 자동 백업 폴더와 주기. 폴더를 비우면 꺼진다. **vault 안쪽은 넣을 수 없다** | T21 · 97 |
 | `backup_keep` · `backup_keep_weekly` · `backup_keep_monthly` | 몇 벌을 남기나 — 일 · 주 · 월 세 층 | 119 · 5.18 |
 | `people[].left_on` · `left_reason` | 떠난 날과 사유. **지우지 않고 적는다** | 122 · 5.18 |
+| `people[].account` | 화면에서 뺀 칸. 값은 그대로 두고 읽지 않는다 | 126 |
 
 읽을 때 기본값과 합치므로 **열쇠가 빠져 있어도 동작한다.** 새 항목을 더할 때 기존 파일을 고칠
 필요가 없고, 반대로 모르는 열쇠는 그대로 두고 지나간다(손으로 적어 둔 메모를 지우지 않는다).
@@ -785,7 +802,7 @@ score = elapsed + unreported_entries × 0.5
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET | `/api/projects` | 목록. `?status=&type=&group=&tag=&owner=&partner=&q=&year=&done_year=&verified=&owner_left=&due=&sort=&order=` (`owner_left=1` 떠난 담당자가 남은 **끝나지 않은** 과제 — 122) (`done_year` 완료일 기준 · `verified=none` 실증효과 미입력 — TODO 104 · 106) |
+| GET | `/api/projects` | 목록. `?status=&type=&group=&tag=&owner=&partner=&q=&year=&done_year=&verified=&owner_left=&effect=&no_effect=&due=&sort=&order=` (`effect=expected\|verified` 금액이 적힌 과제 — 124 · `no_effect=none\|only` 효과성 비대상/대상 — 125) (`owner_left=1` 떠난 담당자가 남은 **끝나지 않은** 과제 — 122) (`done_year` 완료일 기준 · `verified=none` 실증효과 미입력 — TODO 104 · 106) |
 | POST | `/api/projects` | 과제 생성 (폴더 + index.md 생성). 번호의 연도는 **시작일**을 따른다 (95) |
 | GET | `/api/projects/next-id` | 저장하면 붙을 번호를 미리 보여 준다 (`?start_date=`, 95) |
 | GET | `/api/projects/{id}` | 개요 + 일지 목록 요약. 답하지 않은 지시·다음 할 일·개요 작성 여부를 함께 준다 (107 · 112 · 106-B) |

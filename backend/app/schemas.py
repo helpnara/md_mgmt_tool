@@ -34,6 +34,8 @@ class ProjectCreate(BaseModel):
     effect_verified: float | None = None
     # 별도 보고가 필요 없는 과제 (단순 현황 관리). 보고 대상 후보에서만 빠진다.
     no_report: bool = False
+    # 효과 금액으로 관리하지 않는 과제 (TODO 125)
+    no_effect: bool = False
     # 비우면 설정의 작성자를 쓴다 (로그인이 생기면 로그인 사용자).
     created_by: str | None = None
     tags: list[str] = Field(default_factory=list)
@@ -53,6 +55,7 @@ class ProjectUpdate(BaseModel):
     effect_expected: float | None = None
     effect_verified: float | None = None
     no_report: bool | None = None
+    no_effect: bool | None = None
     tags: list[str] | None = None
     body: str | None = None
 

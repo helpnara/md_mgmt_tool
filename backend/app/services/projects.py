@@ -48,7 +48,7 @@ INDEX_TEMPLATE = """## 배경
 META_ORDER = [
     "id", "title", "status", "type", "group", "tags", "owners",
     "start_date", "due_date", "completed_at", "effect_expected", "effect_verified",
-    "no_report", "partners", "created_by", "created_at", "updated_at",
+    "no_report", "no_effect", "partners", "created_by", "created_at", "updated_at",
 ]
 
 # 상태가 이것이 되는 순간 완료일이 남는다 (TODO 104).
@@ -245,6 +245,8 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         # 단순 현황 관리를 과제로 세운 경우가 있다. 그런 과제는 보고 대상 후보에서 뺀다
         # — 매주 "이건 보고 안 해도 되는데" 를 눈으로 걸러 내지 않아도 되게 (TODO 80).
         "no_report": bool(data.get("no_report")),
+        # 효과 금액으로 관리하지 않는 과제 (TODO 125)
+        "no_effect": bool(data.get("no_effect")),
         # 담당자(누가 하는가)와 다른, "누가 등록했는가". 소급이 안 되므로 지금부터 남긴다.
         # 로그인이 생기면 이 자리에 로그인 사용자가 들어온다.
         "created_by": settings_service.current_author(data.get("created_by")) or None,
@@ -335,6 +337,8 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
             updates[field] = normalize_effect(updates[field])
     if "no_report" in updates:
         updates["no_report"] = bool(updates["no_report"])
+    if "no_effect" in updates:
+        updates["no_effect"] = bool(updates["no_effect"])
     if "partners" in updates:
         updates["partners"] = normalize_partners(updates["partners"])
     if "owners" in updates or "owner" in updates:
@@ -405,6 +409,7 @@ def clone_project(conn: sqlite3.Connection, source_id: str) -> str:
             "owners": list(meta.get("owners") or []),
             "partners": meta.get("partners") or [],
             "no_report": bool(meta.get("no_report")),
+            "no_effect": bool(meta.get("no_effect")),
             "body": body,
         },
     )
