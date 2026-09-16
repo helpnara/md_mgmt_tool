@@ -243,6 +243,10 @@ export interface AppSettings {
   /** 자동 백업 폴더. 비면 꺼진 것이다. */
   backup_dir: string;
   backup_keep: number;
+  /** 주 단위로 남길 벌 수 (TODO 119) */
+  backup_keep_weekly: number;
+  /** 월 단위로 남길 벌 수 (TODO 119) */
+  backup_keep_monthly: number;
   backup_every_hours: number;
   /** AI 요약 프롬프트의 앞뒤에 붙일 글 (TODO 71). 도구가 AI 를 부르지는 않는다. */
   ai_prompt_prefix: string;
@@ -404,10 +408,17 @@ export interface BackupStatus {
   enabled: boolean;
   /** 폴더에 실제로 닿는가 (네트워크 드라이브가 끊겼을 수 있다) */
   reachable: boolean;
+  /** 층을 합쳐 남기는 수 (TODO 119) */
   keep: number;
+  keep_daily: number;
+  keep_weekly: number;
+  keep_monthly: number;
   every_hours: number;
   count: number;
+  /** 폴더 전체 용량. 화면에 세우는 몇 개가 아니라 전부를 더한 값이다 */
   total_bytes: number;
+  /** 가장 오래된 백업의 날짜 — 되돌릴 수 있는 범위 */
+  oldest: string | null;
   recent: { name: string; size_bytes: number; at: string }[];
   last: { at: string; ok: boolean; file?: string; error?: string } | null;
 }

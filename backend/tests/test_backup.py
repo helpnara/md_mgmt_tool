@@ -95,21 +95,76 @@ def test_clearing_the_folder_turns_it_off(client, tmp_path):
     assert client.get("/api/settings/backup/status").json()["enabled"] is False
 
 
-def test_old_backups_are_dropped_newest_kept(client, tmp_path):
+def test_same_day_backups_collapse_to_one(client, tmp_path):
+    """하루에 여러 번 돌려도 그날 한 벌만 남는다 (TODO 119).
+
+    "하루 한 벌" 이라야 개수를 보고 기간을 셀 수 있다. 손으로 여러 번 돌린 날이
+    주·월 자리를 차지해 오래된 백업을 밀어내서도 안 된다.
+    """
     make(client)
     target = tmp_path / "백업"
     target.mkdir()
     use_folder(client, target)
-    client.put("/api/settings", json={"backup_keep": 3})
 
     for _ in range(5):
         client.post("/api/settings/backup/run")
 
     files = sorted(target.glob("*.zip"))
-    assert len(files) == 3
-    # 최근 것이 남아야 한다 — 오래된 것을 남기면 쓸모가 없다.
-    newest = max(files, key=lambda item: item.stat().st_mtime)
-    assert newest in files
+    assert len(files) == 1
+    # 남는 것은 그날의 **마지막** 백업이다.
+    assert files[0].stat().st_size > 0
+
+
+def test_tiers_cover_months_with_few_files(client, tmp_path):
+    """일 7 · 주 4 · 월 6 — 같은 개수로 훨씬 긴 기간을 덮는다 (TODO 119)."""
+    target = tmp_path / "백업"
+    target.mkdir()
+    today = datetime(2026, 9, 16, 3, 0)
+    made = []
+    for days_ago in range(179, -1, -1):
+        stamp = (today - timedelta(days=days_ago)).strftime(backup.STAMP)
+        path = target / f"{backup.PREFIX}{stamp}.zip"
+        path.write_bytes(b"x")
+        made.append(path)
+
+    keeping = backup.keep_set(made, backup.Keep(7, 4, 6))
+    assert len(keeping) == 17
+    names = sorted(item.name for item in keeping)
+    # 반년 전까지 닿는다. 예전 방식(최근 10개)이라면 열흘이 전부였다.
+    assert names[0] < f"{backup.PREFIX}20260601"
+    assert names[-1].startswith(f"{backup.PREFIX}20260916")
+    assert len(backup.keep_set(made, backup.Keep(10, 0, 0))) == 10
+
+
+def test_files_we_did_not_name_are_never_dropped(client, tmp_path):
+    """사람이 이름을 바꿔 둔 백업은 판단하지 않는다 — 지우는 쪽이 조심스러워야 한다."""
+    target = tmp_path / "백업"
+    target.mkdir()
+    mine = target / f"{backup.PREFIX}20260916-0300.zip"
+    odd = target / f"{backup.PREFIX}배포전-보관용.zip"
+    for item in (mine, odd):
+        item.write_bytes(b"x")
+    keeping = backup.keep_set([mine, odd], backup.Keep(1, 0, 0))
+    assert odd in keeping and mine in keeping
+
+
+def test_status_counts_every_file_not_just_the_listed_ones(client, tmp_path):
+    """총 용량은 **전체 기준**이다 (TODO 119). 예전에는 화면에 세우는 몇 개만 더했다."""
+    target = tmp_path / "백업"
+    target.mkdir()
+    today = datetime(2026, 9, 16, 3, 0)
+    for days_ago in range(12):
+        stamp = (today - timedelta(days=days_ago)).strftime(backup.STAMP)
+        (target / f"{backup.PREFIX}{stamp}.zip").write_bytes(b"x" * 1000)
+    use_folder(client, target)
+
+    status = client.get("/api/settings/backup/status").json()
+    assert status["count"] == 12
+    assert status["total_bytes"] == 12000  # 세우는 줄(5개) 이 아니라 전부
+    assert len(status["recent"]) == backup.RECENT_LIMIT
+    # 되돌릴 수 있는 범위 — 개수보다 이 날짜가 백업의 뜻이다.
+    assert status["oldest"] == "2026-09-05"
+    assert status["keep"] == status["keep_daily"] + status["keep_weekly"] + status["keep_monthly"]
 
 
 def test_other_files_in_the_folder_are_not_touched(client, tmp_path):

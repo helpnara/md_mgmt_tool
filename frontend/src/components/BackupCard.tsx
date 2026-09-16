@@ -14,8 +14,13 @@ import FolderPicker from "./FolderPicker";
 export default function BackupCard() {
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [dir, setDir] = useState("");
-  const [keep, setKeep] = useState(10);
+  // 층을 나눠 남긴다 — 일 · 주 · 월 (TODO 119)
+  const [keep, setKeep] = useState(7);
+  const [weekly, setWeekly] = useState(4);
+  const [monthly, setMonthly] = useState(6);
   const [hours, setHours] = useState(24);
+  // 목록은 최근 세 줄만. 나머지는 눌러서 편다.
+  const [showAll, setShowAll] = useState(false);
   const [busy, setBusy] = useState(false);
   /** 폴더 고르기를 펼쳤나 (TODO 97). 경로를 손으로 치지 않아도 되게 한다. */
   const [picking, setPicking] = useState(false);
@@ -28,7 +33,9 @@ export default function BackupCard() {
       .then((data) => {
         setStatus(data);
         setDir(data.directory);
-        setKeep(data.keep);
+        setKeep(data.keep_daily ?? data.keep);
+        setWeekly(data.keep_weekly ?? 0);
+        setMonthly(data.keep_monthly ?? 0);
         setHours(data.every_hours);
       })
       .catch((err: Error) => setError(err.message));
@@ -41,7 +48,13 @@ export default function BackupCard() {
     setError(null);
     setNotice(null);
     try {
-      await api.saveSettings({ backup_dir: dir.trim(), backup_keep: keep, backup_every_hours: hours });
+      await api.saveSettings({
+        backup_dir: dir.trim(),
+        backup_keep: keep,
+        backup_keep_weekly: weekly,
+        backup_keep_monthly: monthly,
+        backup_every_hours: hours,
+      });
       setNotice(dir.trim() ? "저장했습니다. [지금 백업]으로 한 번 확인해 보세요." : "자동 백업을 껐습니다.");
       load();
     } catch (err) {
@@ -80,14 +93,30 @@ export default function BackupCard() {
             </button>
           </span>
         </label>
+        {/* 층을 나눠 남긴다 (TODO 119). 하루 한 벌씩 열흘치만 남기면 되돌릴 수 있는
+            범위가 열흘이다 — 같은 개수로 훨씬 긴 기간을 덮으려고 층을 나눈다. */}
         <label>
-          남겨 둘 개수
+          일
           <input
-            type="number"
-            min={1}
-            max={999}
-            value={keep}
+            type="number" min={1} max={99} value={keep}
+            title="최근 며칠치를 그대로 남길지"
             onChange={(event) => setKeep(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          주
+          <input
+            type="number" min={0} max={52} value={weekly}
+            title="그 앞은 주마다 한 벌씩 몇 주"
+            onChange={(event) => setWeekly(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          월
+          <input
+            type="number" min={0} max={36} value={monthly}
+            title="그 앞은 달마다 한 벌씩 몇 달"
+            onChange={(event) => setMonthly(Number(event.target.value))}
           />
         </label>
         <label>
@@ -137,11 +166,17 @@ export default function BackupCard() {
 
       {status && status.count > 0 && (
         <>
-          <p className="hint">
+          {/* 개수보다 **덮는 범위**가 백업의 뜻이다 (TODO 119) */}
+          <p className="hint" data-testid="backup-coverage">
             보관 중인 백업 <b>{status.count}</b>개 · {formatBytes(status.total_bytes)}
+            {status.oldest && (
+              <>
+                {" "}· <b>{status.oldest}</b> 까지 되돌릴 수 있습니다
+              </>
+            )}
           </p>
           <ul className="backup-list">
-            {status.recent.map((item) => (
+            {(showAll ? status.recent : status.recent.slice(0, 3)).map((item) => (
               <li key={item.name}>
                 <span className="backup-when">{item.at}</span>
                 <code>{item.name}</code>
@@ -149,6 +184,16 @@ export default function BackupCard() {
               </li>
             ))}
           </ul>
+          {status.count > status.recent.length && !showAll && (
+            <p className="hint">
+              최근 것만 세웠습니다. 나머지 {status.count - 3}개는 백업 폴더에 있습니다.
+            </p>
+          )}
+          {status.recent.length > 3 && (
+            <button className="ghost small" onClick={() => setShowAll((on) => !on)}>
+              {showAll ? "접기" : `최근 ${status.recent.length}개 모두 보기`}
+            </button>
+          )}
         </>
       )}
 

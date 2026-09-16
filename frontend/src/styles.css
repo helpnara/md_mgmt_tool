@@ -367,15 +367,21 @@ button { white-space: nowrap; }
    카드가 아홉 개라 세로가 매우 길고, 두 칸이면 훑는 거리가 절반이 된다. */
 .settings .card { max-width: 720px; }
 @media (min-width: 1180px) {
+  /* 두 칸으로 흘린다 — **격자가 아니라 단(column)** 이다 (TODO 120).
+     격자로 두면 칸마다 카드 높이가 달라 짧은 카드 아래에 구멍이 생긴다. 높이를 억지로
+     맞추면 그 안이 빌 뿐이므로, 카드를 위로 붙여 흘려 구멍 자체를 없앤다. */
   .settings-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
-    gap: 0 16px;
-    align-items: start;
+    columns: 2;
+    column-gap: 16px;
   }
-  .settings-grid > .card { max-width: none; }
-  /* 서식·오류 기록처럼 넓게 봐야 하는 카드는 두 칸을 다 쓴다. */
-  .settings-grid > .card.wide { grid-column: 1 / -1; max-width: 1100px; }
+  .settings-grid > .card {
+    max-width: none;
+    width: 100%;
+    margin: 0 0 16px;
+    /* 카드가 두 단에 걸쳐 잘리지 않게 */
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+  }
 }
 .settings h2 { margin-bottom: 6px; }
 .vault-box { display: block; margin-top: 6px; padding: 8px 10px; background: #f1f3f5; border-radius: 6px; font-size: 13px; word-break: break-all; }
@@ -1417,3 +1423,21 @@ h2 .copy-table, h1 .copy-table { margin-left: 10px; vertical-align: middle; }
 .person-left-cell input[type="date"] { width: 140px; }
 .person-left-cell select { width: auto; min-width: 70px; }
 .person-actions { display: flex; gap: 4px; white-space: nowrap; }
+
+/* ── 홈 배치 (TODO 123) ──────────────────────────────────────
+   왼쪽 [이번 주 할 일]이 오른쪽보다 길어 오른쪽 아래가 비어 있었다. 오른쪽 칸에 팀 현황과
+   연도별 추이를 쌓아 그 자리를 채운다. 좁은 화면에서는 한 줄씩 서므로 순서만 남는다. */
+.home-right { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+/* 속성별·그룹별은 줄이 짧아 한 줄씩 세우면 자리가 아깝다 */
+.home-slices { display: grid; gap: 14px; }
+@media (min-width: 1100px) {
+  .home-slices { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+
+/* 접히는 묶음 (TODO 120) — 서식처럼 한 번 정하면 한동안 안 고치는 칸들 */
+.settings-fold > summary { cursor: pointer; list-style: none; }
+.settings-fold > summary::-webkit-details-marker { display: none; }
+.settings-fold > summary::before { content: "▸"; margin-right: 6px; color: var(--muted-strong); font-size: 12px; }
+.settings-fold[open] > summary::before { content: "▾"; }
+.settings-fold > summary:hover { color: var(--accent-strong); }
+.settings-fold > .settings-grid { margin-top: 10px; }

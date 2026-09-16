@@ -478,7 +478,9 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 | `report_weekday` | 주간 보고 요일(0=월). 보고 예정일·배너·초안 기본 날짜가 전부 이 값을 본다 | 5.7 |
 | `entry_templates` · `report_template` | 진행일지(속성별)·보고 초안 서식 | 29 |
 | `ai_prompt_prefix` · `ai_prompt_suffix` | AI 프롬프트 앞뒤 글 | 71 · 5.13 |
-| `backup_dir` · `backup_keep` · `backup_every_hours` | 자동 백업. 폴더를 비우면 꺼진다. **vault 안쪽은 넣을 수 없다** | T21 · 97 |
+| `backup_dir` · `backup_every_hours` | 자동 백업 폴더와 주기. 폴더를 비우면 꺼진다. **vault 안쪽은 넣을 수 없다** | T21 · 97 |
+| `backup_keep` · `backup_keep_weekly` · `backup_keep_monthly` | 몇 벌을 남기나 — 일 · 주 · 월 세 층 | 119 · 5.18 |
+| `people[].left_on` · `left_reason` | 떠난 날과 사유. **지우지 않고 적는다** | 122 · 5.18 |
 
 읽을 때 기본값과 합치므로 **열쇠가 빠져 있어도 동작한다.** 새 항목을 더할 때 기존 파일을 고칠
 필요가 없고, 반대로 모르는 열쇠는 그대로 두고 지나간다(손으로 적어 둔 메모를 지우지 않는다).
@@ -783,7 +785,7 @@ score = elapsed + unreported_entries × 0.5
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET | `/api/projects` | 목록. `?status=&type=&group=&tag=&owner=&partner=&q=&year=&done_year=&verified=&due=&sort=&order=` (`done_year` 완료일 기준 · `verified=none` 실증효과 미입력 — TODO 104 · 106) |
+| GET | `/api/projects` | 목록. `?status=&type=&group=&tag=&owner=&partner=&q=&year=&done_year=&verified=&owner_left=&due=&sort=&order=` (`owner_left=1` 떠난 담당자가 남은 **끝나지 않은** 과제 — 122) (`done_year` 완료일 기준 · `verified=none` 실증효과 미입력 — TODO 104 · 106) |
 | POST | `/api/projects` | 과제 생성 (폴더 + index.md 생성). 번호의 연도는 **시작일**을 따른다 (95) |
 | GET | `/api/projects/next-id` | 저장하면 붙을 번호를 미리 보여 준다 (`?start_date=`, 95) |
 | GET | `/api/projects/{id}` | 개요 + 일지 목록 요약. 답하지 않은 지시·다음 할 일·개요 작성 여부를 함께 준다 (107 · 112 · 106-B) |
@@ -850,8 +852,9 @@ score = elapsed + unreported_entries × 0.5
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET/PUT/POST | `/api/people` | 담당자 명부 조회·저장·한 명 추가 |
-| POST | `/api/people/rename` | 담당자 표기 통일 (과제 파일까지 반영) |
+| GET/PUT/POST | `/api/people` | 담당자 명부 조회·저장·한 명 추가. 줄마다 **쓰는 과제 수**와 **끝나지 않은 과제 수**가 함께 온다 (122) |
+| POST | `/api/people/rename` | 담당자 표기 통일 — *같은 사람의 이름을 바로잡는다*. 명부까지 바뀐다 |
+| POST | `/api/people/handover` | 담당자 넘기기 — *다른 사람에게 일을 넘긴다* (122). **끝난 과제는 손대지 않는 것이 기본**이고 명부는 그대로 둔다 |
 | GET/PUT | `/api/settings` | 설정 조회·저장 (4.8 — 서식·백업·AI 프롬프트·보고 요일 등) |
 | GET/PUT | `/api/settings/project-types` | 과제 속성 목록. 줄마다 **몇 건이 쓰는지**가 함께 오고, 쓰는 속성은 뺄 수 없다 (100) |
 | GET/POST | `/api/folders` | 폴더 고르기 (`?path=`) — 하위 폴더 목록 / 새 폴더 만들기. 브라우저가 실제 경로를 주지 않아 서버가 목록을 준다 (97) |
@@ -869,7 +872,7 @@ score = elapsed + unreported_entries × 0.5
 | GET | `/api/versions` · `/overview` · `/content` | 로컬 버전 보관(`.versions/`) 목록·개요·내용 |
 | POST | `/api/versions/restore` | 지난 버전으로 되돌리기 |
 | GET | `/api/trash` · POST `/api/trash/{name}/restore` | 삭제 보관함 목록 · 원래 자리로 되돌리기 |
-| GET | `/api/settings/backup/status` · POST `/api/settings/backup/run` | 백업 상태 · 지금 백업 |
+| GET | `/api/settings/backup/status` · POST `/api/settings/backup/run` | 백업 상태(층별 보관 수 · 전체 용량 · **되돌릴 수 있는 날짜** · 최근 5벌) · 지금 백업 (119) |
 | GET | `/api/backup` | 전체 vault ZIP 내려받기 |
 | GET/DELETE | `/api/errors` | 오류 기록 조회·비우기 (5.10 — 과제 내용은 담지 않는다) |
 | GET/POST | `/api/maintenance/link-fix` | 쌓인 문서의 깨진 첨부 링크 — 세기(아무것도 바꾸지 않는다) / 한 번에 고치기 (116, 5.16) |
@@ -1260,3 +1263,49 @@ vault 를 git 저장소로 두지 않기로 한 것과 같은 판단이다(§ R2
 > 말할 수 있어야 한다. 그 한 줄이 없으면 모든 문의가 추측으로 시작한다.
 > ([Lessons Learned](LESSONS-LEARNED.md) 4절에 점검표로 옮겨 두었다)
 
+## 5.18 사람과 백업 — 시간이 지나면서 생기는 것 (TODO 119 · 122)
+
+한 해쯤 쓰고 나서야 보이는 것이 둘 있었다. **백업이 쌓이는 것**과 **사람이 떠나는 것**이다.
+둘 다 처음에는 없던 문제이고, 둘 다 *지우면 될 것 같은데 지우면 안 되는* 자료다.
+
+### 백업은 층을 나눠 남긴다 (GFS)
+
+하루 한 벌씩 만들고 최근 열 벌만 남기면 **되돌릴 수 있는 범위가 열흘**이다. 2주 전에 잘못
+지운 것은 이미 백업에 없다. 사용자가 본 것은 "파일이 많아진다" 였지만 실제 문제는 그 반대쪽,
+**덮는 기간이 짧다**는 것이었다.
+
+그래서 층을 나눈다 — 일 7 · 주 4 · 월 6. 파일은 일곱 개 늘고 덮는 기간은 열흘에서 반년이 된다.
+업계에서 Grandfather-Father-Son 이라 부르는 방식이고, 3-2-1 규칙(사본 3 · 매체 2 · 원격 1)은
+백업 폴더를 네트워크 드라이브로 잡는 것으로 일부 채운다 — 도구가 강제할 수는 없고 안내한다.
+
+세 가지를 못 박았다.
+
+| 무엇 | 왜 |
+|---|---|
+| **하루 한 벌**만 후보로 삼는다 | 그래야 개수를 보고 기간을 셀 수 있다. 손으로 여러 번 돌린 날이 주·월 자리를 차지해 오래된 백업을 밀어내서도 안 된다 |
+| 이름을 못 읽는 파일은 **건드리지 않는다** | 사람이 이름을 바꿔 둔 것일 수 있다. 지우는 쪽이 조심스러워야 한다 |
+| 화면에 적는 것은 개수가 아니라 **범위** | `2026-04-30 까지 되돌릴 수 있습니다` 가 백업의 뜻이다 |
+
+총 용량이 *화면에 세우는 몇 개*만 더한 값이던 결함도 함께 고쳤다 — 5.8 의 규칙을
+백업 카드가 어기고 있었다.
+
+### 떠난 사람은 지우지 않고 날짜를 적는다
+
+명부에서 지우면 두 가지를 잃는다. 그 사람이 담당이던 과제의 이름은 파일에 그대로 남으므로
+**"명부에 없는 이름"** 이 되어 오타와 뒤섞이고, 지난해 팀원별 성과에서 사라져 **그해에 한 일이
+없던 일**이 된다. 그래서 `left_on`(떠난 날) 한 칸을 둔다 — 소급이 안 되는 자료다(5.5 · 8.2 계열).
+
+그 한 칸이 생기면 나머지가 따라온다.
+
+```
+명부에 left_on 을 적는다
+  → 새 과제 담당자 후보에서 빠진다
+  → 이름 옆에 [전배]·[퇴사] 딱지 (이름은 그대로)
+  → 끝나지 않은 과제에 남아 있으면 홈이 "대체 담당자 지정 필요 N건"
+  → [넘기기] 로 그 과제들만 다른 사람에게
+```
+
+**끝난 과제는 손대지 않는 것이 기본이다.** 바꾸면 지난 보고·지난해 성과와 어긋난다.
+그래서 표기 통일(`rename_owner`, 같은 사람의 이름을 바로잡는 것)과 **함수를 따로 뒀다**
+(`handover`, 다른 사람에게 일을 넘기는 것) — 이름이 비슷하다고 한 함수로 묶으면
+언젠가 한쪽 규칙이 다른 쪽에 새어 든다.

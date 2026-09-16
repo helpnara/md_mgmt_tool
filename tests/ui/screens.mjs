@@ -2534,6 +2534,46 @@ async function main() {
     }
   });
 
+  console.log("\n[19] 백업 층 보관 · 화면 배치 (TODO 119 · 120 · 123)");
+  await check("백업 카드가 일·주·월 칸과 덮는 범위를 보여 준다", async () => {
+    await go("#/settings");
+    const card = page.locator(".card", { hasText: "자동 백업" }).first();
+    const labels = await card.locator("label").allInnerTexts();
+    for (const want of ["일", "주", "월"]) {
+      expect(labels.some((text) => text.trim().startsWith(want)), `${want} 칸이 없습니다: ${labels}`);
+    }
+    // 백업 폴더가 정해져 있을 때만 목록이 선다 — 여기서는 칸이 있는지까지만 본다.
+    expect((await card.innerText()).includes("네트워크 드라이브"), "안내 문구");
+  });
+
+  await check("설정의 서식 묶음은 접혀 있고 눌러서 편다 (TODO 120)", async () => {
+    await go("#/settings");
+    const fold = page.locator("details.settings-fold").first();
+    equal(await fold.count(), 1, "접히는 묶음");
+    equal(await fold.evaluate((el) => el.open), false, "기본은 접힘");
+    // 접혀 있으면 안의 카드는 보이지 않는다 — 그만큼 세로가 짧아진다.
+    equal(await fold.locator(".card").first().isVisible(), false, "접힌 동안 카드");
+    await fold.locator("summary").click();
+    await page.waitForTimeout(300);
+    equal(await fold.locator(".card").first().isVisible(), true, "펼친 뒤 카드");
+  });
+
+  await check("홈의 연도별 추이가 팀 현황 아래 같은 칸에 선다 (TODO 123)", async () => {
+    await go("#/");
+    const right = page.locator(".home-right");
+    equal(await right.count(), 1, "오른쪽 칸");
+    equal(await right.locator(".home-team").count(), 1, "팀 현황");
+    equal(await right.locator(".home-compare").count(), 1, "연도별 추이");
+    // 두 칸이 나란히 서고, 오른쪽 아래의 빈 자리가 채워졌는지 — 높이 차이로 본다.
+    const week = await page.locator(".home-week").boundingBox();
+    const box = await right.boundingBox();
+    expect(Math.abs(week.y - box.y) < 40, `두 칸이 같은 줄에서 시작하지 않습니다 (${week.y} vs ${box.y})`);
+    expect(box.height > 0 && week.height > 0, "두 칸 모두 그려져야 한다");
+    // 속성별·그룹별은 나란히
+    const slices = page.locator(".home-slices");
+    equal(await slices.count(), 1, "속성별·그룹별 묶음");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

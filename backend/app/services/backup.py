@@ -18,13 +18,27 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..config import get_settings
 
 PREFIX = "과제이력-백업-"
 STAMP = "%Y%m%d-%H%M"
 STATE_FILE = "backup-state.json"
+# 화면에 세우는 줄 수. 나머지는 접어 둔다 (TODO 119).
+RECENT_LIMIT = 5
+
+
+class Keep(NamedTuple):
+    """몇 벌을 남기나 — 일 · 주 · 월 (TODO 119)."""
+
+    daily: int
+    weekly: int
+    monthly: int
+
+    @property
+    def total(self) -> int:
+        return self.daily + self.weekly + self.monthly
 
 
 class BackupError(Exception):
@@ -90,15 +104,76 @@ def _files(directory: Path) -> list[Path]:
     )
 
 
-def _settings_values() -> tuple[str, int, int]:
+def _settings_values() -> tuple[str, Keep, int]:
     from . import settings as settings_service
 
     data = settings_service.load()
     return (
         str(data.get("backup_dir") or "").strip(),
-        int(data.get("backup_keep") or 10),
+        Keep(
+            daily=max(1, int(data.get("backup_keep") or 7)),
+            weekly=max(0, int(data.get("backup_keep_weekly") or 0)),
+            monthly=max(0, int(data.get("backup_keep_monthly") or 0)),
+        ),
         int(data.get("backup_every_hours") or 24),
     )
+
+
+def _stamp_of(path: Path) -> datetime | None:
+    """파일 이름에 박힌 시각. 이름이 곧 시각이라 파일 시각보다 믿을 만하다."""
+    text = path.name[len(PREFIX):].split(".")[0]
+    try:
+        return datetime.strptime(text[: len(("20260916-1230"))], STAMP)
+    except ValueError:
+        return None
+
+
+def keep_set(files: list[Path], keep: Keep) -> set[Path]:
+    """남길 파일을 고른다 — 일 · 주 · 월 세 층 (TODO 119).
+
+    **하루에 한 벌**만 후보로 삼는다. 같은 날 여러 번 백업하면 그날의 마지막 것만 남는다 —
+    "하루 한 벌" 이라야 개수를 보고 기간을 셀 수 있고, 손으로 여러 번 돌린 날이 주·월 자리를
+    차지해 오래된 백업을 밀어내는 일도 없다.
+
+    그다음 최근 것부터 층을 채운다 — 일 `daily` 벌, 그 앞은 주마다 한 벌 `weekly` 주,
+    그 앞은 달마다 한 벌 `monthly` 달.
+
+    이름을 읽지 못하는 파일(사람이 손으로 바꾼 것 등)은 **건드리지 않는다.**
+    지우는 쪽이 조심스러워야 한다.
+    """
+    keeping: set[Path] = set()
+    candidates: list[tuple[datetime, Path]] = []
+    seen_day: set[str] = set()
+
+    for path in reversed(files):  # 최근 것부터
+        when = _stamp_of(path)
+        if when is None:
+            keeping.add(path)  # 우리가 만든 이름이 아니다 — 판단하지 않는다
+            continue
+        day = when.date().isoformat()
+        if day in seen_day:
+            continue  # 같은 날 더 이른 백업
+        seen_day.add(day)
+        candidates.append((when, path))
+
+    seen_week: set[tuple[int, int]] = set()
+    seen_month: set[tuple[int, int]] = set()
+    daily_left = keep.daily
+    for when, path in candidates:
+        if daily_left > 0:
+            daily_left -= 1
+            keeping.add(path)
+            continue
+        week = when.isocalendar()[:2]
+        if len(seen_week) < keep.weekly and week not in seen_week:
+            seen_week.add(week)
+            keeping.add(path)
+            continue
+        month = (when.year, when.month)
+        if len(seen_month) < keep.monthly and month not in seen_month:
+            seen_month.add(month)
+            keeping.add(path)
+    return keeping
 
 
 def run(conn: sqlite3.Connection, reason: str = "manual") -> dict[str, Any]:
@@ -129,9 +204,12 @@ def run(conn: sqlite3.Connection, reason: str = "manual") -> dict[str, Any]:
                       "reason": reason, "error": message})
         raise BackupError(message) from exc
 
-    # 오래된 것부터 버린다. 최근 것을 남기는 편이 언제나 쓸모 있다.
-    for stale in _files(target_dir)[:-keep] if keep > 0 else []:
-        stale.unlink(missing_ok=True)
+    # 층을 나눠 남기고 나머지를 버린다 (TODO 119).
+    files = _files(target_dir)
+    keeping = keep_set(files, keep)
+    for stale in files:
+        if stale not in keeping:
+            stale.unlink(missing_ok=True)
 
     _write_state({"at": datetime.now().isoformat(timespec="seconds"), "ok": True,
                   "reason": reason, "file": target.name, "bytes": len(content)})
@@ -173,8 +251,22 @@ def status() -> dict[str, Any]:
     """설정 화면에 세우는 현황."""
     directory, keep, every_hours = _settings_values()
     files = _files(Path(directory)) if directory else []
+
+    # **총 용량은 전체 기준이다** (TODO 119). 예전에는 화면에 세우는 몇 개만 더해서,
+    # 파일이 그보다 많으면 실제보다 작게 보였다 (TODO 82·103-B 와 같은 부류).
+    total_bytes = 0
+    for item in files:
+        try:
+            total_bytes += item.stat().st_size
+        except OSError:
+            continue
+    oldest = None
+    if files:
+        when = _stamp_of(files[0])
+        oldest = (when.date().isoformat() if when else None)
+
     items = []
-    for item in reversed(files[-10:]):
+    for item in reversed(files[-RECENT_LIMIT:]):
         try:
             stat = item.stat()
         except OSError:
@@ -190,10 +282,15 @@ def status() -> dict[str, Any]:
     return {
         "directory": directory,
         "enabled": bool(directory),
-        "keep": keep,
+        "keep": keep.total,
+        "keep_daily": keep.daily,
+        "keep_weekly": keep.weekly,
+        "keep_monthly": keep.monthly,
         "every_hours": every_hours,
         "count": len(files),
-        "total_bytes": sum(item["size_bytes"] for item in items),
+        "total_bytes": total_bytes,
+        # 되돌릴 수 있는 범위 — 개수보다 이 날짜가 백업의 뜻이다.
+        "oldest": oldest,
         "recent": items,
         "last": state or None,
         "reachable": bool(directory) and Path(directory).is_dir(),

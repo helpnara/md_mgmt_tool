@@ -206,11 +206,15 @@ function backupWarning(status: BackupStatus | null): string | null {
   return null;
 }
 
+/** 팀원이 늘면 표가 계속 길어진다. 속성별·그룹별과 같은 규칙으로 접는다 (TODO 123). */
+const MEMBER_LIMIT = 10;
+
 export default function Home({ meta }: { meta: Meta }) {
   const thisYear = String(new Date().getFullYear());
   const [year, setYear] = useState(thisYear);
   // 반기·분기 (TODO 110). 연도 전체를 볼 때는 뜻이 없으므로 그때는 보내지 않는다.
   const [period, setPeriod] = useState("");
+  const [allMembers, setAllMembers] = useState(false);
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 자동 백업이 죽어 있어도 홈은 몰랐다 (TODO 106-A). 문제가 있을 때만 한 줄 띄운다.
@@ -484,6 +488,10 @@ export default function Home({ meta }: { meta: Meta }) {
         )}
       </div>
 
+      {/* ── 오른쪽 칸 — 팀 현황 · 연도별 추이 (TODO 123) ──────────────
+          왼쪽 [이번 주 할 일]이 더 길어 오른쪽 아래가 비어 있었다. 그 자리에 연도별 추이를
+          쌓으면 세로가 카드 하나분 짧아진다. 좁은 화면에서는 한 줄씩 서므로 순서만 남는다. */}
+      <div className="home-right">
       {/* ── 팀 현황 ──────────────────────────────────────────────────── */}
       <div className="card home-team">
         <h2>{year === ALL_YEARS ? "전체" : `${year}년`} 팀 현황</h2>
@@ -545,10 +553,10 @@ export default function Home({ meta }: { meta: Meta }) {
           {" "}<b>실증효과는 끝난 과제에서만 나오므로 기대 대비 달성률이 아닙니다.</b>
         </p>
       </div>
-      </div>
-
       {/* ── 연도 비교 ────────────────────────────────────────────────
-          한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다. */}
+          한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다.
+          **팀 현황 아래, 같은 칸에 쌓는다** (TODO 123) — 왼쪽 [이번 주 할 일]이 더 길어
+          오른쪽 아래가 비어 있었다. 그 자리를 채우면 세로가 카드 하나분 짧아진다. */}
       {data.compare.length > 1 && (
         <div className="card home-compare">
           <h2>
@@ -591,6 +599,8 @@ export default function Home({ meta }: { meta: Meta }) {
           </p>
         </div>
       )}
+      </div>
+      </div>
 
       {/* ── 팀원별 성과 (ROADMAP R1 의 실체) ───────────────────────── */}
       <div className="card home-members wide">
@@ -641,7 +651,7 @@ export default function Home({ meta }: { meta: Meta }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.members.map((member) => (
+                  {(allMembers ? data.members : data.members.slice(0, MEMBER_LIMIT)).map((member) => (
                     <tr key={member.name}>
                       <td>
                         <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
@@ -670,6 +680,11 @@ export default function Home({ meta }: { meta: Meta }) {
                 </tbody>
               </table>
             </div>
+            {data.members.length > MEMBER_LIMIT && (
+              <button type="button" className="ghost small" onClick={() => setAllMembers((on) => !on)}>
+                {allMembers ? "접기" : `나머지 ${data.members.length - MEMBER_LIMIT}명 더 보기`}
+              </button>
+            )}
             {/* 이 문구는 수가 어긋날 때만 띄우면 안 된다. 담당자 없는 과제가 중복분을
                 상쇄해 **우연히 합이 맞는 순간**이 가장 위험하기 때문이다 — 그때야말로
                 합계가 맞는 줄 알고 그대로 보고하게 된다. 그래서 늘 밝힌다. */}
@@ -692,6 +707,8 @@ export default function Home({ meta }: { meta: Meta }) {
           속성은 과제의 *성격*(R&D·투자…), 그룹은 *주제*(차세대전지·소재…)다.
           목록에는 두 필터가 다 있는데 홈에는 그룹 축만 없었다 (TODO 90).
           표 모양은 하나로 맞춘다 — 같은 화면에서 같은 것을 다르게 세지 않기 위해서다. */}
+      {/* 속성별·그룹별은 줄이 짧아 한 줄씩 세우면 자리가 아깝다. 나란히 놓는다 (TODO 123) */}
+      <div className="home-slices">
       <SliceTable
         meta={meta}
         title="속성별"
@@ -721,6 +738,7 @@ export default function Home({ meta }: { meta: Meta }) {
           </>
         }
       />
+      </div>
 
     </section>
   );

@@ -35,7 +35,12 @@ DEFAULTS: dict[str, Any] = {
     "report_weekday": 1,
     # 자동 백업 (바깥쪽 안전망). 폴더를 비워 두면 꺼진다.
     "backup_dir": "",
-    "backup_keep": 10,        # 남겨 둘 백업 개수
+    # 층을 나눠 남긴다 — GFS(Grandfather-Father-Son), TODO 119.
+    # 하루 한 벌씩 열흘치만 남기면 **되돌릴 수 있는 범위가 열흘**이다. 2주 전에 잘못 지운
+    # 것은 이미 없다. 같은 개수로 훨씬 긴 기간을 덮으려고 층을 나눈다.
+    "backup_keep": 7,          # 일 단위 — 최근 며칠치를 그대로 남기나
+    "backup_keep_weekly": 4,   # 주 단위 — 주마다 한 벌 (한 달)
+    "backup_keep_monthly": 6,  # 월 단위 — 달마다 한 벌 (반년)
     "backup_every_hours": 24,  # 이 시간이 지나면 다시 백업한다
     # AI 요약 프롬프트의 앞뒤에 붙일 글 (TODO 71). 비우면 기본 지시문을 쓴다.
     # 도구가 AI 를 부르지는 않는다 — 붙여넣기 좋은 글을 만들어 줄 뿐이다.
@@ -80,6 +85,9 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = backup_service.validate_dir(str(updates[key] or ""))
         elif key in ("backup_keep", "backup_every_hours"):
             current[key] = _positive_int(key, updates[key])
+        elif key in ("backup_keep_weekly", "backup_keep_monthly"):
+            # 층은 0 이 될 수 있다 — "주 단위는 안 쓴다" 는 뜻이다 (TODO 119).
+            current[key] = _zero_or_more(key, updates[key])
         elif key == "project_types":
             current[key] = validate_project_types(updates[key])
         elif key == "entry_templates":
@@ -290,8 +298,26 @@ def validate_report_weekday(value: object) -> int:
     return number
 
 
+LABELS = {
+    "backup_keep": "일 단위로 남길 백업 수",
+    "backup_keep_weekly": "주 단위로 남길 백업 수",
+    "backup_keep_monthly": "달 단위로 남길 백업 수",
+    "backup_every_hours": "백업 주기(시간)",
+}
+
+
+def _zero_or_more(key: str, value: object) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{LABELS.get(key, key)}는 숫자여야 합니다.") from exc
+    if number < 0:
+        raise ValueError(f"{LABELS.get(key, key)}는 0 이상이어야 합니다.")
+    return number
+
+
 def _positive_int(key: str, value: object) -> int:
-    labels = {"backup_keep": "남겨 둘 백업 개수", "backup_every_hours": "백업 주기(시간)"}
+    labels = LABELS
     try:
         number = int(value)
     except (TypeError, ValueError) as exc:

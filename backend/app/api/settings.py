@@ -26,6 +26,9 @@ class SettingsUpdate(BaseModel):
     # 자동 백업 (바깥쪽 안전망). 폴더를 비우면 꺼진다.
     backup_dir: str | None = None
     backup_keep: int | None = None
+    # 층을 나눠 남긴다 — 일 · 주 · 월 (TODO 119)
+    backup_keep_weekly: int | None = None
+    backup_keep_monthly: int | None = None
     backup_every_hours: int | None = None
     # AI 요약 프롬프트의 앞뒤에 붙일 글. 도구가 AI 를 부르지는 않는다 (TODO 71).
     ai_prompt_prefix: str | None = None

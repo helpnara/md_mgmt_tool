@@ -131,17 +131,19 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
         </div>
       </div>
 
-      <div className="settings-group">
-        <h2 className="settings-group-title">
+      {/* 서식 셋은 키가 크고 **매일 여는 칸이 아니다.** 접어 두면 설정 화면의 세로가
+          세 카드분 짧아진다 (TODO 120). 한 번 정하면 한동안 안 고치는 값들이다. */}
+      <details className="settings-group settings-fold">
+        <summary className="settings-group-title">
           서식
-          <span className="hint">새 문서를 무엇으로 시작하는가</span>
-        </h2>
+          <span className="hint">새 문서를 무엇으로 시작하는가 — 진행일지 · 보고 초안 · AI 프롬프트</span>
+        </summary>
         <div className="settings-grid">
           <EntryTemplateCard meta={meta} />
           <ReportTemplateCard />
           <AiPromptCard />
         </div>
-      </div>
+      </details>
 
       <div className="settings-group">
         <h2 className="settings-group-title">
