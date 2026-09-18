@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { projectLink } from "../nav";
+import { projectLink, backTarget } from "../nav";
 import type { Meta, SearchResults as Results } from "../types";
 import { formatBytes } from "../upload";
 import StatusBadge from "./StatusBadge";
@@ -21,7 +21,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return <>{parts}</>;
 }
 
-export default function SearchResults({ query, meta }: { query: string; meta: Meta }) {
+export default function SearchResults({ query, meta, back }: { query: string; meta: Meta; back?: string | null }) {
   const [results, setResults] = useState<Results | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,8 +37,9 @@ export default function SearchResults({ query, meta }: { query: string; meta: Me
 
   return (
     <section className="search-results">
-      <a className="back" href="#/projects">
-        ← 과제 목록
+      {/* 온 곳으로 돌아간다 (TODO 127) */}
+      <a className="back" href={backTarget(back).href}>
+        ← {backTarget(back).label}
       </a>
       <h1 className="search-title">
         “{query}” 검색 결과{" "}

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
-import { backTarget, projectLink } from "../nav";
+import { backTarget, listLink, projectLink } from "../nav";
 import type { Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -32,12 +32,6 @@ interface Props {
 }
 
 /** 그 조건으로 걸러진 과제 목록. 홈의 것과 같은 규칙이다. */
-function listLink(params: Record<string, string>): string {
-  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value));
-  const text = query.toString();
-  return `#/projects${text ? `?${text}` : ""}`;
-}
-
 /**
  * 번호의 연도가 시작일과 어긋났다는 알림 (TODO 95).
  *

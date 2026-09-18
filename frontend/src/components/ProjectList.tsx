@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, Project } from "../types";
 import { dueLabel, effectText, EFFECT_UNIT, formatDate } from "../util";
-import { projectLink, useAddressBar } from "../nav";
+import { backTarget, projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
 import Dashboard from "./Dashboard";
@@ -32,6 +32,9 @@ const DEFAULT_FILTERS = {
   owner_left: "",
   // 효과 금액이 적힌 과제 (TODO 124) · 효과성 관리 비대상 (TODO 125)
   effect: "", no_effect: "",
+  // 어디서 왔는지 (TODO 127). 거르는 조건이 아니라 **돌아갈 곳**이다 — 서버로 보내지 않고,
+  // 조건을 바꿔도 주소에 남아 있어야 한다(그래야 거르다가도 홈으로 돌아간다).
+  back: "",
 };
 
 /**
@@ -63,7 +66,9 @@ const ALL_YEARS = "all";
 
 /** 서버에는 연도만 넘긴다 — [전체]는 조건이 없는 것이다. */
 function toQuery(filters: typeof DEFAULT_FILTERS): Record<string, string> {
-  return { ...filters, year: filters.year === ALL_YEARS ? "" : filters.year };
+  // back 은 화면의 것이지 조건이 아니다 — 서버에 보내지 않는다 (TODO 127).
+  const { back: _back, ...rest } = filters;
+  return { ...rest, year: filters.year === ALL_YEARS ? "" : filters.year };
 }
 
 /** 열 머리글 → 서버가 아는 정렬 이름. 여기 없는 열은 눌러도 아무 일이 없다. */
@@ -143,6 +148,13 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
 
   return (
     <section className="project-list">
+      {/* 홈에서 숫자를 눌러 들어오면 돌아갈 길을 그린다 (TODO 127).
+          메뉴로 들어온 경우에는 온 곳이 없으므로 그리지 않는다 — 없는 길을 만들지 않는다. */}
+      {filters.back && (
+        <a className="back" href={backTarget(filters.back).href}>
+          ← {backTarget(filters.back).label}
+        </a>
+      )}
       <Dashboard
         refreshKey={refreshKey}
         filters={filters}

@@ -1958,7 +1958,9 @@ async function main() {
     await card.getByRole("button", { name: "폴더 고르기" }).click();
     await page.waitForSelector(".folder-picker");
     const up = page.locator(".folder-picker .folder-head button");
-    for (let step = 0; step < 12 && !(await up.isDisabled()); step += 1) {
+    // 임시 vault 경로의 깊이는 실행마다 다르다. 열둘로는 모자란 날이 있어 넉넉히 올라간다
+    // — 다 올라가지 못한 채 "처음 자리" 를 재면 시험이 이유 없이 실패한다.
+    for (let step = 0; step < 30 && !(await up.isDisabled()); step += 1) {
       await up.click();
       await page.waitForTimeout(250);
     }
@@ -2466,7 +2468,8 @@ async function main() {
       expect((await band.innerText()).includes("담당자 공백 과제"), "과제 이름");
       expect((await band.innerText()).includes("전배"), "사유 딱지");
       // 말한 수와 데려가는 목록이 같아야 한다 (DESIGN 5.8)
-      const link = page.locator('.home-week a[href="#/projects?owner_left=1"]').first();
+      // 주소에 back 이 함께 실린다 (TODO 127) — 앞부분으로 찾는다.
+      const link = page.locator('.home-week a[href^="#/projects?owner_left=1"]').first();
       const said = Number((await link.innerText()).match(/(\d+)건/)[1]);
       await link.click();
       await page.waitForTimeout(900);
@@ -2623,6 +2626,69 @@ async function main() {
     const heads = await card.locator("thead th").allInnerTexts();
     expect(!heads.includes("계정"), `계정 열이 남아 있습니다: ${heads.join("|")}`);
     expect(heads.includes("사번"), "사번 열은 그대로여야 한다");
+  });
+
+  console.log("\n[21] 홈에서 간 화면에서 돌아오는 길 (TODO 127)");
+  await check("홈의 숫자를 누르면 목록에 ← 홈 이 선다", async () => {
+    await go("#/");
+    // 팀 현황의 [과제] — 홈에서 목록으로 가는 22곳 중 하나
+    await page.locator(".home-team a.home-stat").first().click();
+    await page.waitForTimeout(900);
+    const back = page.locator(".project-list a.back").first();
+    equal(await back.count(), 1, "뒤로 가기 줄");
+    equal((await back.innerText()).trim(), "← 홈", "문구");
+    await back.click();
+    await page.waitForTimeout(900);
+    expect((page.url().split("#")[1] ?? "").replace(/^\//, "") === "", `홈으로 안 왔습니다: ${page.url()}`);
+  });
+
+  await check("연도별 추이와 팀원별·속성별·그룹별도 같다", async () => {
+    for (const [name, selector] of [
+      ["연도별 추이", ".home-compare a.bar-col"],
+      ["팀원별 성과", ".home-members tbody a"],
+      ["속성별", ".home-slice-type tbody a"],
+    ]) {
+      await go("#/");
+      const link = page.locator(selector).first();
+      if ((await link.count()) === 0) continue; // 자료가 없으면 건너뛴다
+      await link.click();
+      await page.waitForTimeout(800);
+      equal(await page.locator(".project-list a.back").count(), 1, `${name} 에서 온 뒤로 가기`);
+    }
+  });
+
+  await check("조건을 더 걸어도 돌아갈 길이 남는다", async () => {
+    await go("#/");
+    await page.locator(".home-team a.home-stat").first().click();
+    await page.waitForTimeout(900);
+    // 목록에서 상태를 바꿔도 back 이 주소에서 사라지면 안 된다.
+    await page.locator(".toolbar select").first().selectOption("in_progress");
+    await page.waitForTimeout(700);
+    expect(page.url().includes("back=home"), `주소에서 사라졌습니다: ${page.url()}`);
+    equal(await page.locator(".project-list a.back").count(), 1, "뒤로 가기 줄");
+  });
+
+  await check("홈에서 과제를 열면 ← 홈, 메뉴로 열면 ← 과제 목록", async () => {
+    await go("#/");
+    const item = page.locator('.home-week a[href^="#/projects/"]').first();
+    if (await item.count()) {
+      await item.click();
+      await page.waitForTimeout(900);
+      const text = (await page.locator(".detail-header a.back, a.back").first().innerText()).trim();
+      equal(text, "← 홈", "홈에서 연 과제");
+    }
+    // 목록에서 연 과제는 목록으로 돌아간다.
+    await go("#/projects");
+    await page.locator("table.grid tbody tr").first().click();
+    await page.waitForTimeout(900);
+    equal((await page.locator("a.back").first().innerText()).trim(), "← 과제 목록", "목록에서 연 과제");
+  });
+
+  await check("홈에서 설정에 들어가면 홈으로 돌아온다", async () => {
+    await go("#/settings?back=home");
+    equal((await page.locator(".settings a.back").first().innerText()).trim(), "← 홈", "설정의 뒤로");
+    await go("#/settings");
+    equal((await page.locator(".settings a.back").first().innerText()).trim(), "← 과제 목록", "메뉴로 들어간 설정");
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

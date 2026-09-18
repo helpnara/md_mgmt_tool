@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
 import type { BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
-import { projectLink } from "../nav";
+import { listLink, projectLink } from "../nav";
 import { effectNumber } from "../util";
 import LoadError from "./LoadError";
 import CopyTableButton from "./CopyTableButton";
@@ -80,12 +80,6 @@ function StatusCells({
       })}
     </>
   );
-}
-
-function listLink(params: Record<string, string>): string {
-  const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
-  const text = query.toString();
-  return `#/projects${text ? `?${text}` : ""}`;
 }
 
 /** 그룹 표는 자유 입력이라 길어질 수 있다. 이만큼만 세우고 나머지는 접는다. */
@@ -260,7 +254,7 @@ export default function Home({ meta }: { meta: Meta }) {
               <span className="hint">
                 진행일지·보고에 누가 썼는지 남고, 담당자 칸에서 이름을 눌러 넣게 됩니다.
               </span>
-              <a className="home-step-go" href="#/settings">
+              <a className="home-step-go" href="#/settings?back=home">
                 설정 열기 →
               </a>
             </li>
@@ -269,7 +263,7 @@ export default function Home({ meta }: { meta: Meta }) {
               <span className="hint">
                 제목만 있으면 됩니다. 상태·담당자·마감은 나중에 채워도 됩니다.
               </span>
-              <a className="home-step-go primary" href="#/projects?new=1">
+              <a className="home-step-go primary" href={listLink({ new: "1" })}>
                 과제 만들기 →
               </a>
             </li>
@@ -296,7 +290,7 @@ export default function Home({ meta }: { meta: Meta }) {
       {backupWarning(backup) && (
         <div className="home-backup-warn">
           <b>자동 백업</b> {backupWarning(backup)}
-          <a href="#/settings">설정에서 보기 →</a>
+          <a href="#/settings?back=home">설정에서 보기 →</a>
         </div>
       )}
       <div className="home-head">
@@ -443,7 +437,7 @@ export default function Home({ meta }: { meta: Meta }) {
           <>
             <p className="hint">
               <b>대체 담당자 지정 필요</b> —{" "}
-              <a href="#/projects?owner_left=1">
+              <a href={listLink({ owner_left: "1" })}>
                 {week.owner_gaps_total}건 보기 →
               </a>
             </p>
@@ -460,7 +454,7 @@ export default function Home({ meta }: { meta: Meta }) {
             </ul>
             {week.owner_gaps_total > week.owner_gaps.length && (
               <p className="hint">
-                <a href="#/projects?owner_left=1">
+                <a href={listLink({ owner_left: "1" })}>
                   나머지 {week.owner_gaps_total - week.owner_gaps.length}건도 목록에서 보기 →
                 </a>
               </p>
@@ -559,7 +553,7 @@ export default function Home({ meta }: { meta: Meta }) {
             {(team.done_unverified ?? 0) > 0 && (
               <a
                 className="home-stat-note warn-text"
-                href={`#/projects?verified=none${yearParam ? `&year=${yearParam}` : "&year=all"}`}
+                href={listLink({ verified: "none", year: yearParam || "all" })}
               >
                 완료했는데 실증효과 미입력 {team.done_unverified}건 →
               </a>

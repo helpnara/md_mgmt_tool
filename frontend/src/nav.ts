@@ -18,8 +18,17 @@ import { useEffect, useRef } from "react";
 /** 되돌아갈 곳을 담는 주소 칸. */
 export const BACK_PARAM = "back";
 
+/**
+ * 홈에서 왔다는 표시 (TODO 127).
+ *
+ * 홈의 주소는 `#/` 라 `currentLocation()` 이 **빈 글자**를 돌려준다. 그것을 그대로 실으면
+ * "온 곳을 모른다"(빈 값)와 구분되지 않아 홈으로 돌아갈 수 없었다. 이름을 따로 준다.
+ */
+export const HOME_BACK = "home";
+
 const LABELS: Record<string, string> = {
   "": "홈",
+  [HOME_BACK]: "홈",
   projects: "과제 목록",
   reports: "보고 대상",
   history: "보고 이력",
@@ -31,6 +40,20 @@ const LABELS: Record<string, string> = {
 /** 지금 주소에서 `#/` 를 뗀 부분. 되돌아갈 곳으로 그대로 쓴다. */
 export function currentLocation(): string {
   return window.location.hash.replace(/^#\/?/, "");
+}
+
+/**
+ * 지금 화면을 `back` 에 실을 때 쓸 값. 홈이면 빈 글자가 아니라 `home` 이다 (TODO 127).
+ *
+ * 이미 과제 상세에 있으면 **그 화면의 back 을 그대로 물려준다** — 그러지 않으면
+ * 상세 → 상세로 이어질 때 되돌아갈 곳이 상세 자신이 되어 제자리를 맴돈다.
+ */
+export function backValue(): string {
+  const here = currentLocation();
+  if (here.split("?")[0].startsWith("projects/")) {
+    return queryOf(here).get(BACK_PARAM) ?? "";
+  }
+  return here || HOME_BACK;
 }
 
 /** 주소의 물음표 뒷부분. */
@@ -45,10 +68,7 @@ export function queryOf(location: string): URLSearchParams {
  * 그러지 않으면 상세 → 상세로 이어질 때 되돌아갈 곳이 상세 자신이 되어 제자리를 맴돈다.
  */
 export function projectLink(projectId: string, extra?: Record<string, string | number | undefined>): string {
-  const here = currentLocation();
-  const back = here.split("?")[0].startsWith("projects/")
-    ? queryOf(here).get(BACK_PARAM) ?? ""
-    : here;
+  const back = backValue();
 
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(extra ?? {})) {
@@ -59,12 +79,41 @@ export function projectLink(projectId: string, extra?: Record<string, string | n
   return `#/projects/${projectId}${query ? `?${query}` : ""}`;
 }
 
+/**
+ * 과제 목록으로 가는 주소 (TODO 127).
+ *
+ * **`projectLink` 와 같은 규칙으로 `back` 을 싣는다.** 예전에는 홈과 과제 상세가 각자
+ * 같은 함수를 따로 들고 있었고 둘 다 온 곳을 안 실었다 — 그래서 홈에서 숫자를 누르면
+ * 목록은 제대로 걸러지는데 돌아올 길이 없었다. 주소를 만드는 자리를 하나로 모아 두면
+ * 다음에 링크를 붙일 때 저절로 따라온다.
+ */
+export function listLink(params: Record<string, string | number | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const back = backValue();
+  // 목록에서 목록으로 가는 경우(조건만 바뀜)는 온 곳을 덮어쓰지 않는다.
+  if (back && back.split("?")[0].replace(/\/$/, "") !== "projects") {
+    query.set(BACK_PARAM, back);
+  } else {
+    const inherited = queryOf(currentLocation()).get(BACK_PARAM);
+    if (inherited) query.set(BACK_PARAM, inherited);
+  }
+  const text = query.toString();
+  return `#/projects${text ? `?${text}` : ""}`;
+}
+
 /** 뒤로 가기가 가리킬 곳과 거기에 쓸 문구. */
 export function backTarget(back: string | null | undefined): { href: string; label: string } {
   // 어디서 왔는지 모르면 과제 목록으로 보낸다. 홈이 아니라 목록인 이유는,
   // 과제 상세를 여는 길이 대부분 목록이기 때문이다.
   if (!back) return { href: "#/projects", label: "과제 목록" };
   const path = back.split("?")[0].replace(/\/$/, "");
+  // 홈은 주소가 `#/` 라 이름을 따로 쓴다 (TODO 127).
+  if (path === HOME_BACK || path === "") return { href: "#/", label: "홈" };
+  // 과제 상세에서 온 경우 — 유관부서 링크처럼 상세에서 목록으로 가는 길이 있다.
+  if (path.startsWith("projects/")) return { href: `#/${back}`, label: "과제" };
   const label = LABELS[path];
   // 아는 화면이 아니면(주소를 손으로 고쳤다든가) 안전하게 과제 목록으로 보낸다.
   if (label === undefined) return { href: "#/projects", label: "과제 목록" };

@@ -19,11 +19,11 @@ type Route =
   // 목록 화면은 거른 조건을 주소에 두고 그대로 돌려받는다 (nav.ts).
   | { name: "list"; query: string }
   | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null; edit?: boolean }
-  | { name: "search"; query: string }
+  | { name: "search"; query: string; back: string | null }
   | { name: "reports"; query: string }
   | { name: "history"; query: string }
   | { name: "skills"; query: string }
-  | { name: "settings" }
+  | { name: "settings"; back: string | null }
   | { name: "help" };
 
 function readRoute(): Route {
@@ -43,11 +43,12 @@ function readRoute(): Route {
       edit: params.get("edit") === "1",
     };
   }
-  if (path.startsWith("search")) return { name: "search", query: params.get("q") ?? "" };
+  if (path.startsWith("search"))
+    return { name: "search", query: params.get("q") ?? "", back: params.get(BACK_PARAM) };
   if (path.startsWith("history")) return { name: "history", query: queryString ?? "" };
   if (path.startsWith("reports")) return { name: "reports", query: queryString ?? "" };
   if (path.startsWith("skills")) return { name: "skills", query: queryString ?? "" };
-  if (path.startsWith("settings")) return { name: "settings" };
+  if (path.startsWith("settings")) return { name: "settings", back: params.get(BACK_PARAM) };
   if (path.startsWith("help")) return { name: "help" };
   if (path.replace(/\/$/, "") === "projects") return { name: "list", query: queryString ?? "" };
   // 아는 주소가 아니면 홈으로. 손으로 고친 주소에서 빈 화면을 만나는 것보다 낫다.
@@ -207,8 +208,8 @@ export default function App() {
         )}
         {route.name === "reports" && <ReportCandidates meta={meta} query={route.query} />}
         {route.name === "history" && <ReportHistory meta={meta} query={route.query} />}
-        {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} />}
-        {route.name === "search" && <SearchResults query={route.query} meta={meta} />}
+        {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} back={route.back} />}
+        {route.name === "search" && <SearchResults query={route.query} meta={meta} back={route.back} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "home" && <Home meta={meta} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}

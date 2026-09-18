@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { backTarget } from "../nav";
 import type { Meta } from "../types";
 import AiPromptCard from "./AiPromptCard";
 import ReportTemplateCard from "./ReportTemplateCard";
@@ -19,7 +20,7 @@ import BackupCard from "./BackupCard";
  * 지금은 팀장 한 명이 쓰므로 작성자를 여기서 한 번 정해 두고 쓴다.
  * 나중에 로그인이 생기면 이 값 대신 로그인한 사용자가 작성자가 된다.
  */
-export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () => void }) {
+export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved: () => void; back?: string | null }) {
   const [author, setAuthor] = useState("");
   const [savedAuthor, setSavedAuthor] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,8 +55,9 @@ export default function Settings({ meta, onSaved }: { meta: Meta; onSaved: () =>
 
   return (
     <section className="settings">
-      <a className="back" href="#/projects">
-        ← 과제 목록
+      {/* 온 곳으로 돌아간다 (TODO 127). 예전에는 어디서 왔든 과제 목록으로 보냈다. */}
+      <a className="back" href={backTarget(back).href}>
+        ← {backTarget(back).label}
       </a>
       <h1 className="search-title">설정</h1>
 
