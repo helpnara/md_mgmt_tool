@@ -229,34 +229,38 @@ export default function ReportCandidates({ meta, query }: Props) {
         <div className="card drafts-waiting">
           <div className="card-head">
             <h2>확정을 기다리는 초안 ({drafts.length})</h2>
-            {/* 날짜를 가리지 않는다 (TODO 103-A) — 지난주에 쓰다 만 것도 여기 선다. */}
-            <span className="hint">오래된 것부터 · 날짜를 가리지 않습니다</span>
+            {/* 줄을 누르면 무엇이 열리는지 미리 말해 준다 (TODO 130) — 단추가 없어졌으므로
+                누를 곳이 어디인지 글로 알려 주어야 한다. */}
+            <span className="hint">
+              ※ 목록에서 과제를 클릭하면 해당 과제의 초안 편집 화면으로 이동합니다
+            </span>
           </div>
-          <ul className="picked-list">
+          <ul className="picked-list draft-rows">
             {drafts.map((draft) => (
               <li key={draft.id}>
-                {/* 제목은 과제로, 단추는 초안으로 — 묶음 카드와 같은 짜임이다.
-                    확정하기 전에 과제를 한 번 훑어보는 길을 막지 않는다. */}
-                <a href={projectLink(draft.project_id)}>{draft.project_title}</a>
-                {draft.report_date && (
-                  <span className={draft.overdue_days ? "due due-danger" : "due"}>
-                    {draft.report_date}
-                    {draft.overdue_days ? ` · D+${draft.overdue_days}` : ""}
-                  </span>
-                )}
-                {draft.audience && <span className="hint">{draft.audience}</span>}
+                {/* 줄 전체가 초안으로 가는 링크다 (TODO 130). 보고 편집기는 과제 상세 화면
+                    *안에서* 열리므로, 과제를 훑어보는 길도 이 한 줄이 함께 데려간다.
+                    `<li onClick>` 이 아니라 `<a>` 를 줄만큼 넓힌다 — 키보드로 닿고,
+                    가운데 단추로 새 탭에 열리고, 주소가 미리 보인다.
+                    칸은 비어 있어도 그린다 (TODO 131) — 자리를 지켜야 날짜가 세로로 읽힌다. */}
                 <a
-                  className="linkish-button"
+                  className="draft-row"
                   href={projectLink(draft.project_id, { report: draft.id })}
                 >
-                  초안 열기
+                  <span className="draft-title">{draft.project_title}</span>
+                  <span className={draft.overdue_days ? "due due-danger" : "due"}>
+                    {draft.report_date ?? ""}
+                    {draft.report_date && draft.overdue_days ? ` · D+${draft.overdue_days}` : ""}
+                  </span>
+                  <span className="hint draft-audience">{draft.audience ?? ""}</span>
                 </a>
               </li>
             ))}
           </ul>
           <p className="hint">
-            정리를 마치고 <b>[보고 확정]</b>을 누르면 그 시점 문서가 그대로 굳고, 그 과제의
-            미보고 분량이 0으로 돌아갑니다.
+            {/* 날짜를 가리지 않는다 (TODO 103-A) — 지난주에 쓰다 만 것도 여기 선다. */}
+            오래된 것부터 서며 날짜를 가리지 않습니다. 정리를 마치고 <b>[보고 확정]</b>을 누르면
+            그 시점 문서가 그대로 굳고, 그 과제의 미보고 분량이 0으로 돌아갑니다.
           </p>
         </div>
       )}

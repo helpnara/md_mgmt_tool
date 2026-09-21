@@ -1572,8 +1572,25 @@ async function main() {
       const candidates = await api.get("/api/report-candidates");
       equal(await card.locator(".picked-list li").count(), candidates.drafts.length, "카드 안의 줄 수");
       expect(candidates.drafts.length >= 2, `초안 수: ${candidates.drafts.length}`);
-      const open = card.locator(".linkish-button").first();
-      expect(/report=\d+/.test(await open.getAttribute("href")), "[초안 열기]가 초안을 가리키지 않는다");
+      // 줄 전체가 초안으로 가는 링크다 (TODO 130) — 따로 선 [초안 열기] 단추는 없앴다.
+      const open = card.locator(".draft-row").first();
+      expect(/report=\d+/.test(await open.getAttribute("href")), "줄이 초안을 가리키지 않는다");
+      equal(await card.locator(".linkish-button").count(), 0, "남아 있는 [초안 열기]");
+      const head = await card.locator(".card-head").innerText();
+      expect(head.includes("초안 편집 화면으로 이동"), `머리말의 ※ 안내가 없다: ${head}`);
+
+      // 이름 길이가 달라도 날짜 칸이 같은 자리에 선다 (TODO 131).
+      const rows = card.locator(".draft-row");
+      const lefts = [];
+      for (let i = 0; i < (await rows.count()); i += 1) {
+        const box = await rows.nth(i).locator(".due").boundingBox();
+        if (box) lefts.push(Math.round(box.x));
+      }
+      expect(lefts.length >= 2, `날짜 칸을 못 찾았다: ${lefts.length}`);
+      expect(
+        Math.max(...lefts) - Math.min(...lefts) <= 1,
+        `날짜 칸이 줄마다 어긋난다: ${lefts.join(", ")}`,
+      );
     });
   });
 

@@ -631,20 +631,35 @@ button { white-space: nowrap; }
 
 /* 확정을 기다리는 초안 — 후보를 고르기 전에 끝내야 하는 일이라 눈에 먼저 들어와야 한다 */
 .drafts-waiting { border-color: var(--warn); }
-.drafts-waiting .picked-list li { border-color: #f0d9ae; background: #fffdf8; }
-/* 단추처럼 보이지만 링크다 — 새 탭으로 여는 길을 막지 않는다 */
-a.linkish-button {
-  flex: none;
-  padding: 3px 9px;
-  border: 1px solid var(--border);
+.drafts-waiting .picked-list li { border-color: #f0d9ae; background: #fffdf8; padding: 0; }
+/* 줄 하나가 통째로 링크이고, 칸은 격자로 고정한다 (TODO 130 · 131).
+   flex + space-between 이던 때는 과제명 길이를 따라 날짜 자리가 줄마다 움직여
+   위아래로 훑을 수가 없었다. 격자로 고정하면 비로소 세로로 읽힌다. */
+.drafts-waiting .draft-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px 96px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
   border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: none;
 }
-a.linkish-button:hover { border-color: var(--accent); color: var(--accent); }
+.drafts-waiting .draft-row:hover { background: #fdf3df; }
+.drafts-waiting .draft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 긴 이름은 제 칸 안에서 말줄임한다 (TODO 88 의 긴 경로와 같은 처리) */
+.drafts-waiting .draft-title,
+.drafts-waiting .draft-audience { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 보고 대상은 줄 끝에 붙인다 — 왼쪽으로 붙이면 칸 오른쪽이 비어 줄이 덜 끝난 듯 보인다 */
+.drafts-waiting .draft-audience { font-weight: 400; text-align: right; }
+/* 좁은 화면에서는 칸 셋이 들어가지 않는다 — 이름을 윗줄로 올린다 (TODO 83 과 같은 갈래) */
+@media (max-width: 720px) {
+  .drafts-waiting .draft-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .drafts-waiting .draft-title { grid-column: 1 / -1; }
+}
 
 /* ── 지난 보고 대비 변경분 (T11) ───────────────────────────────────────────── */
 .report-diff {
@@ -1300,7 +1315,7 @@ a.partner-person:hover { background: var(--accent-soft); color: var(--accent); }
 /* 추이 막대 대신 숫자 (TODO 103-E) — 해가 셋 쌓이기 전까지 */
 .spark-text { font-size: 11px; white-space: nowrap; }
 /* 확정 대기 카드의 날짜 (TODO 103-A) — 홈의 쓰다 만 보고 줄과 같은 눈 */
-.drafts-waiting .due { font-size: 12px; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+.drafts-waiting .due { font-size: 12px; font-weight: 400; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
 .drafts-waiting .due.due-danger { color: var(--danger); font-weight: 600; }
 
 /* 상태 변경 기록 (TODO 105) — 사람이 쓴 기록이 아니라 도구가 남긴 한 줄이다. 흐리게. */
