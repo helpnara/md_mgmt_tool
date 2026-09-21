@@ -80,28 +80,37 @@ export function projectLink(projectId: string, extra?: Record<string, string | n
 }
 
 /**
- * 과제 목록으로 가는 주소 (TODO 127).
+ * 어느 화면으로든 가는 주소 (TODO 127 · 128).
  *
  * **`projectLink` 와 같은 규칙으로 `back` 을 싣는다.** 예전에는 홈과 과제 상세가 각자
  * 같은 함수를 따로 들고 있었고 둘 다 온 곳을 안 실었다 — 그래서 홈에서 숫자를 누르면
- * 목록은 제대로 걸러지는데 돌아올 길이 없었다. 주소를 만드는 자리를 하나로 모아 두면
+ * 화면은 제대로 걸러지는데 돌아올 길이 없었다. 주소를 만드는 자리를 하나로 모아 두면
  * 다음에 링크를 붙일 때 저절로 따라온다.
  */
-export function listLink(params: Record<string, string | number | undefined>): string {
+export function screenLink(
+  screen: string,
+  params: Record<string, string | number | undefined> = {},
+): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== "") query.set(key, String(value));
   }
   const back = backValue();
-  // 목록에서 목록으로 가는 경우(조건만 바뀜)는 온 곳을 덮어쓰지 않는다.
-  if (back && back.split("?")[0].replace(/\/$/, "") !== "projects") {
+  // 같은 화면 안에서 조건만 바뀌는 경우는 온 곳을 덮어쓰지 않는다 — 덮어쓰면
+  // 되돌아갈 곳이 자기 자신이 되어 제자리를 맴돈다.
+  if (back && back.split("?")[0].replace(/\/$/, "") !== screen) {
     query.set(BACK_PARAM, back);
   } else {
     const inherited = queryOf(currentLocation()).get(BACK_PARAM);
     if (inherited) query.set(BACK_PARAM, inherited);
   }
   const text = query.toString();
-  return `#/projects${text ? `?${text}` : ""}`;
+  return `#/${screen}${text ? `?${text}` : ""}`;
+}
+
+/** 과제 목록으로 가는 주소 — 가장 많이 쓰는 길이라 이름을 따로 둔다. */
+export function listLink(params: Record<string, string | number | undefined> = {}): string {
+  return screenLink("projects", params);
 }
 
 /** 뒤로 가기가 가리킬 곳과 거기에 쓸 문구. */

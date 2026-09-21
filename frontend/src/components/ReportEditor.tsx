@@ -470,10 +470,33 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             </div>
           )}
         </div>
+        {/* 확정된 보고의 첨부는 지우지 않는다 — 그 문서는 "그때 무엇을 보고했는가" 다
+            (본문·삭제를 막는 것과 같은 이유, TODO 103-F). 확정을 풀면 지울 수 있다. */}
         <AttachmentList
           attachments={attachments}
           onPreview={(attachment) => setPreviewing(attachment)}
           onInsert={frozen ? undefined : (attachment) => insertAtCursor(attachment.markdown)}
+          onDelete={
+            frozen
+              ? undefined
+              : async (attachment) => {
+                  // 본문에서 쓰이는 중이면 그 사실을 말해 준다 (TODO 129). 막지는 않는다 —
+                  // 보관함으로 가므로 되돌릴 수 있고, 막으면 급할 때 못 쓴다.
+                  const stored = attachment.rel_path.split("/").pop() ?? "";
+                  const used = stored !== "" && body.includes(stored);
+                  const warn = used
+                    ? "\n\n이 첨부는 **본문에서 쓰이는 중**입니다. 지우면 그 자리가 깨집니다."
+                    : "";
+                  if (!window.confirm(`${attachment.orig_name} 을(를) 보관함으로 옮길까요?${warn}`))
+                    return;
+                  try {
+                    await api.deleteAttachment(attachment.id);
+                    refresh();
+                  } catch (err) {
+                    setError((err as Error).message);
+                  }
+                }
+          }
         />
       </div>
 

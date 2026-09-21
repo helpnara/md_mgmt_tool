@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, OpenDraft, ReportCandidate } from "../types";
 import { formatDate } from "../util";
-import { projectLink, useAddressBar } from "../nav";
+import { backTarget, projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
 import StatusBadge from "./StatusBadge";
@@ -29,6 +29,9 @@ interface Props {
 
 export default function ReportCandidates({ meta, query }: Props) {
   const initial = new URLSearchParams(query);
+  // 어디서 왔는지 (TODO 128). 거르는 조건이 아니라 **돌아갈 곳**이라 서버로 보내지 않고,
+  // 조건을 바꿔도 주소에 남아 있어야 한다.
+  const [back] = useState(() => initial.get("back") ?? "");
   const [items, setItems] = useState<ReportCandidate[]>([]);
   // 확정을 기다리는 초안 (TODO 91). 후보를 고르는 일보다 **먼저 끝내야 하는 일**이라
   // 화면 맨 위에 세운다. 배너에서 "초안 N건 확정하기" 로 오면 여기에 닿는다.
@@ -67,7 +70,7 @@ export default function ReportCandidates({ meta, query }: Props) {
   // 고른 조건과 주소를 맞춘다. 과제를 열어 보고 돌아와도 그대로다.
   useAddressBar(
     "reports",
-    { date: reportDate, all: includeInactive ? "1" : "", status, type, owner, sort, order },
+    { date: reportDate, all: includeInactive ? "1" : "", status, type, owner, sort, order, back },
     (params) => {
       // 주소에 날짜가 없으면 빈칸이 아니라 기본 보고일이다 (TODO 103-D). `?date=` 가 붙은
       // 채로 즐겨찾기의 `#/reports` 를 다시 열면 칸이 비어 보이던 것.
@@ -113,6 +116,13 @@ export default function ReportCandidates({ meta, query }: Props) {
 
   return (
     <section className="candidates">
+      {/* 홈에서 왔으면 돌아갈 길을 그린다 (TODO 128). 메뉴로 왔으면 그리지 않는다 —
+          없는 길을 만들지 않는다. */}
+      {back && (
+        <a className="back" href={backTarget(back).href}>
+          ← {backTarget(back).label}
+        </a>
+      )}
       <div className="card-head page-head">
         <div>
           <h1>보고 대상 후보</h1>

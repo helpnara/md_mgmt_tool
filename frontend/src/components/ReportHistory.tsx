@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, ReportHistoryItem } from "../types";
-import { projectLink, useAddressBar } from "../nav";
+import { backTarget, projectLink, useAddressBar } from "../nav";
 import LoadError from "./LoadError";
 import MonthGrid from "./MonthGrid";
 
@@ -29,6 +29,9 @@ export default function ReportHistory({ meta, query }: Props) {
   const [state, setState] = useState(() => initial.get("state") ?? "");
   // 답하지 않은 지시가 적힌 보고만 (TODO 107). 주소에는 feedback=open 으로 실린다.
   const [feedback, setFeedback] = useState(() => initial.get("feedback") ?? "");
+  // 어디서 왔는지 (TODO 128). 거르는 조건이 아니라 **돌아갈 곳**이라 서버로 보내지 않고,
+  // 조건을 바꿔도 주소에 남아 있어야 한다.
+  const [back] = useState(() => initial.get("back") ?? "");
   const [items, setItems] = useState<ReportHistoryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +52,7 @@ export default function ReportHistory({ meta, query }: Props) {
   }, [load, q]);
 
   // 고른 조건과 주소를 맞춘다. 자주 보는 조건은 즐겨찾기해 두어도 된다.
-  useAddressBar("history", { audience, from, to, q, state, feedback }, (params) => {
+  useAddressBar("history", { audience, from, to, q, state, feedback, back }, (params) => {
     setAudience(params.get("audience") ?? "");
     setFrom(params.get("from") ?? "");
     setTo(params.get("to") ?? "");
@@ -65,6 +68,13 @@ export default function ReportHistory({ meta, query }: Props) {
 
   return (
     <section className="report-history">
+      {/* 홈에서 왔으면 돌아갈 길을 그린다 (TODO 128). 메뉴로 왔으면 그리지 않는다 —
+          없는 길을 만들지 않는다. */}
+      {back && (
+        <a className="back" href={backTarget(back).href}>
+          ← {backTarget(back).label}
+        </a>
+      )}
       <div className="card">
         <div className="card-head">
           <h2>보고 이력</h2>

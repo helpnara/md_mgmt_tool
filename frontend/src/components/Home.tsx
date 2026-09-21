@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
 import type { BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
-import { listLink, projectLink } from "../nav";
+import { listLink, projectLink, screenLink } from "../nav";
 import { effectNumber } from "../util";
 import LoadError from "./LoadError";
 import CopyTableButton from "./CopyTableButton";
@@ -254,7 +254,7 @@ export default function Home({ meta }: { meta: Meta }) {
               <span className="hint">
                 진행일지·보고에 누가 썼는지 남고, 담당자 칸에서 이름을 눌러 넣게 됩니다.
               </span>
-              <a className="home-step-go" href="#/settings?back=home">
+              <a className="home-step-go" href={screenLink("settings")}>
                 설정 열기 →
               </a>
             </li>
@@ -290,7 +290,7 @@ export default function Home({ meta }: { meta: Meta }) {
       {backupWarning(backup) && (
         <div className="home-backup-warn">
           <b>자동 백업</b> {backupWarning(backup)}
-          <a href="#/settings?back=home">설정에서 보기 →</a>
+          <a href={screenLink("settings")}>설정에서 보기 →</a>
         </div>
       )}
       <div className="home-head">
@@ -338,7 +338,7 @@ export default function Home({ meta }: { meta: Meta }) {
           <span className="hint"> · 보고 예정일 {week.report_date}</span>
         </h2>
         <div className="home-week-row">
-          <a className="home-stat go" href="#/reports">
+          <a className="home-stat go" href={screenLink("reports")}>
             <span className="home-stat-label">보고 대상</span>
             <strong>{week.candidates}건</strong>
           </a>
@@ -360,7 +360,7 @@ export default function Home({ meta }: { meta: Meta }) {
               것은 다음 보고일까지 아무 데도 보이지 않았다. 여기서 계속 들고 있는다. */}
           <a
             className={week.drafts_overdue ? "home-stat go danger" : "home-stat go"}
-            href="#/reports"
+            href={screenLink("reports")}
             title="보고 대상 화면 맨 위의 [확정을 기다리는 초안] 으로 갑니다"
           >
             <span className="home-stat-label">작성 중인 보고</span>
@@ -397,7 +397,7 @@ export default function Home({ meta }: { meta: Meta }) {
             </ul>
             {week.drafts > week.draft_items.length && (
               <p className="hint">
-                <a href="#/reports">
+                <a href={screenLink("reports")}>
                   나머지 {week.drafts - week.draft_items.length}건도 보고 대상 화면에서 보기 →
                 </a>
               </p>
@@ -423,7 +423,7 @@ export default function Home({ meta }: { meta: Meta }) {
             {/* 세 건만 세우고 잘렸다고 말하지 않으면 세 건만 있는 줄 안다 (TODO 103-B) */}
             {week.stale_total > week.stale.length && (
               <p className="hint">
-                <a href="#/reports">
+                <a href={screenLink("reports")}>
                   나머지 {week.stale_total - week.stale.length}건도 보고 대상 화면에서 보기 →
                 </a>
               </p>
@@ -512,7 +512,14 @@ export default function Home({ meta }: { meta: Meta }) {
             <span className="home-stat-label">{yearParam ? "그해 끝낸 과제" : "끝낸 과제"}</span>
             <strong>{team.done_in_year ?? 0}건</strong>
           </a>
-          <a className="home-stat" href={`#/history${yearParam ? `?from=${yearParam}-01-01&to=${yearParam}-12-31` : ""}`}>
+          <a
+            className="home-stat"
+            href={
+              yearParam
+                ? screenLink("history", { from: `${yearParam}-01-01`, to: `${yearParam}-12-31` })
+                : screenLink("history")
+            }
+          >
             <span className="home-stat-label">보고 횟수</span>
             <strong>{team.reports}회</strong>
           </a>
@@ -680,7 +687,7 @@ export default function Home({ meta }: { meta: Meta }) {
                       <td>{member.reports}</td>
                       <td className={member.activities ? undefined : "zero"}>
                         {member.activities ? (
-                          <a href={`#/skills?person=${encodeURIComponent(member.name)}${yearParam ? `&year=${yearParam}` : ""}`}>
+                          <a href={screenLink("skills", { person: member.name, year: yearParam })}>
                             {member.activities}
                           </a>
                         ) : (

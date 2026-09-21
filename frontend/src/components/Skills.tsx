@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { Activity, ActivitySummary, Meta } from "../types";
-import { useAddressBar } from "../nav";
+import { backTarget, useAddressBar } from "../nav";
 import { splitPeople } from "../people";
 import LoadError from "./LoadError";
 import ActivityForm from "./ActivityForm";
@@ -28,6 +28,8 @@ function won(value: number): string {
 export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const initial = useMemo(() => new URLSearchParams(query), [query]);
   const [year, setYear] = useState(initial.get("year") ?? THIS_YEAR);
+  // 어디서 왔는지 (TODO 128). 조건이 아니라 돌아갈 곳이다.
+  const [back] = useState(() => initial.get("back") ?? "");
   const [person, setPerson] = useState(initial.get("person") ?? ALL);
   const [kind, setKind] = useState(initial.get("kind") ?? ALL);
   const [find, setFind] = useState(initial.get("q") ?? "");
@@ -66,7 +68,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   useAddressBar(
     "skills",
     Object.fromEntries(
-      Object.entries({ year: year === THIS_YEAR ? "" : year, person, kind, q: find.trim() })
+      Object.entries({ year: year === THIS_YEAR ? "" : year, person, kind, q: find.trim(), back })
         .filter(([, value]) => value),
     ) as Record<string, string>,
     (params) => {
@@ -127,6 +129,13 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
 
   return (
     <section className="skills">
+      {/* 홈에서 왔으면 돌아갈 길을 그린다 (TODO 128). 메뉴로 왔으면 그리지 않는다 —
+          없는 길을 만들지 않는다. */}
+      {back && (
+        <a className="back" href={backTarget(back).href}>
+          ← {backTarget(back).label}
+        </a>
+      )}
       <div className="home-head">
         <h1>팀원 역량 이력</h1>
         <div className="skills-head-right">

@@ -2691,6 +2691,82 @@ async function main() {
     equal((await page.locator(".settings a.back").first().innerText()).trim(), "← 과제 목록", "메뉴로 들어간 설정");
   });
 
+  console.log("\n[22] 보고대상·보고이력·팀원역량의 뒤로 가기 · 보고 첨부 삭제 (TODO 128 · 129)");
+  await check("홈에서 간 세 화면에도 ← 홈 이 선다 (TODO 128)", async () => {
+    for (const [name, selector, screen] of [
+      ["보고 대상", '.home-week a[href^="#/reports"]', "candidates"],
+      ["보고 이력", '.home-team a[href^="#/history"]', "report-history"],
+      ["팀원 역량", '.home-members a[href^="#/skills"]', "skills"],
+    ]) {
+      await go("#/");
+      const link = page.locator(selector).first();
+      if ((await link.count()) === 0) continue; // 자료가 없으면 건너뛴다
+      await link.click();
+      await page.waitForTimeout(900);
+      const back = page.locator(`.${screen} a.back`).first();
+      equal(await back.count(), 1, `${name} 의 뒤로 가기`);
+      equal((await back.innerText()).trim(), "← 홈", `${name} 의 문구`);
+    }
+  });
+
+  await check("메뉴로 들어가면 그 줄을 그리지 않는다", async () => {
+    for (const [hash, screen] of [
+      ["#/reports", "candidates"],
+      ["#/history", "report-history"],
+      ["#/skills", "skills"],
+    ]) {
+      await go(hash);
+      equal(await page.locator(`.${screen} a.back`).count(), 0, `${hash} 에는 없어야 한다`);
+    }
+  });
+
+  await check("보고이력에서 조건을 바꿔도 돌아갈 길이 남는다", async () => {
+    await go("#/");
+    const link = page.locator('.home-team a[href^="#/history"]').first();
+    if ((await link.count()) === 0) return;
+    await link.click();
+    await page.waitForTimeout(900);
+    await page.locator(".report-history select").first().selectOption("frozen");
+    await page.waitForTimeout(700);
+    expect(page.url().includes("back=home"), `주소에서 사라졌습니다: ${page.url()}`);
+    equal(await page.locator(".report-history a.back").count(), 1, "뒤로 가기 줄");
+  });
+
+  await check("보고 초안의 첨부를 지울 수 있다 (TODO 129)", async () => {
+    const made = await api.post(`/api/projects/${seeded.projectA}/reports/draft`, {
+      report_date: dayFromToday(3),
+    });
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const form = new FormData();
+    form.append("file", new Blob([png], { type: "image/png" }), "지울첨부.png");
+    const uploaded = await fetch(`${BASE}/api/reports/${made.id}/attachments`, { method: "POST", body: form });
+    expect(uploaded.status === 201, `업로드 ${uploaded.status}`);
+    try {
+      await go(`#/projects/${seeded.projectA}?report=${made.id}`);
+      const row = page.locator(".report-editor .attachments li").first();
+      equal(await row.count(), 1, "첨부 줄");
+      const remove = row.getByRole("button", { name: "삭제" });
+      equal(await remove.count(), 1, "삭제 단추");
+      await remove.click();
+      await page.waitForTimeout(1200);
+      equal((await api.get(`/api/reports/${made.id}/attachments`)).length, 0, "서버에서도 빠진다");
+    } finally {
+      await api.delete(`/api/reports/${made.id}`);
+    }
+  });
+
+  await check("확정된 보고에는 삭제 단추가 없다", async () => {
+    const reports = await api.get(`/api/projects/${seeded.projectA}/reports`);
+    const frozen = reports.find((item) => item.frozen);
+    await go(`#/projects/${seeded.projectA}?report=${frozen.id}`);
+    const rows = page.locator(".report-editor .attachments li");
+    if ((await rows.count()) === 0) return; // 첨부가 없으면 볼 것이 없다
+    equal(await rows.first().getByRole("button", { name: "삭제" }).count(), 0, "확정 보고의 삭제 단추");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
