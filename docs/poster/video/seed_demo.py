@@ -5,7 +5,7 @@
 역량 기록 8건**짜리 가짜 팀을 만든다 — 실제로 쓰는 모양에 가깝게, 다만 전부 지어낸 것으로.
 
     # 1) 빈 vault 로 서버를 띄운다 (경로는 화면 머리글에 그대로 보이므로 짧게)
-    MD_MGMT_VAULT=~/과제이력관리 python -m uvicorn app.main:app --app-dir backend --port 8094
+    MD_MGMT_VAULT=~/느린나이테 python -m uvicorn app.main:app --app-dir backend --port 8094
 
     # 2) 채운다
     python docs/poster/video/seed_demo.py

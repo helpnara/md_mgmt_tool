@@ -87,7 +87,7 @@ async def _backup_loop() -> None:
             await asyncio.sleep(BACKUP_CHECK_SECONDS)
 
 
-app = FastAPI(title="과제 이력 관리 도구", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="느린 나이테 — 과제 이력 관리 도구", version="0.1.0", lifespan=lifespan)
 
 # 로컬 개발 시 Vite 개발 서버(5173)에서 API를 호출할 수 있게 한다.
 app.add_middleware(

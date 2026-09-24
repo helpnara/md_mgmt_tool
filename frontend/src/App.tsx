@@ -132,7 +132,8 @@ export default function App() {
     <div className="app">
       <header className="app-header" ref={headerRef}>
         <a className="brand" href="#/">
-          과제 이력 관리
+          <img className="brand-mark" src="/favicon.svg" alt="" width="22" height="22" />
+          느린 나이테
         </a>
         <nav className="nav">
           <a href="#/" className={route.name === "home" ? "active" : undefined}>

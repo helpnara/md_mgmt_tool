@@ -64,7 +64,7 @@ python make_thumbnail.py --scale 1  # 1280x800
 ```bash
 # 1) 빈 vault 로 서버를 띄우고 데모 자료를 채운다
 #    경로가 화면 머리글에 그대로 보이므로 짧고 보기 좋은 곳에 둔다
-MD_MGMT_VAULT=~/과제이력관리 python -m uvicorn app.main:app --app-dir backend --port 8094 &
+MD_MGMT_VAULT=~/느린나이테 python -m uvicorn app.main:app --app-dir backend --port 8094 &
 python video/seed_demo.py
 
 # 2) 화면을 녹화한다 (clips/*.webm)

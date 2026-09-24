@@ -81,7 +81,7 @@ def build_frontend_if_needed() -> None:
 
 def main() -> None:
     _safe_console()
-    parser = argparse.ArgumentParser(description="과제 이력 관리 도구")
+    parser = argparse.ArgumentParser(description="느린 나이테 — 과제 이력 관리 도구")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--vault", help="데이터 폴더 (기본: 이 폴더 아래 vault)")

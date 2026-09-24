@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+ICON = "느린나이테.ico"
 VENV = ROOT / ".venv"
 VENDOR = ROOT / "vendor"
 REQUIREMENTS = ROOT / "backend" / "requirements.txt"
@@ -39,9 +40,53 @@ def run(command: list[str]) -> int:
     return subprocess.call(command)
 
 
+def icon_path() -> Path | None:
+    """배포본에서는 맨 위에, 저장소에서 바로 쓸 때는 frontend/public 에 있다."""
+    for candidate in (ROOT / ICON, ROOT / "frontend" / "public" / "favicon.ico"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def make_shortcut() -> Path | None:
+    """바탕화면에 [느린 나이테] 바로가기를 만든다 (윈도우만).
+
+    run.bat 을 가리키고 나이테 아이콘을 단다 — 매일 쓰는 도구는 폴더를 찾아 들어가는
+    것보다 바탕화면에서 바로 열리는 편이 낫다. **실패해도 설치는 성공이다** — 사내 PC 는
+    파워셸이 막혀 있을 수 있어서, 안 되면 조용히 넘어간다(안내만 못 받을 뿐이다).
+    """
+    if sys.platform != "win32":
+        return None
+    target, icon = ROOT / "run.bat", icon_path()
+    desktop = Path.home() / "Desktop"
+    if not target.is_file() or icon is None or not desktop.is_dir():
+        return None
+    link = desktop / "느린 나이테.lnk"
+
+    def quoted(value: Path) -> str:
+        return "'" + str(value).replace("'", "''") + "'"
+
+    script = (
+        "$s=(New-Object -ComObject WScript.Shell).CreateShortcut(" + quoted(link) + ");"
+        "$s.TargetPath=" + quoted(target) + ";"
+        "$s.WorkingDirectory=" + quoted(ROOT) + ";"
+        "$s.IconLocation=" + quoted(icon) + ";"
+        "$s.Description='느린 나이테 — 과제 이력 관리 도구';"
+        "$s.Save()"
+    )
+    try:
+        done = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+            capture_output=True,
+        )
+    except OSError:
+        return None
+    return link if done.returncode == 0 and link.is_file() else None
+
+
 def main() -> int:
     line()
-    say("  과제 이력 관리 도구 — 설치")
+    say("  느린 나이테 — 설치")
     line()
     say()
 
@@ -109,6 +154,9 @@ def main() -> int:
     say("  설치가 끝났습니다. run.bat 을 실행하세요.")
     if updating:
         say("  (기존 데이터는 vault 폴더에 그대로 있습니다)")
+    shortcut = make_shortcut()
+    if shortcut:
+        say(f"  바탕화면에 바로가기를 만들었습니다 — {shortcut.name}")
     line()
     return 0
 

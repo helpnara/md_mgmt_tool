@@ -9,7 +9,7 @@
 버전마다 파일이 다르기 때문이다. 대상 버전은 ZIP 안의 `배포본-정보.txt` 에 적어 둔다 —
 받는 사람이 `python --version` 과 맞춰 볼 수 있어야 한다.
 
-이름은 `과제이력관리-20260909-v1.zip` 꼴이다. **같은 날 다시 만들면 판 번호가 오른다** —
+이름은 `느린나이테-20260909-v1.zip` 꼴이다. **같은 날 다시 만들면 판 번호가 오른다** —
 예전에는 날짜까지만 적어서 그날의 앞 배포본을 말없이 덮었고, "어제 받은 그것" 과
 "방금 받은 그것" 을 이름으로 구분할 수 없었다.
 
@@ -32,7 +32,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "dist"
-NAME = "과제이력관리"
+NAME = "느린나이테"
 
 
 def run(command: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -52,6 +52,18 @@ def export_tree(target: Path) -> None:
     run(["git", "archive", "--format=tar", "-o", str(archive), "HEAD"])
     shutil.unpack_archive(str(archive), str(target), format="tar")
     archive.unlink()
+
+
+def place_icon(target: Path) -> None:
+    """나이테 아이콘을 배포본 맨 위에 한 장 둔다.
+
+    `frontend/public` 안에도 같은 파일이 있지만, 바탕화면 바로가기를 손으로 만들 때
+    받는 사람이 찾아 들어가야 한다. 맨 위에 있으면 [속성 → 아이콘 변경]에서 바로 고른다.
+    setup.py 가 만드는 바로가기도 이 파일을 본다.
+    """
+    source = ROOT / "frontend" / "public" / "favicon.ico"
+    if source.is_file():
+        shutil.copy2(source, target / f"{NAME}.ico")
 
 
 def fetch_wheels(target: Path, python_version: str, platform: str) -> int:
@@ -92,11 +104,11 @@ def write_build_info(
     """무엇을 받았는지 한 장으로. 문의가 왔을 때 '어느 배포본인가'가 먼저 필요하다.
 
     **파이썬·플랫폼은 이름에서 빠졌으므로 여기에 남는다** — 이름은 날짜와 판 번호만
-    담고(과제이력관리-20260909-v1), 무엇을 위한 배포본인지는 이 파일이 말한다.
+    담고(느린나이테-20260909-v1), 무엇을 위한 배포본인지는 이 파일이 말한다.
     """
     (target / "배포본-정보.txt").write_text(
         "\n".join([
-            f"과제 이력 관리 도구 — 배포본",
+            "느린 나이테 — 과제 이력 관리 도구 · 배포본",
             "",
             f"배포본 이름  {name}",
             f"만든 날      {date.today().isoformat()}",
@@ -107,6 +119,7 @@ def write_build_info(
             "설치 방법",
             "  1. 이 폴더를 원하는 위치에 풀어 둔다",
             "  2. setup.bat 을 더블클릭한다",
+            "     (윈도우라면 바탕화면에 [느린 나이테] 바로가기가 생깁니다)",
             "  3. run.bat 을 더블클릭한다",
             "",
             "주의",
@@ -153,6 +166,7 @@ def main() -> int:
         shutil.rmtree(stage)
     payload = stage / NAME
     export_tree(payload)
+    place_icon(payload)
 
     wheels = 0
     if not args.no_vendor:

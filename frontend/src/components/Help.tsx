@@ -10,6 +10,7 @@ export default function Help() {
     <section className="help">
       <h1 className="search-title">도움말</h1>
       <p className="hint">
+        <b>느린 나이테</b>는 과제 이력을 마크다운으로 남기는 도구입니다.
         과제 하나가 폴더 하나입니다. 진행일지·보고·첨부가 그 안에 함께 쌓이고, 모두 <b>보통의
         마크다운 파일</b>이라 이 도구 없이도 탐색기에서 그대로 읽힙니다. 인터넷으로 나가는 것은
         없습니다.

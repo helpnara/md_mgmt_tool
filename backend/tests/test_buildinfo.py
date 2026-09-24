@@ -6,12 +6,12 @@ from app.services import buildinfo
 
 def test_reads_the_fields_make_dist_writes(tmp_path):
     (tmp_path / buildinfo.INFO_FILE).write_text(
-        "과제 이력 관리 도구 — 배포본\n\n배포본 이름  과제이력관리-20260915-v3\n만든 날      2026-09-15\n"
+        "느린 나이테 — 과제 이력 관리 도구 · 배포본\n\n배포본 이름  느린나이테-20260915-v3\n만든 날      2026-09-15\n"
         "소스 버전    4bf39b1 (claude/x)\n대상 파이썬  3.14 (win_amd64)\n",
         encoding="utf-8",
     )
     info = buildinfo.read(tmp_path)
-    assert info == {"name": "과제이력관리-20260915-v3", "built": "2026-09-15", "source": "4bf39b1 (claude/x)"}
+    assert info == {"name": "느린나이테-20260915-v3", "built": "2026-09-15", "source": "4bf39b1 (claude/x)"}
 
 
 def test_missing_file_means_running_from_source(tmp_path):

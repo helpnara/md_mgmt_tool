@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="느린 나이테">
+  <!-- 느린 나이테 — 한 해에 한 겹.
+       겹 간격을 일부러 고르지 않게 두고(바깥이 넓고 안쪽이 촘촘하다), 가운데에서 바깥으로
+       갈라진 틈을 하나 낸다. 그래야 과녁이 아니라 나무 단면으로 읽힌다.
+       16px 에서 뭉개지지 않도록 겹은 넷까지만, 색은 두 가지만 쓴다. -->
+  <rect width="32" height="32" rx="7" fill="#f2e1c6"/>
+  <g fill="none" stroke="#6f431e" stroke-linecap="round">
+    <ellipse cx="15.6" cy="16.6" rx="11.3" ry="11.9" stroke-width="2.2" transform="rotate(-10 15.6 16.6)"/>
+    <ellipse cx="16.1" cy="16.2" rx="8.1" ry="8.7" stroke-width="1.8" transform="rotate(7 16.1 16.2)"/>
+    <ellipse cx="16.6" cy="15.8" rx="5.1" ry="5.6" stroke-width="1.6" transform="rotate(-16 16.6 15.8)"/>
+    <ellipse cx="17" cy="15.4" rx="2.6" ry="3" stroke-width="1.5" transform="rotate(12 17 15.4)"/>
+  </g>
+  <ellipse cx="17.2" cy="15.2" rx="1.2" ry="1.4" fill="#6f431e"/>
+  <!-- 갈라진 틈 — 바탕색으로 겹을 가른다 -->
+  <path d="M18.2 15.9 L26.6 21.8" stroke="#f2e1c6" stroke-width="2" stroke-linecap="round"/>
+</svg>

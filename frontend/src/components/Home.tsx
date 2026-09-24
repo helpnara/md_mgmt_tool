@@ -243,7 +243,7 @@ export default function Home({ meta }: { meta: Meta }) {
     return (
       <section className="home">
         <div className="card home-start">
-          <h1>과제 이력 관리를 시작합니다</h1>
+          <h1>느린 나이테를 시작합니다</h1>
           <p className="hint">
             과제 하나가 폴더 하나입니다. 진행일지와 첨부가 그 안에 함께 쌓이고,
             모두 <b>보통의 마크다운 파일</b>이라 이 도구 없이도 탐색기에서 그대로 읽힙니다.

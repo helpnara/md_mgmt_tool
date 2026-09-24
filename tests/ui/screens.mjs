@@ -1422,7 +1422,7 @@ async function main() {
     const before = await page.evaluate(() => document.querySelector(".app-header").offsetHeight);
     await page.evaluate(() => {
       document.querySelector(".vault-path").textContent =
-        "\\\\사내서버\\연구소\\소재개발팀\\권경락\\문서\\과제이력관리\\vault\\2026";
+        "\\\\사내서버\\연구소\\소재개발팀\\권경락\\문서\\느린나이테\\vault\\2026";
     });
     const after = await page.evaluate(() => document.querySelector(".app-header").offsetHeight);
     equal(after, before, "경로가 길어지자 머리글이 줄바꿈됐다");
@@ -2782,6 +2782,35 @@ async function main() {
     const rows = page.locator(".report-editor .attachments li");
     if ((await rows.count()) === 0) return; // 첨부가 없으면 볼 것이 없다
     equal(await rows.first().getByRole("button", { name: "삭제" }).count(), 0, "확정 보고의 삭제 단추");
+  });
+
+  console.log("\n[23] 이름과 나이테 표시 (TODO 132)");
+
+  await check("탭 제목과 화면 머리가 «느린 나이테» 다", async () => {
+    await go("#/");
+    equal(await page.title(), "느린 나이테", "탭 제목");
+    const brand = page.locator(".app-header .brand");
+    equal((await brand.innerText()).trim(), "느린 나이테", "화면 머리의 이름");
+    // 표시가 글자 옆에 실제로 그려졌는가 — 주소만 맞고 안 뜨는 경우를 잡는다.
+    const mark = brand.locator("img.brand-mark");
+    equal(await mark.count(), 1, "나이테 표시");
+    const box = await mark.boundingBox();
+    expect(box !== null && box.width >= 16, `표시가 그려지지 않았다: ${JSON.stringify(box)}`);
+  });
+
+  await check("표시 파일 셋이 서버에서 제 형식으로 내려온다", async () => {
+    // public/ 의 파일은 assets 묶음과 달리 이름이 그대로다. SPA 되돌림이 이것까지
+    // index.html 로 덮으면 표시가 사라진다 — 형식까지 본다.
+    for (const [path, type] of [
+      ["/favicon.svg", "image/svg+xml"],
+      ["/favicon.ico", "image/"],
+      ["/icon-180.png", "image/png"],
+    ]) {
+      const response = await fetch(BASE + path);
+      equal(response.status, 200, `${path} 의 응답`);
+      const got = response.headers.get("content-type") ?? "";
+      expect(got.startsWith(type), `${path} 의 형식: ${got}`);
+    }
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

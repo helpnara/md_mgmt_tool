@@ -66,7 +66,9 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color:
   top: 0;
   z-index: 5;
 }
-.brand { font-weight: 700; font-size: 16px; color: var(--text); text-decoration: none; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; color: var(--text); text-decoration: none; }
+/* 나이테 표시 — 줄 높이에 끌려다니지 않게 크기를 못 박는다 */
+.brand-mark { flex: none; width: 22px; height: 22px; border-radius: 5px; }
 /* 공유 폴더·OneDrive 경로는 길다. 막아 두지 않으면 이 한 줄이 머리글 전체를 밀어내
    메뉴가 글자 중간에서 줄바꿈되고 검색창이 찌그러진다 (TODO 88). */
 .vault-path {
