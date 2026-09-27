@@ -159,7 +159,9 @@ def ai_prompt_suffix() -> str:
 def normalize_people(value: object) -> list[dict[str, str]]:
     """명부를 정리한다. 이름이 비었거나 겹치는 줄은 버린다.
 
-    사번·계정 칸은 지금 비어 있는 것이 정상이다 — 로그인이 생길 때 채운다.
+    사번 칸은 지금 비어 있는 것이 정상이다 — 로그인이 생길 때 채운다.
+    `account` 는 **화면에서 뺐지만**(TODO 126) 값은 그대로 읽고 쓴다 — 사내 인증 연동을
+    하게 되면 칸만 되살리면 된다.
     """
     people: list[dict[str, str]] = []
     seen: set[str] = set()
