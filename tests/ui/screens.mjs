@@ -2645,6 +2645,41 @@ async function main() {
     expect(heads.includes("사번"), "사번 열은 그대로여야 한다");
   });
 
+  await check("명부 표가 카드 밖으로 밀리지 않는다 (TODO 134)", async () => {
+    await go("#/settings");
+    const box = page.locator(".people-scroll");
+    equal(await box.count(), 1, "명부 표 상자");
+
+    // ① 가로 스크롤이 없어야 한다
+    const size = await box.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+    expect(
+      size.scroll <= size.client + 1,
+      `가로로 ${size.scroll - size.client}px 밀렸다 (${size.scroll} > ${size.client})`,
+    );
+
+    // ② 칸이 서로 겹치지 않아야 한다. `<td>` 에 display:flex 를 걸면 그 칸이 표의 칸
+    //    계산에서 빠져 **옆 칸과 같은 자리에** 그려진다 — 가로 스크롤은 안 생기므로
+    //    ①만으로는 못 잡는다. 실제로 그래서 맨 오른쪽 단추가 안 보였다.
+    const cells = await page.evaluate(() => {
+      const row = document.querySelector(".people-table tbody tr");
+      if (!row) return null;
+      return [...row.children].map((c) => {
+        const r = c.getBoundingClientRect();
+        return { cls: c.className || "(없음)", x: Math.round(r.x), right: Math.round(r.right) };
+      });
+    });
+    expect(cells !== null && cells.length === 5, `줄의 칸 수: ${cells ? cells.length : "없음"}`);
+    for (let i = 1; i < cells.length; i += 1) {
+      expect(
+        cells[i].x >= cells[i - 1].right - 1,
+        `칸이 겹쳤다: ${cells[i - 1].cls}(→${cells[i - 1].right}) 와 ${cells[i].cls}(${cells[i].x}→)`,
+      );
+    }
+    // 마지막 칸이 상자 안에 있어야 보인다
+    const edge = await box.evaluate((el) => Math.round(el.getBoundingClientRect().right));
+    expect(cells[4].right <= edge + 1, `맨 오른쪽 칸이 상자 밖이다: ${cells[4].right} > ${edge}`);
+  });
+
   console.log("\n[21] 홈에서 간 화면에서 돌아오는 길 (TODO 127)");
   await check("홈의 숫자를 누르면 목록에 ← 홈 이 선다", async () => {
     await go("#/");

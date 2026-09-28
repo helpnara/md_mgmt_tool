@@ -566,12 +566,21 @@ button { white-space: nowrap; }
 .trash-list li > button { flex: 0 0 auto; }
 
 /* ── 담당자 명부 (설정) ───────────────────────────── */
-.people-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+/* 명부 표 — **가로 스크롤이 생기지 않게** 칸 폭을 못 박는다 (TODO 134).
+   `table-layout: fixed` 가 아니면 날짜 칸의 내용(날짜 입력 + 사유)이 표를 밀어낸다. */
+.people-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 10px; }
 .people-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 6px; }
 .people-table td { padding: 3px 6px; }
-.people-table td input { padding: 5px 8px; font-size: 13px; }
-.people-table th:nth-child(4), .people-table td:nth-child(4) { width: 60px; text-align: right; font-size: 12px; }
-.people-table th:last-child, .people-table td:last-child { width: 60px; }
+.people-table td input, .people-table td select { min-width: 0; }
+.people-table td input { width: 100%; padding: 5px 8px; font-size: 13px; }
+/* 칸 폭은 이름으로 — 칸이 늘거나 줄어도 번호가 밀리지 않는다 */
+.people-table .col-id { width: 104px; }
+.people-table .col-used { width: 84px; }
+.people-table .col-left { width: 196px; }
+.people-table .col-act { width: 104px; }
+.people-table td:nth-child(3) { text-align: right; font-size: 12px; white-space: nowrap; }
+.people-table th:nth-child(3) { text-align: right; }
+.people-table td .warn-text { display: block; }
 .unregistered { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 /* 명부에 없는 이름 — 막지 않고 알려만 준다 */
 .tag-pick.add { background: #fef3c7; color: #92400e; }
@@ -1429,17 +1438,21 @@ h2 .copy-table, h1 .copy-table { margin-left: 10px; vertical-align: middle; }
 /* ── 담당자 명부 — 스크롤·찾기 (TODO 121) ────────────────────
    인원이 늘어도 카드 키가 자라지 않게 목록 안에서만 스크롤한다. 머리글은 붙여 둔다 —
    스크롤한 뒤에도 어느 칸이 사번인지 보여야 한다. */
-.people-scroll { max-height: 320px; overflow-y: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; }
+.people-scroll { max-height: 320px; overflow-y: auto; overflow-x: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; }
 .people-scroll .people-table { margin: 0; }
 .people-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: 0 1px 0 var(--border); }
 .people-find { flex-direction: row; align-items: center; gap: 8px; margin-top: 8px; }
 .people-find input { max-width: 200px; }
 .people-find .muted { font-size: 12px; }
 .person-left td { color: var(--muted-strong); }
-.person-left-cell { display: flex; gap: 4px; align-items: center; }
-.person-left-cell input[type="date"] { width: 140px; }
-.person-left-cell select { width: auto; min-width: 70px; }
-.person-actions { display: flex; gap: 4px; white-space: nowrap; }
+/* 칸 안에서 나란히 놓는 자리. **`<td>` 에 직접 걸지 않는다** — 그러면 그 칸이 표의
+   칸 계산에서 빠져 옆 칸과 겹쳐 그려진다 (TODO 134 에서 실제로 그랬다). */
+.people-table .cell-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.person-left-cell input[type="date"] { flex: 1 1 108px; font-size: 12px; padding: 5px 6px; }
+.person-left-cell select { flex: 0 0 60px; min-width: 0; padding: 5px 4px; font-size: 12px; }
+/* 단추도 칸 안에서 접힌다 — 밖으로 밀려 안 보이는 것보다 두 줄이 낫다 */
+.person-actions .cell-row { justify-content: flex-end; }
+.person-actions button { padding: 3px 7px; font-size: 12px; }
 
 /* ── 홈 배치 (TODO 123) ──────────────────────────────────────
    왼쪽 [이번 주 할 일]이 오른쪽보다 길어 오른쪽 아래가 비어 있었다. 오른쪽 칸에 팀 현황과

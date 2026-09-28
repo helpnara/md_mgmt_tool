@@ -167,6 +167,17 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
       {people.length > 0 && (
         <div className="people-scroll">
         <table className="people-table">
+          {/* 칸 폭은 `nth-child` 번호가 아니라 **이름**으로 잡는다 (TODO 134).
+              126 에서 계정 칸을 빼자 번호가 한 칸씩 밀려, 날짜 칸이 60px 로 눌리면서
+              표가 카드 밖으로 밀려나 맨 오른쪽 단추가 안 보였다. 칸이 늘거나 줄어도
+              이름표를 따라가면 다시는 밀리지 않는다. */}
+          <colgroup>
+            <col className="col-name" />
+            <col className="col-id" />
+            <col className="col-used" />
+            <col className="col-left" />
+            <col className="col-act" />
+          </colgroup>
           <thead>
             <tr>
               <th>이름</th>
@@ -197,28 +208,34 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                 </td>
                 <td className="muted">
                   {person.used ?? 0}건
+                  {/* 좁은 칸이라 아랫줄로 내린다 — 가운뎃점으로 이으면 줄 사이에서 끊긴다 */}
                   {(person.unfinished ?? 0) > 0 && person.left_on && (
-                    <span className="warn-text"> · 남은 {person.unfinished}건</span>
+                    <span className="warn-text">남은 {person.unfinished}건</span>
                   )}
                 </td>
                 <td className="person-left-cell">
-                  <input
-                    type="date"
-                    value={person.left_on ?? ""}
-                    onChange={(e) => update(index, "left_on", e.target.value)}
-                    title="전배·퇴사한 날. 비워 두면 지금 있는 사람입니다."
-                  />
-                  <select
-                    value={person.left_reason ?? ""}
-                    disabled={!person.left_on}
-                    onChange={(e) => update(index, "left_reason", e.target.value)}
-                  >
-                    <option value="">사유</option>
-                    <option value="전배">전배</option>
-                    <option value="퇴사">퇴사</option>
-                  </select>
+                  {/* 나란히 놓는 일은 안쪽 div 가 한다 — `<td>` 에 display:flex 를 걸면
+                      그 칸이 표의 칸 계산에서 빠져 옆 칸과 겹쳐 그려진다 (TODO 134). */}
+                  <div className="cell-row">
+                    <input
+                      type="date"
+                      value={person.left_on ?? ""}
+                      onChange={(e) => update(index, "left_on", e.target.value)}
+                      title="전배·퇴사한 날. 비워 두면 지금 있는 사람입니다."
+                    />
+                    <select
+                      value={person.left_reason ?? ""}
+                      disabled={!person.left_on}
+                      onChange={(e) => update(index, "left_reason", e.target.value)}
+                    >
+                      <option value="">사유</option>
+                      <option value="전배">전배</option>
+                      <option value="퇴사">퇴사</option>
+                    </select>
+                  </div>
                 </td>
                 <td className="person-actions">
+                  <div className="cell-row">
                   {person.left_on && (person.unfinished ?? 0) > 0 && (
                     <button
                       className="ghost small"
@@ -235,6 +252,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                   >
                     빼기
                   </button>
+                  </div>
                 </td>
               </tr>
               );
