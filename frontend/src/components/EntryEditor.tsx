@@ -5,7 +5,7 @@ import VersionPanel from "./VersionPanel";
 import type { Entry } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
-import { pasteAsTable } from "../table";
+import { handleEditorPaste } from "../table";
 import { scrollEditorIntoView, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
@@ -312,16 +312,16 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
             setBody(event.target.value);
             markDirty();
           }}
-          onPaste={(event) => {
-            const files = Array.from(event.clipboardData.files);
-            if (files.length > 0) {
-              event.preventDefault();
-              void handleFiles(files);
-              return;
-            }
-            // 엑셀에서 복사한 표는 마크다운 표로 바꿔 넣는다.
-            if (pasteAsTable(event, insertAtCursor)) markDirty();
-          }}
+          onPaste={(event) =>
+            // 엑셀 표는 표로, 캡처는 첨부로 — 판단은 한 곳(table.ts)에서 (TODO 137)
+            handleEditorPaste(event, {
+              onInsert: (text) => {
+                insertAtCursor(text);
+                markDirty();
+              },
+              onFiles: (files) => void handleFiles(files),
+            })
+          }
           placeholder="진행 내용을 마크다운으로 작성합니다. 이미지는 Ctrl+V로 바로 붙여넣을 수 있습니다."
           spellCheck={false}
         />

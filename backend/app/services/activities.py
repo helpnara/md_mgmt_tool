@@ -22,6 +22,7 @@ from typing import Any
 
 from ..config import ACTIVITY_KIND_KEYS, DEFAULT_ACTIVITY_KIND, get_settings
 from ..vault import markdown as md
+from ..vault import versions
 from ..vault import paths
 from . import settings as settings_service
 
@@ -203,6 +204,7 @@ def update(conn: sqlite3.Connection, activity_id: int, updates: dict[str, Any]) 
         if target.exists() and target != path:
             target = paths.unique_path(directory, target.stem, ".md")
         paths.move(path, target)
+        versions.follow(path, target)  # 이전 버전도 따라온다 (TODO 142)
 
     index_activities(conn)
     conn.commit()

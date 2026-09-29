@@ -5,7 +5,7 @@ import { backTarget, intakeBackLink, listLink, projectLink } from "../nav";
 import type { Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
-import { pasteAsTable } from "../table";
+import { handleEditorPaste, spliceAtCaret } from "../table";
 import { todayIso, daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
@@ -120,6 +120,8 @@ export default function ProjectDetail({
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [overviewDraft, setOverviewDraft] = useState("");
+  // 개요 편집기 — 붙여넣기·첨부 링크를 커서 자리에 끼우려고 잡아 둔다 (TODO 137)
+  const overviewAreaRef = useRef<HTMLTextAreaElement>(null);
   const [creatingEntry, setCreatingEntry] = useState(false);
   // [이어쓰기]로 시작하면 지난 기록의 내용을 담아 온다. 없으면 서식에서 시작한다.
   const [entrySeed, setEntrySeed] = useState<string | null>(null);
@@ -211,6 +213,12 @@ export default function ProjectDetail({
           ).promise;
           links.push(saved.markdown);
         }
+        if (editingOverview) {
+          // 편집 중이면 **편집기의 커서 자리**에 끼운다. 예전에는 서버의 개요 끝에 붙여 저장했는데,
+          // 열려 있던 편집기의 [저장] 이 그 위를 덮어 링크가 사라졌다 (TODO 138).
+          setOverviewDraft((prev) => spliceAtCaret(overviewAreaRef.current, prev, `\n${links.join("\n")}\n`));
+          return;
+        }
         const body = `${(project.body ?? "").replace(/\s*$/, "")}\n\n${links.join("\n")}\n`;
         await api.updateProject(project.id, { body });
         load();
@@ -220,7 +228,7 @@ export default function ProjectDetail({
         setUploading(null);
       }
     },
-    [project, load],
+    [project, load, editingOverview],
   );
 
   // 개요 편집을 열면 그 카드로 데려간다 (좌측 칸이 맨 위로 올라오기 때문).
@@ -392,7 +400,7 @@ export default function ProjectDetail({
                 {(project.intakes ?? []).map((item) => (
                   <a key={item.id} className="intake-link" href={intakeBackLink(item.id)}>
                     {item.relation === "started" ? "← " : "⇠ "}
-                    <span className="project-id">{item.id}</span> {item.title}
+                    <span className="intake-link-id">{item.id}</span> {item.title}
                     <span className="muted"> · {item.relation === "started" ? "여기서 승격" : "병합됨"}</span>
                   </a>
                 ))}
@@ -649,12 +657,16 @@ export default function ProjectDetail({
             <PreviewToggle on={preview} onToggle={togglePreview} />
             <div className={preview ? "split" : "split solo"}>
               <textarea
+                ref={overviewAreaRef}
                 value={overviewDraft}
                 onChange={(event) => setOverviewDraft(event.target.value)}
                 onPaste={(event) =>
-                  pasteAsTable(event, (snippet) =>
-                    setOverviewDraft((prev) => `${prev.replace(/\s*$/, "")}\n${snippet}`),
-                  )
+                  // 다른 편집기와 같은 판 — 표는 커서 자리에, 캡처는 첨부로 (TODO 137)
+                  handleEditorPaste(event, {
+                    onInsert: (snippet) =>
+                      setOverviewDraft((prev) => spliceAtCaret(overviewAreaRef.current, prev, snippet)),
+                    onFiles: (files) => void attachToOverview(files),
+                  })
                 }
                 spellCheck={false}
               />

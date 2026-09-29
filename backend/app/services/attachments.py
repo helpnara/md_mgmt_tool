@@ -229,12 +229,20 @@ def spreadsheet_preview(conn: sqlite3.Connection, attachment_id: int) -> dict:
     row, path = attachment_file(conn, attachment_id)
     if not is_spreadsheet(row["mime"]):
         raise ValueError("엑셀 파일이 아닙니다.")
+    return spreadsheet_preview_path(path, row["orig_name"])
 
+
+def spreadsheet_preview_path(path: Path, orig_name: str) -> dict:
+    """파일 경로로 바로 뽑는다 — 과제 첨부(색인에 id 가 있다)와 접수 첨부(없다)가 함께 쓴다 (TODO 138)."""
     import base64
 
     from openpyxl import load_workbook
 
-    workbook = load_workbook(path, data_only=True)
+    try:
+        workbook = load_workbook(path, data_only=True)
+    except Exception as exc:  # 깨진 파일·암호 걸린 파일·확장자만 xlsx 인 파일
+        # 500 이 아니라 읽을 수 있는 말로 — 원본은 [원본 열기]로 여전히 열 수 있다 (TODO 138)
+        raise ValueError("이 엑셀 파일은 미리 볼 수 없습니다 — [원본 열기]로 열어 주세요.") from exc
     sheets = []
     for worksheet in workbook.worksheets:
         rows = []
@@ -258,7 +266,7 @@ def spreadsheet_preview(conn: sqlite3.Connection, attachment_id: int) -> dict:
 
     workbook.close()
     return {
-        "orig_name": row["orig_name"],
+        "orig_name": orig_name,
         "sheets": sheets,
         "truncated": any(len(sheet["rows"]) >= PREVIEW_MAX_ROWS for sheet in sheets),
     }

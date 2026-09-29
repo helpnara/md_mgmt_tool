@@ -151,7 +151,7 @@ export interface Entry {
 
 export interface SearchResults {
   /** 갈래마다 상한이 있어 잘렸는지 — 화면이 "N건" 대신 "N건 이상"이라고 말하는 근거 */
-  truncated: { projects: boolean; entries: boolean; reports: boolean; attachments: boolean };
+  truncated: { projects: boolean; entries: boolean; reports: boolean; attachments: boolean; intakes?: boolean };
   query: string;
   projects: {
     id: string;
@@ -187,6 +187,18 @@ export interface SearchResults {
     orig_name: string;
     rel_path: string;
     size_bytes: number | null;
+  }[];
+  /** 과제 접수 (TODO 144) — 반려·이관된 것까지 찾는다 */
+  intakes?: {
+    id: string;
+    title: string;
+    status: string;
+    status_label: string;
+    leader: string | null;
+    leader_team: string | null;
+    received_on: string | null;
+    project_id: string | null;
+    snippet: string;
   }[];
   total: number;
 }
@@ -633,6 +645,8 @@ export interface IntakeAttachment {
   /** 요청 본문에 넣을 링크 / 검토 기록에 넣을 링크 — 기준 폴더가 다르다 */
   markdown: string;
   markdown_log: string;
+  /** 엑셀이면 [내용 보기] 주소 (TODO 138) */
+  preview_url?: string | null;
 }
 
 export interface IntakeDetail extends Intake {

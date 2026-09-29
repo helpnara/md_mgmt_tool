@@ -22,6 +22,8 @@ MIN_FTS_LENGTH = 3
 # **제목이 딱 맞는 과제가 밀려날 수** 있었다. 종류를 나누면 그런 일이 없다.
 KIND_LIMITS = {"project": 30, "entry": 40, "report": 30}
 ATTACHMENT_LIMIT = 20
+# 접수 (TODO 144). 건수가 과제보다 훨씬 적어 LIKE 로 충분하다 — FTS 색인에 넣지 않는다.
+INTAKE_LIMIT = 20
 
 
 def _fts_query(text: str) -> str:
@@ -99,7 +101,7 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None) -> di
     if not query:
         return {
             "query": "", "projects": [], "entries": [], "reports": [], "attachments": [],
-            "total": 0, "truncated": {},
+            "intakes": [], "total": 0, "truncated": {},
         }
 
     # 상한을 통째로 올려 받는 경우(목록 거르기)를 위해 값으로 넘긴다.
@@ -205,21 +207,61 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None) -> di
     attachments_cut = len(attachments) > attachment_cap
     attachments = attachments[:attachment_cap]
 
+    intakes, intakes_cut = _intakes(conn, query, limit or INTAKE_LIMIT)
+
     return {
         "query": query,
         "projects": projects,
         "entries": entries,
         "reports": reports,
         "attachments": attachments,
-        "total": len(projects) + len(entries) + len(reports) + len(attachments),
+        "intakes": intakes,
+        "total": len(projects) + len(entries) + len(reports) + len(attachments) + len(intakes),
         # 어느 갈래가 잘렸는지. 화면이 "N건" 대신 "N건 이상" 이라고 말하는 근거다.
         "truncated": {
             "projects": projects_cut,
             "entries": entries_cut,
             "reports": reports_cut,
             "attachments": attachments_cut,
+            "intakes": intakes_cut,
         },
     }
+
+
+def _intakes(conn: sqlite3.Connection, query: str, cap: int) -> tuple[list[dict], bool]:
+    """접수 건 — 번호·제목·요청 본문·과제리더·소속·태그를 훑는다 (TODO 144).
+
+    반년 뒤 "그 요청 어떻게 됐더라" 를 찾는 길이다. 반려·이관된 것도 찾아져야 한다 —
+    그래서 풀(판정 전)만이 아니라 전부를 본다.
+    """
+    from ..config import INTAKE_STATUS_LABELS
+
+    like = f"%{query}%"
+    rows = conn.execute(
+        """
+        SELECT id, title, status, leader, leader_team, received_on, project_id, merged_into, body
+          FROM intake
+         WHERE id LIKE ? OR title LIKE ? OR body LIKE ? OR leader LIKE ? OR leader_team LIKE ?
+               OR tags LIKE ?
+         ORDER BY received_on DESC, id DESC LIMIT ?
+        """,
+        (like, like, like, like, like, like, cap + 1),
+    ).fetchall()
+    items = [
+        {
+            "id": row["id"],
+            "title": row["title"],
+            "status": row["status"],
+            "status_label": INTAKE_STATUS_LABELS.get(row["status"], row["status"]),
+            "leader": row["leader"],
+            "leader_team": row["leader_team"],
+            "received_on": row["received_on"],
+            "project_id": row["project_id"] or row["merged_into"],
+            "snippet": make_snippet(row["body"] or "", query),
+        }
+        for row in rows[:cap]
+    ]
+    return items, len(rows) > cap
 
 
 def project_ids_matching(conn: sqlite3.Connection, query: str) -> list[str]:

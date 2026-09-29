@@ -9,6 +9,7 @@ from typing import Any
 
 from ..config import get_settings
 from ..vault import markdown as md
+from ..vault import versions
 from ..vault import paths
 from ..vault.indexer import index_project
 from . import trash as trash_service
@@ -104,6 +105,7 @@ def _rename_to_match_meta(
 
     target = paths.unique_path(path.parent, stem, ".md")
     paths.move(path, target)
+    versions.follow(path, target)  # 이전 버전도 따라온다 (TODO 142)
 
     old_rel = path.relative_to(directory).as_posix()
     new_rel = target.relative_to(directory).as_posix()

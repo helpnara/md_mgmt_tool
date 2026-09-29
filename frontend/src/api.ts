@@ -93,7 +93,11 @@ export const api = {
     request<{ ok: boolean }>(`/api/activities/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteActivity: (id: number) => request<void>(`/api/activities/${id}`, { method: "DELETE" }),
   listProjects: (params: Record<string, string>) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    // `year=all` 은 **주소의 말**이다(연도 전체). 서버는 네 자리 연도나 빈 값만 받는다 —
+    // 부르는 쪽마다 바꾸게 두면 한 곳이 빠진다(TODO 140: 병합 칸이 422 로 빈 목록을 보였다).
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([key, v]) => v && !(key === "year" && v === "all")),
+    );
     return request<Project[]>(`/api/projects?${query.toString()}`);
   },
   createProject: (payload: Partial<Project>) =>
@@ -260,6 +264,8 @@ export const api = {
   },
   spreadsheetPreview: (attachmentId: number) =>
     request<SpreadsheetPreview>(`/api/attachments/${attachmentId}/preview`),
+  /** 첨부가 알려 준 미리보기 주소로 — 과제 첨부와 접수 첨부가 주소만 다르다 (TODO 138) */
+  spreadsheetPreviewAt: (url: string) => request<SpreadsheetPreview>(url),
   search: (query: string) => request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),
   /** 이 문서의 이전 버전 (TODO 37-1). path 는 vault 기준 상대경로. */
   versions: (path: string) =>

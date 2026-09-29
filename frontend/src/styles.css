@@ -1550,3 +1550,29 @@ a.class-chip:hover { background: #e2e8f0; }
 .promote-dialog > .form-actions { position: sticky; bottom: -18px; background: var(--surface); padding: 10px 0 4px; border-top: 1px solid var(--border); margin-bottom: -4px; }
 .intake-table th { white-space: nowrap; padding: 6px 8px; }
 .intake-table td { padding: 6px 8px; }
+
+/* ── 접수 번호 (TODO 139) ─────────────────────────────────
+   과제의 번호 딱지(.project-id — 제목 위에 얹는 11px 흐린 글씨)를 빌려 쓰면, 제 칸을 가진
+   풀에서는 작고 흐리고 줄표에서 두 줄로 꺾였다. 번호가 곧 이름인 칸이라 본문 크기로 세운다. */
+.intake-table .intake-id { white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+.intake-table .intake-id a { color: var(--text); font-weight: 600; text-decoration: none; }
+.intake-table .intake-id a:hover { text-decoration: underline; color: var(--accent); }
+/* 번호가 한 줄로 꽉 차게 — 팀 코드 길이가 팀마다 달라 px 로 못 박지 않는다 */
+.intake-table col.col-intake-id { width: 1%; }
+.intake-table col.col-pick { width: 32px; }
+.intake-detail .intake-id-head { display: block; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.01em; }
+.intake-link { white-space: nowrap; }
+.intake-link .intake-link-id { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ── 접수 상세 2단 (TODO 141) — 과제 상세의 .detail-columns 를 그대로 쓴다 ── */
+.intake-columns { margin-top: 12px; }
+.intake-columns .detail-right .intake-logs { margin-top: 0; }
+.intake-body .card-head-actions { display: flex; gap: 6px; align-items: center; }
+
+/* 등록 양식의 첨부 칸 (TODO 138) */
+.intake-form-files { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 1px dashed var(--border); border-radius: 8px; }
+.intake-form-files label.attach-button { cursor: pointer; display: inline-flex; align-items: center; padding: 7px 14px; border-radius: 8px; font-size: 14px; }
+.intake-form-file-list { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.intake-form-file-list li { display: flex; align-items: center; gap: 8px; }
+/* 판정 사유는 한두 줄이다 — 일반 textarea 높이(본문 편집용)를 물려받으면 칸이 화면을 덮는다 */
+.decision-panel textarea { min-height: 56px; height: 64px; }

@@ -2922,6 +2922,8 @@ async function main() {
     await page.getByRole("button", { name: "착수 · 과제로 승격" }).click();
     const dialog = page.locator(".promote-dialog");
     await dialog.waitFor();
+    // 대화상자는 먼저 서고 미리 채울 값(plan)은 뒤따라 온다 — 채워진 뒤에 읽는다
+    await dialog.locator(".next-id").first().waitFor({ timeout: 5000 });
     const text = await dialog.innerText();
     expect(text.includes("요청자 추정"), "요청 효과 참고 문구");
     const owners = await dialog.locator("label", { hasText: "담당자" }).locator("input").first().inputValue();
@@ -2995,6 +2997,226 @@ async function main() {
     equal(await card.locator(".class-lists textarea").count(), 4, "분류 목록 넷");
     await go("#/help");
     expect((await page.locator(".help").innerText()).includes("과제 접수 흐름"), "도움말 절");
+  });
+
+  console.log("\n[25] 붙여넣기 · 첨부 판 · 접수 번호 · 병합 목록 · 2단 · 검색 (TODO 137~144)");
+
+  /**
+   * 가짜 클립보드로 붙여넣는다 — 엑셀처럼 **표 HTML · 탭 글 · 그림을 함께** 담을 수 있다.
+   * 한 편집기만 보는 시험은 나머지 편집기를 놓친다(137 이 그렇게 샜다). 그래서 편집기 목록 전부에 흘린다.
+   */
+  async function pasteInto(selector, { html = "", text = "", image = false }) {
+    await page.locator(selector).first().evaluate(
+      (el, a) => {
+        const dt = new DataTransfer();
+        if (a.html) dt.setData("text/html", a.html);
+        if (a.text) dt.setData("text/plain", a.text);
+        if (a.image) {
+          const png = Uint8Array.from(atob(a.png), (c) => c.charCodeAt(0));
+          dt.items.add(new File([png], "image.png", { type: "image/png" }));
+        }
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+        el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      },
+      {
+        html, text, image,
+        png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      },
+    );
+    await page.waitForTimeout(400);
+  }
+  // 엑셀 셀 복사와 같은 모양 — 셀 안 줄바꿈(<br>)과 병합 셀(colspan)까지
+  const EXCEL = {
+    html:
+      "<html><body><table><tr><td>항목</td><td>값</td></tr>" +
+      "<tr><td>온도<br style='mso-data-placement:same-cell'>편차</td><td>12</td></tr>" +
+      "<tr><td colspan=2>합계</td></tr></table></body></html>",
+    text: '항목\t값\n"온도\n편차"\t12\n합계\t\n',
+    image: true,
+  };
+  function expectTable(value, where) {
+    expect(value.includes("| 항목 | 값 |"), `${where}: 표 머리가 없다 — ${value.slice(-160)}`);
+    expect(value.includes("| 온도<br>편차 | 12 |"), `${where}: 셀 안 줄바꿈이 깨졌다 — ${value.slice(-160)}`);
+    expect(value.includes("| 합계 |  |"), `${where}: 병합 셀 — ${value.slice(-160)}`);
+    expect(!value.includes("image.png") && !value.includes("⏳"), `${where}: 그림으로 들어갔다`);
+  }
+
+  const pasteIntake = await api.post("/api/intakes", { title: "붙여넣기 확인 접수", leader: "현업이", leader_team: "품질팀" });
+  const pasteIntakeHash = `#/intakes/${encodeURIComponent(pasteIntake.id)}`;
+
+  await check("엑셀 표는 편집기 다섯 곳 모두에서 표로 들어간다 — 그림이 아니라 (TODO 137)", async () => {
+    // 1. 진행일지
+    await go(`#/projects/${seeded.projectA}`);
+    await page.getByRole("button", { name: "기록 추가" }).click();
+    await page.waitForTimeout(500);
+    await pasteInto(".entry-editor textarea", EXCEL);
+    expectTable(await page.locator(".entry-editor textarea").first().inputValue(), "진행일지");
+    // 2. 과제 개요 — 표가 **커서 자리**에 들어가는지도 본다(예전에는 맨 끝)
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".card").filter({ hasText: "과제 개요" }).getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(500);
+    const overview = page.locator(".card").filter({ hasText: "과제 개요" }).locator("textarea").first();
+    await overview.fill("첫 줄\n끝 줄");
+    await overview.evaluate((el) => el.setSelectionRange(3, 3));
+    await overview.evaluate(
+      (el, html) => {
+        const dt = new DataTransfer();
+        dt.setData("text/html", html);
+        el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      },
+      EXCEL.html,
+    );
+    await page.waitForTimeout(300);
+    const text = await overview.inputValue();
+    expectTable(text, "과제 개요");
+    expect(text.trim().endsWith("끝 줄"), `표가 커서 자리가 아니라 끝에 붙었다: ${text}`);
+    await page.locator(".card").filter({ hasText: "과제 개요" }).getByRole("button", { name: "취소" }).click().catch(() => {});
+    // 3. 보고
+    const draft = await api.post(`/api/projects/${seeded.projectA}/reports/draft`, { report_date: dayFromToday(5) });
+    try {
+      await go(`#/projects/${seeded.projectA}?report=${draft.id}`);
+      await pasteInto(".report-editor textarea", EXCEL);
+      expectTable(await page.locator(".report-editor textarea").first().inputValue(), "보고");
+    } finally {
+      await api.delete(`/api/reports/${draft.id}`);
+    }
+    // 4 · 5. 접수 요청 내용 · 검토 기록
+    await go(pasteIntakeHash);
+    await page.locator(".intake-body").getByRole("button", { name: "편집" }).click();
+    await page.waitForTimeout(400);
+    await pasteInto(".body-editor textarea", EXCEL);
+    expectTable(await page.locator(".body-editor textarea").first().inputValue(), "접수 요청 내용");
+    await page.locator(".body-editor").getByRole("button", { name: "취소" }).click();
+    await page.getByRole("button", { name: "+ 검토 기록" }).click();
+    await page.waitForTimeout(400);
+    await pasteInto(".log-editor textarea", EXCEL);
+    expectTable(await page.locator(".log-editor textarea").first().inputValue(), "접수 검토 기록");
+    await page.locator(".log-editor").getByRole("button", { name: "취소" }).click();
+    // 편집기에서 올라간 첨부가 없어야 한다
+    equal((await api.get(`/api/intakes/${encodeURIComponent(pasteIntake.id)}`)).attachments.length, 0, "올라간 첨부");
+  });
+
+  await check("캡처(그림만)는 여전히 첨부로 올라간다", async () => {
+    await go(pasteIntakeHash);
+    await page.locator(".intake-body").getByRole("button", { name: "편집" }).click();
+    await page.waitForTimeout(400);
+    await pasteInto(".body-editor textarea", { image: true });
+    await page.waitForTimeout(900);
+    const value = await page.locator(".body-editor textarea").first().inputValue();
+    expect(value.includes("![image.png]("), `그림 링크가 없다: ${value.slice(-120)}`);
+    equal((await api.get(`/api/intakes/${encodeURIComponent(pasteIntake.id)}`)).attachments.length, 1, "올라간 첨부");
+    await page.locator(".body-editor").getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("접수의 편집기 둘과 첨부 카드에 📎 · [본문에 삽입] 이 있다 (TODO 138)", async () => {
+    await go(pasteIntakeHash);
+    equal(await page.locator(".intake-files .attach-button").count(), 1, "첨부 카드의 📎");
+    await page.locator(".intake-body").getByRole("button", { name: "편집" }).click();
+    await page.waitForTimeout(400);
+    equal(await page.locator(".body-editor .attach-button").count(), 1, "요청 내용 편집기의 📎");
+    const before = await page.locator(".body-editor textarea").first().inputValue();
+    await page.locator(".body-editor .attachments li").first().getByRole("button", { name: "본문에 삽입" }).click();
+    const after = await page.locator(".body-editor textarea").first().inputValue();
+    expect(after.length > before.length && after.includes("assets/"), "본문에 삽입이 링크를 넣지 않았다");
+    await page.locator(".body-editor").getByRole("button", { name: "취소" }).click();
+    await page.getByRole("button", { name: "+ 검토 기록" }).click();
+    await page.waitForTimeout(400);
+    equal(await page.locator(".log-editor .attach-button").count(), 1, "검토 기록 편집기의 📎");
+    await page.locator(".log-editor .attachments li").first().getByRole("button", { name: "본문에 삽입" }).click();
+    const log = await page.locator(".log-editor textarea").first().inputValue();
+    // 검토 기록은 logs/ 안에 있어 링크가 ../assets/… 여야 한다
+    expect(log.includes("../assets/"), `검토 기록의 링크 기준이 틀렸다: ${log}`);
+    await page.locator(".log-editor").getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("새 접수를 등록할 때 파일을 함께 올린다 (TODO 138)", async () => {
+    await go("#/intakes");
+    await page.getByRole("button", { name: "+ 접수 등록" }).click();
+    const form = page.locator(".intake-pool form").first();
+    await form.locator("label", { hasText: "과제명" }).locator("input").fill("파일 들고 온 접수");
+    await form.locator('.intake-form-files input[type="file"]').setInputFiles({
+      name: "과제정의서.pptx",
+      mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      buffer: Buffer.from("PK fake pptx"),
+    });
+    expect((await form.locator(".intake-form-file-list").innerText()).includes("과제정의서.pptx"), "고른 파일 목록");
+    await form.getByRole("button", { name: "접수 등록" }).click();
+    await page.waitForFunction(() => location.hash.startsWith("#/intakes/R"), null, { timeout: 5000 });
+    await page.waitForTimeout(900);
+    const made = decodeURIComponent(page.url().split("#/intakes/")[1].split("?")[0]);
+    const detail = await api.get(`/api/intakes/${encodeURIComponent(made)}`);
+    equal(detail.attachments.length, 1, "등록과 함께 올라간 첨부");
+    equal(detail.attachments[0].orig_name, "과제정의서.pptx", "첨부 이름");
+    await fetch(`${BASE}/api/intakes/${encodeURIComponent(made)}/archive`, { method: "POST" });
+  });
+
+  await check("풀의 접수 번호는 본문 크기 · 한 줄이다 (TODO 139)", async () => {
+    await go("#/intakes");
+    const cell = page.locator(`tr[data-intake="${pasteIntake.id}"] td.intake-id`);
+    equal(await cell.count(), 1, "번호 칸");
+    const size = await cell.evaluate((el) => parseFloat(getComputedStyle(el.querySelector("a")).fontSize));
+    expect(size >= 12, `번호 글자가 작다: ${size}px`);
+    const lines = await cell.evaluate((el) => {
+      const a = el.querySelector("a");
+      return Math.round(a.getBoundingClientRect().height / parseFloat(getComputedStyle(a).lineHeight || "18"));
+    });
+    expect(lines <= 1, `번호가 ${lines}줄로 꺾였다`);
+  });
+
+  await check("병합 — 흡수할 과제 목록이 서고 끝까지 정리된다 (TODO 140)", async () => {
+    const target = await api.post("/api/intakes", { title: "병합할 접수" });
+    const hash = `#/intakes/${encodeURIComponent(target.id)}`;
+    await go(hash);
+    await page.locator(".decision-bar").getByRole("button", { name: "병합", exact: true }).click();
+    await page.waitForTimeout(900);
+    const options = page.locator(".decision-panel select option");
+    expect((await options.count()) > 1, "고를 과제가 없다 — 목록을 못 받았다");
+    await page.locator(".decision-panel select").selectOption(seeded.projectB);
+    await page.locator(".decision-panel").getByRole("button", { name: "병합(으)로 정리" }).click();
+    await page.waitForTimeout(900);
+    expect((await page.locator(".decision-line").innerText()).includes(seeded.projectB), "판정 줄의 과제");
+    const project = await api.get(`/api/projects/${seeded.projectB}`);
+    expect(project.intakes.some((row) => row.id === target.id && row.relation === "merged"), "과제 쪽 링크");
+  });
+
+  await check("접수 상세는 2단 — 왼쪽 요청·첨부, 오른쪽 검토 기록. 편집 중에는 1단 (TODO 141)", async () => {
+    await go(pasteIntakeHash);
+    const left = await page.locator(".intake-columns .detail-left").boundingBox();
+    const right = await page.locator(".intake-columns .detail-right").boundingBox();
+    expect(right.x >= left.x + left.width - 1 && Math.abs(right.y - left.y) < 4, `나란히 서지 않는다: ${JSON.stringify({ left, right })}`);
+    equal(await page.locator(".intake-columns .detail-left .intake-files").count(), 1, "첨부는 왼쪽");
+    equal(await page.locator(".intake-columns .detail-right .intake-logs").count(), 1, "검토 기록은 오른쪽");
+    await page.getByRole("button", { name: "+ 검토 기록" }).click();
+    await page.waitForTimeout(400);
+    const r2 = await page.locator(".intake-columns .detail-right").boundingBox();
+    const l2 = await page.locator(".intake-columns .detail-left").boundingBox();
+    expect(r2.y < l2.y && r2.width > 1000, `편집 중인 오른쪽이 넓게 위로 오지 않았다: ${JSON.stringify({ l2, r2 })}`);
+    await page.locator(".log-editor").getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("요청 내용의 [이전 버전] — 제목을 고쳐도 남는다 (TODO 142 · 143)", async () => {
+    const id = encodeURIComponent(pasteIntake.id);
+    await api.patch(`/api/intakes/${id}`, { body: "## 배경\n\n처음 정의\n" });
+    await api.patch(`/api/intakes/${id}`, { body: "## 배경\n\n인터뷰 뒤 바뀐 정의\n" });
+    await api.patch(`/api/intakes/${id}`, { title: "붙여넣기 확인 접수 (범위 조정)" });
+    await go(pasteIntakeHash);
+    await page.locator(".intake-body").getByRole("button", { name: "이전 버전" }).click();
+    await page.waitForTimeout(700);
+    const dir = (await api.get(`/api/intakes/${id}`)).dir_name;
+    const versions = await api.get(`/api/versions?path=${encodeURIComponent(`intakes/${dir}/request.md`)}`);
+    expect(versions.items.length >= 2, `이름을 바꾼 뒤 이전 버전이 ${versions.items.length}벌`);
+    equal(await page.locator(".intake-body .version-panel").count(), 1, "요청 내용의 버전 목록");
+    expect((await page.locator(".intake-body .version-panel").innerText()).includes(versions.items[0].saved_at), "버전 목록의 시각");
+  });
+
+  await check("검색창으로 접수도 찾는다 — 소속·과제리더로도 (TODO 144)", async () => {
+    await go(`#/search?q=${encodeURIComponent("품질팀")}`);
+    const card = page.locator(".search-results .card").filter({ hasText: "접수" });
+    expect((await card.innerText()).includes(pasteIntake.id), "검색 결과의 접수");
+    await card.locator("a").first().click();
+    await page.waitForTimeout(800);
+    equal((await page.locator(".intake-detail a.back").innerText()).trim(), "← 검색 결과", "되돌아갈 곳");
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

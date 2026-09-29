@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import { uploadAttachment } from "../upload";
 import { backTarget, screenLink, useAddressBar } from "../nav";
 import type { Intake, IntakeListing, Meta } from "../types";
 import { effectNumber } from "../util";
@@ -113,8 +114,20 @@ export default function IntakePool({ meta, query }: Props) {
             meta={meta}
             submitLabel="접수 등록"
             onCancel={() => setCreating(false)}
-            onSubmit={async (payload) => {
+            onSubmit={async (payload, files) => {
               const made = await api.createIntake(payload);
+              // 고른 파일은 등록 직후 차례로 올린다. 하나가 실패해도 접수는 이미 있으니 상세로 가서
+              // 거기서 다시 올리면 된다 — 무엇이 안 올라갔는지만 알린다 (TODO 138).
+              const failed: string[] = [];
+              for (const file of files) {
+                try {
+                  await uploadAttachment(`/api/intakes/${encodeURIComponent(made.id)}/attachments`, file, () => undefined)
+                    .promise;
+                } catch (err) {
+                  failed.push(`${file.name} — ${(err as Error).message}`);
+                }
+              }
+              if (failed.length > 0) window.alert(`접수는 등록했지만 첨부 ${failed.length}건을 올리지 못했습니다:\n\n${failed.join("\n")}`);
               setCreating(false);
               window.location.hash = screenLink(`intakes/${made.id}`);
             }}
@@ -292,6 +305,13 @@ export default function IntakePool({ meta, query }: Props) {
         <div className="card table-card">
           <div className="table-scroll">
             <table className="intake-table">
+              {/* 칸 폭은 번호가 아니라 **이름표**로 잡는다 — 칸이 늘거나 줄어도 밀리지 않는다 (134 · 139) */}
+              <colgroup>
+                <col className="col-pick" />
+                <col className="col-intake-id" />
+                <col className="col-title" />
+                <col span={8} />
+              </colgroup>
               <thead>
                 <tr>
                   <th className="pick-col" title="착수 후보">★</th>
@@ -324,7 +344,8 @@ export default function IntakePool({ meta, query }: Props) {
                         item.picked && <span className="star on">★</span>
                       )}
                     </td>
-                    <td className="project-id">
+                    {/* 과제의 번호 딱지(.project-id, 11px)를 빌려 쓰면 제 칸에서는 작고 흐리다 (TODO 139) */}
+                    <td className="intake-id">
                       <a href={screenLink(`intakes/${item.id}`)}>{item.id}</a>
                     </td>
                     <td>

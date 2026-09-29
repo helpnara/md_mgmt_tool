@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { projectLink, backTarget } from "../nav";
+import { projectLink, backTarget, screenLink } from "../nav";
 import type { Meta, SearchResults as Results } from "../types";
 import { formatBytes } from "../upload";
 import StatusBadge from "./StatusBadge";
@@ -72,6 +72,33 @@ export default function SearchResults({ query, meta, back }: { query: string; me
                 </a>
                 <p className="snippet">
                   <Highlight text={project.snippet} query={query} />
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(results.intakes ?? []).length > 0 && (
+        <div className="card">
+          <h2>접수 {(results.intakes ?? []).length}건{results.truncated?.intakes && " 이상"}</h2>
+          <ul className="result-list">
+            {(results.intakes ?? []).map((intake) => (
+              <li key={intake.id}>
+                <a href={screenLink(`intakes/${intake.id}`)}>
+                  <span className="project-id">
+                    {intake.id}
+                    {intake.leader_team && ` · ${intake.leader_team}`}
+                    {intake.leader && ` ${intake.leader}`}
+                  </span>
+                  <strong>
+                    <Highlight text={intake.title} query={query} />
+                  </strong>
+                  <span className={`intake-status intake-${intake.status}`}>{intake.status_label}</span>
+                  {intake.project_id && <span className="muted"> → {intake.project_id}</span>}
+                </a>
+                <p className="snippet">
+                  <Highlight text={intake.snippet} query={query} />
                 </p>
               </li>
             ))}

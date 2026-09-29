@@ -5,7 +5,7 @@ import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import type { Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
-import { pasteAsTable } from "../table";
+import { handleEditorPaste, spliceAtCaret } from "../table";
 import { scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
@@ -344,6 +344,16 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                 setFeedback(event.target.value);
                 setFeedbackDirty(true);
               }}
+              onPaste={(event) => {
+                // 지시가 엑셀 표로 오기도 한다 — 표만 받는다(첨부는 보고 자료 칸의 일) (TODO 137)
+                const area = event.currentTarget;
+                handleEditorPaste(event, {
+                  onInsert: (text) => {
+                    setFeedback((prev) => spliceAtCaret(area, prev, text));
+                    setFeedbackDirty(true);
+                  },
+                });
+              }}
             />
             <div className="form-actions feedback-actions">
               <button
@@ -398,16 +408,16 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
               setBody(event.target.value);
               setDirty(true);
             }}
-            onPaste={(event) => {
-              const files = Array.from(event.clipboardData.files);
-              if (files.length > 0) {
-                event.preventDefault();
-                void handleFiles(files);
-                return;
-              }
-              // 보고 문서야말로 엑셀 표를 그대로 옮겨 오는 일이 잦다.
-              if (pasteAsTable(event, insertAtCursor)) setDirty(true);
-            }}
+            onPaste={(event) =>
+              // 보고 문서야말로 엑셀 표를 그대로 옮겨 오는 일이 잦다 — 표가 그림보다 먼저다 (TODO 137)
+              handleEditorPaste(event, {
+                onInsert: (text) => {
+                  insertAtCursor(text);
+                  setDirty(true);
+                },
+                onFiles: (files) => void handleFiles(files),
+              })
+            }
             spellCheck={false}
           />
           {preview && (

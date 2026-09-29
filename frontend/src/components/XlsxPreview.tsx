@@ -15,8 +15,11 @@ export default function XlsxPreview({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.spreadsheetPreview(attachment.id).then(setPreview).catch((err: Error) => setError(err.message));
-  }, [attachment.id]);
+    const load = attachment.preview_url
+      ? api.spreadsheetPreviewAt(attachment.preview_url)
+      : api.spreadsheetPreview(attachment.id);
+    load.then(setPreview).catch((err: Error) => setError(err.message));
+  }, [attachment.id, attachment.preview_url]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

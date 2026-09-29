@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 import { backTarget, projectLink } from "../nav";
-import { pasteAsTable } from "../table";
+import { handleEditorPaste } from "../table";
 import type { IntakeAttachment, IntakeDetail as Detail, IntakeLog, Meta, Project, PromotionPlan } from "../types";
-import { formatBytes, uploadAttachment } from "../upload";
+import { type Attachment, uploadAttachment } from "../upload";
 import { effectNumber, todayIso } from "../util";
+import AttachmentList from "./AttachmentList";
 import IntakeForm from "./IntakeForm";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
+import VersionPanel from "./VersionPanel";
+import XlsxPreview from "./XlsxPreview";
 
 /**
  * 접수 상세 (TODO 136) — 요청 내용 · 첨부 · 인터뷰 기록 · 판정 · 승격.
@@ -37,6 +40,9 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
   const [error, setError] = useState<string | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [editingBody, setEditingBody] = useState(false);
+  // 검토 기록 편집기가 열렸는가 — 2단을 잠시 1단으로 돌릴 때 쓴다 (TODO 141)
+  const [editingLog, setEditingLog] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
   const [deciding, setDeciding] = useState<string | null>(null);
   const [promoting, setPromoting] = useState(false);
 
@@ -88,7 +94,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
       <div className="card detail-header">
         <div className="detail-head">
           <div>
-            <span className="project-id">{intake.id}</span>
+            <span className="intake-id-head">{intake.id}</span>
             <h1>
               {intake.picked && <span className="star on" title="착수 후보">★ </span>}
               {intake.title}
@@ -264,16 +270,46 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
         />
       )}
 
+      {/* ── 2단 (TODO 141) — 과제 상세와 같은 짜임. 왼쪽은 *무엇을 요청했나*(요청 내용 · 첨부),
+          오른쪽은 *어떻게 구체화됐나*(검토 기록). 세로로 늘어놓으면 기록이 쌓일수록 첨부가 밀려
+          내려가 스크롤이 길어졌다. 편집기를 연 동안에는 1단으로 넓게 쓰고, 편집 중인 쪽이 위로 온다. */}
+      <div
+        className={`detail-columns intake-columns${
+          editingBody || editingLog ? ` editing editing-${editingBody ? "left" : "right"}` : ""
+        }`}
+      >
+      <div className="detail-left">
       {/* ── 요청 내용 ─────────────────────────────────────────────── */}
       <div className="card intake-body">
         <div className="card-head">
           <h2>요청 내용</h2>
-          {open && !editingBody && (
-            <button className="ghost small" onClick={() => setEditingBody(true)}>
-              편집
-            </button>
-          )}
+          <div className="card-head-actions">
+            {open && (
+              <button
+                className={showVersions ? "ghost small on" : "ghost small"}
+                onClick={() => setShowVersions((v) => !v)}
+                title="문제 정의가 바뀌기 전의 요청 내용을 봅니다 — 고칠 때마다 한 벌씩 남습니다."
+              >
+                이전 버전
+              </button>
+            )}
+            {open && !editingBody && (
+              <button className="ghost small" onClick={() => setEditingBody(true)}>
+                편집
+              </button>
+            )}
+          </div>
         </div>
+        {showVersions && open && (
+          <VersionPanel
+            path={`intakes/${intake.dir_name}/request.md`}
+            onRestored={() => {
+              setShowVersions(false);
+              setEditingBody(false);
+              load();
+            }}
+          />
+        )}
         {editingBody ? (
           <BodyEditor
             intake={intake}
@@ -294,7 +330,11 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
       </div>
 
       <Attachments intake={intake} onChanged={load} onError={setError} />
-      <Logs intake={intake} base={base} onChanged={load} onError={setError} />
+      </div>
+      <div className="detail-right">
+        <Logs intake={intake} base={base} onChanged={load} onError={setError} onEditingChange={setEditingLog} />
+      </div>
+      </div>
 
       {open && (
         <p className="danger-zone">
@@ -333,16 +373,21 @@ function DecisionPanel({
 }) {
   const [note, setNote] = useState("");
   const [target, setTarget] = useState("");
-  const [projects, setProjects] = useState<Project[]>([]);
+  // null = 아직 받는 중. 못 받았으면 빈 목록이 아니라 오류를 보인다 — 조용한 빈 칸은
+  // "원래 고를 것이 없다" 로 읽혀 원인을 알 길이 없다 (TODO 140).
+  const [projects, setProjects] = useState<Project[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (kind !== "merged") return;
     api
-      .listProjects({ year: "all", sort: "updated" })
+      .listProjects({ sort: "updated" })
       .then((rows) => setProjects(rows.filter((row) => !["done", "dropped"].includes(row.status))))
-      .catch(() => setProjects([]));
+      .catch((err: Error) => {
+        setProjects([]);
+        setError(`과제 목록을 불러오지 못했습니다 — ${err.message}`);
+      });
   }, [kind]);
 
   const prompts: Record<string, string> = {
@@ -358,14 +403,17 @@ function DecisionPanel({
       {kind === "merged" && (
         <label>
           흡수할 과제
-          <select value={target} onChange={(e) => setTarget(e.target.value)}>
-            <option value="">과제를 고르세요</option>
-            {projects.map((project) => (
+          <select value={target} onChange={(e) => setTarget(e.target.value)} disabled={projects === null}>
+            <option value="">{projects === null ? "불러오는 중…" : "과제를 고르세요"}</option>
+            {(projects ?? []).map((project) => (
               <option key={project.id} value={project.id}>
                 {project.id} {project.title}
               </option>
             ))}
           </select>
+          {projects !== null && projects.length === 0 && !error && (
+            <span className="hint">끝나지 않은 과제가 없습니다 — 병합은 진행 중인 과제에 잇는 것입니다.</span>
+          )}
         </label>
       )}
       <label>
@@ -435,9 +483,121 @@ async function uploadFiles(intakeId: string, files: File[]): Promise<IntakeAttac
   return out;
 }
 
+/** 접수 첨부를 과제 첨부 목록 모양으로 — 진행일지와 **같은 목록 부품**을 쓰려고 (TODO 138). */
+function asAttachments(items: IntakeAttachment[], kind: "markdown" | "markdown_log"): Attachment[] {
+  return items.map((item, index) => ({
+    id: index,
+    entry_id: null,
+    report_id: null,
+    preview_url: item.preview_url ?? null,
+    rel_path: item.rel_path,
+    orig_name: item.orig_name,
+    mime: item.mime,
+    size_bytes: item.size_bytes,
+    is_image: item.is_image,
+    url: item.url,
+    thumb_url: null,
+    markdown: item[kind],
+    orphan: false,
+    deduplicated: false,
+  }));
+}
+
+/**
+ * 첨부 판 — 📎 · 끌어다 놓기 안내 · 목록 · [본문에 삽입] · [내용 보기] · 삭제 (TODO 138).
+ *
+ * 136 에서 접수 편집기를 새로 짜며 진행일지의 첨부 판을 옮겨 오지 않아, 편집 중에는 📎 가 없고
+ * 첨부 카드에는 작은 흐린 단추뿐이었다. **파일을 붙이는 자리는 모두 이 판 하나를 쓴다.**
+ */
+function AttachPanel({
+  intake,
+  kind,
+  heading,
+  onUpload,
+  onInsert,
+  onChanged,
+  onError,
+}: {
+  intake: Detail;
+  kind: "markdown" | "markdown_log";
+  heading: "h2" | "h3";
+  onUpload: (files: File[]) => Promise<void>;
+  onInsert?: (markdown: string) => void;
+  onChanged: () => void;
+  onError: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(0);
+  const [previewing, setPreviewing] = useState<Attachment | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const Title = heading;
+  const editable = intake.in_pool;
+
+  async function upload(files: File[]) {
+    if (files.length === 0) return;
+    setBusy((n) => n + files.length);
+    try {
+      await onUpload(files);
+    } finally {
+      setBusy((n) => Math.max(0, n - files.length));
+    }
+  }
+
+  return (
+    <div className={heading === "h3" ? "attachment-panel" : undefined}>
+      <div className="card-head">
+        <Title>첨부 ({intake.attachments.length})</Title>
+        {editable && (
+          <div className="attach-actions">
+            <span className="hint">이미지는 Ctrl+V, 파일은 끌어다 놓아도 됩니다.</span>
+            <button className="attach-button" disabled={busy > 0} onClick={() => inputRef.current?.click()}>
+              {busy > 0 ? `올리는 중… (${busy})` : "📎 파일 첨부"}
+            </button>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = ""; // 같은 파일을 다시 골라도 반응하도록 비운다
+                void upload(files);
+              }}
+            />
+          </div>
+        )}
+      </div>
+      {intake.attachments.length === 0 ? (
+        <p className="hint">과제정의서(PPT)·부연 설명·공정 설명·활용 화면을 붙여 두세요. 승격하면 과제로 복사됩니다.</p>
+      ) : (
+        <AttachmentList
+          attachments={asAttachments(intake.attachments, kind)}
+          onInsert={onInsert ? (item) => onInsert(item.markdown) : undefined}
+          onPreview={setPreviewing}
+          onDelete={
+            editable
+              ? async (item) => {
+                  const used = intake.body.includes(item.rel_path.split("/").pop() ?? "");
+                  const warn = used ? "\n\n이 첨부는 요청 본문에서 쓰이는 중입니다. 지우면 그 자리가 깨집니다." : "";
+                  if (!window.confirm(`${item.orig_name} 을(를) 보관함으로 옮길까요?${warn}`)) return;
+                  try {
+                    await api.deleteIntakeAttachment(intake.id, item.rel_path);
+                    onChanged();
+                  } catch (err) {
+                    onError((err as Error).message);
+                  }
+                }
+              : undefined
+          }
+        />
+      )}
+      {previewing && <XlsxPreview attachment={previewing} onClose={() => setPreviewing(null)} />}
+    </div>
+  );
+}
+
 function MarkdownArea({
   field,
-  intakeId,
+  intake,
   base,
   linkKind,
   onUploaded,
@@ -445,7 +605,7 @@ function MarkdownArea({
   placeholder,
 }: {
   field: ReturnType<typeof useMarkdownField>;
-  intakeId: string;
+  intake: Detail;
   base: string;
   linkKind: "markdown" | "markdown_log";
   onUploaded: () => void;
@@ -453,19 +613,16 @@ function MarkdownArea({
   placeholder: string;
 }) {
   const [preview, togglePreview] = usePreview();
-  const [uploading, setUploading] = useState(0);
 
+  // 올린 파일은 링크를 커서 자리에 넣는다 — 진행일지 편집기와 같다.
   async function handleFiles(files: File[]) {
     if (files.length === 0) return;
-    setUploading((n) => n + files.length);
     try {
-      const saved = await uploadFiles(intakeId, files);
+      const saved = await uploadFiles(intake.id, files);
       for (const item of saved) field.insert(item[linkKind]);
       onUploaded();
     } catch (err) {
       onError((err as Error).message);
-    } finally {
-      setUploading((n) => Math.max(0, n - files.length));
     }
   }
 
@@ -483,15 +640,9 @@ function MarkdownArea({
           ref={field.ref}
           value={field.value}
           onChange={(event) => field.setValue(event.target.value)}
-          onPaste={(event) => {
-            const files = Array.from(event.clipboardData.files);
-            if (files.length > 0) {
-              event.preventDefault();
-              void handleFiles(files);
-              return;
-            }
-            pasteAsTable(event, field.insert);
-          }}
+          onPaste={(event) =>
+            handleEditorPaste(event, { onInsert: field.insert, onFiles: (files) => void handleFiles(files) })
+          }
           placeholder={placeholder}
           spellCheck={false}
         />
@@ -499,7 +650,15 @@ function MarkdownArea({
           <div className="preview markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(field.value, base) }} />
         )}
       </div>
-      {uploading > 0 && <p className="hint">⏳ 첨부 올리는 중… ({uploading})</p>}
+      <AttachPanel
+        intake={intake}
+        kind={linkKind}
+        heading="h3"
+        onUpload={handleFiles}
+        onInsert={field.insert}
+        onChanged={onUploaded}
+        onError={onError}
+      />
     </div>
   );
 }
@@ -523,7 +682,7 @@ function BodyEditor({
     <div className="body-editor">
       <MarkdownArea
         field={field}
-        intakeId={intake.id}
+        intake={intake}
         base={base}
         linkKind="markdown"
         onUploaded={onUploaded}
@@ -568,72 +727,26 @@ function Attachments({
   onChanged: () => void;
   onError: (message: string) => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const upload = async (files: File[]) => {
+    try {
+      await uploadFiles(intake.id, files);
+      onChanged();
+    } catch (err) {
+      onError((err as Error).message);
+    }
+  };
   return (
-    <div className="card intake-files">
-      <div className="card-head">
-        <h2>첨부 ({intake.attachments.length})</h2>
-        {intake.in_pool && (
-          <>
-            <input
-              ref={inputRef}
-              type="file"
-              multiple
-              hidden
-              onChange={async (event) => {
-                const files = Array.from(event.target.files ?? []);
-                event.target.value = "";
-                if (files.length === 0) return;
-                setBusy(true);
-                try {
-                  await uploadFiles(intake.id, files);
-                  onChanged();
-                } catch (err) {
-                  onError((err as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            />
-            <button className="ghost small" disabled={busy} onClick={() => inputRef.current?.click()}>
-              {busy ? "올리는 중…" : "파일 첨부"}
-            </button>
-          </>
-        )}
-      </div>
-      {intake.attachments.length === 0 ? (
-        <p className="hint">과제정의서(PPT)·부연 설명·공정 설명·활용 화면을 붙여 두세요. 승격하면 과제로 복사됩니다.</p>
-      ) : (
-        <ul className="intake-file-list">
-          {intake.attachments.map((file) => (
-            <li key={file.rel_path}>
-              <a href={file.url} target="_blank" rel="noreferrer">
-                {file.orig_name}
-              </a>
-              <span className="muted"> · {formatBytes(file.size_bytes)}</span>
-              {intake.in_pool && (
-                <button
-                  className="ghost small danger"
-                  onClick={async () => {
-                    const used = intake.body.includes(file.rel_path.split("/").pop() ?? "");
-                    const warn = used ? "\n\n이 첨부는 요청 본문에서 쓰이는 중입니다. 지우면 그 자리가 깨집니다." : "";
-                    if (!window.confirm(`${file.orig_name} 을(를) 보관함으로 옮길까요?${warn}`)) return;
-                    try {
-                      await api.deleteIntakeAttachment(intake.id, file.rel_path);
-                      onChanged();
-                    } catch (err) {
-                      onError((err as Error).message);
-                    }
-                  }}
-                >
-                  삭제
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+    <div
+      className="card intake-files"
+      // 카드에 끌어다 놓아도 받는다 — 과제 개요 카드와 같다 (TODO 138)
+      onDragOver={(event) => intake.in_pool && event.preventDefault()}
+      onDrop={(event) => {
+        if (!intake.in_pool) return;
+        event.preventDefault();
+        void upload(Array.from(event.dataTransfer.files));
+      }}
+    >
+      <AttachPanel intake={intake} kind="markdown" heading="h2" onUpload={upload} onChanged={onChanged} onError={onError} />
     </div>
   );
 }
@@ -645,14 +758,17 @@ function Logs({
   base,
   onChanged,
   onError,
+  onEditingChange,
 }: {
   intake: Detail;
   base: string;
   onChanged: () => void;
   onError: (message: string) => void;
+  onEditingChange: (editing: boolean) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  useEffect(() => onEditingChange(adding || editing !== null), [adding, editing, onEditingChange]);
   return (
     <div className="card intake-logs">
       <div className="card-head">
@@ -769,7 +885,7 @@ function LogEditor({
       </div>
       <MarkdownArea
         field={field}
-        intakeId={intake.id}
+        intake={intake}
         base={`${base}/logs`}
         linkKind="markdown_log"
         onUploaded={onUploaded}

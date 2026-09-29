@@ -119,7 +119,8 @@ def test_search_does_not_claim_truncation_when_everything_fits(client):
 
     found = client.get("/api/search", params={"q": "인장강도"}).json()
     assert found["truncated"] == {
-        "projects": False, "entries": False, "reports": False, "attachments": False
+        "projects": False, "entries": False, "reports": False, "attachments": False,
+        "intakes": False,  # 접수도 찾는다 (TODO 144)
     }
 
 

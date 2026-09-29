@@ -303,6 +303,14 @@ def upload(intake_id: str, file: UploadFile = File(...), conn: sqlite3.Connectio
     return _errors(lambda: svc.save_attachment(conn, intake_id, file.filename or "attachment", file.file))
 
 
+@router.get("/api/intakes/{intake_id}/attachments/preview")
+def preview_attachment(
+    intake_id: str, path: str = Query(...), conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
+    """첨부 엑셀을 그 자리에서 훑어본다 (TODO 138 — 과제 첨부의 [내용 보기]와 같은 판)."""
+    return _errors(lambda: svc.attachment_preview(conn, intake_id, path))
+
+
 @router.delete("/api/intakes/{intake_id}/attachments", status_code=204)
 def delete_attachment(
     intake_id: str, path: str = Query(...), conn: sqlite3.Connection = Depends(get_db)

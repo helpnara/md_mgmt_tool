@@ -13,7 +13,8 @@ interface Props {
   meta: Meta;
   initial?: Partial<Intake>;
   submitLabel: string;
-  onSubmit: (payload: Partial<Intake>) => Promise<void>;
+  /** 등록할 때 고른 파일도 함께 넘긴다 — 등록 직후 차례로 올린다 (TODO 138) */
+  onSubmit: (payload: Partial<Intake>, files: File[]) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -41,6 +42,14 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 받은 과제정의서·부연 설명을 들고 **한 번에** 등록한다. 예전에는 등록한 뒤 상세에 다시 들어가야 했다.
+  const [files, setFiles] = useState<File[]>([]);
+  // FileList 는 **살아 있는 목록**이다 — 입력 칸을 비우거나 끌어다 놓기가 끝나면 비워진다.
+  // 상태 갱신 함수 안에서 읽으면 그때는 이미 비어 있으므로 여기서 바로 배열로 떠 둔다.
+  const addFiles = (list: FileList | File[] | null) => {
+    const picked = Array.from(list ?? []);
+    if (picked.length > 0) setFiles((prev) => [...prev, ...picked]);
+  };
   const [nextId, setNextId] = useState<string | null>(null);
   const update = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -80,7 +89,7 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
         category: classes.category || null,
         delivery: classes.delivery || null,
         cost_kind: classes.cost_kind || null,
-      });
+      }, creating ? files : []);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -197,6 +206,49 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
           <input value={form.tags} onChange={(e) => update("tags", e.target.value)} placeholder="쉼표로 구분" />
         </label>
       </div>
+      {creating && (
+        <div
+          className="intake-form-files"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            addFiles(event.dataTransfer.files);
+          }}
+        >
+          <label className="attach-button">
+            📎 파일 첨부
+            <input
+              type="file"
+              multiple
+              hidden
+              onChange={(event) => {
+                addFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <span className="hint">
+            받은 과제정의서(PPT)·부연 설명을 함께 올립니다 — 끌어다 놓아도 됩니다. 등록하면 첨부에 들어갑니다.
+          </span>
+          {files.length > 0 && (
+            <ul className="intake-form-file-list">
+              {files.map((file, index) => (
+                <li key={`${file.name}-${index}`}>
+                  {file.name}
+                  <button
+                    type="button"
+                    className="ghost small"
+                    onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
+                    aria-label={`${file.name} 빼기`}
+                  >
+                    빼기
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {creating && (
         <p className="hint next-id-hint">
           접수 번호는 <b>접수일의 연도</b>로 붙습니다{nextId && <> — 지금 등록하면 <b className="next-id">{nextId}</b></>}.

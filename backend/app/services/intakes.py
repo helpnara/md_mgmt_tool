@@ -43,6 +43,7 @@ from ..config import (
     get_settings,
 )
 from ..vault import markdown as md
+from ..vault import versions
 from ..vault import paths
 from . import settings as settings_service
 from . import trash as trash_service
@@ -310,6 +311,7 @@ def _rename_to_title(directory: Path, intake_id: str, title: str) -> Path:
     if target.exists():
         target = paths.unique_path(root, expected, "")
     paths.move(directory, target)
+    versions.follow(directory, target)  # 이전 버전도 따라온다 (TODO 142)
     return target
 
 
@@ -508,6 +510,7 @@ def update_log(conn: sqlite3.Connection, intake_id: str, name: str, data: dict[s
     if not path.stem.startswith(expected):
         target = paths.unique_path(path.parent, expected, ".md")
         paths.move(path, target)
+        versions.follow(path, target)  # 이전 버전도 따라온다 (TODO 142)
         path = target
     index_intake(conn, directory)
     conn.commit()
@@ -549,13 +552,13 @@ def save_attachment(
     os.replace(tmp_path, target)
     index_intake(conn, directory)
     conn.commit()
-    return _attachment_info(directory, target)
+    return _attachment_info(directory, target, intake_id)
 
 
-def _attachment_info(directory: Path, path: Path) -> dict[str, Any]:
+def _attachment_info(directory: Path, path: Path, intake_id: str) -> dict[str, Any]:
     from urllib.parse import quote
 
-    from .attachments import guess_mime, is_image, markdown_link
+    from .attachments import guess_mime, is_image, is_spreadsheet, markdown_link
 
     rel = path.relative_to(directory).as_posix()
     name = path.name.split("-", 1)[1] if path.name[:3].isdigit() and "-" in path.name else path.name
@@ -568,10 +571,30 @@ def _attachment_info(directory: Path, path: Path) -> dict[str, Any]:
         "size_bytes": path.stat().st_size,
         "is_image": image,
         "url": f"/intake-files/{quote(directory.name)}/{quote(rel)}",
+        # 엑셀은 그 자리에서 훑어본다 — 과제 첨부의 [내용 보기]와 같은 판 (TODO 138)
+        "preview_url": (
+            f"/api/intakes/{quote(intake_id)}/attachments/preview?path={quote(rel)}"
+            if is_spreadsheet(mime) else None
+        ),
         # 요청 본문(폴더 맨 위)과 검토 기록(logs/)은 링크 기준이 다르다
         "markdown": markdown_link(rel, name, "", image),
         "markdown_log": markdown_link(rel, name, "logs", image),
     }
+
+
+def attachment_preview(conn: sqlite3.Connection, intake_id: str, rel_path: str) -> dict[str, Any]:
+    """접수 첨부 엑셀의 내용 보기 (TODO 138). 판정이 난 건도 볼 수는 있다."""
+    from .attachments import guess_mime, is_spreadsheet, spreadsheet_preview_path
+
+    directory = intake_dir(conn, intake_id)
+    if not rel_path.startswith("assets/"):
+        raise ValueError("첨부가 아닙니다.")
+    path = paths.safe_join(directory, rel_path)
+    if not path.is_file():
+        raise KeyError(rel_path)
+    if not is_spreadsheet(guess_mime(path.name, None)):
+        raise ValueError("엑셀 파일이 아닙니다.")
+    return spreadsheet_preview_path(path, _attachment_info(directory, path, intake_id)["orig_name"])
 
 
 def list_attachments(conn: sqlite3.Connection, intake_id: str) -> list[dict[str, Any]]:
@@ -580,7 +603,7 @@ def list_attachments(conn: sqlite3.Connection, intake_id: str) -> list[dict[str,
     if not assets.exists():
         return []
     return [
-        _attachment_info(directory, path)
+        _attachment_info(directory, path, intake_id)
         for path in sorted(assets.rglob("*"))
         if path.is_file() and not path.name.endswith(".part")
     ]

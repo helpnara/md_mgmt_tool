@@ -8,6 +8,7 @@ from typing import Any
 
 from ..config import CLASSIFICATION_KEYS, DEFAULT_STATUS, STATUS_KEYS, get_settings
 from ..vault import markdown as md
+from ..vault import versions
 from ..vault import paths
 from ..vault.indexer import index_project
 from . import activities as activities_service
@@ -443,6 +444,7 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
             if target.exists():  # 남아 있던 폴더와 겹치면 뒤에 번호를 붙인다
                 target = paths.unique_path(get_settings().projects_dir, expected, "")
             paths.move(directory, target)
+            versions.follow(directory, target)  # 이전 버전도 따라온다 (TODO 142)
             directory = target
 
     index_project(conn, directory)

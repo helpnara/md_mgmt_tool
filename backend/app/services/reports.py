@@ -15,6 +15,7 @@ from typing import Any
 
 from ..config import get_settings
 from ..vault import markdown as md
+from ..vault import versions
 from ..vault import paths
 from ..vault.indexer import index_project
 from . import settings as settings_service
@@ -217,6 +218,7 @@ def _move_report_folder(
     folder = path.parent
     target = paths.unique_path(folder.parent, new_date, "")
     paths.move(folder, target)
+    versions.follow(folder, target)  # 이전 버전도 따라온다 (TODO 142)
     new_path = target / path.name
 
     old_rel, new_rel = (

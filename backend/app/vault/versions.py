@@ -263,3 +263,21 @@ def move_folder(old_rel: str, new_rel: str) -> bool:
         return True
     except OSError:
         return False
+
+
+def follow(source: Path, target: Path) -> bool:
+    """이름이 바뀌어 옮긴 문서·폴더의 보관본을 따라 옮긴다 (TODO 142).
+
+    보관본은 **경로를 열쇠로 쓴다** (`move_folder` 참고). 과제명·진행일지 제목·보고일·접수명을
+    고치면 폴더나 파일 이름이 따라 바뀌는데(4.1), 그때 보관본을 두고 오면 [이전 버전]이 0건이 된다.
+    이름을 바꾸는 자리마다 옮긴 **직후에** 부른다. 폴더든 파일이든 같다 — 파일의 보관본도
+    `.versions/<그 파일 경로>/` 라는 폴더다.
+
+    휴지통으로 옮길 때는 부르지 않는다 — 되돌리면 원래 자리로 오므로 보관본도 그 자리에 있어야 한다.
+    """
+    old_rel = _vault_relative(source)
+    new_rel = _vault_relative(target)
+    if old_rel is None or new_rel is None:
+        return False
+    return move_folder(old_rel, new_rel)
+
