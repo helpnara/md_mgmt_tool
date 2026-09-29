@@ -41,6 +41,22 @@ export interface Meta {
   report_weekday: number;
   vault: string;
   report_cycle_days: number;
+  /** 과제 분류 넷 — 성격 · 분류 · 수행 방식 · 비용구분 (TODO 136). 목록은 설정에서 고친다 */
+  classifications: ClassificationInfo[];
+  /** 분류 칸을 입력 화면에 세우는 속성 (스마트과제) */
+  classified_type: string;
+  /** 접수 상태 — pool 은 "풀에 담겨 있는가" (TODO 136) */
+  intake_statuses: { key: string; label: string; pool: boolean }[];
+  /** 접수 후 이 날수가 지나도 판정이 없으면 묵힌 것이다 */
+  intake_stale_days: number;
+}
+
+export type ClassificationKey = "nature" | "category" | "delivery" | "cost_kind";
+
+export interface ClassificationInfo {
+  key: ClassificationKey;
+  label: string;
+  items: string[];
 }
 
 /** 함께 일하는 팀 하나와 그쪽 담당자들 (TODO 92). */
@@ -75,6 +91,15 @@ export interface Project {
   no_effect?: boolean;
   /** 과제를 등록한 사람. 담당자(누가 하는가)와 다르다. */
   created_by?: string | null;
+  /** 과제 분류 넷 (TODO 136) — 값은 글자 그대로다 */
+  nature?: string | null;
+  category?: string | null;
+  delivery?: string | null;
+  cost_kind?: string | null;
+  /** 이 과제가 승격된 접수 번호 (TODO 136). 직접 만든 과제는 null */
+  intake_id?: string | null;
+  /** 이 과제로 승격된 접수 · 이 과제에 병합된 접수 (상세 조회에서만) */
+  intakes?: IntakeLink[];
   tags: string[];
   entry_count: number;
   body?: string;
@@ -254,6 +279,12 @@ export interface AppSettings {
   /** AI 요약 프롬프트의 앞뒤에 붙일 글 (TODO 71). 도구가 AI 를 부르지는 않는다. */
   ai_prompt_prefix: string;
   ai_prompt_suffix: string;
+  /** 과제 분류 넷의 목록. null 이면 기본 목록을 쓴다 (TODO 136) */
+  classifications: Record<string, string[]> | null;
+  /** 접수 본문 서식. 비우면 기본 서식 */
+  intake_template: string;
+  /** 묵힘 기준일 */
+  intake_stale_days: number;
 }
 
 export interface TrashItem {
@@ -469,6 +500,13 @@ export interface HomeSlice {
   effect_verified: number;
 }
 
+/** 성격별·분류별 표의 한 줄 (TODO 136). 목록으로 이어 줄 거르기 조건을 서버가 함께 준다 —
+ * *미지정* 줄은 "스마트과제인데 비어 있는 것" 이라 조건이 둘이다. 세는 곳과 거르는 곳이 같아야 한다. */
+export interface HomeClassSlice extends HomeSlice {
+  listed: boolean;
+  filter: Record<string, string>;
+}
+
 /** 과제 × 월 표의 재료 (TODO 77). 열두 칸으로 나누는 일은 화면이 한다. */
 export interface MonthGrid {
   /** 줄 = (그 해 번호의 과제) ∪ (그 해에 보고가 있었던 과제). 보고 불필요 과제는 빠진다 */
@@ -513,6 +551,138 @@ export interface Home {
   types: HomeSlice[];
   /** 그룹(주제)별. 속성별과 같은 모양이고, 자유 입력이라 수가 늘 수 있다 (TODO 90) */
   groups: HomeSlice[];
+  /** 성격별 · 분류별 (TODO 136) */
+  natures: HomeClassSlice[];
+  categories: HomeClassSlice[];
+  /** 기대효과를 비용구분으로 나눈 것 — 적힌 과제만 (TODO 136) */
+  effect_by_cost: { key: string; count: number; effect_expected: number; effect_verified: number }[];
+  /** 접수 풀 요약 — 과제 집계와 섞지 않는다 (TODO 136) */
+  intakes: IntakeSummary;
+}
+
+// ── 과제 접수 풀 (TODO 136) ────────────────────────────────────────────────
+
+export interface IntakeSummary {
+  /** 풀에 담긴 수 — 접수 · 검토중 · 보류 */
+  pool: number;
+  counts: Record<string, number>;
+  /** 접수 후 stale_days 가 지나도 판정이 없는 것 (보류는 세지 않는다) */
+  stale: number;
+  stale_days: number;
+  year: string;
+  /** 그 해에 판정이 난 수 — 착수 · 반려 · 이관 · 병합 */
+  decided: Record<string, number>;
+  received_this_year: number;
+}
+
+export interface Intake {
+  id: string;
+  dir_name: string;
+  title: string;
+  status: string;
+  status_label: string;
+  in_pool: boolean;
+  leader: string | null;
+  leader_team: string | null;
+  nature: string | null;
+  category: string | null;
+  delivery: string | null;
+  cost_kind: string | null;
+  start_date: string | null;
+  due_date: string | null;
+  /** 요청자가 적은 기대효과 — **과제로 옮기지 않는다** (참고용) */
+  effect_request: number | null;
+  priority: string | null;
+  priority_note: string | null;
+  /** 풀에서 골라 둔 착수 후보 */
+  picked: boolean;
+  received_on: string | null;
+  decided_on: string | null;
+  decision_note: string | null;
+  project_id: string | null;
+  merged_into: string | null;
+  tags: string[];
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  log_count: number;
+  attachment_count: number;
+  last_log_date: string | null;
+  age_days: number | null;
+  stale: boolean;
+}
+
+export interface IntakeLog {
+  name: string;
+  date: string;
+  title: string;
+  author: string | null;
+  tags: string[];
+  body: string;
+  mtime?: number;
+  broken: boolean;
+}
+
+export interface IntakeAttachment {
+  rel_path: string;
+  orig_name: string;
+  mime: string;
+  size_bytes: number;
+  is_image: boolean;
+  url: string;
+  /** 요청 본문에 넣을 링크 / 검토 기록에 넣을 링크 — 기준 폴더가 다르다 */
+  markdown: string;
+  markdown_log: string;
+}
+
+export interface IntakeDetail extends Intake {
+  body: string;
+  file_mtime: number;
+  logs: IntakeLog[];
+  attachments: IntakeAttachment[];
+  linked_project: { id: string; title?: string; status?: string; missing?: boolean } | null;
+}
+
+export interface IntakeListing {
+  items: Intake[];
+  summary: IntakeSummary;
+  teams: string[];
+  years: string[];
+}
+
+export interface IntakeLink {
+  id: string;
+  title: string;
+  status: string;
+  status_label: string;
+  /** started = 이 과제로 승격 · merged = 이 과제에 병합 */
+  relation: "started" | "merged";
+  received_on: string | null;
+}
+
+export interface PromotionPlan {
+  title: string;
+  type: string;
+  status: string;
+  owners: string[];
+  partners: Partner[];
+  leader: string;
+  leader_team: string;
+  /** 과제리더가 명부에 있는가 — 있으면 담당자로, 없으면 유관부서로 간다 */
+  leader_in_roster: boolean;
+  start_date: string | null;
+  due_date: string | null;
+  effect_request: number | null;
+  nature: string | null;
+  category: string | null;
+  delivery: string | null;
+  cost_kind: string | null;
+  tags: string[];
+  body_preview: string;
+  matched_sections: string[];
+  leftover_sections: string[];
+  attachments: string[];
+  next_project_id: string;
 }
 
 /** 대체 담당자를 정해야 하는 과제 한 줄 (TODO 122). */

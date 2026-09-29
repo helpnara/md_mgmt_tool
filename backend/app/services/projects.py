@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..config import DEFAULT_STATUS, STATUS_KEYS, get_settings
+from ..config import CLASSIFICATION_KEYS, DEFAULT_STATUS, STATUS_KEYS, get_settings
 from ..vault import markdown as md
 from ..vault import paths
 from ..vault.indexer import index_project
@@ -19,6 +19,44 @@ from . import trash as trash_service
 # 안내 문구는 인용문(>)으로 넣는다. 화면에서 흐리게 보여 실제 내용과 구분되고,
 # 사용자는 그 줄을 지우고 쓰면 된다.
 INDEX_TEMPLATE = """## 배경
+
+> 왜 이 과제를 하는지 — 문제 상황, 요청 배경 (이 줄을 지우고 작성하세요)
+
+## 목표
+
+> 무엇을 달성하면 끝인지 — 가능하면 수치로 (성과지표: KPI · 현수준 · 목표)
+
+## 추진내용
+
+> 과제 범위 · 적용 대상 · 단계별 추진계획 · 유관부서 협의
+
+## 산출물
+
+> 과제가 끝났을 때 남기는 결과물 — 예: 평가 보고서, 시제품, 측정 데이터, 특허 초안
+
+## 정성적 효과
+
+> 숫자로 표현하기 어려운 효과 — 품질 향상, 리스크 저감, 기술 확보, 대응 속도 등
+> 근거 자료(엑셀·PPT)는 아래 [파일 첨부]로 붙이고 여기에 링크하면 된다
+
+## 효과 산출 근거
+
+> 위 기대효과 금액이 어떤 계산에서 나왔는지 — 단가 × 물량 × 개선율, 가정, 출처
+> 근거 없는 숫자는 보고 자리에서 방어하지 못한다
+
+## 활용 방안 및 향후 계획
+
+> 결과를 어디에 어떻게 쓰는지, 끝난 뒤 이어질 일
+
+## 관련 링크
+
+> 참고할 사내 위키·공유 폴더 주소, 관련 과제 번호 등
+"""
+
+# 예전 서식들 (TODO 136 에서 섹션 둘을 더하기 전). 그 서식 그대로인 개요도 **아직 작성 전**으로
+# 알아봐야 한다 — 서식을 바꿨다고 이미 만든 과제들이 갑자기 "작성됨" 이 되면 안 된다 (106-B).
+LEGACY_INDEX_TEMPLATES = (
+    """## 배경
 
 > 왜 이 과제를 하는지 — 문제 상황, 요청 배경 (이 줄을 지우고 작성하세요)
 
@@ -43,12 +81,19 @@ INDEX_TEMPLATE = """## 배경
 ## 관련 링크
 
 > 참고할 사내 위키·공유 폴더 주소, 관련 과제 번호 등
-"""
+""",
+)
 
 META_ORDER = [
-    "id", "title", "status", "type", "group", "tags", "owners",
+    "id", "title", "status", "type",
+    # 과제 분류 넷 (TODO 136) — 속성 바로 뒤. 파일을 열었을 때 한 덩이로 읽힌다.
+    "nature", "category", "delivery", "cost_kind",
+    "group", "tags", "owners",
     "start_date", "due_date", "completed_at", "effect_expected", "effect_verified",
-    "no_report", "no_effect", "partners", "created_by", "created_at", "updated_at",
+    "no_report", "no_effect", "partners",
+    # 이 과제가 어느 접수에서 승격됐는가 (TODO 136). 직접 만든 과제는 비어 있다.
+    "intake_id",
+    "created_by", "created_at", "updated_at",
 ]
 
 # 상태가 이것이 되는 순간 완료일이 남는다 (TODO 104).
@@ -78,6 +123,16 @@ def normalize_effect(value: object) -> float | None:
     if number < 0:
         raise ValueError("효과 금액은 0보다 작을 수 없습니다.")
     return round(number, EFFECT_DECIMALS)
+
+
+def normalize_label(value: object) -> str | None:
+    """분류 넷의 값 (TODO 136). 글자 그대로 두되 앞뒤·겹친 공백만 정리한다.
+
+    **목록에 있는지는 따지지 않는다.** 목록은 설정에서 바뀌는데, 바뀔 때마다 예전 값을
+    가진 과제를 저장할 수 없게 되면 안 된다. 화면은 목록에서 고르게 하고, 파일은 무엇이든 받는다.
+    """
+    text = " ".join(str(value or "").split())
+    return text[:40] or None
 
 
 def normalize_owners(value: object) -> list[str]:
@@ -242,6 +297,10 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         or (date_today() if status == DONE_STATUS else None),
         "effect_expected": normalize_effect(data.get("effect_expected")),
         "effect_verified": normalize_effect(data.get("effect_verified")),
+        # 과제 분류 넷 (TODO 136). 주로 스마트과제에서 쓴다 — 다른 과제는 비어 있어도 된다.
+        **{key: normalize_label(data.get(key)) for key in CLASSIFICATION_KEYS},
+        # 접수에서 승격된 과제면 그 접수 번호 (TODO 136)
+        "intake_id": (str(data.get("intake_id") or "").strip() or None),
         # 단순 현황 관리를 과제로 세운 경우가 있다. 그런 과제는 보고 대상 후보에서 뺀다
         # — 매주 "이건 보고 안 해도 되는데" 를 눈으로 걸러 내지 않아도 되게 (TODO 80).
         "no_report": bool(data.get("no_report")),
@@ -268,7 +327,10 @@ def overview_is_blank(body: str | None) -> bool:
     def squash(text: str | None) -> str:
         return " ".join((text or "").split())
 
-    return squash(body) == "" or squash(body) == squash(INDEX_TEMPLATE)
+    text = squash(body)
+    return text == "" or any(
+        text == squash(template) for template in (INDEX_TEMPLATE, *LEGACY_INDEX_TEMPLATES)
+    )
 
 
 def date_today() -> str:
@@ -341,6 +403,11 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         updates["no_effect"] = bool(updates["no_effect"])
     if "partners" in updates:
         updates["partners"] = normalize_partners(updates["partners"])
+    for key in CLASSIFICATION_KEYS:
+        if key in updates:
+            updates[key] = normalize_label(updates[key])
+    # 승격으로 붙은 접수 번호는 화면에서 고치지 않는다 — 양쪽 링크가 어긋난다.
+    updates.pop("intake_id", None)
     if "owners" in updates or "owner" in updates:
         updates["owners"] = normalize_owners(updates.pop("owners", None) or updates.pop("owner", None))
     if "completed_at" in updates:
@@ -410,6 +477,8 @@ def clone_project(conn: sqlite3.Connection, source_id: str) -> str:
             "partners": meta.get("partners") or [],
             "no_report": bool(meta.get("no_report")),
             "no_effect": bool(meta.get("no_effect")),
+            # 같은 줄기의 과제라 분류도 같다 (TODO 136). 접수 번호는 넘기지 않는다.
+            **{key: meta.get(key) for key in CLASSIFICATION_KEYS},
             "body": body,
         },
     )

@@ -34,6 +34,8 @@ KIND_LABELS = {
     "report": "보고 문서",
     "attachment": "첨부 파일",
     "activity": "역량 이력",
+    "intake": "접수",
+    "intake_log": "접수 검토 기록",
 }
 
 

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
-import { backTarget, listLink, projectLink } from "../nav";
+import { backTarget, intakeBackLink, listLink, projectLink } from "../nav";
 import type { Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -347,6 +347,16 @@ export default function ProjectDetail({
             <div className="meta-line">
               <StatusBadge status={project.status} meta={meta} />
               {project.type && <TypeBadge type={project.type} meta={meta} />}
+              {/* 과제 분류 넷 (TODO 136). 누르면 같은 분류의 과제만 걸러 본다. */}
+              {meta.classifications.map((info) => {
+                const value = project[info.key];
+                return value ? (
+                  <a key={info.key} className="chip class-chip" href={listLink({ [info.key]: value, year: "all" })}
+                     title={`${info.label} — 같은 ${info.label}의 과제 보기`}>
+                    <span className="class-chip-label">{info.label}</span> {value}
+                  </a>
+                ) : null;
+              })}
               {project.group && <span className="chip">{project.group}</span>}
               {project.tags.map((tag) => (
                 <span key={tag} className="tag">
@@ -375,6 +385,19 @@ export default function ProjectDetail({
               )}
               <span>최근 업데이트 {formatDate(project.updated_at)}</span>
             </div>
+            {/* 이 과제가 온 접수 · 이 과제에 병합된 접수 (TODO 136) — 양쪽 링크의 과제 쪽 끝 */}
+            {(project.intakes ?? []).length > 0 && (
+              <div className="meta-line intake-line">
+                <span className="muted">접수</span>
+                {(project.intakes ?? []).map((item) => (
+                  <a key={item.id} className="intake-link" href={intakeBackLink(item.id)}>
+                    {item.relation === "started" ? "← " : "⇠ "}
+                    <span className="project-id">{item.id}</span> {item.title}
+                    <span className="muted"> · {item.relation === "started" ? "여기서 승격" : "병합됨"}</span>
+                  </a>
+                ))}
+              </div>
+            )}
             {/* 유관부서 (TODO 92). 누르면 그 팀·사람과 함께 하는 과제만 걸러 본다 —
                 "설비기술팀이랑 뭐뭐 하고 있더라" 가 실제로 자주 하는 물음이다. */}
             {(project.partners ?? []).length > 0 && (

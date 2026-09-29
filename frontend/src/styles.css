@@ -1471,3 +1471,82 @@ h2 .copy-table, h1 .copy-table { margin-left: 10px; vertical-align: middle; }
 .settings-fold[open] > summary::before { content: "▾"; }
 .settings-fold > summary:hover { color: var(--accent-strong); }
 .settings-fold > .settings-grid { margin-top: 10px; }
+
+/* ── 과제 접수 풀 (TODO 136) ──────────────────────────────────────────────── */
+.intake-status { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.intake-received { background: #e0f2fe; color: #075985; }
+.intake-reviewing { background: #fef3c7; color: #92400e; }
+/* 보류는 흐리되 읽혀야 한다 — #6b7280 은 이 바탕에서 AA(4.5)에 조금 못 미친다 */
+.intake-on_hold { background: #f3f4f6; color: #4b5563; }
+.intake-started { background: #dcfce7; color: #166534; }
+.intake-rejected { background: #fee2e2; color: #991b1b; }
+.intake-transferred { background: #ede9fe; color: #5b21b6; }
+.intake-merged { background: #e5e7eb; color: #374151; }
+.priority { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.priority-상 { background: #fee2e2; color: #991b1b; }
+.priority-중 { background: #fef3c7; color: #92400e; }
+.priority-하 { background: #f1f5f9; color: #475569; }
+.star { background: none; border: 0; padding: 0 2px; font-size: 16px; line-height: 1; color: #64748b; cursor: pointer; }
+.star.on { color: var(--warn); }
+span.star { cursor: default; }
+.intake-summary { display: flex; flex-direction: column; gap: 8px; }
+.intake-summary-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.stat-chip { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.stat-chip b { margin-left: 4px; }
+.stat-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+.stat-chip.warn b { color: var(--danger); }
+.stat-chip.warn.quiet b { color: var(--muted-strong); }
+button.linkish { background: none; border: 0; padding: 0 2px; color: var(--accent-strong); cursor: pointer; font-size: 13px; }
+button.linkish.on { font-weight: 700; text-decoration: underline; }
+.intake-table td { vertical-align: middle; }
+.intake-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.intake-table .pick-col { width: 32px; text-align: center; }
+.intake-table .intake-title { font-weight: 600; color: var(--text); text-decoration: none; }
+.intake-table .intake-title:hover { text-decoration: underline; }
+.intake-table tr.stale-row td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+.inline-search input { width: 220px; }
+.picked-filter { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.picked-filter input { width: auto; }
+.intake-new { white-space: nowrap; }
+.empty-card p { margin: 6px 0; }
+
+.intake-detail .decision-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.intake-detail .decision-bar .on { background: var(--accent-soft); border-color: var(--accent); }
+.decision-panel { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fafbfc; display: flex; flex-direction: column; gap: 8px; }
+.decision-line { margin-top: 10px; }
+.decision-note { margin: 6px 0 0; padding: 6px 10px; border-left: 3px solid var(--border); background: #fafbfc; font-size: 13px; white-space: pre-wrap; }
+.stale-note { margin: 8px 0 0; font-size: 13px; }
+.intake-file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.intake-file-list li { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.intake-log-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.intake-log-list .entry { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.intake-log-list .entry-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.intake-log-list .entry-date { font-variant-numeric: tabular-nums; color: var(--muted-strong); font-size: 13px; }
+.intake-log-list .entry-actions { margin-left: auto; display: flex; gap: 4px; }
+.log-editor, .body-editor { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.danger-zone { margin-top: 18px; text-align: right; }
+
+.promote-dialog { max-width: 860px; display: flex; flex-direction: column; gap: 10px; }
+.promote-dialog .partner-row { display: flex; gap: 6px; margin-top: 4px; }
+.promote-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.promote-preview p { margin: 4px 0; }
+.promote-body { max-height: 320px; overflow: auto; margin-top: 8px; padding: 8px; background: #fafbfc; border-radius: 6px; }
+
+/* 과제 쪽 — 분류 칩 · 접수 링크 */
+.class-chip { text-decoration: none; }
+a.class-chip:hover { background: #e2e8f0; }
+.class-chip-label { color: var(--muted-strong); font-size: 11px; margin-right: 2px; }
+.intake-line { gap: 10px; }
+.intake-link { text-decoration: none; font-size: 13px; }
+.intake-link:hover { text-decoration: underline; }
+.intake-hint { margin: 2px 0 8px; }
+.cost-split { display: block; }
+.class-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 8px 0; }
+.class-lists textarea { font-size: 13px; }
+/* 검토 기록 머리 — 과제 쪽 .entry-head 의 양끝 정렬을 이어받으면 단추가 없는 줄(상태 변경)에서
+   제목이 가운데로 떠 버린다. 앞에서부터 채운다. */
+.intake-log-list .entry-head { justify-content: flex-start; }
+/* 승격 단추는 늘 보여야 한다 — 개요 미리보기를 펼치면 대화상자가 길어진다 */
+.promote-dialog > .form-actions { position: sticky; bottom: -18px; background: var(--surface); padding: 10px 0 4px; border-top: 1px solid var(--border); margin-bottom: -4px; }
+.intake-table th { white-space: nowrap; padding: 6px 8px; }
+.intake-table td { padding: 6px 8px; }

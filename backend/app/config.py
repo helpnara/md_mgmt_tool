@@ -57,6 +57,40 @@ PROJECT_TYPES: list[tuple[str, str]] = [
 ]
 TYPE_KEYS: list[str] = [key for key, _ in PROJECT_TYPES]
 
+# 과제 분류 넷 (TODO 136). **속성과 다른 축**이다 — 속성은 과제의 종류(스마트과제·기획보고…)이고,
+# 이 넷은 주로 스마트과제 안에서 거르고 세는 축이다: 성격 · 기술 분류 · 수행 방식 · 효과의 비용 구분.
+# 값은 **글자 그대로** 파일에 적는다(키를 따로 두지 않는다). 목록은 설정에서 고치고,
+# 목록에서 빠진 값도 파일에서 지우지 않는다 — 명부에 없는 담당자 이름을 지우지 않는 것과 같다.
+CLASSIFICATIONS: list[tuple[str, str, list[str]]] = [
+    ("nature", "성격", ["연구과제/PoC", "현장적용", "확대전개", "기타"]),
+    ("category", "분류", ["스마트 센싱", "원인분석/이상탐지", "예측/분류모델 개발", "가이던스/제어", "기타"]),
+    ("delivery", "수행 방식", ["현업 자체 개발", "전문부서 개발", "외부 전문업체 협업"]),
+    # KPI 가 여럿이면 고정비·변동비가 섞일 수 있다. 과제 칸은 대표값 하나다 — 그래서 '혼합'.
+    ("cost_kind", "비용구분", ["고정비", "변동비", "혼합"]),
+]
+CLASSIFICATION_KEYS: list[str] = [key for key, _, _ in CLASSIFICATIONS]
+CLASSIFICATION_LABELS: dict[str, str] = {key: label for key, label, _ in CLASSIFICATIONS}
+# 이 칸들을 입력 화면에 세우는 속성. 다른 속성에는 의미가 없어 칸만 늘어난다.
+CLASSIFIED_TYPE = "smart"
+
+# 접수 상태 (TODO 136). 세 번째 값은 **풀에 담겨 있는가** — 아직 판정이 안 났거나 보류된 것.
+# 풀은 상태가 아니라 화면이다. `pooled` 같은 상태를 따로 두면 "검토중" 과 겹쳐 둘 다 흐려진다.
+INTAKE_STATUSES: list[tuple[str, str, bool]] = [
+    ("received", "접수", True),
+    ("reviewing", "검토중", True),
+    ("on_hold", "보류", True),
+    ("started", "착수", False),
+    ("rejected", "반려", False),
+    ("transferred", "이관", False),
+    ("merged", "병합", False),
+]
+INTAKE_STATUS_KEYS: list[str] = [key for key, _, _ in INTAKE_STATUSES]
+INTAKE_STATUS_LABELS: dict[str, str] = {key: label for key, label, _ in INTAKE_STATUSES}
+INTAKE_POOL_STATUSES: tuple[str, ...] = tuple(key for key, _, pool in INTAKE_STATUSES if pool)
+# 판정 — 풀에서 나가는 길. 착수는 승격으로만 간다(과제가 함께 생긴다).
+INTAKE_DECISIONS: tuple[str, ...] = ("rejected", "transferred", "merged", "on_hold")
+INTAKE_PRIORITIES: list[str] = ["상", "중", "하"]
+
 # 팀원 역량 이력의 구분 (TODO 72). 과제의 '속성'과 다른 축이다.
 # 기록 단위는 **사람**이다 — 한 행사에 세 명이 가면 기록도 세 건이다.
 ACTIVITY_KINDS: list[tuple[str, str]] = [
@@ -108,6 +142,11 @@ class Settings:
         return self.vault_dir / "people"
 
     @property
+    def intakes_dir(self) -> Path:
+        """접수 풀 (TODO 136). 요청 하나가 폴더 하나 — 과제와 같은 짜임이다."""
+        return self.vault_dir / "intakes"
+
+    @property
     def trash_dir(self) -> Path:
         return self.vault_dir / ".trash"
 
@@ -130,7 +169,7 @@ class Settings:
         return self.index_dir / "index.sqlite3"
 
     def ensure_dirs(self) -> None:
-        for path in (self.vault_dir, self.projects_dir, self.people_dir,
+        for path in (self.vault_dir, self.projects_dir, self.people_dir, self.intakes_dir,
                      self.trash_dir, self.index_dir, self.logs_dir):
             path.mkdir(parents=True, exist_ok=True)
 

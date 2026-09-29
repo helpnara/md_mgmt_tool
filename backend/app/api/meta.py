@@ -4,7 +4,10 @@ import sqlite3
 
 from fastapi import APIRouter, Depends
 
-from ..config import ACTIVITY_KINDS, COLLAPSED_STATUSES, STATUSES, get_settings
+from ..config import (
+    ACTIVITY_KINDS, CLASSIFICATIONS, CLASSIFIED_TYPE, COLLAPSED_STATUSES, INTAKE_STATUSES,
+    STATUSES, get_settings,
+)
 from ..deps import get_db
 from ..services import buildinfo
 from ..services import home as home_service
@@ -112,6 +115,18 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "report_cycle_days": get_settings().report_cycle_days,
         # 주간 보고 요일 (0=월 … 6=일). 화면이 안내 문구에 쓴다.
         "report_weekday": settings_service.report_weekday(),
+        # 과제 분류 넷 (TODO 136) — 입력 칸의 목록과 이름표. 분류 칸을 세우는 속성도 함께.
+        "classifications": [
+            {"key": key, "label": label, "items": lists[key]}
+            for key, label, _ in CLASSIFICATIONS
+            for lists in [settings_service.classifications()]
+        ],
+        "classified_type": CLASSIFIED_TYPE,
+        # 접수 (TODO 136) — 상태 이름표와 묵힘 기준일
+        "intake_statuses": [
+            {"key": key, "label": label, "pool": pool} for key, label, pool in INTAKE_STATUSES
+        ],
+        "intake_stale_days": settings_service.intake_stale_days(),
     }
 
 

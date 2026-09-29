@@ -4,6 +4,7 @@ import { backTarget } from "../nav";
 import type { Meta } from "../types";
 import AiPromptCard from "./AiPromptCard";
 import ReportTemplateCard from "./ReportTemplateCard";
+import IntakeSettingsCard from "./IntakeSettingsCard";
 import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
 import PeopleCard from "./PeopleCard";
@@ -116,6 +117,17 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           <ProjectCodeCard onSaved={onSaved} />
         </div>
       </div>
+
+      {/* 과제 분류 넷 · 접수 (TODO 136). 목록은 한 번 정하면 한동안 안 고치므로 접어 둔다. */}
+      <details className="settings-group settings-fold">
+        <summary className="settings-group-title">
+          과제 분류 · 접수
+          <span className="hint">스마트과제의 성격·분류·수행 방식·비용구분 목록 · 접수 서식 · 묵힘 기준</span>
+        </summary>
+        <div className="settings-grid">
+          <IntakeSettingsCard meta={meta} onSaved={onSaved} />
+        </div>
+      </details>
 
       <div className="settings-group">
         <h2 className="settings-group-title">

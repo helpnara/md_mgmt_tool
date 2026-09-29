@@ -104,17 +104,19 @@ function SliceTable({
   title: string;
   /** 첫 열의 이름 — "속성" 또는 "그룹" */
   column: string;
-  rows: HomeSlice[];
+  rows: (HomeSlice & { filter?: Record<string, string> })[];
   /** 목록을 거를 때 쓸 질의 이름 */
-  param: "type" | "group";
+  param: "type" | "group" | "nature" | "category";
   yearParam: string;
   note: ReactNode;
 }) {
   const [all, setAll] = useState(false);
   if (rows.length === 0) return null;
   const shown = all ? rows : rows.slice(0, SLICE_LIMIT);
-  const link = (item: HomeSlice, status?: string) =>
-    listLink({ [param]: item.key, ...(status ? { status } : {}), year: yearParam });
+  // 서버가 거르기 조건을 함께 주면 그것을 쓴다 (성격별·분류별의 *미지정* 줄은 조건이 둘이다 — TODO 136).
+  // 세는 곳과 거르는 곳이 같아야 한다 (DESIGN 5.8).
+  const link = (item: HomeSlice & { filter?: Record<string, string> }, status?: string) =>
+    listLink({ ...(item.filter ?? { [param]: item.key }), ...(status ? { status } : {}), year: yearParam });
 
   return (
     // 속성별과 그룹별을 이름으로 가려낼 수 있어야 한다 — 시험이 둘을 헷갈리면
@@ -338,6 +340,16 @@ export default function Home({ meta }: { meta: Meta }) {
           <span className="hint"> · 보고 예정일 {week.report_date}</span>
         </h2>
         <div className="home-week-row">
+          {/* 접수 풀 (TODO 136) — 과제 수와 섞지 않고 따로 선다. 풀이 비어 있으면 세우지 않는다. */}
+          {data.intakes.pool > 0 && (
+            <a className="home-stat go intake-stat" href={screenLink("intakes")}>
+              <span className="home-stat-label">접수 풀</span>
+              <strong>{data.intakes.pool}건</strong>
+              {data.intakes.stale > 0 && (
+                <span className="home-stat-note warn-text">묵힘 {data.intakes.stale}건</span>
+              )}
+            </a>
+          )}
           <a className="home-stat go" href={screenLink("reports")}>
             <span className="home-stat-label">보고 대상</span>
             <strong>{week.candidates}건</strong>
@@ -556,6 +568,19 @@ export default function Home({ meta }: { meta: Meta }) {
                 <>(전체 {team.total}건)</>
               )}
             </span>
+            {/* 기대효과를 비용구분으로 나눠 본다 (TODO 136) — 적힌 과제만 센다 */}
+            {data.effect_by_cost.length > 0 && (
+              <span className="home-stat-note cost-split">
+                {data.effect_by_cost.map((item, index) => (
+                  <span key={item.key}>
+                    {index > 0 && " · "}
+                    <a href={listLink({ cost_kind: item.key, year: yearParam })}>
+                      {item.key} {money(item.effect_expected)}
+                    </a>
+                  </span>
+                ))}
+              </span>
+            )}
             {/* 완료했는데 실증효과가 빈 과제 (TODO 106-C). 연말에 빈칸을 만나기 전에 여기서 본다. */}
             {(team.done_unverified ?? 0) > 0 && (
               <a
@@ -759,6 +784,32 @@ export default function Home({ meta }: { meta: Meta }) {
         }
       />
       </div>
+
+      {/* ── 성격별 · 분류별 (TODO 136) ─────────────────────────────────
+          스마트과제 안의 두 축이다. *미지정* 줄은 **스마트과제인데 비어 있는 것**만 센다 —
+          기획보고·유지보수가 미지정에 쌓이면 그 줄은 늘 가장 크고 아무 뜻이 없다. */}
+      {(data.natures.length > 0 || data.categories.length > 0) && (
+        <div className="home-slices">
+          <SliceTable
+            meta={meta}
+            title="성격별"
+            column="성격"
+            rows={data.natures}
+            param="nature"
+            yearParam={yearParam}
+            note={<>연구과제/PoC → 현장적용 → 확대전개로 이어지는 흐름을 봅니다. 미지정은 스마트과제인데 비어 있는 것입니다.</>}
+          />
+          <SliceTable
+            meta={meta}
+            title="분류별"
+            column="분류"
+            rows={data.categories}
+            param="category"
+            yearParam={yearParam}
+            note={<>기술 영역별로 어디에 과제가 몰려 있는지 봅니다. 목록은 설정에서 고칩니다.</>}
+          />
+        </div>
+      )}
 
     </section>
   );

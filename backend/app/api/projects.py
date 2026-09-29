@@ -4,7 +4,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..config import FINISHED_STATUSES, STATUS_KEYS, get_settings
+from ..config import CLASSIFICATION_KEYS, FINISHED_STATUSES, STATUS_KEYS, get_settings
 from ..deps import get_db
 from ..vault.markdown import ExternalChangeError
 from ..vault.paths import FileInUseError
@@ -155,6 +155,9 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "no_effect": bool(row["no_effect"]),
         # 과제를 등록한 사람 (담당자와 다르다). 로그인이 생기면 자동으로 채워진다.
         "created_by": row["created_by"],
+        # 과제 분류 넷 · 승격된 접수 번호 (TODO 136)
+        **{key: row[key] for key in CLASSIFICATION_KEYS},
+        "intake_id": row["intake_id"],
         "tags": _tags(conn, row["id"]),
         "entry_count": conn.execute(
             "SELECT COUNT(*) AS n FROM entry WHERE project_id = ?", (row["id"],)
@@ -198,6 +201,13 @@ def list_projects(
     no_effect: str | None = Query(None, pattern="^(none|only)?$"),
     # 떠난 담당자가 남아 있는 **끝나지 않은** 과제만 (TODO 122). 홈이 이리로 이어 준다.
     owner_left: str | None = Query(None, pattern="^(1)?$"),
+    # 과제 분류 넷 (TODO 136). "none" 은 비어 있는 과제 — 홈의 '미지정' 줄이 쓴다.
+    nature: str | None = None,
+    category: str | None = None,
+    delivery: str | None = None,
+    cost_kind: str | None = None,
+    # 접수에서 승격된 과제만("yes") / 직접 만든 과제만("no") (TODO 136)
+    from_intake: str | None = Query(None, pattern="^(yes|no)?$"),
     sort: str = Query("updated"),
     # 열 머리글을 눌러 방향을 뒤집는다 (TODO 57). 정렬 키는 SORTS 가 정의한다.
     order: str | None = Query(None, pattern="^(asc|desc)$"),
@@ -224,6 +234,18 @@ def list_projects(
         )
         params.extend(FINISHED_STATUSES)
         params.extend(names)
+    for column, value in (("nature", nature), ("category", category),
+                          ("delivery", delivery), ("cost_kind", cost_kind)):
+        # 세는 곳(홈)과 거르는 곳(여기)이 같은 조건을 써야 한다 (DESIGN 5.8).
+        if value == "none":
+            where.append(f"(p.{column} IS NULL OR TRIM(p.{column}) = '')")
+        elif value:
+            where.append(f"TRIM(p.{column}) = ?")
+            params.append(value)
+    if from_intake == "yes":
+        where.append("p.intake_id IS NOT NULL AND p.intake_id != ''")
+    elif from_intake == "no":
+        where.append("(p.intake_id IS NULL OR p.intake_id = '')")
     if status:
         where.append("p.status = ?")
         params.append(status)
@@ -343,6 +365,10 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     data["attachment_bytes"] = files["bytes"]
     # 새 진행일지를 빈칸이 아니라 서식에서 시작하도록 함께 실어 보낸다.
     data["entry_template"] = settings_service.entry_template(row["type"])
+    # 이 과제로 승격된 접수와, 이 과제에 병합된 접수 (TODO 136) — 과제 쪽의 역링크
+    from ..services.intakes import related_to_project
+
+    data["intakes"] = related_to_project(conn, project_id)
     return data
 
 

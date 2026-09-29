@@ -23,10 +23,10 @@ from __future__ import annotations
 import sqlite3
 from datetime import date as date_cls
 
-from ..config import FINISHED_STATUSES, STATUS_KEYS, STATUSES
-from . import settings as settings_service
-from . import settings as settings_service
+from ..config import CLASSIFICATION_KEYS, CLASSIFIED_TYPE, FINISHED_STATUSES, STATUS_KEYS, STATUSES
+from . import intakes as intakes_service
 from . import reports as reports_service
+from . import settings as settings_service
 
 # 연도 비교 막대에 세우는 해의 수. 더 늘리면 막대가 얇아지기만 한다.
 COMPARE_YEARS = 5
@@ -331,6 +331,82 @@ def _groups(conn: sqlite3.Connection, year: str | None) -> list[dict]:
     return out
 
 
+def _classified(conn: sqlite3.Connection, year: str | None, column: str) -> list[dict]:
+    """과제 분류(성격·분류)별 과제 수와 효과 금액 (TODO 136). 속성별 표와 같은 모양이다.
+
+    **세는 곳과 거르는 곳이 같아야 한다** (DESIGN 5.8). 값이 있는 줄은 속성과 무관하게 그 값을
+    가진 과제 전부를 세고, *미지정* 줄은 **분류를 쓰는 속성(스마트과제)인데 비어 있는 것**만 센다 —
+    기획보고·유지보수가 미지정에 쌓이면 그 줄은 늘 가장 크고 아무 뜻이 없다.
+    그래서 줄마다 목록으로 이어 줄 거르기 조건(`filter`)을 함께 보낸다.
+    """
+    if column not in CLASSIFICATION_KEYS:
+        raise ValueError(column)
+    clause, params = _year_clause(year)
+    value = f"COALESCE(NULLIF(TRIM(p.{column}), ''), '')"
+    scope = f"(p.type = ? OR {value} <> '')"
+    rows = {
+        row["v"]: row
+        for row in conn.execute(
+            f"SELECT {value} AS v, COUNT(*) AS n,"
+            "       COALESCE(SUM(effect_expected), 0) AS ee,"
+            "       COALESCE(SUM(effect_verified), 0) AS ev"
+            f" FROM project p WHERE {scope}{clause} GROUP BY v",
+            (CLASSIFIED_TYPE, *params),
+        )
+    }
+    statuses = _by_status(
+        conn.execute(
+            f"SELECT {value} AS v, status, COUNT(*) AS n"
+            f" FROM project p WHERE {scope}{clause} GROUP BY v, status",
+            (CLASSIFIED_TYPE, *params),
+        ).fetchall(),
+        "v",
+    )
+    listed = settings_service.classifications()[column]
+    # 목록 순서 → 목록에 없는 값(예전 이름) → 미지정
+    order = [*listed, *sorted(v for v in rows if v and v not in listed), ""]
+    out = []
+    for key in order:
+        row = rows.get(key)
+        if not row:
+            continue
+        by_status = _full(statuses.get(key))
+        out.append({
+            "key": key or "none",
+            "label": key or "미지정",
+            "listed": key in listed,
+            "count": row["n"],
+            "by_status": by_status,
+            "done": by_status[_DONE],
+            "effect_expected": round(row["ee"] or 0, 2),
+            "effect_verified": round(row["ev"] or 0, 2),
+            "filter": {column: key} if key else {column: "none", "type": CLASSIFIED_TYPE},
+        })
+    return out
+
+
+def _effect_by_cost(conn: sqlite3.Connection, year: str | None) -> list[dict]:
+    """기대효과를 비용구분(고정비·변동비·혼합)으로 나눠 본다 (TODO 136). 적힌 과제만."""
+    clause, params = _year_clause(year)
+    rows = conn.execute(
+        "SELECT TRIM(cost_kind) AS k, COUNT(*) AS n,"
+        "       COALESCE(SUM(effect_expected), 0) AS ee,"
+        "       COALESCE(SUM(effect_verified), 0) AS ev"
+        f" FROM project p WHERE cost_kind IS NOT NULL AND TRIM(cost_kind) <> ''{clause}"
+        " GROUP BY k",
+        params,
+    ).fetchall()
+    listed = settings_service.classifications()["cost_kind"]
+    rank = {name: index for index, name in enumerate(listed)}
+    out = [
+        {"key": row["k"], "count": row["n"],
+         "effect_expected": round(row["ee"] or 0, 2), "effect_verified": round(row["ev"] or 0, 2)}
+        for row in rows
+    ]
+    out.sort(key=lambda item: (rank.get(item["key"], len(rank)), item["key"]))
+    return out
+
+
 def _compare(conn: sqlite3.Connection) -> list[dict]:
     """최근 몇 해를 나란히. 한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다."""
     return [
@@ -476,6 +552,12 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
         "members": _members(conn, year, period),
         "types": _types(conn, year),
         "groups": _groups(conn, year),
+        # 과제 분류 넷 중 표로 세우는 둘 · 기대효과의 비용구분 (TODO 136)
+        "natures": _classified(conn, year, "nature"),
+        "categories": _classified(conn, year, "category"),
+        "effect_by_cost": _effect_by_cost(conn, year),
+        # 접수 풀 (TODO 136) — 과제 집계와 **섞지 않고** 따로 한 덩이로 보낸다
+        "intakes": intakes_service.summary(conn, year),
     }
 
 

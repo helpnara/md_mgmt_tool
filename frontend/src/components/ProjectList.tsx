@@ -32,6 +32,8 @@ const DEFAULT_FILTERS = {
   owner_left: "",
   // 효과 금액이 적힌 과제 (TODO 124) · 효과성 관리 비대상 (TODO 125)
   effect: "", no_effect: "",
+  // 과제 분류 넷 (TODO 136) · 접수에서 승격된 과제만/직접 만든 과제만
+  nature: "", category: "", delivery: "", cost_kind: "", from_intake: "",
   // 어디서 왔는지 (TODO 127). 거르는 조건이 아니라 **돌아갈 곳**이다 — 서버로 보내지 않고,
   // 조건을 바꿔도 주소에 남아 있어야 한다(그래야 거르다가도 홈으로 돌아간다).
   back: "",
@@ -97,6 +99,8 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   // 조건은 주소에서 시작한다. 처음 열 때든, 과제를 보고 돌아왔을 때든 같은 길이다.
   const [filters, setFilters] = useState(() => readFilters(new URLSearchParams(query)));
+  const showClasses =
+    filters.type === meta.classified_type || meta.classifications.some((info) => Boolean(filters[info.key]));
   const [view, setView] = useState<"table" | "board">(
     () => (localStorage.getItem("md-mgmt:view") === "board" ? "board" : "table"),
   );
@@ -235,9 +239,41 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               )}
             </select>
           )}
+          {/* 과제 분류 넷 (TODO 136). 목록은 설정에서 온다. 넷은 스마트과제의 칸이라
+              **속성에서 스마트과제를 골랐거나 분류 조건이 이미 걸려 있을 때만** 세운다 —
+              늘 세우면 거르기 줄이 두 줄로 넘어가고, 다른 속성을 볼 때는 쓸 일이 없다. */}
+          {showClasses && meta.classifications.map((info) => (
+            <select
+              key={info.key}
+              value={filters[info.key]}
+              onChange={(event) => setFilter(info.key, event.target.value)}
+              aria-label={info.label}
+            >
+              <option value="">{info.label} 전체</option>
+              {info.items.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+              {/* 목록에서 빠진 예전 값으로 걸려 왔으면 그 값도 보여 준다 — 빈칸으로 보이면 안 된다 */}
+              {filters[info.key] && filters[info.key] !== "none" && !info.items.includes(filters[info.key]) && (
+                <option value={filters[info.key]}>{filters[info.key]}</option>
+              )}
+              <option value="none">미지정</option>
+            </select>
+          ))}
+          <select
+            value={filters.from_intake}
+            onChange={(event) => setFilter("from_intake", event.target.value)}
+            aria-label="등록 경로"
+          >
+            <option value="">등록 경로 전체</option>
+            <option value="yes">접수에서 승격</option>
+            <option value="no">직접 등록</option>
+          </select>
           {/* 첫 화면이 늘 전체면 해가 갈수록 쓸모가 떨어진다. 기본은 올해다.
               세우는 해는 **과제가 실제로 있는 해**뿐이다 (TODO 96). */}
-          <select value={filters.year} onChange={(event) => setFilter("year", event.target.value)}>
+          <select value={filters.year} onChange={(event) => setFilter("year", event.target.value)} aria-label="연도">
             <option value={ALL_YEARS}>연도 전체</option>
             {yearOptions(meta.years, filters.year).map((year) => (
               <option key={year} value={year}>

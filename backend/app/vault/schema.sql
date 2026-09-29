@@ -29,6 +29,48 @@ CREATE TABLE IF NOT EXISTS project (
   -- 홈의 "올해 끝낸 과제" 가 이 날짜로 센다 — 번호의 연도로는 지난해 시작해 올해 끝낸
   -- 과제가 올해 성과에 잡히지 않는다. 나중에 넣으면 그 전 과제는 영영 빈칸이다.
   completed_at     TEXT,
+  -- 과제 분류 넷 (TODO 136). 값은 글자 그대로다 — 목록은 설정에 있다.
+  nature           TEXT,
+  category         TEXT,
+  delivery         TEXT,
+  cost_kind        TEXT,
+  -- 이 과제가 승격된 접수 번호 (TODO 136). 직접 만든 과제는 NULL.
+  intake_id        TEXT,
+  body             TEXT,
+  file_mtime       REAL
+);
+
+-- 과제 접수 (TODO 136). 과제와 **다른 표**다 — 섞으면 반려될 건이 과제 수·효과 합계에 들어간다.
+-- 원본은 intakes/<폴더>/request.md 이고, 이 표는 풀 목록과 집계를 위한 파생물이다.
+CREATE TABLE IF NOT EXISTS intake (
+  id               TEXT PRIMARY KEY,
+  dir_name         TEXT NOT NULL UNIQUE,
+  title            TEXT NOT NULL,
+  status           TEXT NOT NULL,
+  leader           TEXT,
+  leader_team      TEXT,
+  nature           TEXT,
+  category         TEXT,
+  delivery         TEXT,
+  cost_kind        TEXT,
+  start_date       TEXT,
+  due_date         TEXT,
+  effect_request   REAL,
+  priority         TEXT,
+  priority_note    TEXT,
+  picked           INTEGER NOT NULL DEFAULT 0,
+  received_on      TEXT,
+  decided_on       TEXT,
+  decision_note    TEXT,
+  project_id       TEXT,
+  merged_into      TEXT,
+  tags             TEXT,
+  created_by       TEXT,
+  created_at       TEXT,
+  updated_at       TEXT,
+  log_count        INTEGER NOT NULL DEFAULT 0,
+  attachment_count INTEGER NOT NULL DEFAULT 0,
+  last_log_date    TEXT,
   body             TEXT,
   file_mtime       REAL
 );

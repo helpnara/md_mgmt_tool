@@ -35,6 +35,8 @@ const LABELS: Record<string, string> = {
   skills: "팀원 역량",
   search: "검색 결과",
   help: "도움말",
+  // 과제 접수 풀 (TODO 136)
+  intakes: "접수",
 };
 
 /** 지금 주소에서 `#/` 를 뗀 부분. 되돌아갈 곳으로 그대로 쓴다. */
@@ -108,6 +110,18 @@ export function screenLink(
   return `#/${screen}${text ? `?${text}` : ""}`;
 }
 
+/**
+ * 과제 상세에서 그 과제의 접수 건으로 가는 주소 (TODO 136).
+ *
+ * `screenLink` 는 과제 상세에서 떠날 때 상세가 물려받은 back 을 넘긴다. 그러면 승격 직후
+ * (back = 그 접수 건) 과제 → 접수로 갔을 때 되돌아갈 곳이 접수 자신이 되어 제자리를 맴돈다.
+ * 접수 건은 과제의 **곁가지**이므로 되돌아갈 곳은 지금 보던 과제다.
+ */
+export function intakeBackLink(intakeId: string): string {
+  const query = new URLSearchParams({ [BACK_PARAM]: currentLocation() });
+  return `#/intakes/${encodeURIComponent(intakeId)}?${query.toString()}`;
+}
+
 /** 과제 목록으로 가는 주소 — 가장 많이 쓰는 길이라 이름을 따로 둔다. */
 export function listLink(params: Record<string, string | number | undefined> = {}): string {
   return screenLink("projects", params);
@@ -123,6 +137,8 @@ export function backTarget(back: string | null | undefined): { href: string; lab
   if (path === HOME_BACK || path === "") return { href: "#/", label: "홈" };
   // 과제 상세에서 온 경우 — 유관부서 링크처럼 상세에서 목록으로 가는 길이 있다.
   if (path.startsWith("projects/")) return { href: `#/${back}`, label: "과제" };
+  // 접수 상세에서 온 경우 (TODO 136) — 승격된 과제나 병합 대상 과제를 열었다가 돌아간다.
+  if (path.startsWith("intakes/")) return { href: `#/${back}`, label: "접수" };
   const label = LABELS[path];
   // 아는 화면이 아니면(주소를 손으로 고쳤다든가) 안전하게 과제 목록으로 보낸다.
   if (label === undefined) return { href: "#/projects", label: "과제 목록" };

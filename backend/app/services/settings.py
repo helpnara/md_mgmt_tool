@@ -46,10 +46,18 @@ DEFAULTS: dict[str, Any] = {
     # 도구가 AI 를 부르지는 않는다 — 붙여넣기 좋은 글을 만들어 줄 뿐이다.
     "ai_prompt_prefix": "",
     "ai_prompt_suffix": "",
+    # 과제 분류 넷의 목록 (TODO 136). **null 이면 아직 정한 적이 없다** — 코드의 기본 목록을 쓴다.
+    # {"nature": [...], "category": [...], "delivery": [...], "cost_kind": [...]}
+    "classifications": None,
+    # 접수 본문 서식 (TODO 136). 비우면 기본 서식. 섹션 제목을 과제 개요에 맞춰 두면
+    # 승격할 때 그대로 넘어간다 (괄호·줄표 앞까지 비교).
+    "intake_template": "",
+    # 접수 후 이 날수가 지나도 판정이 없으면 홈에 알린다. 요청자에게 가장 나쁜 것은 답이 없는 것이다.
+    "intake_stale_days": 14,
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
 _TEXT_KEYS = ("author", "report_template", "project_code",
-              "ai_prompt_prefix", "ai_prompt_suffix")
+              "ai_prompt_prefix", "ai_prompt_suffix", "intake_template")
 
 
 def _path():
@@ -90,6 +98,10 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = _zero_or_more(key, updates[key])
         elif key == "project_types":
             current[key] = validate_project_types(updates[key])
+        elif key == "classifications":
+            current[key] = validate_classifications(updates[key])
+        elif key == "intake_stale_days":
+            current[key] = _positive_int(key, updates[key])
         elif key == "entry_templates":
             # 빈 서식은 저장하지 않는다 — 비우면 "기본 서식으로 되돌린다"는 뜻이다.
             current[key] = {
@@ -136,6 +148,75 @@ def report_template() -> str:
     text = load()["report_template"].strip()
     # {summary} 가 없으면 진행 내용이 통째로 사라진다. 그런 서식은 쓰지 않는다.
     return text if "{summary}" in text else DRAFT_TEMPLATE
+
+
+# ── 과제 분류 넷 · 접수 (TODO 136) ────────────────────
+
+CLASSIFICATION_MAX_ITEMS = 20
+CLASSIFICATION_MAX_LEN = 30
+
+
+def classifications() -> dict[str, list[str]]:
+    """분류 넷의 목록. 정한 적이 없거나 한 칸만 빠져 있으면 그 칸은 기본 목록을 쓴다."""
+    from ..config import CLASSIFICATIONS
+
+    stored = load().get("classifications")
+    stored = stored if isinstance(stored, dict) else {}
+    out: dict[str, list[str]] = {}
+    for key, _, defaults in CLASSIFICATIONS:
+        items = stored.get(key)
+        out[key] = list(items) if isinstance(items, list) and items else list(defaults)
+    return out
+
+
+def validate_classifications(value: Any) -> dict[str, list[str]]:
+    """목록을 정리한다. 한 칸에 줄바꿈으로 적어 보내도 받는다. 빈 줄·겹치는 값은 버린다.
+
+    **빈 목록은 받지 않는다** — 고를 것이 없는 칸은 칸이 아니다. 쓰지 않을 칸이면 비워 두면
+    되고(값은 선택), 목록 자체를 지우려 하면 기본 목록으로 되돌린다.
+    """
+    from ..config import CLASSIFICATIONS, CLASSIFICATION_LABELS
+
+    if not isinstance(value, dict):
+        raise ValueError("분류 목록 형식이 올바르지 않습니다.")
+    out: dict[str, list[str]] = {}
+    for key, _, defaults in CLASSIFICATIONS:
+        raw = value.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, str):
+            raw = raw.splitlines()
+        items: list[str] = []
+        for item in raw:
+            text = " ".join(str(item).split())
+            if not text or text in items:
+                continue
+            if len(text) > CLASSIFICATION_MAX_LEN:
+                raise ValueError(
+                    f"{CLASSIFICATION_LABELS[key]}: '{text[:12]}…' 이 너무 깁니다 "
+                    f"({CLASSIFICATION_MAX_LEN}자 이하)."
+                )
+            items.append(text)
+        if len(items) > CLASSIFICATION_MAX_ITEMS:
+            raise ValueError(
+                f"{CLASSIFICATION_LABELS[key]}: 항목은 {CLASSIFICATION_MAX_ITEMS}개까지입니다."
+            )
+        out[key] = items or list(defaults)
+    return out
+
+
+def intake_template() -> str:
+    """접수 본문 서식. 비워 두면 기본 서식."""
+    from . import intakes
+
+    return str(load()["intake_template"]).strip() or intakes.DEFAULT_TEMPLATE
+
+
+def intake_stale_days() -> int:
+    try:
+        return max(1, int(load()["intake_stale_days"]))
+    except (TypeError, ValueError):
+        return int(DEFAULTS["intake_stale_days"])
 
 
 # ── AI 요약 프롬프트 (TODO 71) ────────────────────────

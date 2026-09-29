@@ -40,6 +40,11 @@ class ProjectCreate(BaseModel):
     created_by: str | None = None
     tags: list[str] = Field(default_factory=list)
     body: str | None = None
+    # 과제 분류 넷 (TODO 136) — 성격 · 분류 · 수행 방식 · 비용구분
+    nature: str | None = None
+    category: str | None = None
+    delivery: str | None = None
+    cost_kind: str | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -58,6 +63,10 @@ class ProjectUpdate(BaseModel):
     no_effect: bool | None = None
     tags: list[str] | None = None
     body: str | None = None
+    nature: str | None = None
+    category: str | None = None
+    delivery: str | None = None
+    cost_kind: str | None = None
 
     def changes(self) -> dict[str, Any]:
         # 보내지 않은 항목만 건너뛴다. 보낸 값이 null 이면 그 항목을 비우겠다는 뜻이다

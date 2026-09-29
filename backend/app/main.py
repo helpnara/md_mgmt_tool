@@ -14,8 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (activities, attachments, dashboard, entries, errors, export, folders, home,
-                  linkfix, meta, people, projects, reports, search, settings, trash, versions)
+from .api import (activities, attachments, dashboard, entries, errors, export, folders, home, intakes,
+                  linkfix, meta, people, projects, reports, search, settings, trash,
+                  versions)
 from .services import errorlog
 from .config import REPO_ROOT, get_settings
 from .vault.paths import safe_join
@@ -161,6 +162,8 @@ app.include_router(errors.router)
 app.include_router(versions.router)
 app.include_router(folders.router)
 app.include_router(linkfix.router)
+# 과제 접수 풀 (TODO 136) — /intake-files 도 여기 있으므로 SPA 되돌림보다 먼저 선다
+app.include_router(intakes.router)
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

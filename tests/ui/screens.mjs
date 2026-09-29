@@ -1161,7 +1161,7 @@ async function main() {
   await check("첫 화면은 올해 과제만 보여 준다", async () => {
     await go("#/projects");
     const year = String(new Date().getFullYear());
-    equal(await page.locator(".filters select").nth(5).inputValue(), year, "연도 칸의 기본값");
+    equal(await page.locator('.filters select[aria-label="연도"]').inputValue(), year, "연도 칸의 기본값");
     // 기본값은 주소에 적지 않는다 — 주소가 짧게 유지되고, 해가 바뀌면 저절로 따라간다.
     expect(!page.url().includes("year="), `기본값이 주소에 적혔습니다: ${page.url()}`);
   });
@@ -1170,12 +1170,12 @@ async function main() {
     // 지난해 번호를 가진 과제를 만들어 둔다.
     const year = String(new Date().getFullYear());
     const before = await page.locator(".grid tbody tr").count();
-    await page.locator(".filters select").nth(5).selectOption("all");
+    await page.locator('.filters select[aria-label="연도"]').selectOption("all");
     await page.waitForTimeout(700);
     expect(await page.locator(".grid tbody tr").count() >= before, "전체가 올해보다 적습니다");
     // [전체]는 기본값과 구분되어야 한다 — 아니면 즐겨찾기해도 올해로 돌아온다.
     expect(page.url().includes("year=all"), `[전체]가 주소에 남지 않았습니다: ${page.url()}`);
-    await page.locator(".filters select").nth(5).selectOption(year);
+    await page.locator('.filters select[aria-label="연도"]').selectOption(year);
     await page.waitForTimeout(600);
   });
 
@@ -1784,7 +1784,7 @@ async function main() {
     await go("#/");
     const names = await page.locator(".nav a").allInnerTexts();
     equal(names.map((name) => name.trim()).join("|"),
-      "홈|과제목록|보고대상|보고이력|팀원역량|설정|도움말", "메뉴 이름");
+      "홈|접수|과제목록|보고대상|보고이력|팀원역량|설정|도움말", "메뉴 이름");
   });
 
   console.log("\n[10] 과제 번호의 연도는 착수년도 (TODO 95)");
@@ -1952,7 +1952,7 @@ async function main() {
     await go("#/settings");
     const titles = await page.locator(".settings-group-title").allInnerTexts();
     const names = titles.map((text) => text.split("\n")[0].trim());
-    equal(names.join("|"), "기본|보고|서식|보관과 백업|점검", "묶음 이름");
+    equal(names.join("|"), "기본|과제 분류 · 접수|보고|서식|보관과 백업|점검", "묶음 이름");
     // 묶음마다 카드가 하나 이상 들어 있어야 한다 — 빈 묶음은 어수선함만 늘린다.
     for (const group of await page.locator(".settings-group").all()) {
       expect(await group.locator(".card").count() > 0, "카드가 없는 묶음이 있습니다");
@@ -2261,9 +2261,9 @@ async function main() {
   });
 
   console.log("\n[16] 전수 검토의 새 기능 여섯 (TODO 107~112)");
-  await check("메뉴 끝에 [도움말]이 있고 세 묶음이 선다 (TODO 111)", async () => {
+  await check("메뉴 끝에 [도움말]이 있고 네 묶음이 선다 (TODO 111 · 136)", async () => {
     await go("#/help");
-    equal(await page.locator(".help .settings-group").count(), 3, "묶음 수");
+    equal(await page.locator(".help .settings-group").count(), 4, "묶음 수");
     expect(await page.locator(".help-steps li").count() >= 4, "주간 흐름 단계");
     expect(await page.locator(".help-faq dt").count() >= 5, "자주 묻는 것");
     equal(await page.locator(".nav a.active").innerText(), "도움말", "활성 메뉴");
@@ -2593,7 +2593,7 @@ async function main() {
     expect(Math.abs(week.y - box.y) < 40, `두 칸이 같은 줄에서 시작하지 않습니다 (${week.y} vs ${box.y})`);
     expect(box.height > 0 && week.height > 0, "두 칸 모두 그려져야 한다");
     // 속성별·그룹별은 나란히
-    const slices = page.locator(".home-slices");
+    const slices = page.locator(".home-slices:has(.home-slice-type)");
     equal(await slices.count(), 1, "속성별·그룹별 묶음");
   });
 
@@ -2846,6 +2846,155 @@ async function main() {
       const got = response.headers.get("content-type") ?? "";
       expect(got.startsWith(type), `${path} 의 형식: ${got}`);
     }
+  });
+
+  console.log("\n[24] 과제 접수 풀 — 등록 · 검토 · 판정 · 승격 (TODO 136)");
+
+  let intakeId = null;
+  await check("[접수] 메뉴가 과제목록 앞에 서고 풀이 열린다", async () => {
+    await go("#/");
+    const menu = await page.locator(".app-header nav a").allInnerTexts();
+    const at = menu.findIndex((text) => text.trim() === "접수");
+    expect(at >= 0, `메뉴에 접수가 없다: ${menu.join(" | ")}`);
+    expect(menu[at + 1]?.trim() === "과제목록", `접수 다음이 과제목록이 아니다: ${menu.join(" | ")}`);
+    await go("#/intakes");
+    equal(await page.locator(".intake-pool h1").innerText(), "접수", "화면 제목");
+  });
+
+  await check("[+ 접수 등록] 으로 만들면 번호가 붙고 상세로 간다", async () => {
+    await go("#/intakes");
+    await page.getByRole("button", { name: "+ 접수 등록" }).click();
+    const form = page.locator(".intake-pool form").first();
+    await form.locator("label", { hasText: "과제명" }).locator("input").fill("압연 두께 편차 예측");
+    await form.locator('input[placeholder="예: 홍길동"]').fill("현업담당");
+    await form.locator('input[placeholder="예: 압연기술팀"]').fill("압연기술팀");
+    await form.locator('input[placeholder="요청자 추정"]').fill("2.5");
+    await form.getByRole("button", { name: "접수 등록" }).click();
+    await page.waitForFunction(() => location.hash.startsWith("#/intakes/"), null, { timeout: 5000 });
+    await page.waitForTimeout(700);
+    intakeId = decodeURIComponent(page.url().split("#/intakes/")[1].split("?")[0]);
+    expect(/^R\d{4}-(.+-)?\d{3}$/.test(intakeId), `접수 번호 모양: ${intakeId}`);
+    expect((await page.locator(".intake-detail .detail-header").innerText()).includes("압연 두께 편차 예측"), "제목");
+    // 기본 서식이 요청 내용에 깔려 있어야 한다 — 비어 있으면 무엇을 적을지 모른다.
+    const body = await page.locator(".intake-detail .intake-body").innerText();
+    for (const heading of ["배경", "목표", "효과 산출 근거", "추진내용", "활용 방안"]) {
+      expect(body.includes(heading), `서식에 ${heading} 이(가) 없다`);
+    }
+  });
+
+  await check("풀에 서고 ★ 로 착수 후보를 고를 수 있다", async () => {
+    await go("#/intakes");
+    const row = page.locator(`tr[data-intake="${intakeId}"]`);
+    equal(await row.count(), 1, "풀의 줄");
+    await row.locator("button.star").click();
+    await page.waitForTimeout(700);
+    equal((await api.get(`/api/intakes/${encodeURIComponent(intakeId)}`)).picked, true, "서버의 ★");
+    await page.locator(".picked-filter input").check();
+    await page.waitForTimeout(700);
+    equal(await page.locator("tr[data-intake]").count(), 1, "★ 만 거르면 한 줄");
+    await page.locator(".picked-filter input").uncheck();
+  });
+
+  await check("반려는 사유 없이는 안 되고, 재검토로 풀에 되돌아온다", async () => {
+    await go(`#/intakes/${encodeURIComponent(intakeId)}`);
+    await page.locator(".decision-bar").getByRole("button", { name: "반려", exact: true }).click();
+    const confirm = page.locator(".decision-panel").getByRole("button", { name: "반려(으)로 정리" });
+    expect(await confirm.isDisabled(), "사유가 비었는데 누를 수 있다");
+    await page.locator(".decision-panel textarea").fill("시험 반려");
+    await confirm.click();
+    await page.waitForTimeout(900);
+    expect((await page.locator(".decision-line").innerText()).includes("시험 반려"), "판정 사유");
+    // 닫힌 건에는 승격 단추가 없다
+    equal(await page.getByRole("button", { name: "착수 · 과제로 승격" }).count(), 0, "닫힌 건의 승격 단추");
+    await page.getByRole("button", { name: "재검토 (풀로 되돌리기)" }).click();
+    await page.waitForTimeout(900);
+    equal((await api.get(`/api/intakes/${encodeURIComponent(intakeId)}`)).status, "reviewing", "재검토 뒤 상태");
+    // 판정의 흔적은 검토 기록에 남는다
+    expect((await page.locator(".intake-logs").innerText()).includes("시험 반려"), "검토 기록의 판정 줄");
+  });
+
+  let promoted = null;
+  await check("승격 — 명부에 없는 리더는 유관부서, 요청 효과는 참고로만", async () => {
+    await api.patch(`/api/intakes/${encodeURIComponent(intakeId)}`, {
+      body: "## 배경 (과제배경)\n\n두께 편차 클레임\n\n## 추진내용\n\n모델 개발\n\n## 공정 설명\n\n압연 3단\n",
+    });
+    await go(`#/intakes/${encodeURIComponent(intakeId)}`);
+    await page.getByRole("button", { name: "착수 · 과제로 승격" }).click();
+    const dialog = page.locator(".promote-dialog");
+    await dialog.waitFor();
+    const text = await dialog.innerText();
+    expect(text.includes("요청자 추정"), "요청 효과 참고 문구");
+    const owners = await dialog.locator("label", { hasText: "담당자" }).locator("input").first().inputValue();
+    equal(owners, "", "명부에 없는 리더가 담당자로 들어갔다");
+    const partnerTeam = await dialog.locator(".partner-row input").first().inputValue();
+    equal(partnerTeam, "압연기술팀", "유관부서 줄");
+    // 저장 단추가 대화상자 안에서 보인다 (길어져도 아래에 붙어 있다)
+    const submit = dialog.getByRole("button", { name: "승격하고 과제 열기" });
+    expect(await submit.isVisible(), "승격 단추가 보이지 않는다");
+    await submit.click();
+    await page.waitForFunction(() => location.hash.startsWith("#/projects/"), null, { timeout: 5000 });
+    await page.waitForTimeout(900);
+    promoted = page.url().split("#/projects/")[1].split("?")[0];
+    const project = await api.get(`/api/projects/${promoted}`);
+    equal(project.intake_id, intakeId, "과제의 접수 번호");
+    equal(project.effect_expected ?? null, null, "요청 효과가 과제 기대효과로 넘어갔다");
+    expect(project.body.includes("두께 편차 클레임"), "배경이 제자리로 옮겨지지 않았다");
+    expect(project.body.includes("## 접수 내용") && project.body.includes("압연 3단"), "남는 섹션 모음");
+  });
+
+  await check("과제와 접수가 서로 링크된다", async () => {
+    const link = page.locator(".intake-line a.intake-link");
+    equal(await link.count(), 1, "과제 상세의 접수 링크");
+    await link.click();
+    await page.waitForTimeout(900);
+    expect(page.url().includes(`#/intakes/${encodeURIComponent(intakeId)}`), `접수로 가지 않았다: ${page.url()}`);
+    const back = page.locator(".intake-detail a.back").first();
+    equal((await back.innerText()).trim(), "← 과제", "되돌아갈 곳");
+    const line = await page.locator(".decision-line").innerText();
+    expect(line.includes(promoted), `착수 줄에 과제 번호가 없다: ${line}`);
+  });
+
+  await check("과제목록 [등록 경로] 로 접수에서 온 과제만 거른다", async () => {
+    const rows = await api.get("/api/projects?from_intake=yes");
+    equal(rows.length, 1, "접수에서 온 과제 수");
+    await go("#/projects?year=all&from_intake=yes");
+    expect((await page.locator(".project-list, .projects").first().innerText()).includes("압연 두께 편차 예측"), "목록 줄");
+  });
+
+  await check("분류 넷 상자는 스마트과제를 골랐을 때만 선다", async () => {
+    // 늘 세우면 거르기 줄이 두 줄로 넘어간다 — 다른 속성을 볼 때는 쓸 일이 없다.
+    await go("#/projects");
+    equal(await page.locator('.filters select[aria-label="성격"]').count(), 0, "기본 화면의 성격 상자");
+    await go("#/projects?type=smart");
+    equal(await page.locator('.filters select[aria-label="성격"]').count(), 1, "스마트과제의 성격 상자");
+    // 홈·과제 상세에서 분류로 걸러 왔으면 속성과 상관없이 보여야 한다 — 걸린 조건이 숨으면 안 된다.
+    await go("#/projects?category=" + encodeURIComponent("스마트 센싱"));
+    equal(await page.locator('.filters select[aria-label="분류"]').inputValue(), "스마트 센싱", "걸린 분류");
+  });
+
+  await check("홈의 접수 풀 칸 = 풀 화면의 줄 수", async () => {
+    const made = await api.post("/api/intakes", { title: "홈 확인용 접수", received_on: dayFromToday(-1) });
+    try {
+      await go("#/");
+      const stat = page.locator(".intake-stat");
+      equal(await stat.count(), 1, "접수 풀 칸");
+      const shown = Number((await stat.locator("strong").innerText()).replace(/\D/g, ""));
+      await stat.click();
+      await page.waitForTimeout(900);
+      equal(await page.locator("tr[data-intake]").count(), shown, "풀의 줄 수");
+    } finally {
+      await fetch(`${BASE}/api/intakes/${encodeURIComponent(made.id)}/archive`, { method: "POST" }); // 204 — 본문 없음
+    }
+  });
+
+  await check("설정에 분류 목록 · 접수 서식 칸이 있고 도움말에 접수 흐름이 있다", async () => {
+    await go("#/settings");
+    const card = page.locator(".intake-settings");
+    await page.locator("summary", { hasText: "과제 분류" }).first().click().catch(() => undefined);
+    equal(await card.count(), 1, "설정 카드");
+    equal(await card.locator(".class-lists textarea").count(), 4, "분류 목록 넷");
+    await go("#/help");
+    expect((await page.locator(".help").innerText()).includes("과제 접수 흐름"), "도움말 절");
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

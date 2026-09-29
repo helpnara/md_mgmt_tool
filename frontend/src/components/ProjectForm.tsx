@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { Meta, Partner, Project } from "../types";
+import type { ClassificationInfo, ClassificationKey, Meta, Partner, Project } from "../types";
 import TagSuggestions from "./TagSuggestions";
 import UnknownOwners from "./UnknownOwners";
 
@@ -48,6 +48,18 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   );
   const setPartner = (index: number, key: "team" | "people", value: string) =>
     setPartners((prev) => prev.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
+
+  /**
+   * 과제 분류 넷 (TODO 136) — 성격 · 분류 · 수행 방식 · 비용구분.
+   * 입력 칸은 **분류를 쓰는 속성(스마트과제)일 때만** 선다. 속성을 바꿔 칸이 숨어도 값은 지우지
+   * 않는다 — 실수로 속성을 잠깐 바꿨다가 되돌렸을 때 적어 둔 것이 사라지면 안 된다.
+   */
+  const [classes, setClasses] = useState<Record<ClassificationKey, string>>(() => ({
+    nature: initial?.nature ?? "",
+    category: initial?.category ?? "",
+    delivery: initial?.delivery ?? "",
+    cost_kind: initial?.cost_kind ?? "",
+  }));
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +118,10 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
         effect_verified: effect(form.effect_verified),
         no_report: noReport,
         no_effect: noEffect,
+        nature: classes.nature || null,
+        category: classes.category || null,
+        delivery: classes.delivery || null,
+        cost_kind: classes.cost_kind || null,
         // 팀 이름이 빈 줄은 보내지 않는다. 사람 이름을 나누는 일은 **서버가** 한다 (TODO 74).
         partners: partners
           .filter((row) => row.team.trim())
@@ -189,6 +205,26 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           />
         </label>
       </div>
+      {/* ── 과제 분류 넷 (TODO 136) ─────────────────────────────────────
+          스마트과제일 때만 선다. 다른 속성에 이미 값이 있으면(예전에 적어 둔 것) 그대로 보인다. */}
+      {(form.type === meta.classified_type || Object.values(classes).some(Boolean)) && (
+        <div className="form-row class-row">
+          {meta.classifications.map((info) => (
+            <ClassSelect
+              key={info.key}
+              info={info}
+              value={classes[info.key]}
+              onChange={(value) => setClasses((prev) => ({ ...prev, [info.key]: value }))}
+            />
+          ))}
+        </div>
+      )}
+      {creating && form.type === meta.classified_type && (
+        <p className="hint intake-hint">
+          스마트과제는 <a href="#/intakes">접수</a>에서 승격해 만들 수도 있습니다 — 접수 번호와 인터뷰 기록이 과제에
+          함께 이어집니다. 급한 건은 여기서 바로 만들어도 됩니다.
+        </p>
+      )}
       {/* ── 유관부서 (TODO 92) ────────────────────────────────────────
           두 팀 이상이 함께 하고, 팀마다 담당자가 여럿인 일이 흔하다.
           팀은 줄로, 사람은 그 줄 안에서 쉼표로 나눈다. */}
@@ -384,5 +420,32 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
         </button>
       </div>
     </form>
+  );
+}
+
+/** 분류 하나의 선택 상자. 목록에서 빠진 예전 값도 그대로 보인다 — 빈칸으로 바뀌면 안 된다. */
+function ClassSelect({
+  info,
+  value,
+  onChange,
+}: {
+  info: ClassificationInfo;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const items = value && !info.items.includes(value) ? [...info.items, value] : info.items;
+  return (
+    <label>
+      {info.label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">선택 안 함</option>
+        {items.map((item) => (
+          <option key={item} value={item}>
+            {item}
+            {!info.items.includes(item) ? " (목록에 없음)" : ""}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

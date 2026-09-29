@@ -1,4 +1,4 @@
-import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing } from "./types";
+import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -15,6 +15,56 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   meta: () => request<Meta>("/api/meta"),
+  // ── 과제 접수 풀 (TODO 136) ─────────────────────────
+  intakes: (params: Record<string, string>) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    return request<IntakeListing>(`/api/intakes?${query.toString()}`);
+  },
+  nextIntakeId: (receivedOn: string) =>
+    request<{ id: string }>(
+      `/api/intakes/next-id${receivedOn ? `?received_on=${encodeURIComponent(receivedOn)}` : ""}`,
+    ),
+  createIntake: (payload: Partial<Intake> & { body?: string }) =>
+    request<IntakeDetail>("/api/intakes", { method: "POST", body: JSON.stringify(payload) }),
+  getIntake: (id: string) => request<IntakeDetail>(`/api/intakes/${encodeURIComponent(id)}`),
+  updateIntake: (id: string, payload: Partial<Intake> & { body?: string }) =>
+    request<IntakeDetail>(`/api/intakes/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  setIntakeStatus: (id: string, status: string, note?: string, mergedInto?: string) =>
+    request<IntakeDetail>(`/api/intakes/${encodeURIComponent(id)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status, note: note || null, merged_into: mergedInto || null }),
+    }),
+  promotionPlan: (id: string) => request<PromotionPlan>(`/api/intakes/${encodeURIComponent(id)}/promote`),
+  promoteIntake: (
+    id: string,
+    payload: Omit<Partial<PromotionPlan>, "partners"> & { partners?: Partner[]; effect_expected?: number | null; decision_note?: string },
+  ) =>
+    request<{ project_id: string; intake: IntakeDetail }>(`/api/intakes/${encodeURIComponent(id)}/promote`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  archiveIntake: (id: string) =>
+    request<void>(`/api/intakes/${encodeURIComponent(id)}/archive`, { method: "POST" }),
+  createIntakeLog: (id: string, payload: { date: string; title: string; body: string }) =>
+    request<{ name: string; intake: IntakeDetail }>(`/api/intakes/${encodeURIComponent(id)}/logs`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateIntakeLog: (id: string, name: string, payload: { date?: string; title?: string; body?: string; mtime?: number }) =>
+    request<{ name: string; intake: IntakeDetail }>(
+      `/api/intakes/${encodeURIComponent(id)}/logs/${encodeURIComponent(name)}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  deleteIntakeLog: (id: string, name: string) =>
+    request<void>(`/api/intakes/${encodeURIComponent(id)}/logs/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  deleteIntakeAttachment: (id: string, relPath: string) =>
+    request<void>(
+      `/api/intakes/${encodeURIComponent(id)}/attachments?path=${encodeURIComponent(relPath)}`,
+      { method: "DELETE" },
+    ),
   dashboard: (year?: string) =>
     request<Dashboard>(`/api/dashboard${year ? `?year=${year}` : ""}`),
   home: (year?: string, period?: string) => {
@@ -84,7 +134,7 @@ export const api = {
   deleteAttachment: (id: number) => request<void>(`/api/attachments/${id}`, { method: "DELETE" }),
   settings: () => request<AppSettings>("/api/settings"),
   settingsDefaults: () =>
-    request<{ entry_template: string; report_template: string; ai_prompt_prefix: string }>(
+    request<{ entry_template: string; report_template: string; ai_prompt_prefix: string; intake_template: string }>(
       "/api/settings/defaults",
     ),
   /** 이 보고를 AI 에게 넘길 글. **서버가 AI 를 부르지는 않는다** (TODO 71). */

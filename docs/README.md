@@ -35,7 +35,7 @@
 | 바꾼 것 | 함께 고칠 곳 |
 |---|---|
 | 화면·기능 | TODO(결과) → DESIGN 5절 (필요하면 5.x 규칙) |
-| 저장하는 값·파일 서식 | DESIGN **4절** (4.2 개요 · 4.3 진행일지 · 4.4 보고 · 4.8 설정 · 4.9 역량) + 스키마 버전 |
+| 저장하는 값·파일 서식 | DESIGN **4절** (4.2 개요 · 4.3 진행일지 · 4.4 보고 · 4.8 설정 · 4.9 역량 · 4.10 접수) + 스키마 버전 |
 | API 끝점 | DESIGN **6절** 표와 **머리말의 개수** |
 | 설치·배포본·업데이트 절차 | ../README.md + 확산 로드맵 2절 |
 | 로드맵 항목의 상태 | ROADMAP + 확산 로드맵 (둘이 어긋나면 **확산 로드맵이 맞다** — 사람이 먼저다) |
@@ -79,10 +79,10 @@ for f in pathlib.Path("backend/app/api").glob("*.py"):
     pre = m.group(1) if m else ""
     for meth, path in re.findall(r'@router\.(get|post|put|patch|delete)\("([^"]*)"', src):
         eps.add(re.sub(r"\{[^}]*\}", "{}", pre + path).rstrip("/"))
-shown = {re.sub(r"\{[^}]*\}", "{}", p).rstrip("/") for p in re.findall(r'`(/(?:api|files)[^`]*)`', doc)}
+shown = {re.sub(r"\{[^}]*\}", "{}", p).rstrip("/") for p in re.findall(r'`(/(?:api|files|intake-files)[^`]*)`', doc)}
 print("문서(6절)에 없는 끝점:", sorted(e for e in eps if e not in shown))
 EOF
 ```
 
 > 끝점 검사는 표기가 달라도(`{id}` / `{project_id}`) 같게 보도록 이름을 지우고 견준다.
-> 남는 몇 개는 `/api/versions` · `/unfreeze` 처럼 **한 줄에 묶어 적은 것**이라 눈으로 확인한다.
+> 남는 몇 개는 `/api/versions` · `/unfreeze` · 접수의 `logs[/{name}]` 처럼 **한 줄에 묶어 적은 것**이라 눈으로 확인한다.

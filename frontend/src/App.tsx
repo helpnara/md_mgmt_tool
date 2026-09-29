@@ -9,6 +9,8 @@ import ScrollTop from "./components/ScrollTop";
 import Settings from "./components/Settings";
 import Skills from "./components/Skills";
 import Help from "./components/Help";
+import IntakeDetail from "./components/IntakeDetail";
+import IntakePool from "./components/IntakePool";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
 import { BACK_PARAM } from "./nav";
@@ -24,7 +26,10 @@ type Route =
   | { name: "history"; query: string }
   | { name: "skills"; query: string }
   | { name: "settings"; back: string | null }
-  | { name: "help" };
+  | { name: "help" }
+  // 과제 접수 풀 (TODO 136)
+  | { name: "intakes"; query: string }
+  | { name: "intake"; id: string; back: string | null };
 
 function readRoute(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
@@ -50,6 +55,9 @@ function readRoute(): Route {
   if (path.startsWith("skills")) return { name: "skills", query: queryString ?? "" };
   if (path.startsWith("settings")) return { name: "settings", back: params.get(BACK_PARAM) };
   if (path.startsWith("help")) return { name: "help" };
+  if (path.startsWith("intakes/"))
+    return { name: "intake", id: decodeURIComponent(path.slice("intakes/".length)), back: params.get(BACK_PARAM) };
+  if (path.replace(/\/$/, "") === "intakes") return { name: "intakes", query: queryString ?? "" };
   if (path.replace(/\/$/, "") === "projects") return { name: "list", query: queryString ?? "" };
   // 아는 주소가 아니면 홈으로. 손으로 고친 주소에서 빈 화면을 만나는 것보다 낫다.
   return { name: "home" };
@@ -91,7 +99,8 @@ export default function App() {
   // 다만 보고·진행일지를 지정해 여는 경우(`?report=` `?entry=`)는 건드리지 않는다 —
   // 그쪽은 해당 문서 자리로 데려가는 것이 목적이고(util.ts scrollEditorIntoView),
   // 여기서 맨 위로 올리면 그 동작을 덮어써 버린다.
-  const screenKey = route.name === "project" ? `project:${route.id}` : route.name;
+  const screenKey =
+    route.name === "project" ? `project:${route.id}` : route.name === "intake" ? `intake:${route.id}` : route.name;
   const targeted = route.name === "project" && (route.reportId !== undefined || route.entryId !== undefined);
   useEffect(() => {
     // 브라우저는 같은 문서 안 이동에서 스크롤 위치를 **되살린다.** 그대로 두면
@@ -138,6 +147,10 @@ export default function App() {
         <nav className="nav">
           <a href="#/" className={route.name === "home" ? "active" : undefined}>
             홈
+          </a>
+          {/* 접수 → 과제 순서 (TODO 136). 팀의 일이 그 순서로 흐른다. */}
+          <a href="#/intakes" className={route.name === "intakes" || route.name === "intake" ? "active" : undefined}>
+            접수
           </a>
           <a href="#/projects" className={route.name === "list" ? "active" : undefined}>
             과제목록
@@ -215,6 +228,10 @@ export default function App() {
         {route.name === "home" && <Home meta={meta} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}
         {route.name === "help" && <Help />}
+        {route.name === "intakes" && <IntakePool meta={meta} query={route.query} />}
+        {route.name === "intake" && (
+          <IntakeDetail key={route.id} intakeId={route.id} meta={meta} back={route.back} onMetaChange={loadMeta} />
+        )}
       </main>
       {/* 화면마다 따로 두지 않는다 — 요청의 핵심이 "어디서나 같은 자리"다. */}
       <ScrollTop />

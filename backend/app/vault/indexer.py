@@ -238,8 +238,9 @@ def index_project(
         """
         INSERT INTO project(id, dir_name, title, status, type, grp, owner, start_date, due_date,
                             effect_expected, effect_verified, no_report, no_effect, created_by,
-                            completed_at, created_at, updated_at, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            completed_at, nature, category, delivery, cost_kind, intake_id,
+                            created_at, updated_at, body, file_mtime)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
           type=excluded.type, grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
@@ -248,6 +249,8 @@ def index_project(
           no_report=excluded.no_report,
           no_effect=excluded.no_effect,
           created_by=excluded.created_by, completed_at=excluded.completed_at,
+          nature=excluded.nature, category=excluded.category, delivery=excluded.delivery,
+          cost_kind=excluded.cost_kind, intake_id=excluded.intake_id,
           created_at=excluded.created_at,
           updated_at=excluded.updated_at, body=excluded.body, file_mtime=excluded.file_mtime
         """,
@@ -267,6 +270,11 @@ def index_project(
             1 if _as_bool(doc.meta.get("no_effect")) else 0,
             _as_str(doc.meta.get("created_by")),
             _as_str(doc.meta.get("completed_at")),
+            _as_str(doc.meta.get("nature")),
+            _as_str(doc.meta.get("category")),
+            _as_str(doc.meta.get("delivery")),
+            _as_str(doc.meta.get("cost_kind")),
+            _as_str(doc.meta.get("intake_id")),
             _as_str(doc.meta.get("created_at")),
             updated_at,
             doc.body,
@@ -598,5 +606,9 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
 
     # 역량 이력은 과제와 이어지지 않으므로 따로 훑는다 (TODO 72).
     index_activities(conn, problems)
+    # 접수 풀도 따로 훑는다 (TODO 136)
+    from ..services.intakes import reindex_intakes
+
+    reindex_intakes(conn, problems)
     conn.commit()
     return len(found), problems
