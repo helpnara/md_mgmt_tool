@@ -591,11 +591,20 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
     settings.ensure_dirs()
     problems: list[IndexProblem] = []
     found: list[str] = []
+    seen: dict[str, str] = {}
     for project_dir in sorted(settings.projects_dir.iterdir()):
         if not project_dir.is_dir() or project_dir.name.startswith("."):
             continue
         project_id = index_project(conn, project_dir, problems)
         if project_id:
+            # 같은 번호의 폴더가 둘이면 색인에는 하나만 남는다 — 조용히 버리지 않고 알린다 (TODO 146)
+            if project_id in seen:
+                problems.append(IndexProblem(
+                    f"projects/{project_dir.name}",
+                    f"같은 번호 {project_id} 의 과제 폴더가 둘입니다({seen[project_id]}). 목록에는 하나만 "
+                    "보입니다 — 한쪽의 번호를 바꿔 주세요(설정 → 과제 번호 체계).",
+                ))
+            seen[project_id] = project_dir.name
             found.append(project_id)
 
     if found:
@@ -610,5 +619,9 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
     from ..services.intakes import reindex_intakes
 
     reindex_intakes(conn, problems)
+    # 보관함에 간 과제를 가리키는 접수는 풀로 (TODO 145 — 이 규칙 전에 지운 것까지)
+    from ..services.intakes import detach_orphans
+
+    detach_orphans(conn)
     conn.commit()
     return len(found), problems

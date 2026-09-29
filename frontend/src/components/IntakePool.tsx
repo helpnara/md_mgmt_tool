@@ -102,7 +102,7 @@ export default function IntakePool({ meta, query }: Props) {
         </div>
         {!creating && (
           <button onClick={() => setCreating(true)} className="intake-new">
-            + 접수 등록
+            접수 등록
           </button>
         )}
       </div>
@@ -293,7 +293,7 @@ export default function IntakePool({ meta, query }: Props) {
                 <b>풀이 비어 있습니다.</b>
               </p>
               <p className="hint">
-                현업에서 받은 과제정의서를 <b>[+ 접수 등록]</b>으로 받아 두세요. 인터뷰 기록을 쌓다가 착수가 정해지면
+                현업에서 받은 과제정의서를 <b>[접수 등록]</b>으로 받아 두세요. 인터뷰 기록을 쌓다가 착수가 정해지면
                 상세 화면의 <b>[착수 · 과제로 승격]</b>으로 과제를 만듭니다. 반려·보류도 사유와 함께 남습니다.
               </p>
             </>
@@ -304,7 +304,7 @@ export default function IntakePool({ meta, query }: Props) {
       {data && data.items.length > 0 && (
         <div className="card table-card">
           <div className="table-scroll">
-            <table className="intake-table">
+            <table className="grid intake-table">
               {/* 칸 폭은 번호가 아니라 **이름표**로 잡는다 — 칸이 늘거나 줄어도 밀리지 않는다 (134 · 139) */}
               <colgroup>
                 <col className="col-pick" />

@@ -2863,7 +2863,7 @@ async function main() {
 
   await check("[+ 접수 등록] 으로 만들면 번호가 붙고 상세로 간다", async () => {
     await go("#/intakes");
-    await page.getByRole("button", { name: "+ 접수 등록" }).click();
+    await page.getByRole("button", { name: "접수 등록", exact: true }).click();
     const form = page.locator(".intake-pool form").first();
     await form.locator("label", { hasText: "과제명" }).locator("input").fill("압연 두께 편차 예측");
     await form.locator('input[placeholder="예: 홍길동"]').fill("현업담당");
@@ -3083,12 +3083,12 @@ async function main() {
     }
     // 4 · 5. 접수 요청 내용 · 검토 기록
     await go(pasteIntakeHash);
-    await page.locator(".intake-body").getByRole("button", { name: "편집" }).click();
+    await page.locator(".intake-body").getByRole("button", { name: "수정" }).click();
     await page.waitForTimeout(400);
     await pasteInto(".body-editor textarea", EXCEL);
     expectTable(await page.locator(".body-editor textarea").first().inputValue(), "접수 요청 내용");
     await page.locator(".body-editor").getByRole("button", { name: "취소" }).click();
-    await page.getByRole("button", { name: "+ 검토 기록" }).click();
+    await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
     await pasteInto(".log-editor textarea", EXCEL);
     expectTable(await page.locator(".log-editor textarea").first().inputValue(), "접수 검토 기록");
@@ -3099,7 +3099,7 @@ async function main() {
 
   await check("캡처(그림만)는 여전히 첨부로 올라간다", async () => {
     await go(pasteIntakeHash);
-    await page.locator(".intake-body").getByRole("button", { name: "편집" }).click();
+    await page.locator(".intake-body").getByRole("button", { name: "수정" }).click();
     await page.waitForTimeout(400);
     await pasteInto(".body-editor textarea", { image: true });
     await page.waitForTimeout(900);
@@ -3112,7 +3112,7 @@ async function main() {
   await check("접수의 편집기 둘과 첨부 카드에 📎 · [본문에 삽입] 이 있다 (TODO 138)", async () => {
     await go(pasteIntakeHash);
     equal(await page.locator(".intake-files .attach-button").count(), 1, "첨부 카드의 📎");
-    await page.locator(".intake-body").getByRole("button", { name: "편집" }).click();
+    await page.locator(".intake-body").getByRole("button", { name: "수정" }).click();
     await page.waitForTimeout(400);
     equal(await page.locator(".body-editor .attach-button").count(), 1, "요청 내용 편집기의 📎");
     const before = await page.locator(".body-editor textarea").first().inputValue();
@@ -3120,7 +3120,7 @@ async function main() {
     const after = await page.locator(".body-editor textarea").first().inputValue();
     expect(after.length > before.length && after.includes("assets/"), "본문에 삽입이 링크를 넣지 않았다");
     await page.locator(".body-editor").getByRole("button", { name: "취소" }).click();
-    await page.getByRole("button", { name: "+ 검토 기록" }).click();
+    await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
     equal(await page.locator(".log-editor .attach-button").count(), 1, "검토 기록 편집기의 📎");
     await page.locator(".log-editor .attachments li").first().getByRole("button", { name: "본문에 삽입" }).click();
@@ -3132,7 +3132,7 @@ async function main() {
 
   await check("새 접수를 등록할 때 파일을 함께 올린다 (TODO 138)", async () => {
     await go("#/intakes");
-    await page.getByRole("button", { name: "+ 접수 등록" }).click();
+    await page.getByRole("button", { name: "접수 등록", exact: true }).click();
     const form = page.locator(".intake-pool form").first();
     await form.locator("label", { hasText: "과제명" }).locator("input").fill("파일 들고 온 접수");
     await form.locator('.intake-form-files input[type="file"]').setInputFiles({
@@ -3187,7 +3187,7 @@ async function main() {
     expect(right.x >= left.x + left.width - 1 && Math.abs(right.y - left.y) < 4, `나란히 서지 않는다: ${JSON.stringify({ left, right })}`);
     equal(await page.locator(".intake-columns .detail-left .intake-files").count(), 1, "첨부는 왼쪽");
     equal(await page.locator(".intake-columns .detail-right .intake-logs").count(), 1, "검토 기록은 오른쪽");
-    await page.getByRole("button", { name: "+ 검토 기록" }).click();
+    await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
     const r2 = await page.locator(".intake-columns .detail-right").boundingBox();
     const l2 = await page.locator(".intake-columns .detail-left").boundingBox();
@@ -3217,6 +3217,50 @@ async function main() {
     await card.locator("a").first().click();
     await page.waitForTimeout(800);
     equal((await page.locator(".intake-detail a.back").innerText()).trim(), "← 검색 결과", "되돌아갈 곳");
+  });
+
+  console.log("\n[26] 과제 삭제와 접수 연결 · 화면 통일 (TODO 145 · 147)");
+
+  await check("접수에서 온 과제를 지우려 하면 [중단]을 먼저 권하고, 지우면 접수가 풀로 (TODO 145)", async () => {
+    const made = await api.post("/api/intakes", { title: "지울 과제의 접수" });
+    const id = encodeURIComponent(made.id);
+    const promoted = await api.post(`/api/intakes/${id}/promote`, { owners: ["권경락"] });
+    await go(`#/projects/${promoted.project_id}`);
+    await page.locator(".detail-actions, .card").first().getByRole("button", { name: "삭제", exact: true }).first().click();
+    const panel = page.locator(".archive-panel");
+    await panel.waitFor({ timeout: 3000 });
+    expect((await panel.innerText()).includes(made.id), "판에 접수 번호가 없다");
+    equal(await panel.getByRole("button", { name: "중단으로 바꾸기" }).count(), 1, "[중단으로 바꾸기]");
+    await panel.getByRole("button", { name: "그래도 삭제" }).click();
+    await page.waitForTimeout(1000);
+    const intake = await api.get(`/api/intakes/${id}`);
+    equal(intake.status, "reviewing", "지운 뒤 접수 상태");
+    equal(intake.project_id, null, "지운 뒤 접수의 과제 번호");
+  });
+
+  await check("메뉴 화면의 제목은 한 모양이다 — 20px (TODO 147)", async () => {
+    const sizes = {};
+    for (const hash of ["#/", "#/intakes", "#/projects", "#/reports", "#/history", "#/skills", "#/settings", "#/help"]) {
+      await go(hash);
+      const h1 = page.locator("main h1, section h1").first();
+      equal(await h1.count(), 1, `${hash} 에 제목이 없다`);
+      sizes[hash] = await h1.evaluate((el) => getComputedStyle(el).fontSize);
+    }
+    const kinds = new Set(Object.values(sizes));
+    equal(kinds.size, 1, `제목 크기가 갈린다: ${JSON.stringify(sizes)}`);
+  });
+
+  await check("거르기 줄의 상자 높이가 화면마다 같다 · 접수 표도 같은 표 모양 (TODO 147)", async () => {
+    const heights = new Set();
+    for (const hash of ["#/intakes", "#/projects", "#/reports", "#/skills"]) {
+      await go(hash);
+      for (const h of await page.locator(".filters select, .filters input:not([type=checkbox])").evaluateAll(
+        (els) => els.filter((el) => el.offsetParent).map((el) => Math.round(el.getBoundingClientRect().height)),
+      )) heights.add(h);
+    }
+    equal(heights.size, 1, `상자 높이가 갈린다: ${[...heights].join(", ")}`);
+    await go("#/intakes");
+    equal(await page.locator("table.grid.intake-table").count(), 1, "접수 표의 모양");
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

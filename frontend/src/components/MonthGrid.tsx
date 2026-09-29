@@ -143,10 +143,11 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
                     return (
                       <tr key={project.id} className={mine.size ? undefined : "quiet-row"}>
                         <td className="month-name">
+                          {/* 번호는 제목 **위** — 과제목록·보고대상과 같은 순서 (TODO 147) */}
+                          <span className="project-id">{project.id}</span>
                           <a href={projectLink(project.id)} title={project.title}>
                             {project.title}
                           </a>
-                          <span className="project-id">{project.id}</span>
                         </td>
                         {MONTHS.map((month) => {
                           // 기간에 든 것을 **앞으로 당긴다.** 한 칸에 두 건까지만 세우므로,

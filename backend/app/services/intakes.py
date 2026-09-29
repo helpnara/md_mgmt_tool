@@ -88,6 +88,9 @@ META_ORDER = [
     "received_on", "decided_on", "decision_note",
     # 착수하면 과제 번호, 병합하면 흡수한 과제 번호
     "project_id", "merged_into",
+    # 과제를 지워 착수·병합이 풀렸을 때 그 과제 번호와 관계(started/merged) — 보관함에서 과제를
+    # 되돌리면 이 접수가 아직 풀에 있을 때 다시 잇는 근거다 (TODO 145)
+    "detached_from", "detached_as",
     "tags", "created_by", "created_at", "updated_at",
 ]
 
@@ -132,14 +135,12 @@ def next_intake_id(year: int | None = None, code: str | None = None) -> str:
     if code is None:
         code = settings_service.project_code()
     prefix = f"R{year}-{code}-" if code else f"R{year}-"
-    used = 0
-    for child in settings.intakes_dir.iterdir():
-        if not child.is_dir() or not child.name.startswith(prefix):
-            continue
-        seq = child.name[len(prefix):].split("-")[0]
-        if seq.isdigit():
-            used = max(used, int(seq))
-    return f"{prefix}{used + 1:03d}"
+    # 지운 접수의 번호도 다시 쓰지 않는다 (TODO 146 — 과제 번호와 같은 규칙)
+    from .projects import max_sequence
+
+    names = [child.name for child in settings.intakes_dir.iterdir() if child.is_dir()]
+    names += list(trash_service.used_folder_names("intakes"))
+    return f"{prefix}{max_sequence(names, prefix) + 1:03d}"
 
 
 def intake_id_from_dir_name(dir_name: str) -> str:
@@ -415,6 +416,167 @@ def archive_intake(conn: sqlite3.Connection, intake_id: str) -> None:
     )
     conn.execute("DELETE FROM intake WHERE id = ?", (intake_id,))
     conn.commit()
+
+
+# ── 과제를 지우고 되돌릴 때 (TODO 145) ──────────────────────────────────────
+#
+# 원칙 — 접수 하나에 착수 과제는 **하나**이고, 누구와 이어졌는지는 **접수 쪽이 정답**이다
+# (접수의 project_id). 과제의 intake_id 는 되짚어 가는 표지일 뿐이라 둘이 어긋나면 접수를 따른다.
+
+def detach_from_project(conn: sqlite3.Connection, project_id: str, project_title: str) -> list[str]:
+    """과제를 지우면 그 과제로 착수·병합된 접수를 **묻지 않고 풀로** 되돌린다 (사용자 결정).
+
+    판정 칸은 비우고, 흔적은 검토 기록의 `상태변경` 줄 하나로 남긴다. 어느 과제에서 풀렸는지는
+    `detached_from` 에 적어 둔다 — 보관함에서 과제를 되돌릴 때 다시 잇는 근거다.
+    """
+    rows = conn.execute(
+        "SELECT id, status FROM intake WHERE (status = 'started' AND project_id = ?)"
+        " OR (status = 'merged' AND merged_into = ?)",
+        (project_id, project_id),
+    ).fetchall()
+    moved: list[str] = []
+    for row in rows:
+        directory = intake_dir(conn, row["id"])
+        request = directory / REQUEST_FILE
+        doc = md.load(request)
+        relation = "started" if row["status"] == "started" else "merged"
+        meta = md.merge_meta(doc.meta, {
+            "status": "reviewing", "project_id": None, "merged_into": None,
+            "decided_on": None, "decision_note": None,
+            "detached_from": project_id, "detached_as": relation,
+        })
+        meta["updated_at"] = now_iso()
+        md.save(request, md.MarkdownDoc(_ordered(meta), doc.body))
+        what = "착수" if relation == "started" else "병합"
+        _log_status_change(
+            directory, row["status"], "reviewing",
+            f"\n\n과제 **{project_id}** ({project_title}) 을(를) 지워 {what}을(를) 되돌렸다. 과제는 삭제 보관함에 있고, "
+            "거기서 되돌리면 이 접수가 아직 풀에 있을 때 다시 이어진다.\n",
+        )
+        index_intake(conn, directory)
+        moved.append(row["id"])
+    return moved
+
+
+def detach_orphans(conn: sqlite3.Connection) -> list[str]:
+    """이 규칙이 생기기 전에 과제를 지워 **이미 미아가 된** 접수를 풀로 (TODO 145).
+
+    가리키는 과제가 없고 **그 과제가 삭제 보관함에 있을 때만** — 폴더를 손으로 잠시 옮겨 둔 것까지
+    풀로 돌리면 안 된다. 새로 지우는 과제와 같은 규칙(`detach_from_project`)을 쓴다.
+    """
+    trashed = trash_service.trashed_projects()
+    if not trashed:
+        return []
+    live = {row["id"] for row in conn.execute("SELECT id FROM project")}
+    orphans = {
+        row["target"]
+        for row in conn.execute(
+            "SELECT CASE WHEN status = 'started' THEN project_id ELSE merged_into END AS target FROM intake"
+            " WHERE status IN ('started', 'merged')"
+        )
+        if row["target"] and row["target"] not in live and row["target"] in trashed
+    }
+    moved: list[str] = []
+    for project_id in sorted(orphans):
+        label = trashed[project_id]
+        title = label.split(" ", 1)[1] if label.startswith(project_id + " ") else label
+        moved += detach_from_project(conn, project_id, title)
+    return moved
+
+
+def reattach_project(conn: sqlite3.Connection, project_id: str) -> dict[str, list[str]]:
+    """보관함에서 과제를 되돌린 뒤 — 접수가 **아직 풀에 있을 때만** 다시 잇는다 (TODO 145).
+
+    그 사이 다른 과제로 착수됐거나(다시 승격) 반려·이관·병합됐으면 잇지 않고, 과제 쪽의 접수 표지
+    (`intake_id`)를 뗀다 — 접수 하나에 착수 과제가 둘이 되면 안 된다. 되돌리기 자체는 막지 않는다.
+    양쪽에 한 줄씩 남긴다.
+    """
+    from . import projects as projects_service
+
+    project = conn.execute("SELECT title, intake_id FROM project WHERE id = ?", (project_id,)).fetchone()
+    if project is None:
+        return {"relinked": [], "detached": []}
+    relinked: list[str] = []
+    for row in conn.execute("SELECT id, status, project_id, merged_into FROM intake").fetchall():
+        directory = intake_dir(conn, row["id"])
+        request = directory / REQUEST_FILE
+        doc = md.load(request)
+        if str(doc.meta.get("detached_from") or "") != project_id:
+            continue
+        relation = str(doc.meta.get("detached_as") or "started")
+        clear = {"detached_from": None, "detached_as": None}
+        if row["status"] in INTAKE_POOL_STATUSES:
+            changes = {**clear, "decided_on": today()}
+            if relation == "merged":
+                changes.update({"status": "merged", "merged_into": project_id})
+            else:
+                changes.update({"status": "started", "project_id": project_id})
+            meta = md.merge_meta(doc.meta, changes)
+            meta["updated_at"] = now_iso()
+            md.save(request, md.MarkdownDoc(_ordered(meta), doc.body))
+            _log_status_change(
+                directory, row["status"], changes["status"],
+                f"\n\n삭제 보관함에서 과제 **{project_id}** ({project['title']}) 을(를) 되돌려 다시 이었다.\n",
+            )
+            relinked.append(row["id"])
+        else:
+            meta = md.merge_meta(doc.meta, clear)
+            md.save(request, md.MarkdownDoc(_ordered(meta), doc.body))
+            now = row["project_id"] or row["merged_into"]
+            _log_line(
+                directory, f"(연결) 과제 {project_id} 되돌림 — 잇지 않음",
+                f"삭제 보관함에서 과제 **{project_id}** ({project['title']}) 이(가) 되돌아왔지만, 이 접수는 그 사이 "
+                f"**{INTAKE_STATUS_LABELS.get(row['status'], row['status'])}**"
+                + (f"(→ {now})" if now else "") + " 이라 다시 잇지 않았다.\n",
+            )
+        index_intake(conn, directory)
+
+    # 과제 쪽 표지 — 접수가 이 과제를 가리키지 않으면 뗀다(접수가 정답)
+    detached: list[str] = []
+    intake_id = project["intake_id"]
+    if intake_id:
+        row = conn.execute("SELECT status, project_id, merged_into FROM intake WHERE id = ?", (intake_id,)).fetchone()
+        if row is None or not (row["status"] == "started" and row["project_id"] == project_id):
+            directory = projects_service.project_dir(conn, project_id)
+            index_md = directory / "index.md"
+            doc = md.load(index_md)
+            meta = md.merge_meta(doc.meta, {"intake_id": None})
+            md.save(index_md, md.MarkdownDoc(meta, doc.body))
+            if row is None:
+                why = f"접수 {intake_id} 을(를) 찾을 수 없어"
+            else:
+                now = row["project_id"] or row["merged_into"]
+                why = (f"접수 {intake_id} 은(는) 그 사이 **{INTAKE_STATUS_LABELS.get(row['status'], row['status'])}**"
+                       + (f"(→ {now})" if now else "") + " 이라")
+            projects_service.log_system_line(
+                directory, f"(접수) {intake_id} 연결을 떼었다",
+                f"삭제 보관함에서 되돌렸다. {why} 이 과제의 접수 연결을 떼었다 — 이제 *직접 등록* 과제로 본다. "
+                "같은 일을 하는 과제가 둘이면 한쪽을 [중단]하거나 지워 주세요.\n",
+            )
+            from ..vault.indexer import index_project
+
+            index_project(conn, directory)
+            detached.append(intake_id)
+    conn.commit()
+    return {"relinked": relinked, "detached": detached}
+
+
+def _log_line(directory: Path, title: str, body: str) -> None:
+    """검토 기록에 도구가 남기는 한 줄 (판정 줄과 같은 태그 — 사람이 쓴 기록 수에 세지 않는다)."""
+    from .entries import entry_stem
+
+    try:
+        logs_dir = directory / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        day = today()
+        target = paths.unique_path(logs_dir, entry_stem(day, title), ".md")
+        stamp = now_iso()
+        md.save(target, md.MarkdownDoc({
+            "date": day, "title": title, "author": settings_service.current_author(None) or None,
+            "tags": [STATUS_CHANGE_TAG], "created_at": stamp, "updated_at": stamp,
+        }, body))
+    except OSError:
+        pass
 
 
 # ── 검토 기록 (인터뷰) ──────────────────────────────────────────────────────
@@ -938,6 +1100,13 @@ def reindex_intakes(conn: sqlite3.Connection, problems: list | None = None) -> i
             continue
         intake_id = index_intake(conn, directory, problems)
         if intake_id:
+            if intake_id in found and problems is not None:  # 같은 번호가 둘 (TODO 146)
+                from ..vault.indexer import IndexProblem
+
+                problems.append(IndexProblem(
+                    f"intakes/{directory.name}",
+                    f"같은 번호 {intake_id} 의 접수 폴더가 둘입니다. 풀에는 하나만 보입니다.",
+                ))
             found.append(intake_id)
     if found:
         marks = ",".join("?" * len(found))

@@ -130,6 +130,8 @@ export default function ProjectDetail({
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   // 편집을 닫으면 배치가 다시 2단으로 돌아가므로, 고치던 기록 자리로 되돌려 놓는다.
   const lastEditedEntry = useRef<number | null>(null);
+  // 접수에서 온 과제를 지우려 할 때 — [중단]을 먼저 권한다 (TODO 145)
+  const [confirmingArchive, setConfirmingArchive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<{ items: Attachment[]; total_bytes: number; orphan_count: number }>(
     { items: [], total_bytes: 0, orphan_count: 0 },
@@ -454,16 +456,70 @@ export default function ProjectDetail({
             <button
               className="ghost danger"
               onClick={async () => {
-                if (!window.confirm("이 과제를 보관함(.trash)으로 옮길까요?")) return;
+                // 접수에서 온 과제면 확인창 대신 판을 연다 — 지우면 접수가 풀로 돌아간다는 것과
+                // 그만둔 과제는 [중단]이 맞다는 것을 함께 말해야 한다 (TODO 145)
+                if ((project.intakes ?? []).length > 0) {
+                  setConfirmingArchive((value) => !value);
+                  return;
+                }
+                if (!window.confirm("이 과제를 삭제 보관함으로 옮길까요?\n\n설정 → 삭제 보관함에서 되돌릴 수 있습니다.")) return;
                 await api.archiveProject(project.id);
                 // 보관한 과제는 사라진다. 온 곳이 목록 성격이면 그리로 돌려보낸다.
                 window.location.hash = backTarget(back).href;
               }}
             >
-              보관
+              {/* 이름은 **삭제** — 기록·접수·첨부의 삭제와 같은 말. 모두 보관함으로 옮길 뿐이다 (TODO 147) */}
+              삭제
             </button>
           </div>
         </div>
+
+        {confirmingArchive && (
+          <div className="archive-panel">
+            <p>
+              이 과제는 접수{" "}
+              <b>{(project.intakes ?? []).map((item) => item.id).join(", ")}</b> 와(과) 이어져 있습니다. 보관함으로
+              삭제하면(삭제 보관함으로) 그 접수는 <b>검토중으로 풀에 돌아갑니다</b>(검토 기록에 한 줄 남습니다).
+            </p>
+            <p className="hint">
+              <b>하다가 그만둔 과제</b>라면 지우지 말고 상태를 <b>중단</b>으로 두세요 — 요청이 어떻게 끝났는지가
+              기록에 남습니다. 삭제는 <b>잘못 만든 과제</b>를 치울 때 씁니다.
+            </p>
+            <div className="form-actions left">
+              {project.status !== "dropped" && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.updateProject(project.id, { status: "dropped" });
+                      setConfirmingArchive(false);
+                      load();
+                    } catch (err) {
+                      setError((err as Error).message);
+                    }
+                  }}
+                >
+                  중단으로 바꾸기
+                </button>
+              )}
+              <button
+                className="ghost danger"
+                onClick={async () => {
+                  try {
+                    await api.archiveProject(project.id);
+                    window.location.hash = backTarget(back).href;
+                  } catch (err) {
+                    setError((err as Error).message);
+                  }
+                }}
+              >
+                그래도 삭제
+              </button>
+              <button className="ghost" onClick={() => setConfirmingArchive(false)}>
+                취소
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 번호의 연도가 시작일과 어긋났으면 여기서 알린다 (TODO 95) */}
         <YearFixNote

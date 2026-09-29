@@ -122,20 +122,10 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
                 과제리더 {intake.leader ?? "—"}
                 {intake.leader_team && ` · ${intake.leader_team}`}
               </span>
-              <span>
-                접수 {intake.received_on ?? "—"}
-                {open && intake.age_days !== null && (
-                  <b className={intake.stale ? "due-danger" : undefined}> · D+{intake.age_days}</b>
-                )}
-              </span>
+              <span>접수 {intake.received_on ?? "—"}</span>
               {(intake.start_date || intake.due_date) && (
                 <span>
                   추진 {intake.start_date ?? "?"} ~ {intake.due_date ?? "?"}
-                </span>
-              )}
-              {intake.effect_request !== null && (
-                <span title="요청자 추정 — 승격할 때 과제로 옮기지 않고 참고로만 보여 줍니다">
-                  요청 기대효과 {effectNumber(intake.effect_request)} 억원/년
                 </span>
               )}
               {intake.priority_note && <span>중요도 근거: {intake.priority_note}</span>}
@@ -185,6 +175,23 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
                 >
                   {intake.picked ? "☆ 후보에서 빼기" : "★ 착수 후보로"}
                 </button>
+                {/* 삭제는 과제 상세와 같은 자리·같은 이름 — 머리의 맨 끝 (TODO 147) */}
+                <button
+                  className="ghost danger"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `${intake.id} 을(를) 삭제 보관함으로 옮길까요?\n\n잘못 만든 접수를 지우는 것입니다. 할 수 없게 된 요청은 지우지 말고 [반려]로 남겨 주세요 — 반년 뒤 같은 요청이 오면 그 기록이 답이 됩니다.`,
+                      )
+                    )
+                      void api
+                        .archiveIntake(intake.id)
+                        .then(() => (window.location.hash = "#/intakes"))
+                        .catch((err: Error) => setError(err.message));
+                  }}
+                >
+                  삭제
+                </button>
               </>
             ) : (
               intake.status !== "started" && (
@@ -201,6 +208,35 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
             )}
           </div>
         </div>
+
+        {/* 과제 상세와 같은 요약 줄 — 작은 이름 위에 값 (TODO 147) */}
+        <dl className="summary-bar">
+          <div>
+            <dt>경과</dt>
+            <dd className={open && intake.stale ? "danger" : undefined}>
+              {open && intake.age_days !== null ? `D+${intake.age_days}` : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>검토 기록</dt>
+            <dd>{intake.log_count}건</dd>
+          </div>
+          <div>
+            <dt>첨부</dt>
+            <dd>{intake.attachments.length}건</dd>
+          </div>
+          <div title="요청자 추정 — 승격할 때 과제로 옮기지 않고 참고로만 보여 줍니다">
+            <dt>요청 기대효과 억원/년</dt>
+            <dd>
+              {intake.effect_request !== null ? effectNumber(intake.effect_request) : "—"}
+              {intake.effect_request !== null && <span className="muted"> · 요청자 추정</span>}
+            </dd>
+          </div>
+          <div>
+            <dt>상태</dt>
+            <dd>{intake.status_label}</dd>
+          </div>
+        </dl>
 
         {open && (
           <div className="decision-bar">
@@ -286,7 +322,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
           <div className="card-head-actions">
             {open && (
               <button
-                className={showVersions ? "ghost small on" : "ghost small"}
+                className={showVersions ? "ghost on" : "ghost"}
                 onClick={() => setShowVersions((v) => !v)}
                 title="문제 정의가 바뀌기 전의 요청 내용을 봅니다 — 고칠 때마다 한 벌씩 남습니다."
               >
@@ -294,8 +330,8 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
               </button>
             )}
             {open && !editingBody && (
-              <button className="ghost small" onClick={() => setEditingBody(true)}>
-                편집
+              <button className="ghost" onClick={() => setEditingBody(true)}>
+                수정
               </button>
             )}
           </div>
@@ -336,26 +372,6 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
       </div>
       </div>
 
-      {open && (
-        <p className="danger-zone">
-          <button
-            className="ghost small danger"
-            onClick={() => {
-              if (
-                window.confirm(
-                  `${intake.id} 을(를) 보관함으로 옮길까요?\n\n잘못 만든 접수를 지우는 것입니다. 할 수 없게 된 요청은 지우지 말고 [반려]로 남겨 주세요 — 반년 뒤 같은 요청이 오면 그 기록이 답이 됩니다.`,
-                )
-              )
-                void api
-                  .archiveIntake(intake.id)
-                  .then(() => (window.location.hash = "#/intakes"))
-                  .catch((err: Error) => setError(err.message));
-            }}
-          >
-            접수 삭제 (보관함으로)
-          </button>
-        </p>
-      )}
     </section>
   );
 }
@@ -769,38 +785,42 @@ function Logs({
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   useEffect(() => onEditingChange(adding || editing !== null), [adding, editing, onEditingChange]);
+  // 과제 상세의 수행 이력과 **같은 짜임**이다 (TODO 147) — 머리는 카드 밖, 기록은 한 장씩 카드,
+  // [기록 추가]는 주 단추, [수정]·[삭제]는 보통 크기. 2단의 오른쪽이 두 화면에서 같게 읽히게 한다.
   return (
-    <div className="card intake-logs">
-      <div className="card-head">
-        <h2>검토 기록 ({intake.log_count})</h2>
+    <div className="intake-logs">
+      <div className="card-head timeline-head">
+        <h2>검토 기록 ({intake.log_count}건)</h2>
         {intake.in_pool && !adding && (
-          <button className="ghost small" onClick={() => setAdding(true)}>
-            + 검토 기록
-          </button>
+          <div className="timeline-actions">
+            <button onClick={() => setAdding(true)}>기록 추가</button>
+          </div>
         )}
       </div>
-      <p className="hint">
+      <p className="hint timeline-hint">
         인터뷰·협의로 문제 정의가 바뀌고 구체화되는 과정을 남깁니다. 승격해도 여기 남고, 과제에서는 링크로 이어집니다.
       </p>
       {adding && (
-        <LogEditor
-          intake={intake}
-          base={base}
-          onCancel={() => setAdding(false)}
-          onSaved={() => {
-            setAdding(false);
-            onChanged();
-          }}
-          onUploaded={onChanged}
-        />
+        <div className="card log-editor-card">
+          <LogEditor
+            intake={intake}
+            base={base}
+            onCancel={() => setAdding(false)}
+            onSaved={() => {
+              setAdding(false);
+              onChanged();
+            }}
+            onUploaded={onChanged}
+          />
+        </div>
       )}
-      {intake.logs.length === 0 && !adding && <p className="muted">아직 기록이 없습니다.</p>}
-      <ul className="intake-log-list">
+      {intake.logs.length === 0 && !adding && <p className="empty card">아직 기록이 없습니다.</p>}
+      <ol className="timeline">
         {intake.logs.map((log) => {
           const auto = log.tags.includes("상태변경");
           if (editing === log.name)
             return (
-              <li key={log.name}>
+              <li key={log.name} className="card log-editor-card">
                 <LogEditor
                   intake={intake}
                   base={base}
@@ -815,18 +835,22 @@ function Logs({
               </li>
             );
           return (
-            <li key={log.name} className={auto ? "entry status-change" : "entry"}>
+            <li key={log.name} className={`card entry${auto ? " status-change" : ""}`}>
               <div className="entry-head">
-                <span className="entry-date">{log.date}</span>
-                <b>{log.title}</b>
-                {log.author && <span className="muted"> · {log.author}</span>}
+                <div>
+                  <span className="entry-date">
+                    {log.date}
+                    {log.author && <span className="entry-author">{log.author}</span>}
+                  </span>
+                  <h3>{log.title}</h3>
+                </div>
                 {intake.in_pool && !auto && (
-                  <span className="entry-actions">
-                    <button className="ghost small" onClick={() => setEditing(log.name)}>
+                  <div className="entry-actions">
+                    <button className="ghost" onClick={() => setEditing(log.name)}>
                       수정
                     </button>
                     <button
-                      className="ghost small danger"
+                      className="ghost danger"
                       onClick={async () => {
                         if (!window.confirm(`"${log.title}" 기록을 보관함으로 옮길까요?`)) return;
                         try {
@@ -839,14 +863,14 @@ function Logs({
                     >
                       삭제
                     </button>
-                  </span>
+                  </div>
                 )}
               </div>
               <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(log.body, `${base}/logs`) }} />
             </li>
           );
         })}
-      </ul>
+      </ol>
     </div>
   );
 }

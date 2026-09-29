@@ -108,9 +108,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px; }
 /* 셀렉트 여덟 개가 한 줄에 다 서지 못하는 폭이 있다 — 1366×768 에 윈도우 125% 배율이면
    뷰포트가 1093px 이고, 그 폭에서 마지막 셀렉트가 잘려 페이지가 옆으로 밀렸다 (TODO 83).
    접히게 두면 줄이 하나 늘 뿐이고, 가로 스크롤은 생기지 않는다. */
-.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filters select { width: auto; min-width: 130px; }
-.toolbar-actions { display: flex; gap: 8px; }
+.toolbar-actions { display: flex; gap: 8px; align-items: center; }
 
 .grid { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .grid th, .grid td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
@@ -226,7 +226,7 @@ button.small { padding: 3px 9px; font-size: 12px; }
 .app-header { gap: 16px; }
 .search-box { display: flex; gap: 6px; flex: 1; max-width: 480px; margin: 0 auto; }
 .search-box input { min-width: 0; }
-.search-title { font-size: 18px; margin: 4px 0 14px; }
+.search-title { font-size: 20px; margin: 0 0 14px; }
 .result-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .result-list li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd; }
 .result-list a { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); flex-wrap: wrap; }
@@ -918,7 +918,7 @@ button { white-space: nowrap; }
    모든 수는 눌러서 그 조건의 목록으로 이어지므로, 숫자 칸 자체가 링크다. */
 .home { display: flex; flex-direction: column; gap: 14px; }
 .home-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.home-head h1 { margin: 0; font-size: 22px; }
+.home-head h1 { margin: 0; font-size: 20px; }
 .home-year { flex-direction: row; align-items: center; gap: 8px; }
 .home-year select { width: auto; min-width: 110px; }
 .home .card { margin: 0; }
@@ -1518,13 +1518,7 @@ button.linkish.on { font-weight: 700; text-decoration: underline; }
 .stale-note { margin: 8px 0 0; font-size: 13px; }
 .intake-file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .intake-file-list li { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.intake-log-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.intake-log-list .entry { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
-.intake-log-list .entry-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
-.intake-log-list .entry-date { font-variant-numeric: tabular-nums; color: var(--muted-strong); font-size: 13px; }
-.intake-log-list .entry-actions { margin-left: auto; display: flex; gap: 4px; }
 .log-editor, .body-editor { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
-.danger-zone { margin-top: 18px; text-align: right; }
 
 .promote-dialog { max-width: 860px; display: flex; flex-direction: column; gap: 10px; }
 .promote-dialog .partner-row { display: flex; gap: 6px; margin-top: 4px; }
@@ -1543,13 +1537,8 @@ a.class-chip:hover { background: #e2e8f0; }
 .cost-split { display: block; }
 .class-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 8px 0; }
 .class-lists textarea { font-size: 13px; }
-/* 검토 기록 머리 — 과제 쪽 .entry-head 의 양끝 정렬을 이어받으면 단추가 없는 줄(상태 변경)에서
-   제목이 가운데로 떠 버린다. 앞에서부터 채운다. */
-.intake-log-list .entry-head { justify-content: flex-start; }
 /* 승격 단추는 늘 보여야 한다 — 개요 미리보기를 펼치면 대화상자가 길어진다 */
 .promote-dialog > .form-actions { position: sticky; bottom: -18px; background: var(--surface); padding: 10px 0 4px; border-top: 1px solid var(--border); margin-bottom: -4px; }
-.intake-table th { white-space: nowrap; padding: 6px 8px; }
-.intake-table td { padding: 6px 8px; }
 
 /* ── 접수 번호 (TODO 139) ─────────────────────────────────
    과제의 번호 딱지(.project-id — 제목 위에 얹는 11px 흐린 글씨)를 빌려 쓰면, 제 칸을 가진
@@ -1576,3 +1565,18 @@ a.class-chip:hover { background: #e2e8f0; }
 .intake-form-file-list li { display: flex; align-items: center; gap: 8px; }
 /* 판정 사유는 한두 줄이다 — 일반 textarea 높이(본문 편집용)를 물려받으면 칸이 화면을 덮는다 */
 .decision-panel textarea { min-height: 56px; height: 64px; }
+/* 접수에서 온 과제를 지우려 할 때의 판 (TODO 145) — 판정 사유 판과 같은 모양 */
+.archive-panel { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--danger); border-radius: 8px; background: var(--surface); }
+.archive-panel p { margin: 0 0 6px; font-size: 13px; }
+
+/* ── 화면 통일 (TODO 147) ────────────────────────────────
+   메뉴 화면의 제목은 한 모양(20px · 설명 한 줄), 표는 한 모양(.grid), 2단의 오른쪽은 과제 상세의
+   수행 이력과 같은 짜임(머리는 카드 밖 · 기록은 한 장씩). */
+.page-head > .hint { margin: 0; }
+.intake-logs .entry .entry-head { cursor: default; }
+.intake-logs .timeline-hint { margin: -6px 0 12px; }
+.intake-logs .log-editor-card { padding: 14px 16px; }
+.intake-table .intake-title { color: var(--text); }
+.summary-bar dd.danger { color: var(--danger); }
+/* 거르기 줄의 글 칸도 선택 상자와 같은 높이로 (TODO 147) */
+.filters input:not([type="checkbox"]):not([type="radio"]) { padding-top: 5px; padding-bottom: 5px; }

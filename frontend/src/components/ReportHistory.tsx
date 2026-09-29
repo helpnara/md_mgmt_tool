@@ -75,9 +75,13 @@ export default function ReportHistory({ meta, query }: Props) {
           ← {backTarget(back).label}
         </a>
       )}
+      <div className="page-head">
+        <h1>보고 이력</h1>
+        <p className="hint">과제를 가로질러 지난 보고를 찾습니다 — 피보고자·기간·검색어. 과제 × 월 표에서 기간에 든 보고가 붉게 섭니다.</p>
+      </div>
       <div className="card">
         <div className="card-head">
-          <h2>보고 이력</h2>
+          <h2>찾을 조건</h2>
           {items && (
             <span className="hint">
               {filtered ? `조건에 맞는 보고 ${items.length}건` : `보고 ${items.length}건`}

@@ -239,14 +239,22 @@ def next_project_id(year: int | None = None, code: str | None = None) -> str:
         code = settings_service.project_code()
     prefix = f"{year}-{code}-" if code else f"{year}-"
 
+    # 번호는 한 번 쓰면 다시 쓰지 않는다 — 삭제 보관함에 간 과제의 번호도 센다 (TODO 146).
+    names = [child.name for child in settings.projects_dir.iterdir() if child.is_dir()]
+    names += list(trash_service.used_folder_names("projects"))
+    return f"{prefix}{max_sequence(names, prefix) + 1:03d}"
+
+
+def max_sequence(names: list[str], prefix: str) -> int:
+    """`prefix` 로 시작하는 이름들의 가장 큰 일련번호. 없으면 0."""
     used = 0
-    for child in settings.projects_dir.iterdir():
-        if not child.is_dir() or not child.name.startswith(prefix):
+    for name in names:
+        if not name.startswith(prefix):
             continue
-        seq = child.name[len(prefix):].split("-")[0]
+        seq = name[len(prefix):].split("-")[0]
         if seq.isdigit():
             used = max(used, int(seq))
-    return f"{prefix}{used + 1:03d}"
+    return used
 
 
 def project_dir(conn: sqlite3.Connection, project_id: str) -> Path:
@@ -359,11 +367,23 @@ def _log_status_change(directory: Path, old: str, new: str) -> None:
     뒤바뀐다.
     """
     from ..config import STATUS_LABELS
+
+    log_system_line(
+        directory,
+        f"(상태) {STATUS_LABELS.get(old, old)} → {STATUS_LABELS.get(new, new)}",
+        f"상태를 **{STATUS_LABELS.get(old, old)}** 에서 **{STATUS_LABELS.get(new, new)}** 로 바꿨다.\n",
+    )
+
+
+def log_system_line(directory: Path, title: str, body: str) -> None:
+    """도구가 남기는 진행일지 한 줄 — 상태 변경(105)·접수 연결(145). 사람이 쓴 기록과 같은 자리·같은
+    형식이고, `상태변경` 태그라 타임라인에서 흐리게 서며 미보고 분량에 세지 않는다.
+    **실패해도 본 작업을 막지 않는다.**
+    """
     from . import entries as entries_service
 
     try:
         today = date_today()
-        title = f"(상태) {STATUS_LABELS.get(old, old)} → {STATUS_LABELS.get(new, new)}"
         logs_dir = directory / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
         target = paths.unique_path(logs_dir, entries_service.entry_stem(today, title), ".md")
@@ -377,7 +397,7 @@ def _log_status_change(directory: Path, old: str, new: str) -> None:
             "created_at": stamp,
             "updated_at": stamp,
         }
-        md.save(target, md.MarkdownDoc(meta, f"상태를 **{STATUS_LABELS.get(old, old)}** 에서 **{STATUS_LABELS.get(new, new)}** 로 바꿨다.\n"))
+        md.save(target, md.MarkdownDoc(meta, body))
     except OSError:
         pass
 
@@ -503,4 +523,8 @@ def archive_project(conn: sqlite3.Connection, project_id: str) -> None:
     )
     conn.execute("DELETE FROM project WHERE id = ?", (project_id,))
     conn.execute("DELETE FROM search_fts WHERE project_id = ?", (project_id,))
+    # 이 과제로 착수·병합된 접수는 풀로 돌아간다 — 미아가 되지 않게 (TODO 145)
+    from . import intakes as intakes_service
+
+    intakes_service.detach_from_project(conn, project_id, row["title"] if row else directory.name)
     conn.commit()

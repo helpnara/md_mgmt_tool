@@ -118,6 +118,31 @@ def list_items() -> list[dict[str, Any]]:
     return items
 
 
+def trashed_projects() -> dict[str, str]:
+    """보관함에 간 과제의 번호 → 이름표 (TODO 145 — 이미 미아가 된 접수를 풀로 돌릴 때 쓴다)."""
+    return {
+        str(item["project_id"]): str(item.get("label") or item["project_id"])
+        for item in _read_manifest()
+        if item.get("kind") == "project" and item.get("project_id")
+    }
+
+
+def used_folder_names(root: str) -> set[str]:
+    """보관함 기록에 남은 `projects/<폴더>` · `intakes/<폴더>` 이름 (TODO 146).
+
+    다음 번호를 셀 때 **지운 것의 번호도 쓴 번호로** 치려고 쓴다. 남아 있는 폴더만 세면 가장 최근
+    것을 지운 순간 그 번호가 빈 것으로 보여 새 과제가 같은 번호를 받고, 지운 것을 되돌리면 번호가
+    둘이 된다. 진행일지·보고처럼 과제 안에서 지운 것도 그 과제 폴더 이름을 알려 준다 — 상관없다,
+    어느 쪽이든 **쓰인 적 있는 번호**다.
+    """
+    names: set[str] = set()
+    for item in _read_manifest():
+        parts = str(item.get("origin") or "").split("/")
+        if len(parts) >= 2 and parts[0] == root and parts[1]:
+            names.add(parts[1])
+    return names
+
+
 class RestoreError(Exception):
     """되돌릴 수 없는 경우 — 이유를 그대로 화면에 보여 준다."""
 
@@ -139,6 +164,8 @@ def restore(conn: sqlite3.Connection, trash_name: str) -> dict[str, Any]:
             "보관함 폴더에서 직접 옮겨 주세요."
         )
 
+    _refuse_duplicate_number(conn, source, info)
+
     target = settings.vault_dir / info["origin"]
     if target.exists():
         # 같은 자리에 새 항목이 생겼을 수 있다. 덮어쓰지 않고 옆에 놓는다.
@@ -150,12 +177,48 @@ def restore(conn: sqlite3.Connection, trash_name: str) -> dict[str, Any]:
     from ..vault.indexer import reindex_all
 
     reindex_all(conn)
+    if info.get("kind") == "project" and info.get("project_id"):
+        # 과제가 돌아왔으면 접수와의 연결을 정리한다 — 풀에 있으면 다시 잇고, 아니면 표지를 뗀다 (TODO 145)
+        from . import intakes as intakes_service
+
+        intakes_service.reattach_project(conn, str(info["project_id"]))
     conn.commit()
     return {
         "restored_to": target.relative_to(settings.vault_dir).as_posix(),
         "kind": info.get("kind"),
         "label": info.get("label"),
     }
+
+
+def _refuse_duplicate_number(conn: sqlite3.Connection, source: Path, info: dict[str, Any]) -> None:
+    """되돌리면 **같은 번호가 둘**이 되는 경우는 막는다 (TODO 146).
+
+    번호를 다시 쓰지 않게 된 뒤로는 새로 생기지 않지만, 그 전에 이미 같은 번호를 받은 과제·접수가
+    있을 수 있다. 되돌리면 색인은 번호가 열쇠라 **한쪽이 목록에서 사라진다** — 되돌리지 않고 까닭을 말한다.
+    """
+    from ..vault import markdown as md
+
+    kind = info.get("kind")
+    if kind == "project":
+        document, table, noun = source / "index.md", "project", "과제"
+    elif kind == "intake":
+        document, table, noun = source / "request.md", "intake", "접수"
+    else:
+        return
+    try:
+        number = str(md.load(document).meta.get("id") or "").strip()
+    except OSError:
+        return
+    if not number:
+        return
+    row = conn.execute(f"SELECT title FROM {table} WHERE id = ?", (number,)).fetchone()
+    if row is None:
+        return
+    raise RestoreError(
+        f"같은 번호 {number} 의 {noun}(「{row['title']}」)가 이미 있어 되돌리지 않았습니다 — 되돌리면 "
+        f"둘 중 하나가 목록에서 사라집니다. 지금 있는 {noun}의 번호를 먼저 바꾼 뒤(설정 → 과제 번호 체계) "
+        "다시 되돌려 주세요."
+    )
 
 
 def rewrite_origins(mapping: dict[str, str]) -> int:
