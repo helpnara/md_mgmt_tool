@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import type { Activity, Meta } from "../types";
 import { splitPeople } from "../people";
+import { useFormUnsaved } from "../unsaved";
 
 /**
  * 역량 이력 한 건을 쓰는 자리 (TODO 72 · 74).
@@ -40,6 +41,12 @@ export default function ActivityForm({
   const [link, setLink] = useState(activity?.link ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 쓰다가 떠나면 묻는다 (TODO 162)
+  useFormUnsaved(
+    `activity-form:${activity?.id ?? "new"}`,
+    { person, date, endDate, kind, title, host, place, hours, cost, takeaway, link },
+    busy,
+  );
 
   const picked = splitPeople(person);
   // 예전에 한 칸에 여러 이름이 들어간 줄은 칩으로 내주지 않는다 —

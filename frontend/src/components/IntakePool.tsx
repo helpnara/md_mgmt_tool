@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import LoadError from "./LoadError";
+import { attempt } from "../notify";
 import { uploadAttachment } from "../upload";
 import { backTarget, screenLink, useAddressBar } from "../nav";
 import type { Intake, IntakeListing, Meta } from "../types";
@@ -82,12 +84,8 @@ export default function IntakePool({ meta, query }: Props) {
   );
 
   async function togglePicked(item: Intake) {
-    try {
-      await api.updateIntake(item.id, { picked: !item.picked });
-      load();
-    } catch (err) {
-      setError((err as Error).message);
-    }
+    // 동작 실패는 알림으로 — 불러오기 실패 판에 섞으면 "목록을 못 불러왔다" 로 읽힌다 (TODO 161)
+    if (await attempt(() => api.updateIntake(item.id, { picked: !item.picked }))) load();
   }
 
   // 열 머리 정렬 — 과제목록과 같은 부품(SortHeader). 방향을 비워 두면 그 정렬의 기본 방향이다.
@@ -302,7 +300,8 @@ export default function IntakePool({ meta, query }: Props) {
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {/* 불러오기 실패는 모든 화면이 같은 판 (TODO 165) */}
+      {error && <LoadError message={error} onRetry={load} />}
 
       {data && data.items.length === 0 && (
         <div className="card empty-card">

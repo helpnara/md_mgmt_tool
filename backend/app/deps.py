@@ -19,7 +19,9 @@ import sqlite3
 import threading
 from collections.abc import Iterator
 
-from fastapi import Request
+from typing import Annotated
+
+from fastapi import Path, Request
 
 from .db import connect, open_index
 
@@ -71,3 +73,8 @@ def get_db(request: Request) -> Iterator[sqlite3.Connection]:
     finally:
         if writing:
             _write_lock.release()
+
+
+# 줄 번호(진행일지·보고·첨부·역량 기록)의 범위 (TODO 167). 스무 자리 번호가 오면 SQLite 정수 범위를
+# 넘어 500 이 났다 — 화면에서는 닿지 않지만 오류 기록을 더럽힌다. 범위 밖은 422 로 돌려보낸다.
+RowId = Annotated[int, Path(ge=1, le=2**63 - 1)]

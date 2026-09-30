@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { attempt } from "../notify";
 import type { Activity, ActivitySummary, Meta } from "../types";
 import { backTarget, useAddressBar } from "../nav";
 import { splitPeople } from "../people";
@@ -85,10 +86,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
     meta.activity_kinds.find((item) => item.key === key)?.label ?? key;
 
   const remove = async (item: Activity) => {
-    if (!window.confirm(`${item.person} 님의 '${item.title}' 기록을 지울까요? 보관함으로 옮겨집니다.`))
+    if (!window.confirm(`${item.person} 님의 '${item.title}' 기록을 삭제 보관함으로 옮길까요?`))
       return;
-    await api.deleteActivity(item.id);
-    load();
+    if (await attempt(() => api.deleteActivity(item.id))) load();
   };
 
   /** 하루면 날짜 하나, 여러 날이면 기간. 같은 해면 뒤쪽은 월·일만 적는다. */

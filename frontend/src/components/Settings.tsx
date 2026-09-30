@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { backTarget } from "../nav";
 import type { Meta } from "../types";
@@ -15,6 +15,7 @@ import ErrorLogCard from "./ErrorLogCard";
 import LinkFixCard from "./LinkFixCard";
 import VersionsCard from "./VersionsCard";
 import BackupCard from "./BackupCard";
+import LoadError from "./LoadError";
 
 /**
  * 도구 설정.
@@ -27,16 +28,22 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 설정 파일에서 읽지 못해 기본값을 쓰는 값 (TODO 163)
+  const [unreadable, setUnreadable] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .settings()
       .then((settings) => {
         setAuthor(settings.author);
         setSavedAuthor(settings.author);
+        setUnreadable(settings.unreadable ?? []);
+        setLoadError(null);
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => setLoadError(err.message));
   }, []);
+  useEffect(load, [load]);
 
   async function save() {
     setBusy(true);
@@ -67,6 +74,15 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
         <h1>설정</h1>
         <p className="hint page-desc">작성자·담당자 명부·과제 속성과 분류·보고 요일·서식·백업과 보관·점검을 정합니다.</p>
       </div>
+      {loadError && <LoadError message={loadError} onRetry={load} />}
+      {unreadable.length > 0 && (
+        <p className="warn-banner">
+          {unreadable.includes("*")
+            ? "설정 파일(settings.json)을 읽지 못해 모든 설정을 기본값으로 쓰고 있습니다."
+            : `설정 파일(settings.json)의 ${unreadable.join(" · ")} 값을 읽지 못해 기본값을 쓰고 있습니다.`}{" "}
+          여기서 한 번 저장하면 파일이 바로잡힙니다.
+        </p>
+      )}
 
       {/*
         설정은 기능이 늘 때마다 카드가 하나씩 붙어 열넷이 되었고, 한 칸에 죽 늘어놓으니

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { attempt } from "../notify";
+import { useUnsaved } from "../unsaved";
 import { filesBase, renderMarkdown } from "../markdown";
 import VersionPanel from "./VersionPanel";
 import type { Entry } from "../types";
@@ -56,6 +58,8 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
     () => localStorage.getItem(AUTOSAVE_PREF_KEY) === "on",
   );
   const [dirty, setDirty] = useState(false);
+  // 떠날 때 묻는다 (TODO 162) — 임시 보관은 이 편집기가 처음부터 해 왔다
+  useUnsaved(`entry:${initial?.id ?? `new-${projectId}`}`, dirty);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -410,8 +414,8 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           attachments={attachments}
           onInsert={(attachment) => insertAtCursor(`\n${attachment.markdown}\n`)}
           onDelete={async (attachment) => {
-            if (!window.confirm(`${attachment.orig_name} 을(를) 보관함으로 옮길까요?`)) return;
-            await api.deleteAttachment(attachment.id);
+            if (!window.confirm(`${attachment.orig_name} 을(를) 삭제 보관함으로 옮길까요?`)) return;
+            if (!(await attempt(() => api.deleteAttachment(attachment.id)))) return;
             if (entryId) refreshAttachments(entryId);
           }}
         />
@@ -425,8 +429,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
             <button
               className="ghost small"
               onClick={async () => {
-                await api.reindex();
-                window.location.reload();
+                if (await attempt(() => api.reindex())) window.location.reload();
               }}
             >
               지금 다시 읽기

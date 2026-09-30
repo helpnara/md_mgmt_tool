@@ -76,9 +76,13 @@ def _read_manifest() -> list[dict[str, Any]]:
         if not line:
             continue
         try:
-            items.append(json.loads(line))
+            item = json.loads(line)
         except json.JSONDecodeError:
             continue  # 깨진 줄 하나가 나머지를 못 보게 만들면 안 된다
+        # 읽히기는 하는데 모양이 다른 줄(`[1]`, `"글"`)도 건너뛴다 — 한 줄 때문에
+        # 도구가 켜지지 않았다 (TODO 163). 줄마다 사전이라고 믿는 곳이 여럿이다.
+        if isinstance(item, dict):
+            items.append(item)
     return items
 
 
@@ -248,6 +252,9 @@ def _rewrite_locked(path: Path, mapping: dict[str, str]) -> int:
             item = json.loads(line)
         except json.JSONDecodeError:
             lines.append(line)  # 깨진 줄은 그대로 둔다 — 함부로 버리지 않는다
+            continue
+        if not isinstance(item, dict):
+            lines.append(line)
             continue
         origin = item.get("origin") or ""
         parts = origin.split("/")

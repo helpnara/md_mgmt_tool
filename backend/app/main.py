@@ -5,11 +5,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.exception_handlers import (http_exception_handler,
-                                        request_validation_exception_handler)
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -142,7 +141,18 @@ async def record_validation_error(request: Request, exc: RequestValidationError)
         error="RequestValidationError",
         detail=str(exc.errors())[:500],
     )
-    return await request_validation_exception_handler(request, exc)
+    # 받은 값(`input`)을 그대로 돌려주면 NaN · 무한대 같은 값은 JSON 으로 못 적어 **500 이 났다**
+    # (TODO 167). 화면에 필요한 것은 어느 칸이 왜 틀렸는가뿐이다.
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                {"loc": [str(part) for part in error.get("loc", ())], "msg": str(error.get("msg", "")),
+                 "type": str(error.get("type", ""))}
+                for error in exc.errors()
+            ]
+        },
+    )
 
 
 app.include_router(meta.router)

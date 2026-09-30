@@ -29,9 +29,33 @@ def _dump_yaml(meta: dict[str, Any]) -> str:
     ).rstrip("\n")
 
 
+class _TolerantLoader(yaml.SafeLoader):
+    """날짜처럼 생겼지만 없는 날짜(`2026-02-30`)를 **글자로** 읽는 YAML 읽개 (TODO 164).
+
+    기본 읽개는 그런 값에서 예외를 던져 **파일 전체**를 못 읽었다 — 날짜 하나를 잘못 적으면 과제가
+    목록에서 통째로 사라졌다. 글자로 받아 두면 색인이 그 값만 비우고 알린다(indexer._as_date).
+    """
+
+
+def _tolerant_timestamp(loader: yaml.SafeLoader, node: yaml.Node) -> Any:
+    try:
+        return yaml.constructor.SafeConstructor.construct_yaml_timestamp(loader, node)
+    except ValueError:
+        return loader.construct_scalar(node)
+
+
+_TolerantLoader.add_constructor("tag:yaml.org,2002:timestamp", _tolerant_timestamp)
+
+
+class _TolerantHandler(frontmatter.YAMLHandler):
+    def load(self, fm: str, **kwargs: object) -> Any:
+        return yaml.load(fm, Loader=_TolerantLoader)  # noqa: S506 — SafeLoader 를 이어받았다
+
+
 def loads(text: str) -> MarkdownDoc:
-    post = frontmatter.loads(text)
-    return MarkdownDoc(dict(post.metadata), post.content)
+    post = frontmatter.loads(text, handler=_TolerantHandler())
+    metadata = post.metadata if isinstance(post.metadata, dict) else {}
+    return MarkdownDoc(dict(metadata), post.content)
 
 
 def load(path: Path) -> MarkdownDoc:

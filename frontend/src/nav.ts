@@ -212,3 +212,22 @@ export function useAddressBar(
     return () => window.removeEventListener("hashchange", onHashChange);
   }, [screen]);
 }
+
+
+/** 메뉴 화면의 브라우저 탭 제목 (TODO 169). 탭 이름과 같다. */
+export const SCREEN_TITLES: Record<string, string> = {
+  home: "홈",
+  intakes: "접수",
+  list: "과제목록",
+  reports: "보고대상",
+  history: "보고이력",
+  skills: "팀원역량",
+  settings: "설정",
+  help: "도움말",
+  search: "검색",
+};
+
+/** 브라우저 탭 제목 — 과제 · 접수를 여러 탭으로 열어도 구분되게 (TODO 169). */
+export function setPageTitle(text: string): void {
+  document.title = text ? `${text} · 느린 나이테` : "느린 나이테";
+}

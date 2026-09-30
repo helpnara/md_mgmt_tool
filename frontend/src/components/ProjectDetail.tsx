@@ -1,7 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
-import { backTarget, intakeBackLink, listLink, projectLink } from "../nav";
+import { backTarget, intakeBackLink, listLink, projectLink, setPageTitle } from "../nav";
+import { attempt } from "../notify";
+import { dropDraft, hasDraft, takeDraft, useDraftKeeper, useUnsaved } from "../unsaved";
 import type { Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -121,6 +123,10 @@ export default function ProjectDetail({
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [overviewDraft, setOverviewDraft] = useState("");
+  // 개요 저장 중 — 두 번 누르면 두 번 저장되던 것을 막는다 (TODO 161)
+  const [savingOverview, setSavingOverview] = useState(false);
+  // 저장하지 않고 남았던 글을 되살렸다 (TODO 162)
+  const [overviewRestored, setOverviewRestored] = useState(false);
   // 개요 편집기 — 붙여넣기·첨부 링크를 커서 자리에 끼우려고 잡아 둔다 (TODO 137)
   const overviewAreaRef = useRef<HTMLTextAreaElement>(null);
   const [pasteOffer, setPasteOffer] = useState<PasteOffer | null>(null);
@@ -173,6 +179,29 @@ export default function ProjectDetail({
 
   useEffect(load, [load]);
   useEffect(() => setOpenReport(openReportId ?? null), [openReportId]);
+  // 브라우저 탭 제목 (TODO 169)
+  useEffect(() => {
+    if (project) setPageTitle(`${project.id} ${project.title}`);
+  }, [project]);
+
+  // 과제 개요 편집 — 떠날 때 묻고, 쓰던 글은 임시 보관한다 (TODO 162)
+  const overviewKey = `overview:${projectId}`;
+  const overviewOriginal = project?.body ?? "";
+  const overviewDirty = editingOverview && overviewDraft !== overviewOriginal;
+  useUnsaved(overviewKey, overviewDirty);
+  useDraftKeeper(editingOverview ? overviewKey : null, overviewDraft, overviewOriginal);
+
+  async function saveOverview() {
+    if (!project || savingOverview) return;
+    setSavingOverview(true);
+    const saved = await attempt(() => api.updateProject(project.id, { body: overviewDraft }));
+    setSavingOverview(false);
+    if (!saved) return; // 실패 — 편집기를 열어 둔 채 알림만 (쓰던 글은 그대로 남는다)
+    dropDraft(overviewKey);
+    setOverviewRestored(false);
+    setEditingOverview(false);
+    load();
+  }
   // 복제 직후 새 과제로 옮겨 오면 같은 부품이 그대로 쓰이므로 첫 상태만으로는 안 열린다 (TODO 109).
   useEffect(() => {
     if (edit) setEditingProject(true);
@@ -263,17 +292,20 @@ export default function ProjectDetail({
         <a className="back" href={backTarget(back).href}>
           ← {backTarget(back).label}
         </a>
-        <div className="card">
+        <div className={missing ? "card" : "card load-error"}>
           <h2>{missing ? "이 과제를 찾을 수 없습니다" : "과제를 불러오지 못했습니다"}</h2>
           <p className="hint">
             <code>{projectId}</code>
             {missing ? (
               <>
-                {" "}번 과제가 없습니다. <b>과제 번호가 바뀌었거나</b> 보관함으로 옮겨졌을 수
+                {" "}번 과제가 없습니다. <b>과제 번호가 바뀌었거나</b> 삭제 보관함으로 옮겨졌을 수
                 있습니다.
                 <br />
                 번호를 일괄로 바꾸면 예전 주소·즐겨찾기는 더 이상 맞지 않습니다.
                 과제 목록에서 이름으로 찾아 주세요.
+                <br />
+                탐색기·다른 편집기로 과제 파일을 고쳤다면 <b>파일을 읽지 못했을 수도</b> 있습니다 —
+                [다시 읽기] 를 누르면 무엇이 문제인지 알려 줍니다 (TODO 164).
               </>
             ) : (
               <> — {error}</>
@@ -283,6 +315,16 @@ export default function ProjectDetail({
             {!missing && (
               <button className="ghost" onClick={load}>
                 다시 시도
+              </button>
+            )}
+            {missing && (
+              <button
+                className="ghost"
+                onClick={async () => {
+                  if (await attempt(() => api.reindex())) load();
+                }}
+              >
+                다시 읽기
               </button>
             )}
             <a className="button-like primary-link" href="#/projects">
@@ -467,7 +509,7 @@ export default function ProjectDetail({
                   return;
                 }
                 if (!window.confirm("이 과제를 삭제 보관함으로 옮길까요?\n\n설정 → 삭제 보관함에서 되돌릴 수 있습니다.")) return;
-                await api.archiveProject(project.id);
+                if (!(await attempt(() => api.archiveProject(project.id)))) return;
                 // 보관한 과제는 사라진다. 온 곳이 목록 성격이면 그리로 돌려보낸다.
                 window.location.hash = backTarget(back).href;
               }}
@@ -694,8 +736,18 @@ export default function ProjectDetail({
             <button
               className="ghost"
               onClick={() => {
-                setOverviewDraft(project.body ?? "");
-                setEditingOverview((value) => !value);
+                if (editingOverview) {
+                  // [취소] — 쓴 것이 있으면 버릴지 묻는다 (TODO 162)
+                  if (overviewDirty && !window.confirm("저장하지 않은 개요를 버릴까요?")) return;
+                  dropDraft(overviewKey);
+                  setOverviewRestored(false);
+                  setEditingOverview(false);
+                  return;
+                }
+                const kept = takeDraft(overviewKey, project.body ?? "");
+                setOverviewDraft(kept ?? project.body ?? "");
+                setOverviewRestored(kept !== null);
+                setEditingOverview(true);
               }}
             >
               {editingOverview ? "취소" : "수정"}
@@ -720,6 +772,13 @@ export default function ProjectDetail({
                 ref={overviewAreaRef}
                 value={overviewDraft}
                 onChange={(event) => setOverviewDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  // 다른 편집기와 같이 Ctrl+S 로 저장 (TODO 162)
+                  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+                    event.preventDefault();
+                    void saveOverview();
+                  }
+                }}
                 onPaste={(event) =>
                   // 다른 편집기와 같은 판 — 표는 커서 자리에, 캡처는 첨부로 (TODO 137)
                   handleEditorPaste(event, {
@@ -745,15 +804,25 @@ export default function ProjectDetail({
               onFiles={(files) => void attachToOverview(files)}
               onClose={closeOffer}
             />
+            {overviewRestored && (
+              <p className="hint restored">
+                저장하지 않은 작성 중 내용을 복구했습니다.{" "}
+                <button
+                  className="ghost small"
+                  onClick={() => {
+                    dropDraft(overviewKey);
+                    setOverviewDraft(project.body ?? "");
+                    setOverviewRestored(false);
+                  }}
+                >
+                  복구한 내용 버리기
+                </button>
+              </p>
+            )}
             <div className="form-actions">
-              <button
-                onClick={async () => {
-                  await api.updateProject(project.id, { body: overviewDraft });
-                  setEditingOverview(false);
-                  load();
-                }}
-              >
-                저장
+              <span className="hint">Ctrl+S 로도 저장됩니다</span>
+              <button disabled={savingOverview} onClick={() => void saveOverview()}>
+                {savingOverview ? "저장 중…" : "저장"}
               </button>
             </div>
           </>
@@ -832,7 +901,7 @@ export default function ProjectDetail({
                 <button
                   className="ghost small danger"
                   onClick={async () => {
-                    if (!window.confirm(`${report.report_date} 보고를 보관함으로 옮길까요?`)) return;
+                    if (!window.confirm(`${report.report_date} 보고를 삭제 보관함으로 옮길까요?`)) return;
                     try {
                       await api.deleteReport(report.id);
                       setOpenReport(null);
@@ -887,8 +956,8 @@ export default function ProjectDetail({
           <AttachmentList
             attachments={files.items}
             onDelete={async (attachment) => {
-              if (!window.confirm(`${attachment.orig_name} 을(를) 보관함으로 옮길까요?`)) return;
-              await api.deleteAttachment(attachment.id);
+              if (!window.confirm(`${attachment.orig_name} 을(를) 삭제 보관함으로 옮길까요?`)) return;
+              if (!(await attempt(() => api.deleteAttachment(attachment.id)))) return;
               load();
             }}
           />
@@ -923,6 +992,12 @@ export default function ProjectDetail({
             <button className="ghost small" onClick={() => setExpandAll((value) => !value)}>
               {expandAll ? `최근 ${AUTO_OPEN}건만 보기` : `모두 펼치기 (+${collapsedCount})`}
             </button>
+          )}
+          {/* 쓰다 만 새 기록이 브라우저에 남아 있으면 알린다 — 전에는 편집기를 열어야 알 수 있었다 (TODO 162) */}
+          {!creatingEntry && hasDraft(`new-${projectId}`) && (
+            <span className="draft-waiting" title="저장하지 않고 남은 기록이 있습니다 — [기록 추가] 를 누르면 되살아납니다">
+              작성 중이던 기록 있음
+            </span>
           )}
           <button onClick={() => setCreatingEntry(true)}>기록 추가</button>
         </div>
@@ -1064,8 +1139,8 @@ export default function ProjectDetail({
                   <button
                     className="ghost danger"
                     onClick={async () => {
-                      if (!window.confirm("이 기록을 보관함으로 옮길까요?")) return;
-                      await api.deleteEntry(entry.id);
+                      if (!window.confirm("이 기록을 삭제 보관함으로 옮길까요?")) return;
+                      if (!(await attempt(() => api.deleteEntry(entry.id)))) return;
                       load();
                     }}
                   >

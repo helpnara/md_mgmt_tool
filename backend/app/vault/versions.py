@@ -106,9 +106,13 @@ def _free_name(bucket: Path) -> Path:
 
 def _stamps(bucket: Path) -> list[str]:
     """오래된 것부터 정렬한 버전 이름. 이름이 곧 시각이라 문자열 정렬로 충분하다."""
-    if not bucket.is_dir():
+    try:
+        if not bucket.is_dir():
+            return []
+        return sorted(item.stem for item in bucket.glob("*.md") if item.is_file())
+    except (OSError, ValueError):
+        # 이름이 너무 길거나 쓸 수 없는 글자가 든 경로 — 버전이 없는 것으로 본다 (TODO 167)
         return []
-    return sorted(item.stem for item in bucket.glob("*.md") if item.is_file())
 
 
 def _prune(bucket: Path) -> None:

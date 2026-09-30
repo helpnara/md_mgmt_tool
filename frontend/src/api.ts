@@ -1,14 +1,44 @@
 import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
 
+/** 서버에 닿지 못했을 때 (TODO 165) — 브라우저의 영어 `Failed to fetch` 대신 */
+export const OFFLINE_MESSAGE =
+  "프로그램에 연결하지 못했습니다 — 느린 나이테 창(run.bat)이 켜져 있는지 확인하세요.";
+
+/**
+ * 서버가 돌려준 실패를 사람이 읽을 한 줄로 (TODO 165).
+ *
+ * 사유는 대개 글이지만 입력 검사(422)는 **목록**으로 온다 — 그대로 `new Error` 에 넣으면 `[object Object]`
+ * 가 됐다(140 의 병합 칸). 글이 아닌 500 은 `Internal Server Error` 대신 오류 기록 자리를 알려 준다.
+ */
+export function errorText(status: number, body: unknown): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const fields = detail
+      .map((item) => (Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : null))
+      .filter((field): field is string => typeof field === "string" && field !== "body");
+    const unique = [...new Set(fields)];
+    return `입력값을 서버가 받지 못했습니다${unique.length ? ` (항목: ${unique.join(", ")})` : ""}.`;
+  }
+  if (status >= 500) return "서버에서 오류가 났습니다 — 설정 › 최근 오류에 남았습니다.";
+  if (status === 404) return "찾을 수 없습니다 — 지워졌거나 번호가 바뀌었을 수 있습니다.";
+  return `요청에 실패했습니다 (${status}).`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...init,
+    });
+  } catch {
+    throw new Error(OFFLINE_MESSAGE);
+  }
   if (!response.ok) {
-    const detail = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(detail.detail ?? "요청에 실패했습니다.");
+    const body = await response.json().catch(() => null);
+    throw new Error(errorText(response.status, body));
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }

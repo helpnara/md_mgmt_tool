@@ -13,7 +13,10 @@ import IntakeDetail from "./components/IntakeDetail";
 import IntakePool from "./components/IntakePool";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
-import { BACK_PARAM } from "./nav";
+import { BACK_PARAM, SCREEN_TITLES, setPageTitle } from "./nav";
+import { confirmLeave, hasUnsaved, LEAVE_MESSAGE } from "./unsaved";
+import ErrorBoundary from "./components/ErrorBoundary";
+import Toast from "./components/Toast";
 
 type Route =
   // 홈이 `#/` 를 쓰고, 과제 목록은 `#/projects` 로 내려간다 (TODO 56).
@@ -114,8 +117,26 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenKey]);
 
+  // 편집 중에 떠나면 묻는다 (TODO 162). 화면 안 이동은 주소가 이미 바뀐 뒤에 알 수 있으므로,
+  // 머물기로 하면 **바뀐 주소를 되돌린다**(history 를 쌓지 않게 replaceState — hashchange 가 다시 나지 않는다).
+  // 되돌릴 주소는 이벤트의 oldURL — 조건을 바꿀 때 쓰는 replaceState 까지 반영된 직전 주소다.
   useEffect(() => {
-    const onHashChange = () => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsaved()) return;
+      event.preventDefault();
+      event.returnValue = LEAVE_MESSAGE;
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = (event: HashChangeEvent) => {
+      if (!confirmLeave()) {
+        const before = event.oldURL.includes("#") ? event.oldURL.slice(event.oldURL.indexOf("#")) : "#/";
+        window.history.replaceState(null, "", before);
+        return;
+      }
       const next = readRoute();
       setRoute(next);
       // 검색 결과를 떠나면 검색창을 비운다 (TODO 115). 지난 검색어가 남아 있으면
@@ -134,7 +155,27 @@ export default function App() {
 
   useEffect(loadMeta, [loadMeta]);
 
-  if (error) return <div className="app-error">서버에 연결하지 못했습니다: {error}</div>;
+  // 브라우저 탭 제목 (TODO 169) — 과제 · 접수를 여러 탭으로 열어도 구분되게. 과제 · 접수 화면은
+  // 제목을 알고 나서 스스로 고친다(pageTitle).
+  useEffect(() => {
+    if (route.name === "project" || route.name === "intake") return;
+    setPageTitle(SCREEN_TITLES[route.name] ?? "");
+  }, [route.name]);
+
+  if (error)
+    return (
+      <div className="app-error">
+        <p>{error}</p>
+        <button
+          onClick={() => {
+            setError(null);
+            loadMeta();
+          }}
+        >
+          다시 시도
+        </button>
+      </div>
+    );
   if (!meta) return <div className="app-loading">불러오는 중…</div>;
 
   return (
@@ -209,6 +250,8 @@ export default function App() {
         </div>
       )}
       <main>
+        {/* 화면 하나가 그리다 멈춰도 메뉴는 살아 있게 (TODO 166) */}
+        <ErrorBoundary resetKey={screenKey}>
         {route.name === "project" && (
           <ProjectDetail
             projectId={route.id}
@@ -225,14 +268,16 @@ export default function App() {
         {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} back={route.back} />}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} back={route.back} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
-        {route.name === "home" && <Home meta={meta} />}
+        {route.name === "home" && <Home meta={meta} onMetaChange={loadMeta} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}
         {route.name === "help" && <Help />}
         {route.name === "intakes" && <IntakePool meta={meta} query={route.query} />}
         {route.name === "intake" && (
           <IntakeDetail key={route.id} intakeId={route.id} meta={meta} back={route.back} onMetaChange={loadMeta} />
         )}
+        </ErrorBoundary>
       </main>
+      <Toast />
       {/* 화면마다 따로 두지 않는다 — 요청의 핵심이 "어디서나 같은 자리"다. */}
       <ScrollTop />
     </div>

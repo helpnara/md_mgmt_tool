@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { IntakeDetail, Meta, PrecheckBand } from "../types";
+import { useUnsaved } from "../unsaved";
 
 /**
  * 사전점검 체크리스트 대화상자 (TODO 155).
@@ -48,6 +49,8 @@ export default function PrecheckDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dirty = JSON.stringify(answers) !== JSON.stringify(initial);
+  // 창을 연 채 메뉴를 누르거나 새로고침하면 묻는다 (TODO 162)
+  useUnsaved(`precheck:${intake.id}`, dirty && !readOnly);
 
   // 합계는 **지금 고른 것**으로 바로 — 저장 전에 결과를 본다
   let raw = 0;

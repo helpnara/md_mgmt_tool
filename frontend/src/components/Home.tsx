@@ -7,6 +7,7 @@ import { cellEffect, DASH, effectNumber, sumBy } from "../util";
 import LoadError from "./LoadError";
 import CopyTableButton from "./CopyTableButton";
 import TotalRow from "./TotalRow";
+import ProblemsBanner from "./ProblemsBanner";
 
 /** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
 const PERIODS: [string, string][] = [
@@ -227,7 +228,7 @@ function backupWarning(status: BackupStatus | null): string | null {
 /** 팀원이 늘면 표가 계속 길어진다. 속성별·그룹별과 같은 규칙으로 접는다 (TODO 123). */
 const MEMBER_LIMIT = 10;
 
-export default function Home({ meta }: { meta: Meta }) {
+export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?: () => void }) {
   const thisYear = String(new Date().getFullYear());
   const [year, setYear] = useState(thisYear);
   // 반기·분기 (TODO 110). 연도 전체를 볼 때는 뜻이 없으므로 그때는 보내지 않는다.
@@ -311,6 +312,14 @@ export default function Home({ meta }: { meta: Meta }) {
   const maxCompare = Math.max(1, ...data.compare.map((item) => item.total));
   return (
     <section className="home">
+      {/* 읽지 못한 파일 · 값 — 백업 경고처럼 문제가 있을 때만 선다 (TODO 164) */}
+      <ProblemsBanner
+        problems={meta.problems ?? []}
+        onReindexed={() => {
+          load();
+          onMetaChange?.();
+        }}
+      />
       {backupWarning(backup) && (
         <div className="home-backup-warn">
           <b>자동 백업</b> {backupWarning(backup)}

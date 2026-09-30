@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import { attempt } from "../notify";
 import { copyAsPlainText } from "../plaintext";
 import type { ErrorEntry } from "../types";
 import { formatDateTime } from "../util";
@@ -72,8 +73,7 @@ export default function ErrorLogCard() {
                 title="문제를 재현하기 전에 비워 두면 그 뒤의 것만 남습니다."
                 onClick={async () => {
                   if (!window.confirm("오류 기록을 모두 지울까요?")) return;
-                  await api.clearErrors();
-                  load();
+                  if (await attempt(() => api.clearErrors())) load();
                 }}
               >
                 비우기
@@ -99,7 +99,7 @@ export default function ErrorLogCard() {
           {(open ? items : items.slice(0, 5)).map((item, index) => (
             <li key={`${item.at}-${index}`}>
               <div className="error-head">
-                <span className="error-status">{item.status ?? "실패"}</span>
+                <span className="error-status">{item.status ?? (item.action.startsWith("화면 ") ? "화면" : "실패")}</span>
                 <code className="error-action">{item.action}</code>
                 <span className="muted">{formatDateTime(item.at)}</span>
               </div>

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from ..config import get_settings
-from ..deps import get_db
+from ..deps import get_db, RowId
 from ..services import attachments as svc
 from ..vault import paths
 from ..vault.paths import FileInUseError
@@ -46,7 +46,7 @@ def _dir_name(conn: sqlite3.Connection, project_id: str) -> str:
 
 @router.post("/api/entries/{entry_id}/attachments", status_code=201)
 def upload_to_entry(
-    entry_id: int, file: UploadFile = File(...), conn: sqlite3.Connection = Depends(get_db)
+    entry_id: RowId, file: UploadFile = File(...), conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     entry = conn.execute("SELECT * FROM entry WHERE id = ?", (entry_id,)).fetchone()
     if entry is None:
@@ -68,7 +68,7 @@ def upload_to_entry(
 
 
 @router.get("/api/entries/{entry_id}/attachments")
-def list_entry_attachments(entry_id: int, conn: sqlite3.Connection = Depends(get_db)) -> list[dict]:
+def list_entry_attachments(entry_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> list[dict]:
     entry = conn.execute("SELECT * FROM entry WHERE id = ?", (entry_id,)).fetchone()
     if entry is None:
         raise HTTPException(status_code=404, detail="진행일지를 찾을 수 없습니다.")
@@ -120,7 +120,7 @@ def list_project_attachments(project_id: str, conn: sqlite3.Connection = Depends
 
 
 @router.get("/api/attachments/{attachment_id}/preview")
-def preview_spreadsheet(attachment_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def preview_spreadsheet(attachment_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """엑셀 보고 자료를 브라우저에서 바로 훑어볼 수 있게 표/이미지를 뽑아 준다."""
     try:
         return svc.spreadsheet_preview(conn, attachment_id)
@@ -131,7 +131,7 @@ def preview_spreadsheet(attachment_id: int, conn: sqlite3.Connection = Depends(g
 
 
 @router.get("/api/attachments/{attachment_id}/thumb")
-def get_thumbnail(attachment_id: int, conn: sqlite3.Connection = Depends(get_db)) -> FileResponse:
+def get_thumbnail(attachment_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> FileResponse:
     try:
         return FileResponse(svc.thumbnail(conn, attachment_id), media_type="image/jpeg")
     except KeyError as exc:
@@ -141,7 +141,7 @@ def get_thumbnail(attachment_id: int, conn: sqlite3.Connection = Depends(get_db)
 
 
 @router.delete("/api/attachments/{attachment_id}", status_code=204)
-def delete_attachment(attachment_id: int, conn: sqlite3.Connection = Depends(get_db)) -> None:
+def delete_attachment(attachment_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> None:
     try:
         svc.delete_attachment(conn, attachment_id)
     except KeyError as exc:

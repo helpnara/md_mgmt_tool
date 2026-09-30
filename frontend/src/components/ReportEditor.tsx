@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { attempt } from "../notify";
+import { dropDraft, takeDraft, useDraftKeeper, useUnsaved } from "../unsaved";
 import { filesBase, renderMarkdown } from "../markdown";
 import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import type { Report } from "../types";
@@ -78,6 +80,21 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
 
   useEffect(refresh, [refresh]);
   useEffect(() => setBody(report.body ?? ""), [report.id, report.body]);
+  // 쓰던 보고 — 떠날 때 묻고, 임시 보관한다 (TODO 162). 확정된 보고는 본문을 고칠 수 없으니 빼고.
+  const draftKey = `report:${report.id}`;
+  const [restored, setRestored] = useState(false);
+  useUnsaved(draftKey, !frozen && (dirty || feedbackDirty));
+  useDraftKeeper(frozen ? null : draftKey, body, report.body ?? "");
+  useEffect(() => {
+    if (frozen) return;
+    const kept = takeDraft(draftKey, report.body ?? "");
+    if (kept === null) return;
+    setBody(kept);
+    setDirty(true);
+    setRestored(true);
+    // 문서를 바꿔 열 때만 — 저장해서 본문이 바뀐 것은 되살릴 일이 아니다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.id]);
   useEffect(() => setAudience(report.audience ?? ""), [report.id, report.audience]);
   useEffect(() => setReportDate(report.report_date), [report.id, report.report_date]);
   useEffect(() => {
@@ -274,7 +291,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             className="ghost small"
             disabled={audience === (report.audience ?? "")}
             onClick={async () => {
-              await api.updateReport(report.id, { audience });
+              if (!(await attempt(() => api.updateReport(report.id, { audience })))) return;
               setDirty(false);
               onChanged();
             }}
@@ -512,7 +529,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                   const warn = used
                     ? "\n\n이 첨부는 **본문에서 쓰이는 중**입니다. 지우면 그 자리가 깨집니다."
                     : "";
-                  if (!window.confirm(`${attachment.orig_name} 을(를) 보관함으로 옮길까요?${warn}`))
+                  if (!window.confirm(`${attachment.orig_name} 을(를) 삭제 보관함으로 옮길까요?${warn}`))
                     return;
                   try {
                     await api.deleteAttachment(attachment.id);
@@ -525,6 +542,22 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         />
       </div>
 
+      {restored && dirty && (
+        <p className="hint restored">
+          저장하지 않은 작성 중 내용을 복구했습니다.{" "}
+          <button
+            className="ghost small"
+            onClick={() => {
+              dropDraft(draftKey);
+              setBody(report.body ?? "");
+              setDirty(false);
+              setRestored(false);
+            }}
+          >
+            복구한 내용 버리기
+          </button>
+        </p>
+      )}
       {notice && <p className="hint notice">{notice}</p>}
       {error && <p className="form-error">{error}</p>}
 
@@ -536,8 +569,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
               className="ghost"
               onClick={async () => {
                 if (!window.confirm("확정을 해제하면 문서를 다시 고칠 수 있습니다. 해제할까요?")) return;
-                await api.unfreezeReport(report.id);
-                onChanged();
+                if (await attempt(() => api.unfreezeReport(report.id))) onChanged();
               }}
             >
               확정 해제
@@ -551,7 +583,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                 className="ghost danger"
                 disabled={busy}
                 onClick={async () => {
-                  if (!window.confirm("이 보고 초안을 보관함(.trash)으로 옮길까요? 보관함에서 되돌릴 수 있습니다."))
+                  if (!window.confirm("이 보고 초안을 삭제 보관함으로 옮길까요?\n\n설정 → 삭제 보관함에서 되돌릴 수 있습니다."))
                     return;
                   setBusy(true);
                   try {

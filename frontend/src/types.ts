@@ -51,6 +51,8 @@ export interface Meta {
   intake_stale_days: number;
   /** 사전점검 체크리스트 (TODO 155) */
   precheck: PrecheckMeta;
+  /** 마지막으로 vault 를 훑었을 때 읽지 못한 파일 · 값 (TODO 164) */
+  problems?: { path: string; reason: string }[];
 }
 
 export interface PrecheckItemDef {
@@ -316,6 +318,8 @@ export interface Person {
 export interface AppSettings {
   /** 지금은 설정에서 정한 사용자, 나중에는 로그인한 사용자가 된다. */
   author: string;
+  /** 설정 파일에서 읽지 못해 기본값을 쓰는 열쇠 — "*" 는 파일 전체 (TODO 163, 읽을 때만 온다) */
+  unreadable?: string[];
   /** 과제 속성별 진행일지 서식. "" 키가 공통 서식. */
   entry_templates: Record<string, string>;
   /** 보고 초안 서식. {summary} 자리에 미보고 진행일지가 들어간다. */

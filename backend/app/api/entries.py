@@ -4,7 +4,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..deps import get_db
+from ..deps import get_db, RowId
 from ..vault.markdown import ExternalChangeError
 from ..vault.paths import FileInUseError, InvalidDateError
 from ..schemas import EntryCreate, EntryUpdate
@@ -77,7 +77,7 @@ def create_entry(
 
 
 @router.get("/api/entries/{entry_id}")
-def get_entry(entry_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def get_entry(entry_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     row = conn.execute("SELECT * FROM entry WHERE id = ?", (entry_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="진행일지를 찾을 수 없습니다.")
@@ -86,7 +86,7 @@ def get_entry(entry_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict
 
 @router.patch("/api/entries/{entry_id}")
 def update_entry(
-    entry_id: int, payload: EntryUpdate, conn: sqlite3.Connection = Depends(get_db)
+    entry_id: RowId, payload: EntryUpdate, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     try:
         svc.update_entry(conn, entry_id, payload.changes())
@@ -101,7 +101,7 @@ def update_entry(
 
 
 @router.delete("/api/entries/{entry_id}", status_code=204)
-def delete_entry(entry_id: int, conn: sqlite3.Connection = Depends(get_db)) -> None:
+def delete_entry(entry_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> None:
     try:
         svc.delete_entry(conn, entry_id)
     except KeyError as exc:

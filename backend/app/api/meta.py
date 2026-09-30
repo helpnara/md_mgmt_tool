@@ -12,6 +12,7 @@ from ..deps import get_db
 from ..services import buildinfo
 from ..services import home as home_service
 from ..services import settings as settings_service
+from ..vault import indexer
 from ..vault.indexer import reindex_all
 
 router = APIRouter(prefix="/api", tags=["meta"])
@@ -129,6 +130,8 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "intake_stale_days": settings_service.intake_stale_days(),
         # 사전점검 체크리스트 (TODO 155) — 항목·단계·점수와 구간 기준
         "precheck": _precheck_meta(),
+        # 마지막으로 vault 를 훑었을 때 읽지 못한 파일 · 값 (TODO 164) — 홈 · 과제목록이 늘 띄운다
+        "problems": [{"path": item.rel_path, "reason": item.reason} for item in indexer.LAST_PROBLEMS],
     }
 
 

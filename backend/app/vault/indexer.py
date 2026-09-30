@@ -24,6 +24,34 @@ class IndexProblem(NamedTuple):
     reason: str
 
 
+# 마지막으로 온 vault 를 훑었을 때의 문제 (TODO 164). 켤 때의 검은 창과 [다시 읽기] 에서만 보이면
+# 사용자는 모른다 — 홈·과제목록이 늘 보이는 자리에 띄운다(api/meta 의 `problems`).
+LAST_PROBLEMS: list[IndexProblem] = []
+
+
+def _as_date(meta: dict, key: str, rel_path: str, problems: list[IndexProblem] | None) -> str | None:
+    """날짜 칸. 읽을 수 없는 값이면 **그 값만** 비우고 알린다 (TODO 164).
+
+    전에는 `2026-02-30` 하나로 파일 전체를 못 읽어 과제가 목록 · 홈 · 보고대상에서 통째로 사라졌다.
+    파일은 그대로 둔다 — 사람이 고치면 다음 [다시 읽기] 에서 돌아온다.
+    """
+    value = meta.get(key)
+    if value is None or value == "":
+        return None
+    if isinstance(value, (date_cls, datetime)):
+        return _as_str(value)
+    text = str(value).strip()
+    try:
+        date_cls.fromisoformat(text[:10])
+        if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+            return text
+    except ValueError:
+        pass
+    if problems is not None:
+        problems.append(IndexProblem(rel_path, f"{key} 값({text})을 날짜로 읽지 못해 이 값 없이 보입니다 — 파일을 고친 뒤 [다시 읽기]"))
+    return None
+
+
 def _load_doc(path: Path, root: Path, problems: list[IndexProblem] | None) -> md.MarkdownDoc | None:
     """front matter가 깨진 파일 하나 때문에 전체 인덱싱이 멈추지 않게 한다."""
     try:
@@ -144,7 +172,7 @@ def _index_entries(
             seen.append(path.relative_to(project_dir).as_posix())
             continue
         rel_path = path.relative_to(project_dir).as_posix()
-        entry_date = _as_str(doc.meta.get("date")) or path.name[:10]
+        entry_date = _as_date(doc.meta, "date", path.relative_to(project_dir.parent.parent).as_posix(), problems) or path.name[:10]
         title = _as_str(doc.meta.get("title")) or path.stem
         updated_at = _as_str(doc.meta.get("updated_at"))
         conn.execute(
@@ -210,10 +238,21 @@ def project_id_from_dir_name(dir_name: str) -> str:
     return dir_name
 
 
+def refresh_problems(prefix: str, found: list[IndexProblem]) -> None:
+    """폴더 하나를 다시 읽었을 때 그 폴더의 문제만 바꿔 끼운다 (TODO 164) — 도구에서 날짜를 고쳐
+    저장하면 경고가 바로 사라지고, [다시 읽기] 를 기다리지 않는다."""
+    LAST_PROBLEMS[:] = [item for item in LAST_PROBLEMS if not item.rel_path.startswith(prefix)] + found
+
+
 def index_project(
     conn: sqlite3.Connection, project_dir: Path, problems: list[IndexProblem] | None = None
 ) -> str | None:
     """과제 폴더 하나를 인덱싱한다. 반환값은 과제 id."""
+    if problems is None:
+        local: list[IndexProblem] = []
+        result = index_project(conn, project_dir, local)
+        refresh_problems(f"projects/{project_dir.name}/", local)
+        return result
     index_md = project_dir / "index.md"
     if not index_md.exists():
         return None
@@ -223,6 +262,7 @@ def index_project(
         # 개요 문서를 못 읽으면 이 과제는 이번 회차에 건드리지 않는다.
         return project_id_from_dir_name(project_dir.name)
     project_id = _as_str(doc.meta.get("id")) or project_id_from_dir_name(project_dir.name)
+    rel_index = index_md.relative_to(project_dir.parent.parent).as_posix()
     # owners(복수)가 우선이고, 예전 문서의 owner(단수)도 그대로 읽는다.
     owners = _as_list(doc.meta.get("owners")) or _as_list(doc.meta.get("owner"))
     # 예전에 상태로 쓰이던 '기획보고' 같은 값은 상태+속성으로 나눠 읽는다.
@@ -262,14 +302,14 @@ def index_project(
             project_type,
             _as_str(doc.meta.get("group")),
             ", ".join(owners) or None,
-            _as_str(doc.meta.get("start_date")),
-            _as_str(doc.meta.get("due_date")),
+            _as_date(doc.meta, "start_date", rel_index, problems),
+            _as_date(doc.meta, "due_date", rel_index, problems),
             _as_effect(doc.meta.get("effect_expected")),
             _as_effect(doc.meta.get("effect_verified")),
             1 if _as_bool(doc.meta.get("no_report")) else 0,
             1 if _as_bool(doc.meta.get("no_effect")) else 0,
             _as_str(doc.meta.get("created_by")),
-            _as_str(doc.meta.get("completed_at")),
+            _as_date(doc.meta, "completed_at", rel_index, problems),
             _as_str(doc.meta.get("nature")),
             _as_str(doc.meta.get("category")),
             _as_str(doc.meta.get("delivery")),
@@ -310,7 +350,7 @@ def _index_reports(
             seen.append(path.relative_to(project_dir).as_posix())
             continue
         rel_path = path.relative_to(project_dir).as_posix()
-        report_date = _as_str(doc.meta.get("report_date")) or path.parent.name
+        report_date = _as_date(doc.meta, "report_date", rel_path, problems) or path.parent.name
         conn.execute(
             """
             INSERT INTO report(project_id, report_date, title, rel_path, covers_from, covers_to,
@@ -624,4 +664,5 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
 
     detach_orphans(conn)
     conn.commit()
+    LAST_PROBLEMS[:] = problems
     return len(found), problems

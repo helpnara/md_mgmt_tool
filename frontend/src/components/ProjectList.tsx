@@ -1,8 +1,10 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import { notifyError } from "../notify";
 import type { Meta, Project } from "../types";
 import { cellCount, cellEffect, DASH, dueLabel, EFFECT_UNIT, sumBy } from "../util";
 import TotalRow from "./TotalRow";
+import ProblemsBanner from "./ProblemsBanner";
 import { backTarget, projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
@@ -116,7 +118,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
   // 조건이 아니라 한 번 쓰고 마는 신호라 filters 에 넣지 않는다 — 주소에도 남기지 않는다.
   const [creating, setCreating] = useState(() => new URLSearchParams(query).get("new") === "1");
   const [error, setError] = useState<string | null>(null);
-  const [problems, setProblems] = useState<{ path: string; reason: string }[]>([]);
+  const [reindexing, setReindexing] = useState(false);
   // 과제가 늘거나 다시 읽었을 때 대시보드도 같이 갱신한다.
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -358,16 +360,22 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           />
           <button
             className="ghost"
+            disabled={reindexing}
             onClick={async () => {
-              const result = await api.reindex();
-              setProblems(result.problems);
+              setReindexing(true);
+              const result = await api.reindex().catch((err: Error) => {
+                notifyError(err.message);
+                return null;
+              });
+              setReindexing(false);
+              if (!result) return;
               load();
               onMetaChange();
               setRefreshKey((value) => value + 1);
             }}
             title="폴더를 직접 수정했을 때 다시 읽어들입니다"
           >
-            다시 읽기
+            {reindexing ? "읽는 중…" : "다시 읽기"}
           </button>
           <button onClick={() => setCreating(true)}>과제 추가</button>
         </div>
@@ -395,28 +403,8 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
 
       {error && <LoadError message={error} onRetry={load} />}
 
-      {problems.length > 0 && (
-        <div className="card problems">
-          <div className="card-head">
-            <h2>읽지 못한 파일 {problems.length}건</h2>
-            <button className="ghost small" onClick={() => setProblems([])}>
-              닫기
-            </button>
-          </div>
-          <p className="hint">
-            md 파일 맨 위의 설정(front matter) 형식이 어긋났습니다. 아래 파일을 열어 고친 뒤 다시 읽어 주세요.
-            나머지 과제는 정상적으로 표시됩니다.
-          </p>
-          <ul className="problem-list">
-            {problems.map((problem) => (
-              <li key={problem.path}>
-                <code>{problem.path}</code>
-                <span className="muted">{problem.reason}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* 읽지 못한 파일 · 값 — [다시 읽기] 를 누르기 전에도 늘 보인다 (TODO 164) */}
+      <ProblemsBanner problems={meta.problems ?? []} onReindexed={() => { load(); onMetaChange(); }} />
 
       {view === "board" && <ProjectBoard meta={meta} projects={projects} />}
 
@@ -457,7 +445,8 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                   <StatusBadge status={project.status} meta={meta} />
                 </td>
                 <td className="one-line">
-                  <TypeBadge type={project.type} meta={meta} />
+                  {/* 속성이 없으면 표의 빈 값 `-` (158) — 딱지 부품의 `—` 는 표 밖의 규칙이다 (TODO 169) */}
+                  {project.type ? <TypeBadge type={project.type} meta={meta} /> : <span className="muted">{DASH}</span>}
                   {/* 금액으로 재지 않는 과제 (TODO 125) */}
                   {project.no_effect && (
                     <span className="tag" title="효과성 관리 비대상 과제">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { ClassificationKey, Intake, Meta } from "../types";
+import { useFormUnsaved } from "../unsaved";
 
 /**
  * 접수의 칸 (TODO 136) — 등록할 때와 고칠 때 같은 폼이다.
@@ -44,6 +45,8 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
   const [error, setError] = useState<string | null>(null);
   // 받은 과제정의서·부연 설명을 들고 **한 번에** 등록한다. 예전에는 등록한 뒤 상세에 다시 들어가야 했다.
   const [files, setFiles] = useState<File[]>([]);
+  // 쓰다가 떠나면 묻는다 (TODO 162)
+  useFormUnsaved(`intake-form:${initial?.id ?? "new"}`, { form, files: files.map((file) => file.name) }, busy);
   // FileList 는 **살아 있는 목록**이다 — 입력 칸을 비우거나 끌어다 놓기가 끝나면 비워진다.
   // 상태 갱신 함수 안에서 읽으면 그때는 이미 비어 있으므로 여기서 바로 배열로 떠 둔다.
   const addFiles = (list: FileList | File[] | null) => {

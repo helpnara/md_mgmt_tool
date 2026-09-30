@@ -21,6 +21,9 @@ class RestoreRequest(BaseModel):
 
 @router.get("")
 def list_versions(path: str = Query(..., min_length=1)) -> dict:
+    # 경로에 NUL 글자가 들면 파일 열기가 500 을 냈다 (TODO 167)
+    if "\x00" in path:
+        raise HTTPException(status_code=400, detail="경로가 올바르지 않습니다.")
     return {"path": path, "items": svc.list_for(path)}
 
 

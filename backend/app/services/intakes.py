@@ -1006,7 +1006,13 @@ def promote(conn: sqlite3.Connection, intake_id: str, data: dict[str, Any]) -> s
 
 def index_intake(conn: sqlite3.Connection, directory: Path, problems: list | None = None) -> str | None:
     """접수 폴더 하나를 색인한다. 파일이 원본이고 이 표는 목록·집계용 파생물이다."""
-    from ..vault.indexer import IndexProblem, _as_bool, _as_effect, _as_list, _as_str
+    from ..vault.indexer import IndexProblem, _as_bool, _as_date, _as_effect, _as_list, _as_str, refresh_problems
+
+    if problems is None:  # 하나만 다시 읽을 때 — 그 접수의 경고만 바꿔 끼운다 (TODO 164)
+        local: list = []
+        result = index_intake(conn, directory, local)
+        refresh_problems(f"intakes/{directory.name}/", local)
+        return result
 
     request = directory / REQUEST_FILE
     if not request.exists():
@@ -1023,6 +1029,7 @@ def index_intake(conn: sqlite3.Connection, directory: Path, problems: list | Non
     if status not in INTAKE_STATUS_KEYS:
         status = "received"
     # 상태 변경 줄은 사람이 한 검토가 아니다 — 기록 수와 "최근 검토일" 에서 뺀다
+    rel_request = request.relative_to(get_settings().vault_dir).as_posix()
     human_dates: list[str] = []
     for path in sorted((directory / "logs").glob("*.md")) if (directory / "logs").exists() else []:
         try:
@@ -1074,14 +1081,14 @@ def index_intake(conn: sqlite3.Connection, directory: Path, problems: list | Non
             _as_str(doc.meta.get("leader")),
             _as_str(doc.meta.get("leader_team")),
             *[_as_str(doc.meta.get(key)) for key in CLASSIFICATION_KEYS],
-            _as_str(doc.meta.get("start_date")),
-            _as_str(doc.meta.get("due_date")),
+            _as_date(doc.meta, "start_date", rel_request, problems),
+            _as_date(doc.meta, "due_date", rel_request, problems),
             _as_effect(doc.meta.get("effect_request")),
             priority if priority in INTAKE_PRIORITIES else None,
             _as_str(doc.meta.get("priority_note")),
             1 if _as_bool(doc.meta.get("picked")) else 0,
-            _as_str(doc.meta.get("received_on")) or (_as_str(doc.meta.get("created_at")) or "")[:10] or None,
-            _as_str(doc.meta.get("decided_on")),
+            _as_date(doc.meta, "received_on", rel_request, problems) or (_as_str(doc.meta.get("created_at")) or "")[:10] or None,
+            _as_date(doc.meta, "decided_on", rel_request, problems),
             _as_str(doc.meta.get("decision_note")),
             _as_str(doc.meta.get("project_id")),
             _as_str(doc.meta.get("merged_into")),

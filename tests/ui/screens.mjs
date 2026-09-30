@@ -17,7 +17,7 @@
  */
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2826,7 +2826,8 @@ async function main() {
 
   await check("탭 제목과 화면 머리가 «느린 나이테» 다", async () => {
     await go("#/");
-    equal(await page.title(), "느린 나이테", "탭 제목");
+    // 탭 제목은 화면 이름 · 도구 이름 (TODO 169 — 탭 여러 개를 구분하려고)
+    equal(await page.title(), "홈 · 느린 나이테", "탭 제목");
     const brand = page.locator(".app-header .brand");
     equal((await brand.innerText()).trim(), "느린 나이테", "화면 머리의 이름");
     // 표시가 글자 옆에 실제로 그려졌는가 — 주소만 맞고 안 뜨는 경우를 잡는다.
@@ -3590,6 +3591,214 @@ async function main() {
     await page.setViewportSize({ width: 1500, height: 900 });
     await api.patch(`/api/projects/${seeded.projectA}`, { group: "" });
   });
+
+  console.log("\n[30] 실패 알림 · 떠나기 경고 · 임시 보관 · 읽지 못한 값 · 안전망 · 좁은 창 (TODO 161~169)");
+
+  // 이 묶음은 **일부러** 실패(409 · 연결 끊김 · 그리기 오류)를 끼워 넣는다 — 그때 나는 콘솔 오류는
+  // 끝의 "화면 오류가 없었다" 에 세지 않는다. 묶음이 끝나면 여기까지로 되돌린다.
+  const errorsBefore30 = pageErrors.length;
+
+  /** 다음 확인 창 하나만 이 시험의 손으로 받고, 그 뒤는 위쪽의 전역 handler(accept)로 돌린다 */
+  const nextDialog = (handle) => {
+    page.removeAllListeners("dialog");
+    page.once("dialog", async (dialog) => {
+      await handle(dialog);
+      page.on("dialog", (other) => other.accept());
+    });
+  };
+
+  /** 서버의 쓰기 요청을 일부러 실패시킨다 — 윈도우에서 파일이 열려 있을 때와 같은 409 */
+  const FAIL = "시험용 실패 — 다른 프로그램에서 열려 있습니다";
+  const failWrites = (on) =>
+    on
+      ? page.route("**/api/**", (route) =>
+          route.request().method() === "GET"
+            ? route.continue()
+            : route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ detail: FAIL }) }))
+      : page.unroute("**/api/**");
+
+  await check("저장·삭제가 실패하면 화면 아래 알림에 사유가 선다 (161)", async () => {
+    nextDialog((d) => d.accept());
+    await go(`#/projects/${seeded.projectA}`);
+    await failWrites(true);
+    await page.locator("li.entry").first().getByRole("button", { name: "삭제" }).click();
+    await page.waitForTimeout(700);
+    await failWrites(false);
+    expect((await page.locator(".toast").innerText()).includes(FAIL), "진행일지 삭제 실패 알림");
+    await page.locator(".toast").getByRole("button", { name: "알림 닫기" }).click();
+    // 개요 저장 — 실패해도 편집기와 쓰던 글이 남는다
+    await page.locator(".card", { hasText: "과제 개요" }).getByRole("button", { name: "수정" }).first().click();
+    await page.locator(".card", { hasText: "과제 개요" }).locator("textarea").fill("실패할 개요");
+    await failWrites(true);
+    await page.getByRole("button", { name: "저장", exact: true }).first().click();
+    await page.waitForTimeout(700);
+    await failWrites(false);
+    expect((await page.locator(".toast").innerText()).includes(FAIL), "개요 저장 실패 알림");
+    equal(await page.locator(".card", { hasText: "과제 개요" }).locator("textarea").inputValue(), "실패할 개요", "쓰던 글");
+    // 뒷정리 — 버리고 닫는다
+    nextDialog((d) => d.accept());
+    await page.locator(".card", { hasText: "과제 개요" }).getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("편집 중에 메뉴를 누르면 묻고, 머물면 글이 그대로다 (162)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".card", { hasText: "과제 개요" }).getByRole("button", { name: "수정" }).first().click();
+    await page.locator(".card", { hasText: "과제 개요" }).locator("textarea").fill("떠나기 시험");
+    let asked = "";
+    nextDialog((d) => { asked = d.message(); d.dismiss(); });
+    await page.locator("header a", { hasText: "도움말" }).click();
+    await page.waitForTimeout(500);
+    expect(asked.includes("저장하지 않은 내용"), `묻지 않았다: ${asked}`);
+    expect(page.url().includes(`projects/${seeded.projectA}`), `떠났다: ${page.url()}`);
+    equal(await page.locator(".card", { hasText: "과제 개요" }).locator("textarea").inputValue(), "떠나기 시험", "쓰던 글");
+    // 떠나기로 하면 떠난다 — 그리고 다시 열면 임시 보관이 되살린다
+    nextDialog((d) => d.accept());
+    await page.locator("header a", { hasText: "도움말" }).click();
+    await page.waitForTimeout(500);
+    expect(page.url().includes("#/help"), `못 떠났다: ${page.url()}`);
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".card", { hasText: "과제 개요" }).getByRole("button", { name: "수정" }).first().click();
+    equal(await page.locator(".card", { hasText: "과제 개요" }).locator("textarea").inputValue(), "떠나기 시험", "되살린 글");
+    expect(await page.locator(".restored").count() > 0, "복구 안내");
+    await page.getByRole("button", { name: "복구한 내용 버리기" }).click();
+    await page.locator(".card", { hasText: "과제 개요" }).getByRole("button", { name: "취소" }).click();
+    // 저장하지 않은 것이 없으면 묻지 않는다
+    let again = false;
+    nextDialog((d) => { again = true; d.dismiss(); });
+    await page.locator("header a", { hasText: "도움말" }).click();
+    await page.waitForTimeout(400);
+    expect(!again && page.url().includes("#/help"), "편집이 없으면 묻지 않아야 한다");
+  });
+
+  await check("Ctrl+S 가 개요 · 접수 편집기에서도 저장한다 (162)", async () => {
+    await go(`#/projects/${seeded.projectB}`);
+    await page.locator(".card", { hasText: "과제 개요" }).getByRole("button", { name: "수정" }).first().click();
+    const area = page.locator(".card", { hasText: "과제 개요" }).locator("textarea");
+    await area.fill("## 배경\n\nCtrl+S 로 저장한 개요");
+    await area.press("Control+s");
+    await page.waitForTimeout(800);
+    expect((await api.get(`/api/projects/${seeded.projectB}`)).body.includes("Ctrl+S 로 저장한 개요"), "개요 저장");
+    const made = await api.post("/api/intakes", { title: "Ctrl+S 접수" });
+    await go(`#/intakes/${encodeURIComponent(made.id)}`);
+    await page.locator(".intake-body").getByRole("button", { name: "수정" }).click();
+    const box = page.locator(".body-editor textarea");
+    await box.fill("## 배경\n\n단축키로 저장");
+    await box.press("Control+s");
+    await page.waitForTimeout(800);
+    expect((await api.get(`/api/intakes/${encodeURIComponent(made.id)}`)).body.includes("단축키로 저장"), "요청 내용 저장");
+  });
+
+  await check("서버에 닿지 못하면 한국어로 말하고 [다시 시도] 가 있다 (165)", async () => {
+    await page.route("**/api/**", (route) => route.abort("connectionrefused"));
+    for (const hash of ["#/intakes", `#/projects/${seeded.projectA}`, "#/settings"]) {
+      await go(hash);
+      const text = await page.locator("main").innerText();
+      expect(text.includes("run.bat") && !text.includes("Failed to fetch"), `${hash}: ${text.slice(0, 120)}`);
+      expect(await page.locator(".load-error").getByRole("button", { name: "다시 시도" }).count() > 0, `${hash} 다시 시도`);
+    }
+    await page.unroute("**/api/**");
+  });
+
+  await check("입력 검사 오류는 사유 목록으로 오고, 화면은 항목 이름으로 말한다 (165 · 167)", async () => {
+    const res = await fetch(`${BASE}/api/people`, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"name": NaN}' });
+    equal(res.status, 422, "NaN 은 422 (전에는 500)");
+    expect(Array.isArray((await res.json()).detail), "사유는 목록");
+    // 화면 쪽 — 목록 사유를 받은 요청이 [object Object] 로 보이지 않는다
+    await go("#/projects");
+    await page.route("**/api/projects", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({ detail: [{ loc: ["body", "title"], msg: "x", type: "x" }] }) })
+        : route.continue());
+    await page.getByRole("button", { name: "과제 추가" }).click();
+    await page.locator(".card", { hasText: "새 과제" }).locator("input").first().fill("검사 오류 시험");
+    await page.locator(".card", { hasText: "새 과제" }).getByRole("button", { name: "만들기" }).click();
+    await page.waitForTimeout(600);
+    await page.unroute("**/api/projects");
+    const shown = await page.locator(".card", { hasText: "새 과제" }).innerText();
+    expect(shown.includes("입력값을 서버가 받지 못했습니다") && shown.includes("title") && !shown.includes("[object Object]"), shown.slice(0, 200));
+    nextDialog((d) => d.accept());
+    await page.locator(".card", { hasText: "새 과제" }).getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("화면 하나가 그리다 멈춰도 메뉴가 살고 오류 기록에 남는다 (166)", async () => {
+    await api.delete("/api/errors");
+    await page.route("**/api/home**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: '{"team": null}' }));
+    await go("#/");
+    await page.unroute("**/api/home**");
+    expect(await page.locator(".render-error").count() === 1, "안전망 판");
+    expect(await page.locator("header .nav a").count() >= 8, "메뉴가 살아 있다");
+    await page.locator("header a", { hasText: "도움말" }).click();
+    await page.waitForTimeout(500);
+    equal(await page.locator(".render-error").count(), 0, "다른 화면으로 가면 풀린다");
+    await page.waitForTimeout(300);
+    const logged = (await api.get("/api/errors")).items;
+    expect(logged.some((item) => item.action.startsWith("화면") && item.error === "render"), `기록: ${JSON.stringify(logged.slice(0, 2))}`);
+    // 화면 오류는 목록에서 "화면" 으로 보인다
+    await go("#/settings");
+    await page.locator("summary", { hasText: "점검" }).first().click().catch(() => undefined);
+    // 이 시험이 남긴 기록은 지운다 — 뒤의 "화면 오류가 없었다" 는 페이지 오류를 보므로 영향이 없다
+    await api.delete("/api/errors");
+  });
+
+  await check("손으로 틀린 날짜를 적어도 과제가 남고, 홈 위에 알린다 (164)", async () => {
+    const made = await api.post("/api/projects", { title: "날짜 틀린 과제", due_date: "2026-11-01" });
+    const index = join(vault, "projects", (await readdir(join(vault, "projects"))).find((name) => name.startsWith(made.id)), "index.md");
+    const text = await readFile(index, "utf8");
+    await writeFile(index, text.replace(/^due_date: .*$/m, "due_date: 2026-02-30"), "utf8");
+    await api.post("/api/reindex");
+    // 화면은 켤 때 · [다시 읽기] 를 눌렀을 때 목록을 받는다 — 사용자가 도구를 다시 켠 것과 같게
+    await go("#/");
+    await page.reload();
+    await page.waitForTimeout(800);
+    const banner = page.locator(".problems-banner");
+    expect(await banner.count() === 1, "홈 위 알림");
+    await banner.getByRole("button", { name: "무엇인지 보기" }).click();
+    expect((await banner.innerText()).includes("2026-02-30"), "무엇이 틀렸는지");
+    expect((await api.get("/api/projects")).some((p) => p.id === made.id), "과제는 목록에 남는다");
+    // 도구에서 날짜를 고치면 알림이 사라진다
+    await api.patch(`/api/projects/${made.id}`, { due_date: "2026-11-30" });
+    await page.reload();
+    await page.waitForTimeout(800);
+    equal(await page.locator(".problems-banner").count(), 0, "고치면 사라진다");
+    await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+  });
+
+  await check("설정 파일의 값이 틀리면 설정 화면이 알린다 (163)", async () => {
+    const path = join(vault, "settings.json");
+    const before = await readFile(path, "utf8").catch(() => "{}");
+    const data = JSON.parse(before || "{}");
+    await writeFile(path, JSON.stringify({ ...data, backup_every_hours: "매일" }), "utf8");
+    await go("#/settings");
+    expect((await page.locator(".warn-banner").innerText()).includes("backup_every_hours"), "설정 화면 알림");
+    await writeFile(path, before, "utf8");
+  });
+
+  await check("Esc 로 승격 창이 닫히고, 탭 제목이 과제 · 접수 이름이다 (169)", async () => {
+    const made = await api.post("/api/intakes", { title: "Esc 시험 접수" });
+    await go(`#/intakes/${encodeURIComponent(made.id)}`);
+    expect((await page.title()).startsWith(`${made.id} Esc 시험 접수`), `탭 제목: ${await page.title()}`);
+    await page.getByRole("button", { name: /착수 · 과제로 승격/ }).click();
+    await page.locator(".promote-dialog").waitFor();
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    equal(await page.locator(".promote-dialog").count(), 0, "Esc 로 닫힘");
+    await go(`#/projects/${seeded.projectA}`);
+    expect((await page.title()).startsWith(seeded.projectA), `과제 탭 제목: ${await page.title()}`);
+  });
+
+  await check("창을 반으로 붙인 폭(960px)에서 메뉴가 꺾이지 않는다 (168)", async () => {
+    await page.setViewportSize({ width: 960, height: 900 });
+    await go("#/");
+    const tall = await page.evaluate(() =>
+      [...document.querySelectorAll("header .nav a")].filter((a) => a.getClientRects().length > 1 || a.getBoundingClientRect().height > 40).map((a) => a.textContent));
+    equal(tall.length, 0, `꺾인 메뉴: ${tall.join(",")}`);
+    const search = await page.locator("header .search-box input").boundingBox();
+    expect(search && search.width > 200, `검색 칸 폭 ${search?.width}`);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "가로 넘침");
+    await page.setViewportSize({ width: 1500, height: 900 });
+  });
+
+  pageErrors.length = errorsBefore30;
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {

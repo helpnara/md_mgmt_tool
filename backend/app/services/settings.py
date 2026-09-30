@@ -69,16 +69,68 @@ def _path():
     return get_settings().vault_dir / FILENAME
 
 
+# 값의 모양 (TODO 163). 손으로 고친 설정 파일의 값 하나가 모양이 다르면(`"backup_every_hours": "매일"`)
+# 그 값을 쓰는 곳이 모두 넘어졌다. 읽을 때 한 번 걸러 **그 값만** 기본값으로 둔다.
+_NULLABLE_SHAPES: dict[str, type] = {"project_types": list, "classifications": dict, "precheck_items": list}
+_POSITIVE_KEYS = ("backup_keep", "backup_every_hours", "intake_stale_days")
+_ZERO_OK_KEYS = ("backup_keep_weekly", "backup_keep_monthly")
+
+# 마지막으로 읽을 때 기본값으로 바꾼 열쇠 — 설정 화면이 알린다.
+_unreadable: list[str] = []
+
+
+def _shape_ok(key: str, value: Any) -> bool:
+    default = DEFAULTS[key]
+    if key in _NULLABLE_SHAPES:
+        return value is None or isinstance(value, _NULLABLE_SHAPES[key])
+    if isinstance(default, bool):
+        return isinstance(value, bool)
+    if isinstance(default, int):
+        if isinstance(value, bool) or not isinstance(value, int):
+            return False
+        if key == "report_weekday":
+            return 0 <= value <= 6
+        if key in _POSITIVE_KEYS:
+            return value >= 1
+        if key in _ZERO_OK_KEYS:
+            return value >= 0
+        return True
+    if key == "precheck_thresholds":
+        return (isinstance(value, list) and len(value) == 2
+                and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value))
+    return isinstance(value, type(default))
+
+
 def load() -> dict[str, Any]:
     path = _path()
+    _unreadable.clear()
     if not path.exists():
         return dict(DEFAULTS)
     try:
         stored = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         # 설정 파일이 깨졌다고 도구가 멈출 이유는 없다.
+        _unreadable.append("*")
         return dict(DEFAULTS)
-    return {**DEFAULTS, **{key: stored.get(key, value) for key, value in DEFAULTS.items()}}
+    if not isinstance(stored, dict):
+        # 목록·글이면 시작하다 멈췄다 (TODO 163)
+        _unreadable.append("*")
+        return dict(DEFAULTS)
+    out = dict(DEFAULTS)
+    for key in DEFAULTS:
+        if key not in stored:
+            continue
+        if _shape_ok(key, stored[key]):
+            out[key] = stored[key]
+        else:
+            _unreadable.append(key)
+    return out
+
+
+def unreadable_keys() -> list[str]:
+    """설정 파일에서 읽지 못해 기본값을 쓰고 있는 열쇠. `"*"` 는 파일 전체."""
+    load()
+    return list(_unreadable)
 
 
 def save(updates: dict[str, Any]) -> dict[str, Any]:

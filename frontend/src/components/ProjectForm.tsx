@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { ClassificationInfo, ClassificationKey, Meta, Partner, Project } from "../types";
 import TagSuggestions from "./TagSuggestions";
 import UnknownOwners from "./UnknownOwners";
+import { useFormUnsaved } from "../unsaved";
 
 interface Props {
   meta: Meta;
@@ -95,6 +96,8 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   // 금액으로 재지 않는 과제 (TODO 125). 유지보수·기획보고처럼 효과 금액을 적지 않는 일이
   // "완료했는데 실증효과 미입력" 에 계속 남으면, 줄지 않는 그 숫자를 곧 안 보게 된다.
   const [noEffect, setNoEffect] = useState(Boolean(initial?.no_effect));
+  // 쓰다가 떠나면 묻는다 (TODO 162)
+  useFormUnsaved(`project-form:${initial?.id ?? "new"}`, { form, noReport, noEffect }, busy);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();

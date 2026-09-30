@@ -44,7 +44,8 @@ class SettingsUpdate(BaseModel):
 
 @router.get("")
 def read_settings() -> dict:
-    return svc.load()
+    # 설정 파일에서 읽지 못해 기본값을 쓰는 열쇠 — 설정 화면이 한 줄로 알린다 (TODO 163)
+    return {**svc.load(), "unreadable": svc.unreadable_keys()}
 
 
 @router.put("")

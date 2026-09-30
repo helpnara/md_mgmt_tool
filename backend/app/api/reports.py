@@ -6,7 +6,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from ..deps import get_db
+from ..deps import get_db, RowId
 from ..vault.markdown import ExternalChangeError
 from ..services import attachments as attach_svc
 from ..services import reports as svc
@@ -92,7 +92,7 @@ class FeedbackDone(BaseModel):
 
 @router.post("/api/reports/{report_id}/feedback-done")
 def feedback_done(
-    report_id: int, payload: FeedbackDone, conn: sqlite3.Connection = Depends(get_db)
+    report_id: RowId, payload: FeedbackDone, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     """지시에 답했다(또는 아직이다). 다음 초안에 그 지시가 다시 나오지 않게 한다 (TODO 107)."""
     try:
@@ -128,7 +128,7 @@ def create_draft(
 
 
 @router.get("/api/reports/{report_id}")
-def get_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def get_report(report_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     try:
         return _serialize(conn, svc.report_row(conn, report_id))
     except KeyError as exc:
@@ -137,7 +137,7 @@ def get_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> di
 
 @router.patch("/api/reports/{report_id}")
 def update_report(
-    report_id: int, payload: ReportUpdate, conn: sqlite3.Connection = Depends(get_db)
+    report_id: RowId, payload: ReportUpdate, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     try:
         svc.update_report(conn, report_id, payload.changes())
@@ -153,7 +153,7 @@ def update_report(
 
 
 @router.get("/api/reports/{report_id}/diff")
-def report_diff(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def report_diff(report_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """직전에 확정한 보고와의 차이. 비교할 보고가 없으면 previous 가 null."""
     try:
         return svc.diff_with_previous(conn, report_id)
@@ -162,7 +162,7 @@ def report_diff(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> d
 
 
 @router.post("/api/reports/{report_id}/freeze")
-def freeze_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def freeze_report(report_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     try:
         svc.freeze_report(conn, report_id)
     except KeyError as exc:
@@ -171,7 +171,7 @@ def freeze_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) ->
 
 
 @router.post("/api/reports/{report_id}/unfreeze")
-def unfreeze_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def unfreeze_report(report_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     try:
         svc.unfreeze_report(conn, report_id)
     except KeyError as exc:
@@ -180,7 +180,7 @@ def unfreeze_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) 
 
 
 @router.delete("/api/reports/{report_id}", status_code=204)
-def delete_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> None:
+def delete_report(report_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> None:
     try:
         svc.delete_report(conn, report_id)
     except KeyError as exc:
@@ -193,7 +193,7 @@ def delete_report(report_id: int, conn: sqlite3.Connection = Depends(get_db)) ->
 
 
 @router.get("/api/reports/{report_id}/attachments")
-def list_report_attachments(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> list[dict]:
+def list_report_attachments(report_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> list[dict]:
     from .attachments import _serialize as serialize_attachment
 
     try:
@@ -212,7 +212,7 @@ def list_report_attachments(report_id: int, conn: sqlite3.Connection = Depends(g
 
 @router.post("/api/reports/{report_id}/attachments", status_code=201)
 def upload_report_attachment(
-    report_id: int, file: UploadFile = File(...), conn: sqlite3.Connection = Depends(get_db)
+    report_id: RowId, file: UploadFile = File(...), conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     from .attachments import _serialize as serialize_attachment
 
@@ -245,7 +245,7 @@ def upload_report_attachment(
 
 
 @router.get("/api/reports/{report_id}/ai-prompt")
-def ai_prompt(report_id: int, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def ai_prompt(report_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """이 보고를 AI 에게 넘길 글 한 덩이. **여기서 AI 를 부르지는 않는다** (TODO 71).
 
     만들어 주기만 하고, 어디에 붙여넣을지는 사람이 정한다.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { useEscape } from "../util";
 import type { Attachment } from "../upload";
 import type { SpreadsheetPreview } from "../types";
 
@@ -13,6 +14,7 @@ export default function XlsxPreview({
 }) {
   const [preview, setPreview] = useState<SpreadsheetPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useEscape(onClose);
 
   useEffect(() => {
     const load = attachment.preview_url

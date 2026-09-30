@@ -6,7 +6,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from ..deps import get_db
+from ..deps import get_db, RowId
 from ..services import activities as svc
 from ..vault.paths import FileInUseError, InvalidDateError
 
@@ -70,7 +70,7 @@ def create_activity(payload: ActivityIn, conn: sqlite3.Connection = Depends(get_
 
 @router.patch("/{activity_id}")
 def update_activity(
-    activity_id: int, payload: ActivityIn, conn: sqlite3.Connection = Depends(get_db)
+    activity_id: RowId, payload: ActivityIn, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     try:
         svc.update(conn, activity_id, payload.changes())
@@ -86,7 +86,7 @@ def update_activity(
 
 
 @router.delete("/{activity_id}", status_code=204)
-def delete_activity(activity_id: int, conn: sqlite3.Connection = Depends(get_db)) -> None:
+def delete_activity(activity_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> None:
     try:
         svc.delete(conn, activity_id)
     except KeyError as exc:

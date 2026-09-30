@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
   return value.slice(0, 10);
@@ -139,4 +141,16 @@ export function effectText(
   if (verified != null) return { text: num(verified), verified: true };
   if (expected != null) return { text: num(expected), verified: false };
   return null;
+}
+
+/** Esc 로 닫히는 창 (TODO 169) — 승격 창 · 엑셀 [내용 보기] 가 Esc 에 안 닫혔다(사전점검 창만 닫혔다). */
+export function useEscape(onEscape: () => void, active = true): void {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onEscape();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onEscape, active]);
 }

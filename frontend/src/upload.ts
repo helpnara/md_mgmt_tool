@@ -1,3 +1,4 @@
+import { errorText, OFFLINE_MESSAGE } from "./api";
 export interface Attachment {
   id: number;
   entry_id: number | null;
@@ -41,16 +42,17 @@ export function uploadAttachment(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(JSON.parse(xhr.responseText) as Attachment);
       } else {
-        let message = `업로드 실패 (${xhr.status})`;
+        // 다른 요청과 같은 말로 (TODO 165) — 사유가 목록(422)이어도, 글이 아닌 500 이어도
+        let body: unknown = null;
         try {
-          message = JSON.parse(xhr.responseText).detail ?? message;
+          body = JSON.parse(xhr.responseText);
         } catch {
-          /* 응답이 JSON이 아니면 기본 메시지를 쓴다 */
+          /* 응답이 JSON이 아니면 상태 번호로 말한다 */
         }
-        reject(new Error(message));
+        reject(new Error(errorText(xhr.status, body)));
       }
     });
-    xhr.addEventListener("error", () => reject(new Error("네트워크 오류로 업로드하지 못했습니다.")));
+    xhr.addEventListener("error", () => reject(new Error(OFFLINE_MESSAGE)));
     xhr.addEventListener("abort", () => reject(new Error("업로드를 취소했습니다.")));
 
     xhr.open("POST", endpoint);

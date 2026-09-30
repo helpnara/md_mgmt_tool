@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { renderMarkdown } from "../markdown";
-import { backTarget, projectLink } from "../nav";
+import { backTarget, projectLink, setPageTitle } from "../nav";
+import LoadError from "./LoadError";
+import { dropDraft, takeDraft, useDraftKeeper, useUnsaved } from "../unsaved";
 import PasteOfferBar from "./PasteOffer";
 import PrecheckDialog, { BandChip } from "./PrecheckDialog";
 import { type PasteOffer, handleEditorPaste } from "../table";
 import type { IntakeAttachment, IntakeDetail as Detail, IntakeLog, Meta, Project, PromotionPlan } from "../types";
 import { type Attachment, uploadAttachment } from "../upload";
-import { effectNumber, todayIso } from "../util";
+import { effectNumber, todayIso, useEscape } from "../util";
 import AttachmentList from "./AttachmentList";
 import IntakeForm from "./IntakeForm";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
@@ -61,6 +63,10 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
       .catch((err: Error) => setError(err.message));
   }, [intakeId]);
   useEffect(load, [load]);
+  // 브라우저 탭 제목 (TODO 169)
+  useEffect(() => {
+    if (intake) setPageTitle(`${intake.id} ${intake.title}`);
+  }, [intake]);
 
   const target = back ? backTarget(back) : { href: "#/intakes", label: "접수" };
 
@@ -70,7 +76,8 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
         <a className="back" href={target.href}>
           ← {target.label}
         </a>
-        {error ? <p className="error">{error}</p> : <p className="muted">불러오는 중…</p>}
+        {/* 불러오기 실패는 모든 화면이 같은 판 — 사유와 [다시 시도] (TODO 165) */}
+        {error ? <LoadError message={error} onRetry={load} /> : <p className="muted">불러오는 중…</p>}
       </section>
     );
   }
@@ -704,7 +711,7 @@ function AttachPanel({
               ? async (item) => {
                   const used = intake.body.includes(item.rel_path.split("/").pop() ?? "");
                   const warn = used ? "\n\n이 첨부는 요청 본문에서 쓰이는 중입니다. 지우면 그 자리가 깨집니다." : "";
-                  if (!window.confirm(`${item.orig_name} 을(를) 보관함으로 옮길까요?${warn}`)) return;
+                  if (!window.confirm(`${item.orig_name} 을(를) 삭제 보관함으로 옮길까요?${warn}`)) return;
                   try {
                     await api.deleteIntakeAttachment(intake.id, item.rel_path);
                     onChanged();
@@ -729,6 +736,7 @@ function MarkdownArea({
   onUploaded,
   onError,
   placeholder,
+  onSave,
 }: {
   field: ReturnType<typeof useMarkdownField>;
   intake: Detail;
@@ -737,6 +745,8 @@ function MarkdownArea({
   onUploaded: () => void;
   onError: (message: string) => void;
   placeholder: string;
+  /** Ctrl+S — 다른 편집기와 같게 (TODO 162) */
+  onSave: () => void;
 }) {
   const [preview, togglePreview] = usePreview();
   const [pasteOffer, setPasteOffer] = useState<PasteOffer | null>(null);
@@ -771,6 +781,12 @@ function MarkdownArea({
           ref={field.ref}
           value={field.value}
           onChange={(event) => field.setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+              event.preventDefault();
+              onSave();
+            }
+          }}
           onPaste={(event) =>
             handleEditorPaste(event, {
               onInsert: field.insert,
@@ -828,10 +844,34 @@ function BodyEditor({
   onSaved: () => void;
   onUploaded: () => void;
 }) {
-  const field = useMarkdownField(intake.body ?? "");
+  // 요청 내용 — 떠날 때 묻고, 쓰던 글은 임시 보관한다 (TODO 162)
+  const draftKey = `intake:${intake.id}`;
+  const original = intake.body ?? "";
+  const [kept] = useState(() => takeDraft(draftKey, original));
+  const [restored, setRestored] = useState(kept !== null);
+  const field = useMarkdownField(kept ?? original);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const base = `/intake-files/${encodeURIComponent(intake.dir_name)}`;
+  const dirty = field.value !== original;
+  useUnsaved(draftKey, dirty);
+  useDraftKeeper(draftKey, field.value, original);
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateIntake(intake.id, { body: field.value });
+      dropDraft(draftKey);
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="body-editor">
       <MarkdownArea
@@ -841,28 +881,38 @@ function BodyEditor({
         linkKind="markdown"
         onUploaded={onUploaded}
         onError={setError}
+        onSave={() => void save()}
         placeholder="과제정의서의 내용을 옮겨 적습니다. 이미지는 Ctrl+V 로, 엑셀 표는 그대로 붙여넣으면 표가 됩니다."
       />
+      {restored && (
+        <p className="hint restored">
+          저장하지 않은 작성 중 내용을 복구했습니다.{" "}
+          <button
+            className="ghost small"
+            onClick={() => {
+              dropDraft(draftKey);
+              field.setValue(original);
+              setRestored(false);
+            }}
+          >
+            복구한 내용 버리기
+          </button>
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
       <div className="form-actions">
-        <button className="ghost" onClick={onCancel} disabled={busy}>
+        <button
+          className="ghost"
+          onClick={() => {
+            if (dirty && !window.confirm("저장하지 않은 요청 내용을 버릴까요?")) return;
+            dropDraft(draftKey);
+            onCancel();
+          }}
+          disabled={busy}
+        >
           취소
         </button>
-        <button
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setError(null);
-            try {
-              await api.updateIntake(intake.id, { body: field.value });
-              onSaved();
-            } catch (err) {
-              setError((err as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
+        <button disabled={busy} onClick={() => void save()}>
           {busy ? "저장 중…" : "저장"}
         </button>
       </div>
@@ -990,7 +1040,7 @@ function Logs({
                     <button
                       className="ghost danger"
                       onClick={async () => {
-                        if (!window.confirm(`"${log.title}" 기록을 보관함으로 옮길까요?`)) return;
+                        if (!window.confirm(`"${log.title}" 기록을 삭제 보관함으로 옮길까요?`)) return;
                         try {
                           await api.deleteIntakeLog(intake.id, log.name);
                           onChanged();
@@ -1046,6 +1096,26 @@ function LogEditor({
   const field = useMarkdownField(log?.body ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 떠날 때 묻는다 (TODO 162)
+  const dirty =
+    field.value !== (log?.body ?? "") || title !== (log?.title ?? "") || date !== (log?.date ?? todayIso());
+  useUnsaved(`intake-log:${intake.id}:${log?.name ?? "new"}`, dirty);
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (log) await api.updateIntakeLog(intake.id, log.name, { date, title, body: field.value, mtime: log.mtime });
+      else await api.createIntakeLog(intake.id, { date, title, body: field.value });
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="log-editor">
       <div className="form-row">
@@ -1065,29 +1135,22 @@ function LogEditor({
         linkKind="markdown_log"
         onUploaded={onUploaded}
         onError={setError}
+        onSave={() => void save()}
         placeholder="누구와 무엇을 이야기했고, 문제 정의가 어떻게 바뀌었는지 적습니다."
       />
       {error && <p className="error">{error}</p>}
       <div className="form-actions">
-        <button className="ghost" onClick={onCancel} disabled={busy}>
+        <button
+          className="ghost"
+          onClick={() => {
+            if (dirty && !window.confirm("저장하지 않은 기록을 버릴까요?")) return;
+            onCancel();
+          }}
+          disabled={busy}
+        >
           취소
         </button>
-        <button
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setError(null);
-            try {
-              if (log) await api.updateIntakeLog(intake.id, log.name, { date, title, body: field.value, mtime: log.mtime });
-              else await api.createIntakeLog(intake.id, { date, title, body: field.value });
-              onSaved();
-            } catch (err) {
-              setError((err as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
+        <button disabled={busy} onClick={() => void save()}>
           {busy ? "저장 중…" : "저장"}
         </button>
       </div>
@@ -1114,6 +1177,8 @@ function PromoteDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBody, setShowBody] = useState(false);
+  // Esc 로 닫는다 — 보내는 중에는 막는다 (TODO 169)
+  useEscape(onClose, !busy);
 
   useEffect(() => {
     api
