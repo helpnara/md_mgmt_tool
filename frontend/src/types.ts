@@ -49,6 +49,52 @@ export interface Meta {
   intake_statuses: { key: string; label: string; pool: boolean }[];
   /** 접수 후 이 날수가 지나도 판정이 없으면 묵힌 것이다 */
   intake_stale_days: number;
+  /** 사전점검 체크리스트 (TODO 155) */
+  precheck: PrecheckMeta;
+}
+
+export interface PrecheckItemDef {
+  group: string;
+  item: string;
+  /** [단계, 점수] */
+  choices: [string, number][];
+}
+
+export interface PrecheckMeta {
+  items: PrecheckItemDef[];
+  /** [착수 권장 이상, 보완 필요 이상] */
+  thresholds: [number, number];
+  max: number;
+  bands: { key: string; label: string }[];
+}
+
+export interface PrecheckBand {
+  key: "go" | "fix" | "hold";
+  label: string;
+}
+
+export interface PrecheckAnswer {
+  group: string;
+  item: string;
+  choice: string;
+  score: number;
+  max: number;
+  note: string | null;
+}
+
+export interface PrecheckSummary {
+  on: string | null;
+  items: PrecheckAnswer[];
+  rated: number;
+  total_items: number;
+  raw: number;
+  max: number;
+  /** 다 매겼을 때만 — 100점 환산 */
+  score: number | null;
+  band: PrecheckBand | null;
+  /** 지금 체크리스트와 다른 기준으로 매긴 점수 */
+  stale: boolean;
+  groups: { group: string; score: number; max: number; rated: number; count: number }[];
 }
 
 export type ClassificationKey = "nature" | "category" | "delivery" | "cost_kind";
@@ -297,6 +343,9 @@ export interface AppSettings {
   intake_template: string;
   /** 묵힘 기준일 */
   intake_stale_days: number;
+  /** 사전점검 항목 — null 이면 기본 목록. 저장할 때는 설정 칸의 글(한 줄에 하나)로도 보낸다 (TODO 155) */
+  precheck_items: PrecheckItemDef[] | string | null;
+  precheck_thresholds: [number, number];
 }
 
 export interface TrashItem {
@@ -624,6 +673,11 @@ export interface Intake {
   last_log_date: string | null;
   age_days: number | null;
   stale: boolean;
+  /** 사전점검 — 점수는 다 매겼을 때만 (TODO 155) */
+  precheck_score: number | null;
+  precheck_rated: number | null;
+  precheck_total: number | null;
+  precheck_band: PrecheckBand | null;
 }
 
 export interface IntakeLog {
@@ -657,6 +711,7 @@ export interface IntakeDetail extends Intake {
   logs: IntakeLog[];
   attachments: IntakeAttachment[];
   linked_project: { id: string; title?: string; status?: string; missing?: boolean } | null;
+  precheck: PrecheckSummary;
 }
 
 export interface IntakeListing {
@@ -674,6 +729,7 @@ export interface IntakeLink {
   /** started = 이 과제로 승격 · merged = 이 과제에 병합 */
   relation: "started" | "merged";
   received_on: string | null;
+  precheck_score?: number | null;
 }
 
 export interface PromotionPlan {

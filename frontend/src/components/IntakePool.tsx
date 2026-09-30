@@ -92,6 +92,7 @@ export default function IntakePool({ meta, query }: Props) {
   // 열 머리 정렬 — 과제목록과 같은 부품(SortHeader). 방향을 비워 두면 그 정렬의 기본 방향이다.
   const BASE_ORDER: Record<string, "asc" | "desc"> = {
     age: "asc", received: "desc", priority: "asc", id: "asc", title: "asc", status: "asc", effect: "desc", decided: "desc",
+    precheck: "desc",
   };
   const current: SortState = {
     key: filters.sort,
@@ -281,6 +282,7 @@ export default function IntakePool({ meta, query }: Props) {
             <option value="age">오래 기다린 순</option>
             <option value="received">최근 접수순</option>
             <option value="priority">중요도순</option>
+            <option value="precheck">사전점검 높은 순</option>
             <option value="effect">요청 효과 큰 순</option>
             <option value="decided">최근 판정순</option>
             <option value="id">접수 번호순</option>
@@ -340,6 +342,9 @@ export default function IntakePool({ meta, query }: Props) {
                   <th>과제리더 · 소속</th>
                   <th>성격 · 분류</th>
                   <SortHeader {...header("priority")}>중요도</SortHeader>
+                  <SortHeader {...header("precheck", "desc")} className="num">
+                    <span title="사전점검 체크리스트 — 다 매겼을 때의 합계(100점)">사전점검</span>
+                  </SortHeader>
                   <SortHeader {...header("status")}>상태</SortHeader>
                   <SortHeader {...header("received", "desc")}>접수일</SortHeader>
                   <SortHeader {...header("age")} className="num">경과</SortHeader>
@@ -384,6 +389,21 @@ export default function IntakePool({ meta, query }: Props) {
                     </td>
                     <td className="muted">{[item.nature, item.category].filter(Boolean).join(" · ") || "—"}</td>
                     <td>{item.priority ? <span className={`priority priority-${item.priority}`}>{item.priority}</span> : <span className="muted">—</span>}</td>
+                    {/* 사전점검 — 다 매겼으면 점수와 구간 점, 매기는 중이면 7/10 (TODO 155) */}
+                    <td className="num precheck-col">
+                      {item.precheck_score !== null ? (
+                        <span title={item.precheck_band?.label}>
+                          <i className={`band-dot band-${item.precheck_band?.key ?? "none"}`} />
+                          {item.precheck_score}
+                        </span>
+                      ) : item.precheck_rated ? (
+                        <span className="muted" title="평가 중">
+                          {item.precheck_rated}/{item.precheck_total}
+                        </span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`intake-status intake-${item.status}`}>{item.status_label}</span>
                     </td>

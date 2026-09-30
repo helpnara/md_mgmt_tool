@@ -507,7 +507,7 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 `title` · `status` · `leader` · `leader_team` · 분류 넷 · `start_date` · `due_date` · `effect_request` ·
 `priority` · `priority_note` · `picked` · `received_on` · `decided_on` · `decision_note` · `project_id` ·
 `merged_into` · `tags` · `log_count` · `attachment_count` · `last_log_date` · `body` · `file_mtime`).
-`log_count` 는 **사람이 쓴 검토 기록만** 센다 — 판정 줄(`상태변경` 태그)은 빼고. 파생값이라
+스키마 **14** 에서 `precheck_score`(다 매겼을 때만, 100점 환산) · `precheck_rated` · `precheck_total` 을 더했다(TODO 155). `log_count` 는 **사람이 쓴 검토 기록만** 센다 — 판정 줄(`상태변경` 태그)은 빼고. 파생값이라
 파일에서 언제든 다시 만든다.
 
 **`project_partner` — 유관부서** (TODO 92). `(project_id, team, person)` 한 쌍이 한 줄이다.
@@ -535,6 +535,8 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 | `people[].account` | 화면에서 뺀 칸. 값은 그대로 두고 읽지 않는다 | 126 |
 | `classifications` | 과제 분류 넷의 목록 `{nature: [...], category: [...], delivery: [...], cost_kind: [...]}`. `null` 이거나 목록이 비면 기본값 | 136 · 4.2 |
 | `intake_template` | 접수 본문 서식. 비우면 기본 서식 | 136 · 4.10 |
+| `precheck_items` | 사전점검 항목 `[{group, item, choices: [[단계, 점수], …]}, …]`. `null` 이면 기본 목록(사용자가 준 다섯 분류 · 열 항목). 설정 칸에서는 한 줄에 한 항목 `분류 \| 항목 \| 단계=점수, …` 로 고친다 | 155 · 4.10 |
+| `precheck_thresholds` | `[착수 권장 이상, 보완 필요 이상]` — 기본 `[80, 60]`. 그 아래는 보류 검토 | 155 |
 | `intake_stale_days` | 묵힘 기준일(기본 14). 접수·검토중인 건이 이 날수를 넘기면 풀과 홈에 붉게 선다. 보류는 빼고 센다 | 136 |
 
 읽을 때 기본값과 합치므로 **열쇠가 빠져 있어도 동작한다.** 새 항목을 더할 때 기존 파일을 고칠
@@ -603,6 +605,11 @@ project_id:                # 착수하면 그 과제 번호
 merged_into:               # 병합하면 흡수한 과제 번호
 detached_from:             # 그 과제를 지워 착수·병합이 풀렸을 때 과제 번호 (TODO 145)
 detached_as:               # started · merged — 보관함에서 과제를 되돌리면 다시 잇는 근거
+precheck:                  # 사전점검 체크리스트 (TODO 155) — 매길 때의 스냅샷
+  on: 2026-09-30
+  total_items: 10          # 그때의 항목 수 — 다 매겼는지 이것으로 가린다
+  items:                   # 그때의 이름 · 고른 단계 · 점수 · 만점 · 근거(선택)
+    - {group: 구체성, item: R&R 수립 및 유관부서 협의 여부, choice: 수립 중, score: 7, max: 10, note: 9/20 협의 예정}
 tags: []
 ---
 
@@ -622,6 +629,7 @@ tags: []
   `assets/` 는 통째로 **복사**한다 — 경로 규칙(`assets/<날짜>/NNN-이름`)이 같아 본문 링크가 그대로
   산다. 접수 쪽 원본도 남는다. 과제 개요 `## 관련 링크` 에 `- 접수: R… 제목` 한 줄이 붙는다.
 * **과제를 지우면** (TODO 145) — 그 과제로 착수·병합된 접수는 **묻지 않고 검토중으로 풀에** 돌아가고, 검토 기록에 `상태변경` 줄 하나가 남는다. **보관함에서 과제를 되돌리면** 접수가 아직 풀에 있을 때만 다시 잇는다. 그 사이 다시 승격·반려됐으면 잇지 않고 과제의 `intake_id` 를 떼며 양쪽에 한 줄. 원칙은 *접수 하나에 착수 과제 하나 · 연결은 접수 쪽이 정답*. 이 규칙 전에 지운 과제를 가리키는 접수는 다시 읽을 때 같은 규칙으로 풀에 돌아간다(그 과제가 보관함에 있을 때만).
+* **사전점검 체크리스트** (TODO 155) — 다섯 분류 · 열 항목 · 항목마다 단계별 점수(기본 100점 만점, 항목은 설정 4.8). 서버가 **지금의 체크리스트로** 채점해 위 스냅샷을 적는다 — 항목이 뒤에 바뀌어도 매긴 점수는 흔들리지 않고, 화면은 *다른 기준으로 매긴 점수* 라고 알린다. 합계는 **다 매겼을 때만** 100점으로 환산해 낸다. 바꿔 저장하면 검토 기록에 `상태변경` 줄 하나. 판정이 난 접수는 고칠 수 없다.
 * 첨부 파일은 `/intake-files/<폴더>/<경로>` 로 서빙한다 — 과제 첨부(`/files/`)와 같은 규칙이다.
 
 ---
@@ -937,7 +945,7 @@ score = elapsed + unreported_entries × 0.5
 
 ## 6. API 설계
 
-> 2026-09-29 기준 실제 구현 목록이다(끝점 **92개** = GET 46 · POST 30 · DELETE 7 · PATCH 6 · PUT 3 — 화면으로 되돌리는 `/{full_path}` 는 빼고 센다).
+> 2026-09-30 기준 실제 구현 목록이다(끝점 **93개** = GET 46 · POST 30 · DELETE 7 · PATCH 6 · PUT 4 — 화면으로 되돌리는 `/{full_path}` 는 빼고 센다).
 > 초안 단계에서 적어 두었다가 만들지 않은 것(`/api/tags`, `/api/groups`,
 > 보고 단독 내보내기, 첨부 원본 단독 다운로드)은 아래에서 뺐다 —
 > 태그·그룹은 `/api/meta` 하나로 합쳤고, 첨부 원본은 정적 서빙(`/files/...`)이 맡는다.
@@ -1017,6 +1025,7 @@ score = elapsed + unreported_entries × 0.5
 | POST | `/api/intakes` | 접수 등록. 번호의 연도는 **접수일**을 따른다 |
 | GET | `/api/intakes/next-id` | 등록하면 붙을 번호 (`?received_on=`) |
 | GET/PATCH | `/api/intakes/{id}` | 상세(본문·첨부·검토 기록·이어진 과제) / 고치기 — 풀에 있는 동안만 |
+| PUT | `/api/intakes/{id}/precheck` | 사전점검을 매긴다 (`items: [{group, item, choice, note}]`) — 서버가 지금 체크리스트로 채점해 스냅샷을 적는다. 풀에 있을 때만 (155) |
 | POST | `/api/intakes/{id}/status` | 판정 (`status` · `note` · `merged_into`). 보류·반려·이관은 사유 필수, `received`·`reviewing` 은 판정을 비운다 |
 | GET/POST | `/api/intakes/{id}/promote` | 승격 미리보기(명부 가름·섹션 매핑·첨부·붙을 과제 번호) / 실제로 승격 |
 | POST | `/api/intakes/{id}/archive` | 삭제 보관함으로 (착수된 건은 안 된다) |
@@ -1093,7 +1102,7 @@ md_mgmt_tool/
 │   │                            # home dashboard search export people settings
 │   │                            # trash backup renumber errorlog ai_prompt
 │   │                            # folders linkfix buildinfo intakes
-│   └── tests/                   # pytest 54 파일 (백엔드 자동 시험)
+│   └── tests/                   # pytest 55 파일 (백엔드 자동 시험)
 ├── frontend/
 │   ├── src/
 │   │   ├── api.ts               # 서버로 가는 길 한 곳

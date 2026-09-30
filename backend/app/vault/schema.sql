@@ -72,7 +72,11 @@ CREATE TABLE IF NOT EXISTS intake (
   attachment_count INTEGER NOT NULL DEFAULT 0,
   last_log_date    TEXT,
   body             TEXT,
-  file_mtime       REAL
+  file_mtime       REAL,
+  -- 사전점검 (TODO 155) — 합계(다 매겼을 때만, 100점 환산) · 매긴 항목 수 · 항목 수
+  precheck_score   INTEGER,
+  precheck_rated   INTEGER,
+  precheck_total   INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS entry (

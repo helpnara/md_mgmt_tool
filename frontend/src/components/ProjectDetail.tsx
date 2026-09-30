@@ -407,6 +407,7 @@ export default function ProjectDetail({
                     {item.relation === "started" ? "← " : "⇠ "}
                     <span className="intake-link-id">{item.id}</span> {item.title}
                     <span className="muted"> · {item.relation === "started" ? "여기서 승격" : "병합됨"}</span>
+                    {item.precheck_score != null && <span className="muted"> · 사전점검 {item.precheck_score}점</span>}
                   </a>
                 ))}
               </div>

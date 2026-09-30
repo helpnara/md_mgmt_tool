@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { ClassificationKey, Meta } from "../types";
+import type { ClassificationKey, Meta, PrecheckItemDef } from "../types";
+
+/** 사전점검 항목을 설정 칸의 글로 — 한 줄에 하나: `분류 | 항목 | 단계=점수, …` (TODO 155) */
+function toLines(items: PrecheckItemDef[]): string {
+  return items
+    .map((item) => `${item.group} | ${item.item} | ${item.choices.map(([label, score]) => `${label}=${score}`).join(", ")}`)
+    .join("\n");
+}
 
 /**
  * 과제 분류 넷의 목록 · 접수 서식 · 묵힘 기준일 (TODO 136).
@@ -19,6 +26,10 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
   const [template, setTemplate] = useState("");
   const [fallback, setFallback] = useState("");
   const [staleDays, setStaleDays] = useState(String(meta.intake_stale_days));
+  const [precheckText, setPrecheckText] = useState(() => toLines(meta.precheck.items));
+  const [precheckDefault, setPrecheckDefault] = useState("");
+  const [high, setHigh] = useState(String(meta.precheck.thresholds[0]));
+  const [low, setLow] = useState(String(meta.precheck.thresholds[1]));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,13 +42,19 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
       >,
     );
     setStaleDays(String(meta.intake_stale_days));
-  }, [meta.classifications, meta.intake_stale_days]);
+    setPrecheckText(toLines(meta.precheck.items));
+    setHigh(String(meta.precheck.thresholds[0]));
+    setLow(String(meta.precheck.thresholds[1]));
+  }, [meta.classifications, meta.intake_stale_days, meta.precheck]);
 
   useEffect(() => {
     api.settings().then((s) => setTemplate(s.intake_template ?? "")).catch(() => undefined);
     api
       .settingsDefaults()
-      .then((d) => setFallback((d as { intake_template?: string }).intake_template ?? ""))
+      .then((d) => {
+        setFallback(d.intake_template ?? "");
+        setPrecheckDefault(d.precheck_items ?? "");
+      })
       .catch(() => undefined);
   }, []);
 
@@ -49,6 +66,9 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
         classifications: lists as unknown as Record<string, string[]>,
         intake_template: template,
         intake_stale_days: Number(staleDays),
+        // 기본 목록 그대로면 "정한 적 없음" 으로 둔다 — 기본 목록이 나중에 바뀌면 따라가도록
+        precheck_items: precheckText.trim() === precheckDefault.trim() ? "" : precheckText,
+        precheck_thresholds: [Number(high), Number(low)],
       });
       onSaved();
       setNotice("저장했습니다.");
@@ -102,6 +122,35 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
         추진내용 · 효과 산출 근거 · 활용 방안 및 향후 계획) 승격할 때 그 자리로 그대로 넘어갑니다. 예:{" "}
         <code>## 목표 (성과지표)</code>
       </p>
+      <h3 className="precheck-settings-title">사전점검 체크리스트</h3>
+      <p className="hint">
+        접수의 <b>[체크리스트]</b>에서 매기는 항목입니다. <b>한 줄에 한 항목</b> — <code>분류 | 항목 | 단계=점수, 단계=점수, …</code>.
+        같은 분류끼리 묶여 보입니다. 이미 매긴 접수의 점수는 바뀌지 않고, 그 접수를 열면 &quot;다른 기준으로 매긴 점수&quot;라고
+        알려 줍니다. 만점이 100이 아니면 100점으로 환산해 보입니다.
+      </p>
+      <textarea
+        className="template-box precheck-lines"
+        value={precheckText}
+        onChange={(e) => setPrecheckText(e.target.value)}
+        spellCheck={false}
+        aria-label="사전점검 항목"
+      />
+      <div className="form-row">
+        <label>
+          착수 권장 (이상)
+          <input type="number" min="1" max="100" value={high} onChange={(e) => setHigh(e.target.value)} />
+        </label>
+        <label>
+          보완 필요 (이상)
+          <input type="number" min="1" max="100" value={low} onChange={(e) => setLow(e.target.value)} />
+        </label>
+        <span className="hint">그 아래는 보류 검토. 접수 상세와 풀에 색 딱지로 보입니다.</span>
+      </div>
+      <div className="form-actions left">
+        <button className="ghost" onClick={() => setPrecheckText(precheckDefault)} disabled={!precheckDefault}>
+          체크리스트 기본 목록으로
+        </button>
+      </div>
       {notice && <p className="hint notice">{notice}</p>}
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions">

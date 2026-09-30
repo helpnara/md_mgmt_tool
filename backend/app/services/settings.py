@@ -54,6 +54,11 @@ DEFAULTS: dict[str, Any] = {
     "intake_template": "",
     # 접수 후 이 날수가 지나도 판정이 없으면 홈에 알린다. 요청자에게 가장 나쁜 것은 답이 없는 것이다.
     "intake_stale_days": 14,
+    # 접수 사전점검 체크리스트 (TODO 155). **null 이면 기본 목록**(사용자가 준 다섯 분류 · 열 항목).
+    # [{"group": "필요성", "item": "…", "choices": [["근거 명확", 10], …]}, …]
+    "precheck_items": None,
+    # 점수 구간 — 이상이면 착수 권장 / 이상이면 보완 필요 / 그 아래 보류 검토
+    "precheck_thresholds": [80, 60],
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
 _TEXT_KEYS = ("author", "report_template", "project_code",
@@ -102,6 +107,16 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = validate_classifications(updates[key])
         elif key == "intake_stale_days":
             current[key] = _positive_int(key, updates[key])
+        elif key == "precheck_items":
+            from . import precheck
+
+            # 빈 글·빈 목록은 "기본 목록으로" — 고를 것 없는 체크리스트는 체크리스트가 아니다
+            value = updates[key]
+            current[key] = None if (isinstance(value, (str, list)) and not value) else precheck.validate_items(value)
+        elif key == "precheck_thresholds":
+            from . import precheck
+
+            current[key] = precheck.validate_thresholds(updates[key])
         elif key == "entry_templates":
             # 빈 서식은 저장하지 않는다 — 비우면 "기본 서식으로 되돌린다"는 뜻이다.
             current[key] = {

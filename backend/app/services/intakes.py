@@ -91,6 +91,8 @@ META_ORDER = [
     # 과제를 지워 착수·병합이 풀렸을 때 그 과제 번호와 관계(started/merged) — 보관함에서 과제를
     # 되돌리면 이 접수가 아직 풀에 있을 때 다시 잇는 근거다 (TODO 145)
     "detached_from", "detached_as",
+    # 사전점검 체크리스트 (TODO 155) — 그때의 항목 이름 · 단계 · 점수 · 만점을 함께 적은 스냅샷
+    "precheck",
     "tags", "created_by", "created_at", "updated_at",
 ]
 
@@ -1035,6 +1037,10 @@ def index_intake(conn: sqlite3.Connection, directory: Path, problems: list | Non
     assets = directory / "assets"
     attachment_count = sum(1 for p in assets.rglob("*") if p.is_file()) if assets.exists() else 0
     priority = _as_str(doc.meta.get("priority"))
+    # 사전점검 (TODO 155) — 풀의 열·정렬에 쓰는 세 수. 점수는 다 매겼을 때만(아니면 NULL)
+    from . import precheck as precheck_service
+
+    check = precheck_service.summarize(doc.meta.get("precheck"))
     conn.execute(
         """
         INSERT INTO intake(id, dir_name, title, status, leader, leader_team,
@@ -1042,8 +1048,8 @@ def index_intake(conn: sqlite3.Connection, directory: Path, problems: list | Non
                            effect_request, priority, priority_note, picked,
                            received_on, decided_on, decision_note, project_id, merged_into, tags,
                            created_by, created_at, updated_at, log_count, attachment_count,
-                           last_log_date, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           last_log_date, body, file_mtime, precheck_score, precheck_rated, precheck_total)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
           leader=excluded.leader, leader_team=excluded.leader_team,
@@ -1056,7 +1062,9 @@ def index_intake(conn: sqlite3.Connection, directory: Path, problems: list | Non
           merged_into=excluded.merged_into, tags=excluded.tags, created_by=excluded.created_by,
           created_at=excluded.created_at, updated_at=excluded.updated_at,
           log_count=excluded.log_count, attachment_count=excluded.attachment_count,
-          last_log_date=excluded.last_log_date, body=excluded.body, file_mtime=excluded.file_mtime
+          last_log_date=excluded.last_log_date, body=excluded.body, file_mtime=excluded.file_mtime,
+          precheck_score=excluded.precheck_score, precheck_rated=excluded.precheck_rated,
+          precheck_total=excluded.precheck_total
         """,
         (
             intake_id,
@@ -1086,6 +1094,9 @@ def index_intake(conn: sqlite3.Connection, directory: Path, problems: list | Non
             last_log,
             doc.body,
             request.stat().st_mtime,
+            check["score"],
+            check["rated"],
+            check["total_items"],
         ),
     )
     return intake_id
@@ -1165,13 +1176,45 @@ def serialize(row: sqlite3.Row, stale_days: int | None = None) -> dict[str, Any]
     data["in_pool"] = row["status"] in INTAKE_POOL_STATUSES
     data["age_days"] = age_days(row["received_on"])
     data["stale"] = is_stale(row, stale_days)
+    # 사전점검 구간 딱지 (TODO 155) — 기준은 설정에서
+    from . import precheck as precheck_service
+
+    data["precheck_band"] = precheck_service.band(row["precheck_score"])
     return data
+
+
+def save_precheck(conn: sqlite3.Connection, intake_id: str, answers: list[dict[str, Any]]) -> dict[str, Any]:
+    """사전점검을 매긴다 (TODO 155). 풀에 있을 때만 — 판정이 난 접수는 그때의 점수로 굳는다.
+
+    점수를 바꿀 때마다 검토 기록에 한 줄(*(사전점검) 62 → 78점* 과 바뀐 항목) — 인터뷰로 보완된 과정이
+    기록 옆에 남는다. 바뀐 것이 없으면 남기지 않는다.
+    """
+    from . import precheck as precheck_service
+
+    row = _row(conn, intake_id)
+    _ensure_open(row)
+    directory = intake_dir(conn, intake_id)
+    request = directory / REQUEST_FILE
+    doc = md.load(request)
+    before = precheck_service.summarize(doc.meta.get("precheck"))
+    snapshot = precheck_service.build_snapshot(answers, today())
+    after = precheck_service.summarize(snapshot)
+    title, body = precheck_service.describe_change(before, after)
+    if body.strip() == "바뀐 항목이 없다." and before["score"] == after["score"]:
+        return after
+    meta = md.merge_meta(doc.meta, {"precheck": snapshot})
+    meta["updated_at"] = now_iso()
+    md.save(request, md.MarkdownDoc(_ordered(meta), doc.body))
+    _log_line(directory, title, body)
+    index_intake(conn, directory)
+    conn.commit()
+    return after
 
 
 def related_to_project(conn: sqlite3.Connection, project_id: str) -> list[dict[str, Any]]:
     """과제 상세에 세울 접수 — 이 과제로 승격된 것과, 이 과제에 병합된 것."""
     rows = conn.execute(
-        "SELECT id, title, status, project_id, merged_into, received_on FROM intake"
+        "SELECT id, title, status, project_id, merged_into, received_on, precheck_score FROM intake"
         " WHERE project_id = ? OR merged_into = ? ORDER BY received_on, id",
         (project_id, project_id),
     ).fetchall()
@@ -1183,6 +1226,7 @@ def related_to_project(conn: sqlite3.Connection, project_id: str) -> list[dict[s
             "status_label": INTAKE_STATUS_LABELS.get(row["status"], row["status"]),
             "relation": "started" if row["project_id"] == project_id else "merged",
             "received_on": row["received_on"],
+            "precheck_score": row["precheck_score"],
         }
         for row in rows
     ]

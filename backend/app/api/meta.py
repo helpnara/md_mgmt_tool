@@ -127,6 +127,8 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
             {"key": key, "label": label, "pool": pool} for key, label, pool in INTAKE_STATUSES
         ],
         "intake_stale_days": settings_service.intake_stale_days(),
+        # 사전점검 체크리스트 (TODO 155) — 항목·단계·점수와 구간 기준
+        "precheck": _precheck_meta(),
     }
 
 
@@ -137,4 +139,16 @@ def reindex(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "indexed": indexed,
         # 읽지 못한 파일은 조용히 넘기지 않고 화면에 알린다.
         "problems": [{"path": item.rel_path, "reason": item.reason} for item in problems],
+    }
+
+
+def _precheck_meta() -> dict:
+    from ..services import precheck
+
+    items = precheck.definition()
+    return {
+        "items": items,
+        "thresholds": precheck.thresholds(),
+        "max": sum(max(c[1] for c in item["choices"]) for item in items),
+        "bands": [{"key": key, "label": label} for key, label in precheck.BANDS],
     }

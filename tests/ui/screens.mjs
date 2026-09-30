@@ -3382,6 +3382,68 @@ async function main() {
     expect(page.url().includes("order=asc"), `방향이 바뀌지 않았다: ${page.url()}`);
   });
 
+  console.log("\n[28] 접수 사전점검 체크리스트 (TODO 155)");
+
+  await check("요약 줄의 [체크리스트] — 다 매기면 합계·구간, 덜 매기면 평가 중", async () => {
+    const made = await api.post("/api/intakes", { title: "사전점검 확인" });
+    const hash = `#/intakes/${encodeURIComponent(made.id)}`;
+    await go(hash);
+    const cell = page.locator(".summary-bar .precheck-cell");
+    expect((await cell.innerText()).includes("미평가"), "처음에는 미평가");
+    await cell.getByRole("button", { name: "체크리스트" }).click();
+    const dialog = page.locator(".precheck-dialog");
+    await dialog.waitFor();
+    const rows = dialog.locator(".precheck-row");
+    equal(await rows.count(), 10, "항목 수");
+    equal(await dialog.locator(".precheck-group").count(), 5, "분류 수");
+    // 셋만 매기면 합계가 없다
+    for (let i = 0; i < 3; i += 1) await rows.nth(i).locator(".precheck-choice").first().click();
+    expect((await dialog.locator(".precheck-total").innerText()).includes("평가 3/10"), "평가 3/10");
+    // 고른 칩을 다시 누르면 지워진다
+    await rows.nth(0).locator(".precheck-choice").first().click();
+    expect((await dialog.locator(".precheck-total").innerText()).includes("평가 2/10"), "다시 누르면 지움");
+    // 나머지를 모두 최고점으로 — 이미 켜진 것은 다시 누르면 지워지므로 건너뛴다
+    for (let i = 0; i < 10; i += 1) {
+      const on = await rows.nth(i).locator(".precheck-choice.on").count();
+      if (!on) await rows.nth(i).locator(".precheck-choice").first().click();
+    }
+    await rows.nth(0).locator(".precheck-note").fill("9/12 사업부장 회의");
+    expect((await dialog.locator(".precheck-total").innerText()).includes("100점"), "합계 100");
+    await dialog.getByRole("button", { name: "저장" }).click();
+    await page.waitForTimeout(1000);
+    const after = await cell.innerText();
+    expect(after.includes("100점") && after.includes("착수 권장"), `요약 줄: ${after}`);
+    expect((await page.locator(".intake-logs").innerText()).includes("(사전점검) 미평가 → 100점"), "기록 한 줄");
+    const stored = await api.get(`/api/intakes/${encodeURIComponent(made.id)}`);
+    equal(stored.precheck.items[0].note, "9/12 사업부장 회의", "근거");
+    // 풀의 열
+    await go("#/intakes?sort=precheck");
+    const first = page.locator("tr[data-intake]").first();
+    equal(await first.getAttribute("data-intake"), made.id, "사전점검 높은 순의 첫 줄");
+    expect((await first.locator(".precheck-col").innerText()).includes("100"), "풀의 점수 칸");
+  });
+
+  await check("판정이 난 접수의 체크리스트는 볼 수만 있다", async () => {
+    const made = await api.post("/api/intakes", { title: "반려된 점검" });
+    await api.post(`/api/intakes/${encodeURIComponent(made.id)}/status`, { status: "rejected", note: "시험" });
+    await go(`#/intakes/${encodeURIComponent(made.id)}`);
+    await page.locator(".summary-bar .precheck-cell").getByRole("button", { name: "체크리스트" }).click();
+    const dialog = page.locator(".precheck-dialog");
+    await dialog.waitFor();
+    equal(await dialog.getByRole("button", { name: "저장" }).count(), 0, "저장 단추");
+    expect(await dialog.locator(".precheck-choice").first().isDisabled(), "고르기가 막혀 있어야 한다");
+    await dialog.getByRole("button", { name: "닫기" }).click();
+  });
+
+  await check("설정에 사전점검 항목 · 기준 칸이 있다", async () => {
+    await go("#/settings");
+    await page.locator("summary", { hasText: "과제 분류" }).first().click().catch(() => undefined);
+    const box = page.locator(".intake-settings .precheck-lines");
+    equal(await box.count(), 1, "항목 칸");
+    expect((await box.inputValue()).split("\n").length === 10, "기본 열 줄");
+    equal(await page.locator(".intake-settings input[type=number]").count(), 3, "묵힘 · 기준 둘");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

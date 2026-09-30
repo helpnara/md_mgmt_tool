@@ -37,6 +37,9 @@ class SettingsUpdate(BaseModel):
     classifications: dict[str, list[str] | str] | None = None
     intake_template: str | None = None
     intake_stale_days: int | None = None
+    # 사전점검 (TODO 155) — 항목은 설정 칸의 글(한 줄에 하나) 또는 목록, 기준은 [착수 권장, 보완 필요]
+    precheck_items: list[dict] | str | None = None
+    precheck_thresholds: list[int] | None = None
 
 
 @router.get("")
@@ -79,6 +82,7 @@ def read_defaults() -> dict:
     from ..config import DEFAULT_ENTRY_TEMPLATE
     from ..services.ai_prompt import DEFAULT_PREFIX
     from ..services import intakes as intakes_service
+    from ..services import precheck
     from ..services.reports import DRAFT_TEMPLATE
 
     return {
@@ -86,6 +90,9 @@ def read_defaults() -> dict:
         "report_template": DRAFT_TEMPLATE,
         "ai_prompt_prefix": DEFAULT_PREFIX,
         "intake_template": intakes_service.DEFAULT_TEMPLATE,
+        # 사전점검 기본 목록 — 설정 칸에 보이는 글 모양 (TODO 155)
+        "precheck_items": precheck.to_lines(precheck.DEFAULT_ITEMS),
+        "precheck_thresholds": list(precheck.DEFAULT_THRESHOLDS),
     }
 
 

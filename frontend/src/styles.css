@@ -1606,3 +1606,42 @@ a.class-chip:hover { background: #e2e8f0; }
 .table-foot { margin: 8px 2px 0; }
 /* 제목 칸이 남는 폭을 차지해 연도·기간 상자는 오른쪽에 모인다 (설명 줄이 붙으며 가운데로 밀렸다 — TODO 153) */
 .home-head > div:first-child { flex: 1 1 auto; min-width: 0; }
+
+/* ── 사전점검 체크리스트 (TODO 155) ─────────────────────── */
+.precheck-cell dd { display: flex; align-items: center; gap: 8px; }
+.precheck-band { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.band-go { background: #dcfce7; color: #166534; }
+.band-fix { background: #fef3c7; color: #92400e; }
+.band-hold { background: #fee2e2; color: #991b1b; }
+.band-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--border); }
+.band-dot.band-go { background: #16a34a; }
+.band-dot.band-fix { background: #d97706; }
+.band-dot.band-hold { background: #dc2626; }
+.precheck-dialog { max-width: 980px; width: min(980px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; }
+.precheck-dialog .card-head p { margin: 2px 0 0; }
+.precheck-stale { margin: 0; font-size: 13px; }
+.precheck-group { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.precheck-group h3 { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0 6px; font-size: 14px; }
+.precheck-subtotal { font-size: 13px; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+/* 단계 칩 칸은 폭을 못 박는다 — 줄마다 칩 길이가 달라 칸이 들쭉날쭉하면 눈이 칩을 좇아 다녀야 한다 */
+.precheck-row { display: grid; grid-template-columns: minmax(200px, 1fr) 380px minmax(170px, 0.8fr); gap: 10px; align-items: center; padding: 6px 0; border-top: 1px dashed var(--border); }
+.precheck-group h3 + .precheck-row { border-top: 0; }
+.precheck-row.unrated .precheck-item::before { content: "●"; color: var(--warn, #d97706); font-size: 8px; margin-right: 6px; vertical-align: middle; }
+.precheck-item { font-size: 13px; }
+.precheck-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.precheck-choice { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; }
+.precheck-choice b { margin-left: 4px; font-variant-numeric: tabular-nums; }
+.precheck-choice.on.tone-high { background: #dcfce7; border-color: #16a34a; color: #166534; }
+.precheck-choice.on.tone-mid { background: #fef3c7; border-color: #d97706; color: #92400e; }
+.precheck-choice.on.tone-low { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+.precheck-choice:disabled { opacity: 0.45; }
+.precheck-note { font-size: 13px; padding: 5px 8px; }
+.precheck-foot { position: sticky; bottom: -18px; background: var(--surface); padding: 10px 0 4px; border-top: 1px solid var(--border); margin-bottom: -4px; align-items: center; }
+.precheck-total { margin-right: auto; font-size: 14px; }
+.precheck-total b { font-size: 20px; }
+.precheck-col { white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) {
+  .precheck-row { grid-template-columns: 1fr; }
+}
+.precheck-settings-title { margin: 18px 0 4px; font-size: 14px; }
+.precheck-lines { min-height: 220px; font-size: 12px; }

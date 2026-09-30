@@ -3,6 +3,7 @@ import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 import { backTarget, projectLink } from "../nav";
 import PasteOfferBar from "./PasteOffer";
+import PrecheckDialog, { BandChip } from "./PrecheckDialog";
 import { type PasteOffer, handleEditorPaste } from "../table";
 import type { IntakeAttachment, IntakeDetail as Detail, IntakeLog, Meta, Project, PromotionPlan } from "../types";
 import { type Attachment, uploadAttachment } from "../upload";
@@ -45,6 +46,8 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
   // 검토 기록 편집기가 열렸는가 — 2단을 잠시 1단으로 돌릴 때 쓴다 (TODO 141)
   const [editingLog, setEditingLog] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  // 사전점검 체크리스트 대화상자 (TODO 155)
+  const [prechecking, setPrechecking] = useState(false);
   const [deciding, setDeciding] = useState<string | null>(null);
   const [promoting, setPromoting] = useState(false);
 
@@ -213,6 +216,26 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
 
         {/* 과제 상세와 같은 요약 줄 — 작은 이름 위에 값 (TODO 147) */}
         <dl className="summary-bar">
+          {/* 사전점검 (TODO 155) — 요약 줄의 첫 칸. 평소에는 점수 한 칸, 매길 때만 대화상자 */}
+          <div className="precheck-cell">
+            <dt>사전점검 체크리스트</dt>
+            <dd>
+              {intake.precheck.score !== null ? (
+                <>
+                  {intake.precheck.score}점 <BandChip band={intake.precheck.band} />
+                </>
+              ) : intake.precheck.rated > 0 ? (
+                <span className="muted">
+                  평가 중 {intake.precheck.rated}/{intake.precheck.total_items}
+                </span>
+              ) : (
+                <span className="muted">미평가</span>
+              )}
+              <button className="ghost small" onClick={() => setPrechecking(true)}>
+                체크리스트
+              </button>
+            </dd>
+          </div>
           <div>
             <dt>경과</dt>
             <dd className={open && intake.stale ? "danger" : undefined}>
@@ -296,6 +319,18 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
       </div>
 
       {error && <p className="error">{error}</p>}
+
+      {prechecking && (
+        <PrecheckDialog
+          intake={intake}
+          meta={meta}
+          onClose={() => setPrechecking(false)}
+          onSaved={() => {
+            setPrechecking(false);
+            load();
+          }}
+        />
+      )}
 
       {promoting && (
         <PromoteDialog

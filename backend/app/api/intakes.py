@@ -87,6 +87,17 @@ class Promotion(BaseModel):
     decision_note: str | None = None
 
 
+class PrecheckAnswer(BaseModel):
+    group: str
+    item: str
+    choice: str | None = None
+    note: str | None = None
+
+
+class PrecheckIn(BaseModel):
+    items: list[PrecheckAnswer] = Field(default_factory=list)
+
+
 class LogIn(BaseModel):
     date: str | None = None
     title: str | None = None
@@ -125,6 +136,8 @@ SORTS = {
     "status": "i.status ASC, i.id ASC",
     "effect": "CASE WHEN i.effect_request IS NULL THEN 1 ELSE 0 END, i.effect_request DESC, i.id ASC",
     "decided": "COALESCE(i.decided_on, '') DESC, i.id DESC",
+    # 사전점검 높은 순 (TODO 155) — 다 매기지 않은 것은 맨 뒤
+    "precheck": "CASE WHEN i.precheck_score IS NULL THEN 1 ELSE 0 END, i.precheck_score DESC, i.id ASC",
 }
 
 
@@ -198,6 +211,8 @@ def list_intakes(
     # 열 머리를 눌러 뒤집는 두 가지 (TODO 154) — 비어 있는 값은 어느 쪽이든 맨 뒤
     elif order == "asc" and sort == "effect":
         order_by = "CASE WHEN i.effect_request IS NULL THEN 1 ELSE 0 END, i.effect_request ASC, i.id ASC"
+    elif order == "asc" and sort == "precheck":
+        order_by = "CASE WHEN i.precheck_score IS NULL THEN 1 ELSE 0 END, i.precheck_score ASC, i.id ASC"
     elif order == "desc" and sort == "priority":
         order_by = ("CASE i.priority WHEN '하' THEN 0 WHEN '중' THEN 1 WHEN '상' THEN 2 ELSE 3 END,"
                     " COALESCE(i.received_on, '9999') ASC")
@@ -239,6 +254,12 @@ def get_intake(intake_id: str, conn: sqlite3.Connection = Depends(get_db)) -> di
         data["file_mtime"] = row["file_mtime"]
         data["logs"] = svc.list_logs(conn, intake_id)
         data["attachments"] = svc.list_attachments(conn, intake_id)
+        # 사전점검 (TODO 155) — 항목별 답 · 분류별 소계 · 합계 · 구간 · 지금 기준과 다른지
+        from ..services import precheck as precheck_service
+        from ..vault import markdown as md
+
+        stored = md.load(svc.intake_dir(conn, intake_id) / svc.REQUEST_FILE).meta.get("precheck")
+        data["precheck"] = precheck_service.summarize(stored)
         # 이어진 과제가 아직 있는지 — 과제를 지웠으면 링크 대신 그렇다고 말한다
         linked = row["project_id"] or row["merged_into"]
         data["linked_project"] = None
@@ -259,6 +280,13 @@ def update_intake(intake_id: str, payload: IntakeUpdate, conn: sqlite3.Connectio
 @router.post("/api/intakes/{intake_id}/status")
 def change_status(intake_id: str, payload: StatusChange, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     _errors(lambda: svc.set_status(conn, intake_id, payload.status, payload.note, payload.merged_into))
+    return get_intake(intake_id, conn)
+
+
+@router.put("/api/intakes/{intake_id}/precheck")
+def save_precheck(intake_id: str, payload: PrecheckIn, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """사전점검을 매긴다 (TODO 155). 서버가 **지금의 체크리스트로** 채점해 스냅샷을 남긴다."""
+    _errors(lambda: svc.save_precheck(conn, intake_id, [item.model_dump() for item in payload.items]))
     return get_intake(intake_id, conn)
 
 

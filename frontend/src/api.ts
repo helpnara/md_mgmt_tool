@@ -46,6 +46,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  /** 사전점검을 매긴다 (TODO 155) — 서버가 지금의 체크리스트로 채점한다 */
+  savePrecheck: (id: string, items: { group: string; item: string; choice: string | null; note: string | null }[]) =>
+    request<IntakeDetail>(`/api/intakes/${encodeURIComponent(id)}/precheck`, {
+      method: "PUT",
+      body: JSON.stringify({ items }),
+    }),
   archiveIntake: (id: string) =>
     request<void>(`/api/intakes/${encodeURIComponent(id)}/archive`, { method: "POST" }),
   createIntakeLog: (id: string, payload: { date: string; title: string; body: string }) =>
@@ -138,7 +144,14 @@ export const api = {
   deleteAttachment: (id: number) => request<void>(`/api/attachments/${id}`, { method: "DELETE" }),
   settings: () => request<AppSettings>("/api/settings"),
   settingsDefaults: () =>
-    request<{ entry_template: string; report_template: string; ai_prompt_prefix: string; intake_template: string }>(
+    request<{
+      entry_template: string;
+      report_template: string;
+      ai_prompt_prefix: string;
+      intake_template: string;
+      precheck_items: string;
+      precheck_thresholds: [number, number];
+    }>(
       "/api/settings/defaults",
     ),
   /** 이 보고를 AI 에게 넘길 글. **서버가 AI 를 부르지는 않는다** (TODO 71). */
