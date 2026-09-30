@@ -3,9 +3,10 @@ import type { ReactNode } from "react";
 import { api } from "../api";
 import type { BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
 import { listLink, projectLink, screenLink } from "../nav";
-import { effectNumber } from "../util";
+import { cellEffect, DASH, effectNumber, sumBy } from "../util";
 import LoadError from "./LoadError";
 import CopyTableButton from "./CopyTableButton";
+import TotalRow from "./TotalRow";
 
 /** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
 const PERIODS: [string, string][] = [
@@ -35,7 +36,10 @@ function statusCells(meta: Meta, counts: Record<string, number>): number[] {
  */
 
 const ALL_YEARS = "all";
-/** 억원/년. 목록·과제 상세와 **같은 규칙**으로 적는다 (util.ts effectNumber, TODO 76). */
+/**
+ * 억원/년 — **표 밖**(팀 현황 카드). 목록·과제 상세와 같은 규칙으로 적는다 (util.ts effectNumber, TODO 156).
+ * 표 안은 `cellEffect` 다 — 0 이 `-` 로 선다 (TODO 158).
+ */
 function money(value: number): string {
   return value ? effectNumber(value) : "—";
 }
@@ -72,14 +76,22 @@ function StatusCells({
       {meta.statuses.map((status) => {
         const count = counts?.[status.key] ?? 0;
         return (
-          // 0 은 흐리게. 어디가 비었는지가 이 표의 요점이다.
+          // 0 은 흐린 `-` (TODO 158). 칸은 지우지 않는다 — 어디가 비었는지가 이 표의 요점이다 (TODO 75).
           <td key={status.key} className={count ? undefined : "zero"}>
-            {count ? <a href={link(status.key)}>{count}</a> : 0}
+            {count ? <a href={link(status.key)}>{count}</a> : DASH}
           </td>
         );
       })}
     </>
   );
+}
+
+/** 상태 여섯 칸의 합계 (TODO 157). 줄마다 더한 값을 `meta.statuses` 순서로. */
+function statusTotals(meta: Meta, rows: { by_status: Record<string, number> }[]): string[] {
+  return meta.statuses.map((status) => {
+    const total = sumBy(rows, (row) => row.by_status?.[status.key] ?? 0);
+    return total ? String(total) : DASH;
+  });
 }
 
 /** 그룹 표는 자유 입력이라 길어질 수 있다. 이만큼만 세우고 나머지는 접는다. */
@@ -158,17 +170,27 @@ function SliceTable({
                 <td>
                   <a href={link(item)}>{item.label}</a>
                 </td>
-                <td>{item.count}</td>
+                <td>{item.count || DASH}</td>
                 <StatusCells
                   meta={meta}
                   counts={item.by_status}
                   link={(status) => link(item, status)}
                 />
-                <td>{money(item.effect_expected)}</td>
-                <td>{money(item.effect_verified)}</td>
+                <td>{cellEffect(item.effect_expected)}</td>
+                <td>{cellEffect(item.effect_verified)}</td>
               </tr>
             ))}
           </tbody>
+          {/* 접어 둔 줄까지 **표 전체**를 더한다 — 접기는 보기 편하려는 것이지 거르기가 아니다 (TODO 157) */}
+          <TotalRow
+            label="합계"
+            cells={[
+              String(sumBy(rows, (item) => item.count) || DASH),
+              ...statusTotals(meta, rows),
+              cellEffect(sumBy(rows, (item) => item.effect_expected)),
+              cellEffect(sumBy(rows, (item) => item.effect_verified)),
+            ]}
+          />
         </table>
       </div>
       {rows.length > SLICE_LIMIT && (
@@ -705,28 +727,45 @@ export default function Home({ meta }: { meta: Meta }) {
                       <td>
                         <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
                       </td>
-                      <td>{member.total}</td>
+                      <td>{member.total || DASH}</td>
                       <StatusCells
                         meta={meta}
                         counts={member.by_status}
                         link={(status) => listLink({ owner: member.name, status, year: yearParam })}
                       />
-                      <td>{money(member.effect_expected)}</td>
-                      <td>{money(member.effect_verified)}</td>
-                      <td>{member.reports}</td>
+                      <td>{cellEffect(member.effect_expected)}</td>
+                      <td>{cellEffect(member.effect_verified)}</td>
+                      <td>{member.reports || DASH}</td>
                       <td className={member.activities ? undefined : "zero"}>
                         {member.activities ? (
                           <a href={screenLink("skills", { person: member.name, year: yearParam })}>
                             {member.activities}
                           </a>
                         ) : (
-                          0
+                          DASH
                         )}
                       </td>
-                      <td className="muted">{member.last_reported_at ?? "—"}</td>
+                      <td className="muted">{member.last_reported_at ?? DASH}</td>
                     </tr>
                   ))}
                 </tbody>
+                {/* 사람별로 더하므로 **담당 중복이 들어 있다** — 이름표에 밝힌다. 팀 합계는 위의 팀 현황이다 (TODO 157) */}
+                <TotalRow
+                  label={
+                    <span title="한 과제에 담당자가 여럿이면 양쪽에 잡힙니다. 팀 합계는 위의 팀 현황을 쓰십시오.">
+                      합계 <span className="total-note">중복 포함</span>
+                    </span>
+                  }
+                  cells={[
+                    String(memberSum || DASH),
+                    ...statusTotals(meta, data.members),
+                    cellEffect(sumBy(data.members, (member) => member.effect_expected)),
+                    cellEffect(sumBy(data.members, (member) => member.effect_verified)),
+                    String(sumBy(data.members, (member) => member.reports) || DASH),
+                    String(sumBy(data.members, (member) => member.activities) || DASH),
+                    null,
+                  ]}
+                />
               </table>
             </div>
             {data.members.length > MEMBER_LIMIT && (

@@ -3,7 +3,8 @@ import { api } from "../api";
 import { uploadAttachment } from "../upload";
 import { backTarget, screenLink, useAddressBar } from "../nav";
 import type { Intake, IntakeListing, Meta } from "../types";
-import { effectNumber } from "../util";
+import { cellCount, cellEffect, DASH, sumBy } from "../util";
+import TotalRow from "./TotalRow";
 import IntakeForm from "./IntakeForm";
 import SortHeader, { type SortState } from "./SortHeader";
 
@@ -332,21 +333,21 @@ export default function IntakePool({ meta, query }: Props) {
                 <col className="col-pick" />
                 <col className="col-intake-id" />
                 <col className="col-title" />
-                <col span={8} />
+                <col span={9} />
               </colgroup>
               <thead>
                 <tr>
                   <th className="pick-col" title="착수 후보">★</th>
                   <SortHeader {...header("id")}>접수 번호</SortHeader>
                   <SortHeader {...header("title")}>과제명</SortHeader>
-                  <th>과제리더 · 소속</th>
-                  <th>성격 · 분류</th>
-                  <SortHeader {...header("priority")}>중요도</SortHeader>
+                  <th className="col-leader">과제리더 · 소속</th>
+                  <th className="col-class">성격 · 분류</th>
+                  <SortHeader {...header("priority")} className="one-line">중요도</SortHeader>
                   <SortHeader {...header("precheck", "desc")} className="num">
                     <span title="사전점검 체크리스트 — 다 매겼을 때의 합계(100점)">사전점검</span>
                   </SortHeader>
-                  <SortHeader {...header("status")}>상태</SortHeader>
-                  <SortHeader {...header("received", "desc")}>접수일</SortHeader>
+                  <SortHeader {...header("status")} className="one-line">상태</SortHeader>
+                  <SortHeader {...header("received", "desc")} className="one-line">접수일</SortHeader>
                   <SortHeader {...header("age")} className="num">경과</SortHeader>
                   <th className="num">검토</th>
                   <SortHeader {...header("effect", "desc")} className="num">
@@ -383,12 +384,12 @@ export default function IntakePool({ meta, query }: Props) {
                         <span className="muted"> → {item.project_id}</span>
                       )}
                     </td>
-                    <td>
-                      {item.leader ?? <span className="muted">—</span>}
+                    <td className="col-leader">
+                      {item.leader ?? <span className="muted">{DASH}</span>}
                       {item.leader_team && <span className="muted"> · {item.leader_team}</span>}
                     </td>
-                    <td className="muted">{[item.nature, item.category].filter(Boolean).join(" · ") || "—"}</td>
-                    <td>{item.priority ? <span className={`priority priority-${item.priority}`}>{item.priority}</span> : <span className="muted">—</span>}</td>
+                    <td className="muted col-class">{[item.nature, item.category].filter(Boolean).join(" · ") || DASH}</td>
+                    <td className="one-line">{item.priority ? <span className={`priority priority-${item.priority}`}>{item.priority}</span> : <span className="muted">{DASH}</span>}</td>
                     {/* 사전점검 — 다 매겼으면 점수와 구간 점, 매기는 중이면 7/10 (TODO 155) */}
                     <td className="num precheck-col">
                       {item.precheck_score !== null ? (
@@ -401,21 +402,42 @@ export default function IntakePool({ meta, query }: Props) {
                           {item.precheck_rated}/{item.precheck_total}
                         </span>
                       ) : (
-                        <span className="muted">—</span>
+                        <span className="muted">{DASH}</span>
                       )}
                     </td>
-                    <td>
+                    <td className="one-line">
                       <span className={`intake-status intake-${item.status}`}>{item.status_label}</span>
                     </td>
-                    <td className="muted">{item.received_on ?? "—"}</td>
+                    <td className="one-line muted">{item.received_on ?? DASH}</td>
                     <td className={`num ${item.stale ? "due-danger" : "muted"}`}>
-                      {item.in_pool && item.age_days !== null ? `D+${item.age_days}` : "—"}
+                      {item.in_pool && item.age_days !== null ? `D+${item.age_days}` : DASH}
                     </td>
-                    <td className="num muted">{item.log_count}</td>
-                    <td className="num muted">{item.effect_request !== null ? effectNumber(item.effect_request) : "—"}</td>
+                    <td className="num muted">{cellCount(item.log_count)}</td>
+                    <td className="num muted">{cellEffect(item.effect_request)}</td>
                   </tr>
                 ))}
               </tbody>
+              {/* 지금 걸러진 접수만 더한다. 사전점검 점수는 더하지 않는다 — 합이 뜻이 없다 (TODO 157) */}
+              <TotalRow
+                label={`합계 (${data.items.length}건)`}
+                span={2}
+                cells={[
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  { text: cellCount(sumBy(data.items, (item) => item.log_count)), className: "num" },
+                  {
+                    text: cellEffect(sumBy(data.items, (item) => item.effect_request)),
+                    className: "num",
+                    title: "요청자 추정의 합 — 참고용입니다",
+                  },
+                ]}
+              />
             </table>
           </div>
           <p className="hint table-foot">

@@ -5,6 +5,8 @@ import { backTarget, useAddressBar } from "../nav";
 import { splitPeople } from "../people";
 import LoadError from "./LoadError";
 import ActivityForm from "./ActivityForm";
+import TotalRow from "./TotalRow";
+import { cellCount, DASH, sumBy } from "../util";
 
 /**
  * 팀원 역량 이력 (TODO 72).
@@ -280,16 +282,19 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                       {item.name}
                     </button>
                   </td>
-                  <td>{item.count}</td>
+                  <td className={item.count ? undefined : "zero"}>{cellCount(item.count)}</td>
                   {meta.activity_kinds.map((kindInfo) => (
+                    // 0 은 흐린 `-` (TODO 158). 칸은 지우지 않는다 — 어디가 비었는지가 요점이다
                     <td key={kindInfo.key} className={item.by_kind[kindInfo.key] ? undefined : "zero"}>
-                      {item.by_kind[kindInfo.key] ?? 0}
+                      {cellCount(item.by_kind[kindInfo.key])}
                     </td>
                   ))}
-                  <td title={`시간을 적어 둔 기록 ${item.with_hours}건`}>
-                    {item.hours ? `${item.hours}h` : "—"}
+                  <td title={`시간을 적어 둔 기록 ${item.with_hours}건`} className={item.hours ? undefined : "zero"}>
+                    {item.hours ? `${item.hours}h` : DASH}
                   </td>
-                  <td title={`비용을 적어 둔 기록 ${item.with_cost}건`}>{won(item.cost)}</td>
+                  <td title={`비용을 적어 둔 기록 ${item.with_cost}건`} className={item.cost ? undefined : "zero"}>
+                    {item.cost ? won(item.cost) : DASH}
+                  </td>
                   <td>
                     {/* 한 해만 보면 늘고 주는 것을 알 수 없다. 최근 몇 해를 나란히 놓는다. */}
                     {summary.trend_years.length >= 3 ? (
@@ -312,7 +317,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                     )}
                   </td>
                   <td className="muted">
-                    {item.last_date ?? "—"}
+                    {item.last_date ?? DASH}
                     {item.days_since !== null && item.days_since >= summary.quiet_days && (
                       <span className="due due-warn"> D+{item.days_since}</span>
                     )}
@@ -320,6 +325,26 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 </tr>
               ))}
             </tbody>
+            {/* 사람별 참여 기록을 더한다 — 한 행사에 여럿이 가면 사람마다 한 건이라 *행사* 수와는 다르다 (TODO 157) */}
+            <TotalRow
+              label={`합계 (${summary.people.length}명)`}
+              cells={[
+                cellCount(sumBy(summary.people, (item) => item.count)),
+                ...meta.activity_kinds.map((kindInfo) =>
+                  cellCount(sumBy(summary.people, (item) => item.by_kind[kindInfo.key] ?? 0)),
+                ),
+                (() => {
+                  const hours = sumBy(summary.people, (item) => item.hours);
+                  return hours ? `${Math.round(hours * 10) / 10}h` : DASH;
+                })(),
+                (() => {
+                  const cost = sumBy(summary.people, (item) => item.cost);
+                  return cost ? won(cost) : DASH;
+                })(),
+                null,
+                null,
+              ]}
+            />
           </table>
         </div>
         )}

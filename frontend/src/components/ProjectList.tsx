@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, Project } from "../types";
-import { dueLabel, effectText, EFFECT_UNIT, formatDate } from "../util";
+import { cellCount, cellEffect, DASH, dueLabel, EFFECT_UNIT, sumBy } from "../util";
+import TotalRow from "./TotalRow";
 import { backTarget, projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
@@ -78,6 +79,7 @@ const COLUMN_SORTS: Record<string, { key: string; first?: "asc" | "desc" }> = {
   과제: { key: "title" },
   상태: { key: "status" },
   속성: { key: "type" },
+  성격: { key: "nature" },
   그룹: { key: "group" },
   담당자: { key: "owner" },
   태그: { key: "tag" },
@@ -86,6 +88,12 @@ const COLUMN_SORTS: Record<string, { key: string; first?: "asc" | "desc" }> = {
   기록: { key: "entries", first: "desc" },
   "최근 업데이트": { key: "updated", first: "desc" },
 };
+
+/** 효과 칸의 합계 — 줄과 같은 `기대 → 실증` 모양. 둘 다 0 이면 `-` 하나 (TODO 157 · 158) */
+function effectTotal(expected: number, verified: number): string {
+  const [left, right] = [cellEffect(expected), cellEffect(verified)];
+  return left === DASH && right === DASH ? DASH : `${left} → ${right}`;
+}
 
 function readFilters(params: URLSearchParams): typeof DEFAULT_FILTERS {
   const values = { ...DEFAULT_FILTERS };
@@ -145,9 +153,10 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
     : null;
   const onSort = (next: SortState) =>
     setFilters((prev) => ({ ...prev, sort: next.key, order: next.order }));
-  const header = (label: string) => {
+  // 한 줄 칸은 `nowrap`, 과제·담당자·태그는 좁혀 두 줄까지 접힌다 (TODO 160). 칸 모양은 이름표로 준다.
+  const header = (label: string, className?: string) => {
     const column = COLUMN_SORTS[label];
-    return { sortKey: column?.key, first: column?.first, current: sortState, onSort };
+    return { sortKey: column?.key, first: column?.first, current: sortState, onSort, className };
   };
 
   return (
@@ -326,13 +335,14 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           </div>
           {/* 지금 걸러진 줄 그대로 엑셀로 (TODO 108). 화면의 표와 열이 같다. */}
           <CopyTableButton
-            headers={["번호", "과제", "상태", "속성", "그룹", "담당자", "유관부서", "태그", "시작", "마감", `기대효과(${EFFECT_UNIT})`, `실증효과(${EFFECT_UNIT})`, "기록", "미보고"]}
+            headers={["번호", "과제", "상태", "속성", "성격", "그룹", "담당자", "유관부서", "태그", "시작", "마감", `기대효과(${EFFECT_UNIT})`, `실증효과(${EFFECT_UNIT})`, "기록", "미보고"]}
             rows={() =>
               projects.map((project) => [
                 project.id,
                 project.title,
                 meta.statuses.find((status) => status.key === project.status)?.label ?? project.status,
                 meta.types.find((type) => type.key === project.type)?.label ?? project.type ?? "",
+                project.nature ?? "",
                 project.group ?? "",
                 project.owners.join(", "),
                 project.partners.map((partner) => partner.team).join(", "),
@@ -411,23 +421,27 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
       {view === "board" && <ProjectBoard meta={meta} projects={projects} />}
 
       {view === "table" && (
-      <table className="grid">
+      /* 좁은 화면에서는 표만 가로로 민다 — 한 줄 칸을 다시 꺾지 않는다 (TODO 160) */
+      <div className="table-scroll">
+      <table className="grid project-table">
         <thead>
           <tr>
-            <SortHeader {...header("과제")}>과제</SortHeader>
-            <SortHeader {...header("상태")}>상태</SortHeader>
-            <SortHeader {...header("속성")}>속성</SortHeader>
-            <SortHeader {...header("그룹")}>그룹</SortHeader>
-            <SortHeader {...header("담당자")}>담당자</SortHeader>
-            <SortHeader {...header("태그")}>태그</SortHeader>
-            <SortHeader {...header("마감")}>마감</SortHeader>
-            <SortHeader {...header("효과")}>
+            <SortHeader {...header("과제", "col-title")}>과제</SortHeader>
+            <SortHeader {...header("상태", "one-line")}>상태</SortHeader>
+            <SortHeader {...header("속성", "one-line")}>속성</SortHeader>
+            {/* 스마트과제는 성격이 중요하다 — 속성 바로 옆 (TODO 159) */}
+            <SortHeader {...header("성격", "one-line")}>성격</SortHeader>
+            <SortHeader {...header("그룹", "one-line")}>그룹</SortHeader>
+            <SortHeader {...header("담당자", "col-owners")}>담당자</SortHeader>
+            <SortHeader {...header("태그", "col-tags")}>태그</SortHeader>
+            <SortHeader {...header("마감", "one-line")}>마감</SortHeader>
+            <SortHeader {...header("효과", "one-line num")}>
               <span title={`기대효과 → 실증효과 (${EFFECT_UNIT})`}>
                 효과<span className="th-unit">{EFFECT_UNIT}</span>
               </span>
             </SortHeader>
-            <SortHeader {...header("기록")}>기록</SortHeader>
-            <SortHeader {...header("최근 업데이트")}>최근 업데이트</SortHeader>
+            <SortHeader {...header("기록", "one-line num")}>기록</SortHeader>
+            <SortHeader {...header("최근 업데이트", "one-line")}>최근 업데이트</SortHeader>
           </tr>
         </thead>
         <tbody>
@@ -435,14 +449,14 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
             const due = dueLabel(project.due_date, project.status);
             return (
               <tr key={project.id} onClick={() => (window.location.hash = projectLink(project.id))}>
-                <td>
+                <td className="col-title">
                   <span className="project-id">{project.id}</span>
                   <span className="project-title">{project.title}</span>
                 </td>
-                <td>
+                <td className="one-line">
                   <StatusBadge status={project.status} meta={meta} />
                 </td>
-                <td>
+                <td className="one-line">
                   <TypeBadge type={project.type} meta={meta} />
                   {/* 금액으로 재지 않는 과제 (TODO 125) */}
                   {project.no_effect && (
@@ -451,65 +465,105 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                     </span>
                   )}
                 </td>
-                <td>{project.group ?? "—"}</td>
-                <td className="owners">
+                {/* 성격 — 스마트과제가 아니면 대개 비어 있다 (TODO 159) */}
+                <td className={project.nature ? "one-line" : "one-line muted"}>{project.nature || DASH}</td>
+                {/* 그룹은 말줄임 없이 끝까지 — 중요한 정보라 바로 보여야 한다 (TODO 160 결정) */}
+                <td className="one-line">{project.group || DASH}</td>
+                <td className="owners col-owners">
                   {project.owners.length > 0
                     ? project.owners.map((name, i) => (
-                        <span key={name}>
+                        // 쉼표 **뒤의 빈칸은 이름 밖에** — 줄은 이름 사이에서만 바뀐다 (TODO 160)
+                        <Fragment key={name}>
                           {i > 0 && ", "}
+                          <span className="owner-name">
                           {name}
                           {/* 떠난 사람은 이름 옆에 딱지. 이름 자체는 지우지 않는다 (TODO 122) */}
                           {leftLabel(meta, name) && (
                             <span className="tag left-tag">{leftLabel(meta, name)}</span>
                           )}
+                          </span>
+                        </Fragment>
+                      ))
+                    : DASH}
+                </td>
+                <td className="tags col-tags">
+                  {project.tags.length > 0
+                    ? project.tags.map((tag) => (
+                        <span key={tag} className="tag">
+                          {tag}
                         </span>
                       ))
-                    : "—"}
+                    : <span className="muted">{DASH}</span>}
                 </td>
-                <td className="tags">
-                  {project.tags.map((tag) => (
-                    <span key={tag} className="tag">
-                      {tag}
-                    </span>
-                  ))}
-                </td>
-                <td>
-                  {/* 끝난 과제는 남은 날짜 없이 마감일만 보여 준다 */}
+                <td className="one-line">
+                  {/* 끝난 과제는 남은 날짜 없이 마감일만 보여 준다. 남은 날과 날짜는 한 줄에 나란히 (TODO 160) */}
                   {due && <span className={`due due-${due.tone}`}>{due.text}</span>}
-                  <span className="due-date">{formatDate(project.due_date)}</span>
+                  <span className="due-date">{project.due_date ? project.due_date.slice(0, 10) : DASH}</span>
                 </td>
-                <td className="effect-col">
+                <td className="effect-col one-line num">
                   {(() => {
-                    const effect = effectText(project.effect_expected, project.effect_verified);
-                    if (!effect) return <span className="muted">—</span>;
+                    // 기대 → 실증. 표 안이라 0·빈 값은 `-` (TODO 156 · 158)
+                    const expected = project.effect_expected;
+                    const verified = project.effect_verified;
+                    if (expected == null && verified == null) return <span className="muted">{DASH}</span>;
+                    const text =
+                      expected != null && verified != null
+                        ? `${cellEffect(expected)} → ${cellEffect(verified)}`
+                        : cellEffect(verified ?? expected);
                     return (
                       <span
-                        className={`effect${effect.verified ? " verified" : ""}`}
+                        className={`effect${verified != null ? " verified" : ""}`}
                         title={
-                          effect.verified
+                          verified != null
                             ? `실증효과 확인됨 (${EFFECT_UNIT})`
                             : `기대효과 — 아직 실증 전 (${EFFECT_UNIT})`
                         }
                       >
-                        {effect.text}
+                        {text}
                       </span>
                     );
                   })()}
                 </td>
-                <td>{project.entry_count}건</td>
-                <td>{formatDate(project.updated_at)}</td>
+                <td className="one-line num">{cellCount(project.entry_count, "건")}</td>
+                <td className="one-line">{project.updated_at ? project.updated_at.slice(0, 10) : DASH}</td>
               </tr>
             );
           })}
           {projects.length === 0 && (
             <tr>
-              <td colSpan={10} className="empty">
+              <td colSpan={11} className="empty">
                 과제가 없습니다. [과제 추가]로 시작하세요.
               </td>
             </tr>
           )}
         </tbody>
+        {/* 지금 걸러진 과제만 더한다 (TODO 157). 효과는 기대·실증을 **따로** 더한다 — 합치지 않는다 */}
+        {projects.length > 0 && (
+          <TotalRow
+            label={`합계 (${projects.length}건)`}
+            cells={[
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                text: effectTotal(
+                  sumBy(projects, (p) => p.effect_expected),
+                  sumBy(projects, (p) => p.effect_verified),
+                ),
+                className: "num",
+                title: `기대효과 합계 → 실증효과 합계 (${EFFECT_UNIT})`,
+              },
+              { text: cellCount(sumBy(projects, (p) => p.entry_count), "건"), className: "num" },
+              null,
+            ]}
+          />
+        )}
       </table>
+      </div>
       )}
     </section>
   );

@@ -96,6 +96,23 @@ SORTS = {
 }
 
 
+def _nature_order() -> tuple[str, list[str]]:
+    """성격 열의 정렬 (TODO 159). 글자순이 아니라 **설정 목록의 순서**다 —
+    연구과제/PoC → 현장적용 → 확대전개 처럼 목록 자체가 흐름이기 때문이다.
+    목록에 없는 값(손으로 고친 파일)은 목록 뒤에 글자순으로, 빈 값은 어느 방향에서나 맨 뒤.
+
+    이름은 물음표로 넘긴다 — 설정에 적힌 말에 따옴표·쉼표가 들어 있어도 SQL 이 깨지지 않는다.
+    """
+    names = settings_service.classifications().get("nature", [])
+    when = " ".join("WHEN ? THEN %d" % index for index in range(len(names)))
+    position = f"(CASE p.nature {when} ELSE {len(names)} END)" if names else "0"
+    clause = (
+        "CASE WHEN p.nature IS NULL OR p.nature = '' THEN 1 ELSE 0 END, "
+        f"{position} ASC, p.nature ASC, p.title ASC"
+    )
+    return clause, list(names)
+
+
 def _tags(conn: sqlite3.Connection, project_id: str) -> list[str]:
     rows = conn.execute(
         "SELECT t.name FROM tag t JOIN project_tag pt ON pt.tag_id = t.id WHERE pt.project_id = ? ORDER BY t.name",
@@ -299,10 +316,16 @@ def list_projects(
         params.extend(matched)
 
     clause = f"WHERE {' AND '.join(where)}" if where else ""
-    clause_order = SORTS.get(sort, SORTS["updated"])
+    order_params: list[str] = []
+    if sort == "nature":
+        clause_order, order_params = _nature_order()
+    else:
+        clause_order = SORTS.get(sort, SORTS["updated"])
     if order is not None:
         clause_order = _flip(clause_order, order)
-    rows = conn.execute(f"SELECT p.* FROM project p {clause} ORDER BY {clause_order}", params).fetchall()
+    rows = conn.execute(
+        f"SELECT p.* FROM project p {clause} ORDER BY {clause_order}", [*params, *order_params]
+    ).fetchall()
     return [_serialize(conn, row) for row in rows]
 
 

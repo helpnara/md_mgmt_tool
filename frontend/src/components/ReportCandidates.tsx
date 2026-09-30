@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, OpenDraft, ReportCandidate } from "../types";
-import { formatDate } from "../util";
+import { cellCount, DASH, formatDate, sumBy } from "../util";
+import TotalRow from "./TotalRow";
 import { backTarget, projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
@@ -347,7 +348,7 @@ export default function ReportCandidates({ meta, query }: Props) {
                 {item.never_reported ? (
                   <span className="never">보고 이력 없음</span>
                 ) : (
-                  formatDate(item.last_reported_at)
+                  item.last_reported_at ? formatDate(item.last_reported_at) : DASH
                 )}
               </td>
               <td>
@@ -366,7 +367,7 @@ export default function ReportCandidates({ meta, query }: Props) {
                     item.last_report_audience
                   )
                 ) : item.never_reported ? (
-                  <span className="muted">—</span>
+                  <span className="muted">{DASH}</span>
                 ) : (
                   <span className="muted" title="보고 문서에 피보고자가 적혀 있지 않습니다.">
                     미기재
@@ -380,14 +381,14 @@ export default function ReportCandidates({ meta, query }: Props) {
                     착수 전
                   </span>
                 ) : item.days_since_report === null ? (
-                  "—"
+                  DASH
                 ) : (
                   <span className={item.days_since_report >= LATE_DAYS ? "due due-danger" : "due"}>
                     D+{item.days_since_report}
                   </span>
                 )}
               </td>
-              <td>{item.unreported_entries}건</td>
+              <td>{cellCount(item.unreported_entries, "건")}</td>
               <td>
                 <button className="ghost small" disabled={busy} onClick={() => makeDraft(item.id)}>
                   보고 초안
@@ -403,6 +404,14 @@ export default function ReportCandidates({ meta, query }: Props) {
             </tr>
           )}
         </tbody>
+        {/* 미보고 분량만 더한다 — 이번 주에 정리할 기록이 모두 몇 건인가 (TODO 157) */}
+        {items.length > 0 && (
+          <TotalRow
+            label={`합계 (${items.length}건)`}
+            span={2}
+            cells={[null, null, null, null, cellCount(sumBy(items, (item) => item.unreported_entries), "건"), ""]}
+          />
+        )}
       </table>
     </section>
   );

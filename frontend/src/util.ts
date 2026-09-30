@@ -90,14 +90,42 @@ export const EFFECT_UNIT = "억원/년";
  * "0"으로 적으면 실제로 효과가 0인 과제와 구분되지 않는다.
  */
 /**
- * 효과 금액 한 숫자를 글자로. **없는 자리는 붙이지 않는다.**
+ * 효과 금액 한 숫자를 글자로 — **어디서나 소수 첫째 자리, 끝의 0 도 적는다** (TODO 156).
  *
- * `3` → `3`, `1.2` → `1.2`, `1.25` → `1.25`.
- * `toFixed(2)` 를 그냥 쓰면 `1.20` `3.00` 이 되어 표가 지저분해진다.
- * 반올림 자리(2)는 저장 쪽(`normalize_effect`)과 같아야 한다 (TODO 76).
+ * `3` → `3.0`, `1.2` → `1.2`, `1.25` → `1.3`.
+ * 전에는 둘째 자리까지 적고 끝의 0 을 뗐다(`3` · `3.5` · `1.25`) — 한 표 안에서 줄마다 자릿수가 달라
+ * 눈으로 견주기 어려웠다. **입력·저장은 여전히 둘째 자리**(1억 2,500만 원, TODO 76)이고 보일 때만 줄인다.
+ * 합계는 원래 값으로 더한 뒤 여기서 한 번 반올림한다 — 반올림한 값끼리 더하면 줄의 합과 어긋난다.
+ *
+ * `toFixed(1)` 을 그냥 쓰면 `1.15` 가 `1.1` 이 된다(2진수로 1.1499…). 저장 값은 둘째 자리까지라
+ * 아주 작은 값을 더해 반올림하면 서버(`round`)·엑셀과 같은 사사오입이 된다.
  */
 export function effectNumber(value: number): string {
-  return String(Number(value.toFixed(2)));
+  const tenths = Math.round(value * 10 + (value >= 0 ? 1e-9 : -1e-9));
+  return (tenths / 10).toFixed(1);
+}
+
+/**
+ * 표 안에서 값이 없거나 0 일 때 쓰는 표시 (TODO 158).
+ * 표 밖(요약 카드·상세 화면)의 빈 값은 그대로 `—` 다 — 카드의 `0건` 은 "없다" 를 말하는 값이다.
+ */
+export const DASH = "-";
+
+/** 표 칸의 수. 0 이면 `-` (TODO 158). */
+export function cellCount(value: number | null | undefined, suffix = ""): string {
+  return value ? `${value}${suffix}` : DASH;
+}
+
+/** 표 칸의 효과 금액. 없거나 소수 첫째 자리에서 0 이면 `-` (TODO 156 · 158). */
+export function cellEffect(value: number | null | undefined): string {
+  if (value == null) return DASH;
+  const text = effectNumber(value);
+  return Number(text) === 0 ? DASH : text;
+}
+
+/** 표의 합계 줄 (TODO 157) — 걸러져 보이는 줄을 **원래 값으로** 더한다. 빈 값은 0 으로 본다. */
+export function sumBy<T>(rows: T[], pick: (row: T) => number | null | undefined): number {
+  return rows.reduce((total, row) => total + (pick(row) ?? 0), 0);
 }
 
 export function effectText(

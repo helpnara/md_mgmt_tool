@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { MonthGrid as GridData } from "../types";
 import { projectLink } from "../nav";
+import TotalRow from "./TotalRow";
 
 /**
  * 과제 × 월 보고 표 (TODO 77).
@@ -128,12 +129,7 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
                   <tr>
                     <th className="month-name">과제</th>
                     {MONTHS.map((month) => (
-                      <th key={month}>
-                        {month}월
-                        {monthTotals[month] > 0 && (
-                          <span className="th-unit">{monthTotals[month]}건</span>
-                        )}
-                      </th>
+                      <th key={month}>{month}월</th>
                     ))}
                   </tr>
                 </thead>
@@ -203,6 +199,12 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
                     );
                   })}
                 </tbody>
+                {/* 달마다 보고 수 — 전에는 머리에 작게 붙어 있던 것을 다른 표처럼 맨 아래 합계 줄로 (TODO 157) */}
+                <TotalRow
+                  label={`합계 (보고 ${grid.reports.length}건)`}
+                  labelClass="month-name"
+                  cells={MONTHS.map((month) => (monthTotals[month] ? `${monthTotals[month]}건` : null))}
+                />
               </table>
             </div>
             <p className="hint">

@@ -366,9 +366,10 @@ async function main() {
     for (const selector of [".home-members tbody tr", ".home-slice-type tbody tr"]) {
       const row = page.locator(selector).first();
       const cells = await row.locator("td").allInnerTexts();
-      // [이름, 합계, 상태 6칸, …]
-      const total = Number(cells[1]);
-      const sum = cells.slice(2, 2 + count).reduce((acc, text) => acc + Number(text), 0);
+      // [이름, 합계, 상태 6칸, …] — 표 안의 0 은 `-` 로 선다 (TODO 158)
+      const num = (text) => (text.trim() === "-" ? 0 : Number(text));
+      const total = num(cells[1]);
+      const sum = cells.slice(2, 2 + count).reduce((acc, text) => acc + num(text), 0);
       equal(sum, total, `${selector} 의 상태 칸 합`);
     }
   });
@@ -403,14 +404,15 @@ async function main() {
       "보고 없는 과제 줄이 없습니다");
   });
 
-  await check("효과 금액이 소수 둘째 자리까지 보인다", async () => {
-    // 지금까지는 toFixed(1) 이라 1.25 가 1.3 으로 보였다 (TODO 76).
+  await check("효과 금액은 둘째 자리까지 저장되고, 첫째 자리로 보인다", async () => {
+    // 저장은 둘째 자리(TODO 76), 표시는 어디서나 첫째 자리(TODO 156) — 1.25 는 1.3 으로 선다.
     // 새 과제를 만들지 않는다 — 과제 수를 세는 다른 시험이 흔들린다.
     await api.patch(`/api/projects/${seeded.projectA}`, { effect_expected: 1.25 });
+    equal((await api.get(`/api/projects/${seeded.projectA}`)).effect_expected, 1.25, "저장 값");
     await go("#/projects");
     const row = page.locator(".grid tbody tr").filter({ hasText: "고강도 소재 개발" }).first();
     const text = await row.innerText();
-    expect(text.includes("1.25"), `1.25 로 안 보입니다: ${text}`);
+    expect(text.includes("1.3") && !text.includes("1.25"), `1.3 으로 안 보입니다: ${text}`);
     await api.patch(`/api/projects/${seeded.projectA}`, { effect_expected: 3.5 });
   });
 
@@ -3442,6 +3444,151 @@ async function main() {
     equal(await box.count(), 1, "항목 칸");
     expect((await box.inputValue()).split("\n").length === 10, "기본 열 줄");
     equal(await page.locator(".intake-settings input[type=number]").count(), 3, "묵힘 · 기준 둘");
+  });
+
+  console.log("\n[29] 효과 첫째 자리 · 합계 줄 · 0 은 - · 성격 칸 · 한 줄 칸 (TODO 156~160)");
+
+  /** 칸 안의 글자가 몇 줄로 섰는지 — 글자 조각들의 세로 위치를 묶어 센다 (TODO 160). */
+  const lineCount = (locator) =>
+    locator.evaluate((cell) => {
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      const rects = [...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0);
+      const lines = [];
+      for (const rect of rects) {
+        const mid = rect.top + rect.height / 2;
+        if (!lines.some((line) => Math.abs(line - mid) < 8)) lines.push(mid);
+      }
+      return lines.length;
+    });
+
+  await check("효과는 어디서나 소수 첫째 자리 — 끝의 0 도 적는다 (156)", async () => {
+    await api.patch(`/api/projects/${seeded.projectA}`, { effect_expected: 3 });
+    await go("#/projects");
+    const row = page.locator(".grid tbody tr").filter({ hasText: "고강도 소재 개발" }).first();
+    expect((await row.locator(".effect-col").innerText()).trim() === "3.0", "목록 3.0");
+    await go(`#/projects/${seeded.projectA}`);
+    expect((await page.locator(".summary-bar, .project-summary, main").first().innerText()).includes("3.0"), "상세 3.0");
+    await go("#/");
+    expect((await page.locator(".home-team").innerText()).includes("3.0") ||
+      (await page.locator(".home-team").innerText()).includes(".0") ||
+      /\d\.\d/.test(await page.locator(".home-team").innerText()), "홈 팀 현황의 효과가 첫째 자리");
+    await api.patch(`/api/projects/${seeded.projectA}`, { effect_expected: 3.5 });
+  });
+
+  await check("표마다 맨 아래 합계 줄이 선다 (157)", async () => {
+    for (const [hash, selector] of [
+      ["#/projects", ".project-table"],
+      ["#/", ".home-member-table"],
+      ["#/", ".home-slice-type table"],
+      ["#/reports", "table.grid"],
+      ["#/skills", ".skills-table"],
+      ["#/intakes?status=all", ".intake-table"],
+    ]) {
+      await go(hash);
+      const foot = page.locator(`${selector} tfoot tr.total-row`).first();
+      equal(await foot.count(), 1, `${hash} ${selector} 의 합계 줄`);
+      expect((await foot.innerText()).startsWith("합계"), `${selector} 첫 칸이 합계`);
+      // 합계 줄의 칸 수 = 머리 줄의 칸 수 (칸이 밀리면 합계가 엉뚱한 열 아래 선다)
+      const cols = async (row) =>
+        row.evaluate((tr) => [...tr.children].reduce((n, cell) => n + (cell.colSpan || 1), 0));
+      equal(await cols(foot), await cols(page.locator(`${selector} thead tr`).first()), `${selector} 칸 수`);
+    }
+    await go("#/history");
+    const month = page.locator(".month-grid tfoot tr.total-row");
+    equal(await month.count(), 1, "과제 × 월 합계 줄");
+    expect((await page.locator(".month-grid thead").innerText()).includes("건") === false, "머리의 N건은 아래로 옮겼다");
+  });
+
+  await check("과제목록 합계는 걸러진 줄만 더한다 — 기록 수 · 효과 (157)", async () => {
+    // 목록은 연도·상태로 걸러져 있다 — 화면에 선 줄의 과제만 가져와 견준다
+    await go("#/projects?status=in_progress");
+    const ids = (await page.locator(".project-table tbody .project-id").allInnerTexts()).map((t) => t.trim());
+    const rows = (await api.get("/api/projects")).filter((p) => ids.includes(p.id));
+    equal(rows.length, ids.length, "화면의 줄");
+    expect(rows.every((p) => p.status === "in_progress"), "진행중만 걸러졌다");
+    const foot = await page.locator(".project-table tfoot").innerText();
+    expect(foot.includes(`합계 (${rows.length}건)`), `줄 수: ${foot}`);
+    const entries = rows.reduce((n, p) => n + p.entry_count, 0);
+    expect(foot.includes(entries ? `${entries}건` : "-"), `기록 합계 ${entries}: ${foot}`);
+    const expected = rows.reduce((n, p) => n + (p.effect_expected ?? 0), 0);
+    if (expected) expect(foot.includes((Math.round(expected * 10) / 10).toFixed(1)), `효과 합계 ${expected}: ${foot}`);
+    // 더할 수 없는 칸은 `-`
+    expect((await page.locator(".project-table tfoot td.total-none").count()) >= 7, "더할 수 없는 칸이 - 로");
+  });
+
+  await check("[표 복사] 에는 합계 줄이 들어가지 않는다 (157)", async () => {
+    await go("#/projects");
+    await page.evaluate(() => {
+      window.__copied = "";
+      navigator.clipboard.writeText = async (text) => { window.__copied = text; };
+    });
+    await page.getByRole("button", { name: "표 복사" }).first().click();
+    await page.waitForTimeout(300);
+    const copied = await page.evaluate(() => window.__copied);
+    const lines = copied.trim().split("\n");
+    equal(lines.length, (await page.locator(".project-table tbody tr").count()) + 1, "머리 + 과제 줄");
+    expect(!copied.includes("합계"), "합계 줄이 섞였습니다");
+    expect(lines[0].split("\t").slice(3, 6).join("|") === "속성|성격|그룹", `머리: ${lines[0]}`);
+  });
+
+  await check("표 안의 0 은 - 로 선다 (158)", async () => {
+    await go("#/");
+    const zeros = await page.locator(".home-member-table tbody td.zero").allInnerTexts();
+    expect(zeros.length > 0, "빈 상태 칸이 있어야 한다(시험 자료)");
+    expect(zeros.every((text) => text.trim() === "-"), `0 이 남았습니다: ${zeros.join(",")}`);
+    await go("#/projects");
+    const cells = await page.locator(".project-table tbody td").allInnerTexts();
+    expect(!cells.some((text) => /^(0|0건|0\.0)$/.test(text.trim())), "과제목록에 0 이 남았습니다");
+    await go("#/reports");
+    const unreported = await page.locator("table.grid tbody td").allInnerTexts();
+    expect(!unreported.some((text) => text.trim() === "0건"), "보고대상에 0건이 남았습니다");
+  });
+
+  await check("과제목록에 성격 칸 — 속성 바로 옆, 없으면 - (159)", async () => {
+    await api.patch(`/api/projects/${seeded.projectB}`, { nature: "현장적용" });
+    await go("#/projects");
+    const heads = (await page.locator(".project-table thead th").allInnerTexts()).map((t) => t.trim().split("\n")[0]);
+    equal(heads.indexOf("성격"), heads.indexOf("속성") + 1, `칸 순서: ${heads.join(",")}`);
+    const col = heads.indexOf("성격");
+    const smart = page.locator(".project-table tbody tr").filter({ hasText: "공정 자동화" }).first();
+    equal((await smart.locator("td").nth(col).innerText()).trim(), "현장적용", "스마트과제의 성격");
+    const other = page.locator(".project-table tbody tr").filter({ hasText: "고강도 소재 개발" }).first();
+    equal((await other.locator("td").nth(col).innerText()).trim(), "-", "다른 과제는 -");
+    // 머리를 눌러 정렬 — 성격이 있는 과제가 먼저
+    await page.locator(".project-table thead th", { hasText: "성격" }).locator("button").click();
+    await page.waitForTimeout(600);
+    expect(page.url().includes("sort=nature"), `주소: ${page.url()}`);
+    expect((await page.locator(".project-table tbody tr").first().innerText()).includes("공정 자동화"), "성격 있는 과제가 맨 위");
+  });
+
+  await check("짧은 칸은 한 줄, 그룹은 말줄임 없이 (160)", async () => {
+    await api.patch(`/api/projects/${seeded.projectA}`, { group: "차세대 이차전지 고강도 소재 공정 그룹" });
+    for (const width of [1366, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      await go("#/projects");
+      const cells = page.locator(".project-table tbody td.one-line");
+      const n = await cells.count();
+      expect(n > 0, "한 줄 칸이 없습니다");
+      for (let i = 0; i < n; i += 1) {
+        const lines = await lineCount(cells.nth(i));
+        expect(lines <= 1, `${width}px — ${await cells.nth(i).innerText()} 가 ${lines}줄`);
+      }
+      const group = page.locator(".project-table tbody td", { hasText: "차세대 이차전지 고강도 소재 공정 그룹" });
+      expect(await group.evaluate((td) => td.scrollWidth <= td.clientWidth + 1 && getComputedStyle(td).textOverflow !== "ellipsis"),
+        `${width}px 그룹 이름이 잘렸습니다`);
+      // 표가 넘치면 표만 가로로 민다 — 화면 전체가 옆으로 밀리지 않는다
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${width}px 화면이 옆으로 넘칩니다`);
+      await go("#/intakes?status=all");
+      const intakeCells = page.locator(".intake-table tbody td.one-line, .intake-table tbody td.num, .intake-table tbody td.intake-id");
+      const m = await intakeCells.count();
+      for (let i = 0; i < m; i += 1) {
+        const lines = await lineCount(intakeCells.nth(i));
+        expect(lines <= 1, `접수 ${width}px — ${await intakeCells.nth(i).innerText()} 가 ${lines}줄`);
+      }
+    }
+    await page.setViewportSize({ width: 1500, height: 900 });
+    await api.patch(`/api/projects/${seeded.projectA}`, { group: "" });
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

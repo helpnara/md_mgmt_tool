@@ -119,6 +119,16 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px; }
 .grid tbody tr { cursor: pointer; }
 .grid tbody tr:hover { background: var(--accent-soft); }
 .empty { color: var(--muted); text-align: center; padding: 32px; }
+/* 합계 줄 (TODO 157) — 머리 줄과 같은 옅은 바탕 · 굵은 글씨. 위의 선 하나로 본문과 가른다.
+   더할 수 없는 칸의 `-` 는 흐리게 — 값이 아니라 "여기는 더하지 않는다" 는 표시다. */
+.grid tfoot th, .grid tfoot td {
+  background: #fafbfc; border-top: 1px solid var(--border); border-bottom: none;
+  font-weight: 700; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.grid tfoot th { font-size: 13px; text-align: left; }
+.grid tfoot td.total-none { color: #9aa3ad; font-weight: 400; }
+.grid tfoot .total-note { margin-left: 4px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.grid tfoot tr:hover { background: none; }
 
 .project-id { display: block; font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
 .project-title { font-weight: 600; }
@@ -1085,6 +1095,7 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
   box-shadow: 1px 0 0 var(--border);
 }
 .month-grid th.month-name { background: #fafbfc; }
+.month-grid tfoot td { text-align: center; }
 .month-grid tbody tr:hover td.month-name { background: #fcfcfd; }
 .month-grid td.month-name a {
   display: block; color: var(--text); text-decoration: none; font-weight: 600;
@@ -1094,7 +1105,8 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 /* 보고가 한 건도 없는 줄 — 올해 한 번도 보고하지 않은 과제다 */
 .month-grid tbody tr.quiet-row td.month-name { border-left: 3px solid var(--warn); }
 .month-cell { min-width: 76px; }
-.month-cell.zero::after { content: "·"; color: #c8cfd8; }
+/* 보고가 없는 달 — 다른 표의 0 과 같은 `-` (TODO 158) */
+.month-cell.zero::after { content: "-"; color: #9aa3ad; }
 .month-hit {
   display: block; padding: 3px 5px; border-radius: 6px; text-decoration: none;
   background: var(--accent-soft); color: var(--accent-strong); margin-bottom: 3px;
@@ -1645,3 +1657,25 @@ a.class-chip:hover { background: #e2e8f0; }
 }
 .precheck-settings-title { margin: 18px 0 4px; font-size: 14px; }
 .precheck-lines { min-height: 220px; font-size: 12px; }
+
+/* ── 과제목록 표의 줄바꿈 (TODO 160) ─────────────────────
+   짧은 칸(상태·속성·성격·그룹·마감·효과·기록·최근 업데이트)은 **한 줄**로, 내용만큼 폭을 잡는다.
+   남는 폭을 과제·담당자·태그가 나눠 갖고 줄이 바뀐다 — **글자는 자르지 않는다**(그룹도 말줄임 없음).
+   담당자·태그는 폭 목표를 두어 두 줄 안팎으로 접히고, 과제명은 가장 넓게 남긴다.
+   표가 화면보다 넓어지면 .table-scroll 이 표만 가로로 민다. */
+.project-table th, .project-table td { padding-left: 8px; padding-right: 8px; }
+.project-table th.sortable button { padding-left: 8px; padding-right: 8px; }
+.project-table .one-line { white-space: nowrap; }
+.project-table .one-line .tag { margin: 0 0 0 4px; }
+.project-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.project-table td.col-title { min-width: 10em; word-break: keep-all; overflow-wrap: anywhere; }
+/* 담당자·태그는 한 사람·한 태그가 쪼개지지 않게 — 줄은 이름·태그 사이에서만 바뀐다 */
+.project-table td.col-owners { min-width: 7em; }
+.project-table .owner-name { white-space: nowrap; }
+.project-table td.col-tags { min-width: 7.5em; }
+.project-table td.col-tags .tag { margin: 1px 4px 1px 0; white-space: nowrap; }
+/* 접수 풀도 같은 규칙 — 두 표의 모양을 맞춘다 (TODO 154 · 160) */
+.intake-table .one-line { white-space: nowrap; }
+/* 낱말 가운데서 꺾지 않는다 — "생산기술팀" 이 "생산 / 기술팀" 으로 갈리지 않게 */
+.intake-table td { word-break: keep-all; overflow-wrap: anywhere; }
+.intake-table td.col-leader, .intake-table td.col-class { min-width: 7em; }
