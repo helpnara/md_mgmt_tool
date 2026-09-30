@@ -8,13 +8,15 @@
 export default function Help() {
   return (
     <section className="help">
-      <h1 className="search-title">도움말</h1>
-      <p className="hint">
+      <div className="page-head">
+        <h1>도움말</h1>
+        <p className="hint page-desc">
         <b>느린 나이테</b>는 과제 이력을 마크다운으로 남기는 도구입니다.
         과제 하나가 폴더 하나입니다. 진행일지·보고·첨부가 그 안에 함께 쌓이고, 모두 <b>보통의
         마크다운 파일</b>이라 이 도구 없이도 탐색기에서 그대로 읽힙니다. 인터넷으로 나가는 것은
         없습니다.
       </p>
+      </div>
 
       <div className="settings-group">
         <h2 className="settings-group-title">
@@ -159,7 +161,8 @@ export default function Help() {
             <dt>지운 것을 되돌리려면?</dt>
             <dd>
               설정 → <b>삭제 보관함</b>. 과제·기록·보고·첨부·접수는 [삭제]해도 지워지지 않고 거기로 옮겨지며
-              원래 자리로 되돌릴 수 있습니다. 잘못 고친 것은 그 문서의 <b>[이전 버전]</b>에서 되돌립니다.
+              원래 자리로 되돌릴 수 있습니다. 잘못 고친 것은 그 문서의 <b>[이전 버전]</b>에서 되돌립니다 — 되돌리는 것은
+              <b>본문</b>이고, 과제명·상태 같은 정보는 지금 것 그대로입니다.
               접수에서 착수한 과제를 지우면 그 접수는 풀로 돌아가고, 과제를 되돌리면 (접수가 아직 풀에
               있을 때) 다시 이어집니다.
             </dd>
@@ -181,8 +184,8 @@ export default function Help() {
             </dd>
             <dt>엑셀 표를 붙여넣었는데 그림으로 들어가요.</dt>
             <dd>
-              이제는 <b>표로</b> 들어갑니다(셀 안 줄바꿈·병합 셀까지). 차트처럼 그림으로 넣고 싶을 때만{" "}
-              <b>Ctrl+Shift+V</b>.
+              이제는 <b>표로</b> 들어갑니다(셀 안 줄바꿈·병합 셀까지). 차트처럼 그림으로 넣고 싶으면, 붙인 직후
+              편집기 아래에 뜨는 <b>[그림으로 바꾸기]</b>를 누릅니다.
             </dd>
             <dt>두 글자로 검색이 안 돼요.</dt>
             <dd>

@@ -249,5 +249,17 @@ def export_html(conn: sqlite3.Connection, project_id: str, include_reports_full:
     renderer = MarkdownIt("commonmark", {"breaks": True, "linkify": True, "html": False}).enable("table")
     project = _project_row(conn, project_id)
     return f"{filename[:-3]}.html", HTML_TEMPLATE.format(
-        title=project["title"], body=renderer.render(text)
+        title=project["title"], body=restore_line_breaks(renderer.render(text))
+    )
+
+
+def restore_line_breaks(html: str) -> str:
+    """표 칸 안의 `<br>` 만 줄바꿈으로 되살린다 — 화면(`markdown.ts`)과 같은 규칙 (TODO 148).
+    속성이 붙은 태그와 코드 안은 글자 그대로 둔다."""
+    import re
+
+    parts = re.split(r"(<code[\s\S]*?</code>)", html)
+    return "".join(
+        part if index % 2 else re.sub(r"&lt;br\s*/?&gt;", "<br>", part, flags=re.I)
+        for index, part in enumerate(parts)
     )

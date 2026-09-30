@@ -446,6 +446,8 @@ export interface DocumentVersion {
   /** 사람이 읽는 시각 */
   saved_at: string;
   size_bytes: number;
+  /** 그 다음 저장이 본문을 바꿨는가 — 아니면 정보(과제명·상태 …)만 바뀐 저장이다 (TODO 152) */
+  body_changed?: boolean;
 }
 
 /** 자동 백업 현황 (T21). */

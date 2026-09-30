@@ -161,8 +161,8 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
       )}
       {/* 메뉴마다 같은 머리 — 제목 한 줄 + 설명 한 줄 (TODO 147) */}
       <div className="page-head">
-        <h1>과제 목록</h1>
-        <p className="hint">과제를 상태·속성·그룹·담당자·연도로 거르고 정렬합니다. 줄을 누르면 과제 상세로 갑니다.</p>
+        <h1>과제목록</h1>
+        <p className="hint page-desc">과제를 상태·속성·그룹·담당자·연도로 거르고 정렬합니다. 줄을 누르면 과제 상세로 갑니다.</p>
       </div>
       <Dashboard
         refreshKey={refreshKey}

@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 import { backTarget, projectLink } from "../nav";
-import { handleEditorPaste } from "../table";
+import PasteOfferBar from "./PasteOffer";
+import { type PasteOffer, handleEditorPaste } from "../table";
 import type { IntakeAttachment, IntakeDetail as Detail, IntakeLog, Meta, Project, PromotionPlan } from "../types";
 import { type Attachment, uploadAttachment } from "../upload";
 import { effectNumber, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import IntakeForm from "./IntakeForm";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
+import StatusBadge from "./StatusBadge";
 import VersionPanel from "./VersionPanel";
 import XlsxPreview from "./XlsxPreview";
 
@@ -268,6 +270,8 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
         {open && deciding && (
           <DecisionPanel
             kind={deciding}
+            meta={meta}
+            intakeTitle={intake.title}
             onCancel={() => setDeciding(null)}
             onConfirm={async (note, mergedInto) => {
               await api.setIntakeStatus(intake.id, deciding, note, mergedInto);
@@ -380,15 +384,20 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
 
 function DecisionPanel({
   kind,
+  meta,
+  intakeTitle,
   onCancel,
   onConfirm,
 }: {
   kind: string;
+  meta: Meta;
+  intakeTitle: string;
   onCancel: () => void;
   onConfirm: (note: string, mergedInto?: string) => Promise<void>;
 }) {
   const [note, setNote] = useState("");
   const [target, setTarget] = useState("");
+  const [query, setQuery] = useState("");
   // null = 아직 받는 중. 못 받았으면 빈 목록이 아니라 오류를 보인다 — 조용한 빈 칸은
   // "원래 고를 것이 없다" 로 읽혀 원인을 알 길이 없다 (TODO 140).
   const [projects, setProjects] = useState<Project[] | null>(null);
@@ -414,23 +423,72 @@ function DecisionPanel({
   };
   const required = kind !== "merged";
 
+  // 흡수할 과제 고르기 (TODO 151) — **과제 번호순**, 찾기 칸의 낱말은 띄어 쓰면 **모두 든 것**만 남긴다.
+  // 번호로도 찾는다(`007`). 찾기 전에는 접수 제목과 낱말이 겹치는 과제를 위에 따로 세운다 — 같은
+  // 요청이면 대개 제목이 닮았다.
+  const sorted = [...(projects ?? [])].sort((a, b) => a.id.localeCompare(b.id, "ko", { numeric: true }));
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = sorted.filter((project) => {
+    const hay = `${project.id} ${project.title}`.toLowerCase();
+    return words.every((word) => hay.includes(word));
+  });
+  const titleWords = intakeTitle.split(/[\s·,()/\-]+/).filter((word) => word.length >= 2);
+  const similar = words.length
+    ? []
+    : sorted.filter((project) => titleWords.some((word) => project.title.includes(word)));
+  const chosen = sorted.find((project) => project.id === target);
+  const row = (project: Project) => (
+    <li key={project.id}>
+      <button type="button" className="merge-option" onClick={() => setTarget(project.id)}>
+        <span className="merge-option-id">{project.id}</span>
+        <span className="merge-option-title">{project.title}</span>
+        <StatusBadge status={project.status} meta={meta} />
+      </button>
+    </li>
+  );
+
   return (
     <div className="decision-panel">
       {kind === "merged" && (
-        <label>
-          흡수할 과제
-          <select value={target} onChange={(e) => setTarget(e.target.value)} disabled={projects === null}>
-            <option value="">{projects === null ? "불러오는 중…" : "과제를 고르세요"}</option>
-            {(projects ?? []).map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.id} {project.title}
-              </option>
-            ))}
-          </select>
-          {projects !== null && projects.length === 0 && !error && (
-            <span className="hint">끝나지 않은 과제가 없습니다 — 병합은 진행 중인 과제에 잇는 것입니다.</span>
+        <div className="merge-picker">
+          <span className="merge-picker-label">흡수할 과제</span>
+          {chosen ? (
+            <p className="merge-chosen">
+              <b>{chosen.id}</b> {chosen.title} <StatusBadge status={chosen.status} meta={meta} />
+              <button type="button" className="ghost small" onClick={() => setTarget("")}>
+                다시 고르기
+              </button>
+            </p>
+          ) : (
+            <>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="과제명·번호의 낱말 — 띄어 쓰면 모두 든 과제만 (예: 온도 예측)"
+                aria-label="흡수할 과제 찾기"
+                disabled={projects === null}
+                autoFocus
+              />
+              {projects === null && <p className="hint">불러오는 중…</p>}
+              {projects !== null && projects.length === 0 && !error && (
+                <p className="hint">끝나지 않은 과제가 없습니다 — 병합은 진행 중인 과제에 잇는 것입니다.</p>
+              )}
+              {similar.length > 0 && (
+                <>
+                  <p className="hint merge-group">접수 제목과 낱말이 겹치는 과제</p>
+                  <ul className="merge-list">{similar.map(row)}</ul>
+                  <p className="hint merge-group">전체 (과제 번호순)</p>
+                </>
+              )}
+              {projects !== null && projects.length > 0 && (
+                <ul className="merge-list">
+                  {matches.length === 0 ? <li className="hint">맞는 과제가 없습니다.</li> : matches.map(row)}
+                </ul>
+              )}
+            </>
           )}
-        </label>
+        </div>
       )}
       <label>
         {STATUS_LINES[kind]} {required ? "사유" : "메모"}
@@ -499,6 +557,15 @@ async function uploadFiles(intakeId: string, files: File[]): Promise<IntakeAttac
   return out;
 }
 
+/**
+ * 이 글이 가리키는 첨부인가. 첨부는 `assets/<날짜>/NNN-이름` 이고 번호는 날마다 001 부터라,
+ * 파일 이름만으로는 다른 날의 같은 이름과 섞인다 — **날짜 폴더부터** 견준다(공백은 `<…>` 로 감싸거나 %20).
+ */
+function referencedIn(text: string, item: IntakeAttachment): boolean {
+  const tail = item.rel_path.replace(/^assets\//, "");
+  return !!tail && (text.includes(tail) || text.includes(encodeURI(tail)));
+}
+
 /** 접수 첨부를 과제 첨부 목록 모양으로 — 진행일지와 **같은 목록 부품**을 쓰려고 (TODO 138). */
 function asAttachments(items: IntakeAttachment[], kind: "markdown" | "markdown_log"): Attachment[] {
   return items.map((item, index) => ({
@@ -533,6 +600,8 @@ function AttachPanel({
   onInsert,
   onChanged,
   onError,
+  only,
+  emptyText,
 }: {
   intake: Detail;
   kind: "markdown" | "markdown_log";
@@ -541,7 +610,11 @@ function AttachPanel({
   onInsert?: (markdown: string) => void;
   onChanged: () => void;
   onError: (message: string) => void;
+  /** 보일 첨부만 고른다 — 검토 기록은 **그 기록의 첨부만** (TODO 150). 없으면 전부 */
+  only?: (item: IntakeAttachment) => boolean;
+  emptyText?: string;
 }) {
+  const items = only ? intake.attachments.filter(only) : intake.attachments;
   const [busy, setBusy] = useState(0);
   const [previewing, setPreviewing] = useState<Attachment | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -561,7 +634,7 @@ function AttachPanel({
   return (
     <div className={heading === "h3" ? "attachment-panel" : undefined}>
       <div className="card-head">
-        <Title>첨부 ({intake.attachments.length})</Title>
+        <Title>첨부 ({items.length})</Title>
         {editable && (
           <div className="attach-actions">
             <span className="hint">이미지는 Ctrl+V, 파일은 끌어다 놓아도 됩니다.</span>
@@ -582,11 +655,13 @@ function AttachPanel({
           </div>
         )}
       </div>
-      {intake.attachments.length === 0 ? (
-        <p className="hint">과제정의서(PPT)·부연 설명·공정 설명·활용 화면을 붙여 두세요. 승격하면 과제로 복사됩니다.</p>
+      {items.length === 0 ? (
+        <p className="hint">
+          {emptyText ?? "과제정의서(PPT)·부연 설명·공정 설명·활용 화면을 붙여 두세요. 승격하면 과제로 복사됩니다."}
+        </p>
       ) : (
         <AttachmentList
-          attachments={asAttachments(intake.attachments, kind)}
+          attachments={asAttachments(items, kind)}
           onInsert={onInsert ? (item) => onInsert(item.markdown) : undefined}
           onPreview={setPreviewing}
           onDelete={
@@ -629,6 +704,10 @@ function MarkdownArea({
   placeholder: string;
 }) {
   const [preview, togglePreview] = usePreview();
+  const [pasteOffer, setPasteOffer] = useState<PasteOffer | null>(null);
+  const closeOffer = useCallback(() => setPasteOffer(null), []);
+  // 이번 편집에서 올린 첨부 — 본문에서 링크를 지웠어도 목록에는 남겨 다시 넣을 수 있게 (TODO 150)
+  const [uploadedNow, setUploadedNow] = useState<string[]>([]);
 
   // 올린 파일은 링크를 커서 자리에 넣는다 — 진행일지 편집기와 같다.
   async function handleFiles(files: File[]) {
@@ -636,6 +715,7 @@ function MarkdownArea({
     try {
       const saved = await uploadFiles(intake.id, files);
       for (const item of saved) field.insert(item[linkKind]);
+      setUploadedNow((prev) => [...prev, ...saved.map((item) => item.rel_path)]);
       onUploaded();
     } catch (err) {
       onError((err as Error).message);
@@ -657,7 +737,11 @@ function MarkdownArea({
           value={field.value}
           onChange={(event) => field.setValue(event.target.value)}
           onPaste={(event) =>
-            handleEditorPaste(event, { onInsert: field.insert, onFiles: (files) => void handleFiles(files) })
+            handleEditorPaste(event, {
+              onInsert: field.insert,
+              onFiles: (files) => void handleFiles(files),
+              onOffer: setPasteOffer,
+            })
           }
           placeholder={placeholder}
           spellCheck={false}
@@ -666,6 +750,13 @@ function MarkdownArea({
           <div className="preview markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(field.value, base) }} />
         )}
       </div>
+      <PasteOfferBar
+        offer={pasteOffer}
+        area={field.ref.current}
+        setValue={field.setValue}
+        onFiles={(files) => void handleFiles(files)}
+        onClose={closeOffer}
+      />
       <AttachPanel
         intake={intake}
         kind={linkKind}
@@ -674,6 +765,18 @@ function MarkdownArea({
         onInsert={field.insert}
         onChanged={onUploaded}
         onError={onError}
+        // 검토 기록은 그날 한 번의 인터뷰다 — 접수의 첨부 전부가 아니라 **이 기록의 첨부만** (TODO 150).
+        // 요청 내용은 접수 전체를 다루므로 전부.
+        only={
+          linkKind === "markdown_log"
+            ? (item) => uploadedNow.includes(item.rel_path) || referencedIn(field.value, item)
+            : undefined
+        }
+        emptyText={
+          linkKind === "markdown_log"
+            ? "이 기록에 붙인 첨부가 없습니다. 📎 로 올리거나 끌어다 놓으면 여기에 섭니다. 접수의 첨부 전체는 왼쪽 첨부 카드에 있습니다."
+            : undefined
+        }
       />
     </div>
   );
@@ -867,6 +970,19 @@ function Logs({
                 )}
               </div>
               <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(log.body, `${base}/logs`) }} />
+              {/* 이 기록의 첨부만 — 진행일지의 *첨부* 줄과 같은 모양 (TODO 150) */}
+              {intake.attachments.some((item) => referencedIn(log.body, item)) && (
+                <div className="entry-files">
+                  <span className="muted">첨부</span>
+                  {intake.attachments
+                    .filter((item) => referencedIn(log.body, item))
+                    .map((item) => (
+                      <a key={item.rel_path} href={item.url} target="_blank" rel="noreferrer" className="file-chip">
+                        {item.is_image ? "🖼" : "📄"} {item.orig_name}
+                      </a>
+                    ))}
+                </div>
+              )}
             </li>
           );
         })}

@@ -135,20 +135,42 @@ def _readable(stamp: str) -> str:
     return f"{when} ({parts[3]})" if len(parts) > 3 else when
 
 
+def _body_of(text: str) -> str:
+    """front matter 를 뗀 본문 — 되돌리기와 *정보만 바뀐 저장* 가리기가 본문을 본다 (TODO 152)."""
+    from . import markdown as md
+
+    try:
+        return md.loads(text).body.strip()
+    except Exception:  # 손으로 고쳐 front matter 가 깨진 파일도 통째로는 견줄 수 있다
+        return text.strip()
+
+
 def list_for(rel_path: str) -> list[dict[str, Any]]:
-    """한 문서의 이전 버전. **새 것부터.**"""
+    """한 문서의 이전 버전. **새 것부터.**
+
+    `body_changed` — 그 버전 **다음 저장이 본문을 바꿨는가**. 과제명·상태만 바꾼 저장도 문서를 다시
+    쓰므로 한 벌이 남는데, 되돌리기는 본문만 가져오므로(152) 그런 버전은 되돌려도 달라지는 것이 없다.
+    화면은 그것을 *정보만 바뀐 저장* 으로 접는다.
+    """
     bucket = _bucket(rel_path)
+    try:
+        newer = _body_of((get_settings().vault_dir / rel_path).read_text(encoding="utf-8"))
+    except OSError:
+        newer = None
     items = []
     for stamp in reversed(_stamps(bucket)):
         file = bucket / f"{stamp}.md"
         try:
+            body = _body_of(file.read_text(encoding="utf-8"))
             items.append(
                 {
                     "stamp": stamp,
                     "saved_at": _readable(stamp),
                     "size_bytes": file.stat().st_size,
+                    "body_changed": newer is None or body != newer,
                 }
             )
+            newer = body
         except OSError:
             continue
     return items
@@ -187,8 +209,18 @@ def restore(conn, rel_path: str, stamp: str) -> dict[str, Any]:
     if not target.is_file():
         raise VersionError("되돌릴 원본 문서가 없습니다. 문서가 지워졌거나 옮겨졌습니다.")
 
-    keep(target)  # 지금 내용을 잃지 않는다
-    target.write_text(text, encoding="utf-8")
+    # **본문만** 되돌린다 (TODO 152). 문서 하나에 본문과 정보(front matter — 과제명·상태·담당·기간·
+    # 접수 번호 …)가 함께 들어 있어, 통째로 덮으면 *개요 글* 을 되돌리려다 과제명·상태까지 그때로 돌아갔다
+    # (폴더 이름은 새 이름 그대로 남아 어긋났다). 정보는 [과제 정보 수정]·판정으로만 바뀐다.
+    # 저장은 md.save 로 — 지금 내용이 먼저 버전으로 남는다(되돌린 것도 다시 되돌릴 수 있다).
+    from . import markdown as md
+
+    old = md.loads(text)
+    current = md.load(target)
+    meta = dict(current.meta) if current.meta else dict(old.meta)
+    if "updated_at" in meta:
+        meta["updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    md.save(target, md.MarkdownDoc(meta, old.body))
 
     # 과제 폴더 안이면 그 과제만, 아니면 통째로 다시 읽는다.
     parts = rel_path.split("/")

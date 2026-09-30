@@ -137,7 +137,14 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         </a>
       )}
       <div className="home-head">
-        <h1>팀원 역량 이력</h1>
+        <div>
+          <h1>팀원역량</h1>
+          <p className="hint page-desc skills-intro">
+            팀원 역량 이력 — 교육·세미나·박람회·학회 참여 이력을 <b>사람 기준</b>으로 쌓습니다. 한 행사에 여러 명이 가면
+        사람 수만큼 기록합니다. <b>지나간 이력만</b> 담습니다 — 이 화면의 쓸모는 계획표가 아니라,
+        쌓인 이력을 놓고 <b>내년에 무엇을 하면 좋을지 면담에서 이야기하는 것</b>입니다.
+          </p>
+        </div>
         <div className="skills-head-right">
           <label className="home-year">
             기준 연도
@@ -155,11 +162,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         </div>
       </div>
 
-      <p className="hint skills-intro">
-        교육·세미나·박람회·학회 참여 이력을 <b>사람 기준</b>으로 쌓습니다. 한 행사에 여러 명이 가면
-        사람 수만큼 기록합니다. <b>지나간 이력만</b> 담습니다 — 이 화면의 쓸모는 계획표가 아니라,
-        쌓인 이력을 놓고 <b>내년에 무엇을 하면 좋을지 면담에서 이야기하는 것</b>입니다.
-      </p>
+
 
       {adding && (
         <ActivityForm

@@ -21,10 +21,17 @@ export function toPlainText(markdown: string): string {
     // 표 구분선(| --- | --- |)은 버리고, 나머지 표 행은 셀 구분만 남긴다.
     if (/^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(line) && line.includes("-")) continue;
     if (/^\s*\|.*\|\s*$/.test(line)) {
-      line = line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()).join(" | ");
+      // 칸 안 줄바꿈(<br>)은 한 줄 안에서 " / " 로 — 줄을 나누면 표의 행이 깨진다 (TODO 148)
+      line = line
+        .trim()
+        .replace(/^\||\|$/g, "")
+        .split("|")
+        .map((cell) => cell.trim().replace(/<br\s*\/?>/gi, " / "))
+        .join(" | ");
     }
 
     line = line
+      .replace(/<br\s*\/?>/gi, "\n")           // 표 밖의 <br> 은 줄바꿈 (TODO 148)
       .replace(/^\s*#{1,6}\s*/, "")           // 제목 기호 제거
       .replace(/^\s*>\s?/, "")                // 인용 기호 제거
       // 목적지가 <…> 로 감싸인 링크(공백·괄호 있는 파일 이름)도 한 덩이로 본다 (TODO 114)

@@ -5,7 +5,8 @@ import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import type { Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
-import { handleEditorPaste, spliceAtCaret } from "../table";
+import PasteOfferBar from "./PasteOffer";
+import { type PasteOffer, handleEditorPaste, spliceAtCaret } from "../table";
 import { scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
@@ -60,6 +61,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [pasteOffer, setPasteOffer] = useState<PasteOffer | null>(null);
+  const closeOffer = useCallback(() => setPasteOffer(null), []);
 
   // 보고 문서를 열면 좌측 칸이 맨 위로 올라온다. 문서가 있는 자리로 데려간다.
   useEffect(() => scrollEditorIntoView(rootRef.current), []);
@@ -416,6 +419,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                   setDirty(true);
                 },
                 onFiles: (files) => void handleFiles(files),
+                onOffer: setPasteOffer,
               })
             }
             spellCheck={false}
@@ -426,6 +430,17 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         </div>
         </>
       )}
+
+      <PasteOfferBar
+        offer={pasteOffer}
+        area={textareaRef.current}
+        setValue={(next) => {
+          setBody(next);
+          setDirty(true);
+        }}
+        onFiles={(files) => void handleFiles(files)}
+        onClose={closeOffer}
+      />
 
       {uploads.length > 0 && (
         <ul className="uploads">

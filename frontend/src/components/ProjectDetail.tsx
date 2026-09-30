@@ -5,7 +5,8 @@ import { backTarget, intakeBackLink, listLink, projectLink } from "../nav";
 import type { Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
-import { handleEditorPaste, spliceAtCaret } from "../table";
+import PasteOfferBar from "./PasteOffer";
+import { type PasteOffer, handleEditorPaste, spliceAtCaret } from "../table";
 import { todayIso, daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
@@ -122,6 +123,8 @@ export default function ProjectDetail({
   const [overviewDraft, setOverviewDraft] = useState("");
   // 개요 편집기 — 붙여넣기·첨부 링크를 커서 자리에 끼우려고 잡아 둔다 (TODO 137)
   const overviewAreaRef = useRef<HTMLTextAreaElement>(null);
+  const [pasteOffer, setPasteOffer] = useState<PasteOffer | null>(null);
+  const closeOffer = useCallback(() => setPasteOffer(null), []);
   const [creatingEntry, setCreatingEntry] = useState(false);
   // [이어쓰기]로 시작하면 지난 기록의 내용을 담아 온다. 없으면 서식에서 시작한다.
   const [entrySeed, setEntrySeed] = useState<string | null>(null);
@@ -722,6 +725,7 @@ export default function ProjectDetail({
                     onInsert: (snippet) =>
                       setOverviewDraft((prev) => spliceAtCaret(overviewAreaRef.current, prev, snippet)),
                     onFiles: (files) => void attachToOverview(files),
+                    onOffer: setPasteOffer,
                   })
                 }
                 spellCheck={false}
@@ -733,6 +737,13 @@ export default function ProjectDetail({
                 />
               )}
             </div>
+            <PasteOfferBar
+              offer={pasteOffer}
+              area={overviewAreaRef.current}
+              setValue={setOverviewDraft}
+              onFiles={(files) => void attachToOverview(files)}
+              onClose={closeOffer}
+            />
             <div className="form-actions">
               <button
                 onClick={async () => {

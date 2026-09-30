@@ -1543,7 +1543,7 @@ a.class-chip:hover { background: #e2e8f0; }
 /* ── 접수 번호 (TODO 139) ─────────────────────────────────
    과제의 번호 딱지(.project-id — 제목 위에 얹는 11px 흐린 글씨)를 빌려 쓰면, 제 칸을 가진
    풀에서는 작고 흐리고 줄표에서 두 줄로 꺾였다. 번호가 곧 이름인 칸이라 본문 크기로 세운다. */
-.intake-table .intake-id { white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+.intake-table .intake-id { white-space: nowrap; font-size: 14px; font-variant-numeric: tabular-nums; }
 .intake-table .intake-id a { color: var(--text); font-weight: 600; text-decoration: none; }
 .intake-table .intake-id a:hover { text-decoration: underline; color: var(--accent); }
 /* 번호가 한 줄로 꽉 차게 — 팀 코드 길이가 팀마다 달라 px 로 못 박지 않는다 */
@@ -1572,7 +1572,6 @@ a.class-chip:hover { background: #e2e8f0; }
 /* ── 화면 통일 (TODO 147) ────────────────────────────────
    메뉴 화면의 제목은 한 모양(20px · 설명 한 줄), 표는 한 모양(.grid), 2단의 오른쪽은 과제 상세의
    수행 이력과 같은 짜임(머리는 카드 밖 · 기록은 한 장씩). */
-.page-head > .hint { margin: 0; }
 .intake-logs .entry .entry-head { cursor: default; }
 .intake-logs .timeline-hint { margin: -6px 0 12px; }
 .intake-logs .log-editor-card { padding: 14px 16px; }
@@ -1580,3 +1579,30 @@ a.class-chip:hover { background: #e2e8f0; }
 .summary-bar dd.danger { color: var(--danger); }
 /* 거르기 줄의 글 칸도 선택 상자와 같은 높이로 (TODO 147) */
 .filters input:not([type="checkbox"]):not([type="radio"]) { padding-top: 5px; padding-bottom: 5px; }
+/* 엑셀 표를 넣은 직후의 한 줄 (TODO 149) */
+.paste-offer { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 10px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); font-size: 13px; }
+/* 흡수할 과제 고르기 (TODO 151) */
+.merge-picker { display: flex; flex-direction: column; gap: 6px; }
+.merge-picker-label { font-size: 13px; color: var(--muted-strong); }
+.merge-group { margin: 4px 0 0; }
+.merge-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.merge-list li + li { border-top: 1px solid var(--border); }
+.merge-list li.hint { padding: 8px 10px; }
+.merge-option { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; background: none; border: 0; border-radius: 0; color: var(--text); text-align: left; cursor: pointer; }
+.merge-option:hover { background: var(--accent-soft); filter: none; }
+.merge-option-id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); min-width: 92px; }
+.merge-option-title { flex: 1; font-weight: 600; }
+.merge-chosen { display: flex; align-items: center; gap: 8px; margin: 0; }
+
+/* ── 화면 머리 (TODO 153) ────────────────────────────────
+   제목(= 탭 이름) 과 설명 한 줄 사이는 **어디서나 같은 4px**. 147 에서 한 화면씩 맞추다 보니 머리의 짜임
+   (제목만 / 제목+설명을 한 칸에 / 옆에 연도 상자)에 따라 설명의 위 여백이 0·8·12px 로 갈렸다.
+   짜임이 달라도 같은 이름(.page-desc)을 달고 여기 한 줄이 정한다. */
+.page-head h1, .home-head h1 { margin: 0; line-height: 1.4; }
+.page-head p.page-desc, .home-head p.page-desc { margin: 4px 0 0; }
+.page-head { margin-bottom: 14px; }
+/* 수 칸의 정렬 머리는 오른쪽으로 (TODO 154) */
+.grid th.sortable.num button { justify-content: flex-end; }
+.table-foot { margin: 8px 2px 0; }
+/* 제목 칸이 남는 폭을 차지해 연도·기간 상자는 오른쪽에 모인다 (설명 줄이 붙으며 가운데로 밀렸다 — TODO 153) */
+.home-head > div:first-child { flex: 1 1 auto; min-width: 0; }

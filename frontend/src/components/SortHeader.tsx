@@ -18,16 +18,18 @@ interface Props {
   children: React.ReactNode;
   /** 처음 눌렀을 때의 방향. 수·날짜는 큰 것/최근 것부터가 자연스럽다. */
   first?: "asc" | "desc";
+  /** 수 칸처럼 칸마다 붙는 이름 (예: num — 오른쪽 맞춤) */
+  className?: string;
 }
 
-export default function SortHeader({ sortKey, current, onSort, children, first = "asc" }: Props) {
-  if (!sortKey) return <th>{children}</th>;
+export default function SortHeader({ sortKey, current, onSort, children, first = "asc", className }: Props) {
+  if (!sortKey) return <th className={className}>{children}</th>;
 
   const on = current?.key === sortKey;
   const order = on ? current.order : null;
 
   return (
-    <th className={`sortable${on ? " sorted" : ""}`}>
+    <th className={`sortable${on ? " sorted" : ""}${className ? ` ${className}` : ""}`}>
       <button
         type="button"
         onClick={() => onSort({ key: sortKey, order: on && order === first ? (first === "asc" ? "desc" : "asc") : first })}

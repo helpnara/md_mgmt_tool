@@ -33,9 +33,24 @@ renderer.renderer.rules.link_open = (tokens, idx, options, env, self) => {
 renderer.renderer.rules.table_open = () => '<div class="table-scroll"><table>';
 renderer.renderer.rules.table_close = () => "</table></div>";
 
+/**
+ * 표 칸 안의 줄바꿈 `<br>` 만 되살린다 (TODO 148).
+ *
+ * 본문에 섞인 HTML 은 실행하지 않고 글자로 보인다(`html: false` — 붙여넣은 글에 무엇이 섞여도 안전하게).
+ * 그런데 마크다운 표는 한 칸이 한 줄이라 칸 안 줄바꿈을 `<br>` 로 적는 것이 관례이고, 엑셀 표를 붙여넣으면
+ * 도구가 직접 그렇게 적는다(137). **속성 없는 `<br>` 한 가지만** 되살리고 나머지는 계속 글자로 둔다.
+ * 코드(`…`) 안은 적힌 그대로 둔다.
+ */
+export function restoreLineBreaks(html: string): string {
+  return html
+    .split(/(<code[\s\S]*?<\/code>)/)
+    .map((part, index) => (index % 2 === 1 ? part : part.replace(/&lt;br\s*\/?&gt;/gi, "<br>")))
+    .join("");
+}
+
 /** base를 주면 첨부 링크가 실제 파일을 가리키도록 렌더링한다. */
 export function renderMarkdown(text: string, base?: string): string {
-  return renderer.render(text ?? "", { base });
+  return restoreLineBreaks(renderer.render(text ?? "", { base }));
 }
 
 /**

@@ -2739,8 +2739,9 @@ async function main() {
   await check("홈에서 설정에 들어가면 홈으로 돌아온다", async () => {
     await go("#/settings?back=home");
     equal((await page.locator(".settings a.back").first().innerText()).trim(), "← 홈", "설정의 뒤로");
+    // 메뉴로 들어오면 그리지 않는다 — 다른 메뉴 화면과 같은 규칙 (TODO 153. 전에는 "← 과제 목록" 이 섰다)
     await go("#/settings");
-    equal((await page.locator(".settings a.back").first().innerText()).trim(), "← 과제 목록", "메뉴로 들어간 설정");
+    equal(await page.locator(".settings a.back").count(), 0, "메뉴로 들어간 설정의 뒤로 가기");
   });
 
   console.log("\n[22] 보고대상·보고이력·팀원역량의 뒤로 가기 · 보고 첨부 삭제 (TODO 128 · 129)");
@@ -3123,6 +3124,9 @@ async function main() {
     await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
     equal(await page.locator(".log-editor .attach-button").count(), 1, "검토 기록 편집기의 📎");
+    // 검토 기록 편집기에는 그 기록의 첨부만 선다(150) — 여기서 하나 올린 뒤 [본문에 삽입]
+    await pasteInto(".log-editor textarea", { image: true });
+    await page.waitForTimeout(900);
     await page.locator(".log-editor .attachments li").first().getByRole("button", { name: "본문에 삽입" }).click();
     const log = await page.locator(".log-editor textarea").first().inputValue();
     // 검토 기록은 logs/ 안에 있어 링크가 ../assets/… 여야 한다
@@ -3170,9 +3174,12 @@ async function main() {
     await go(hash);
     await page.locator(".decision-bar").getByRole("button", { name: "병합", exact: true }).click();
     await page.waitForTimeout(900);
-    const options = page.locator(".decision-panel select option");
-    expect((await options.count()) > 1, "고를 과제가 없다 — 목록을 못 받았다");
-    await page.locator(".decision-panel select").selectOption(seeded.projectB);
+    // 찾기 칸 + 번호순 목록 (TODO 151) — 목록이 비면 못 받은 것이다(140)
+    const options = page.locator(".decision-panel .merge-option");
+    expect((await options.count()) > 0, "고를 과제가 없다 — 목록을 못 받았다");
+    await page.locator('.decision-panel input[type="search"]').fill(seeded.projectB);
+    equal(await options.count(), 1, "번호로 찾은 과제 수");
+    await options.first().click();
     await page.locator(".decision-panel").getByRole("button", { name: "병합(으)로 정리" }).click();
     await page.waitForTimeout(900);
     expect((await page.locator(".decision-line").innerText()).includes(seeded.projectB), "판정 줄의 과제");
@@ -3207,7 +3214,10 @@ async function main() {
     const versions = await api.get(`/api/versions?path=${encodeURIComponent(`intakes/${dir}/request.md`)}`);
     expect(versions.items.length >= 2, `이름을 바꾼 뒤 이전 버전이 ${versions.items.length}벌`);
     equal(await page.locator(".intake-body .version-panel").count(), 1, "요청 내용의 버전 목록");
-    expect((await page.locator(".intake-body .version-panel").innerText()).includes(versions.items[0].saved_at), "버전 목록의 시각");
+    // 제목만 바꾼 저장은 본문이 같아 접힌다(152) — 본문이 바뀐 버전이 목록에 선다
+    const shown = versions.items.find((item) => item.body_changed !== false);
+    expect((await page.locator(".intake-body .version-panel").innerText()).includes(shown.saved_at), "버전 목록의 시각");
+    expect((await page.locator(".intake-body .version-panel").innerText()).includes("정보만 바뀐 저장"), "접힌 줄");
   });
 
   await check("검색창으로 접수도 찾는다 — 소속·과제리더로도 (TODO 144)", async () => {
@@ -3261,6 +3271,115 @@ async function main() {
     equal(heights.size, 1, `상자 높이가 갈린다: ${[...heights].join(", ")}`);
     await go("#/intakes");
     equal(await page.locator("table.grid.intake-table").count(), 1, "접수 표의 모양");
+  });
+
+  console.log("\n[27] 표 칸 줄바꿈 · 그림으로 바꾸기 · 검토 기록 첨부 · 병합 찾기 · 화면 머리 · 접수 표 (TODO 148~154)");
+
+  await check("표 칸 안의 <br> 은 줄바꿈으로, 속성 붙은 태그는 글자로 (TODO 148)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".card").filter({ hasText: "과제 개요" }).getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(400);
+    const box = page.locator(".card").filter({ hasText: "과제 개요" }).locator("textarea").first();
+    await box.fill("| 항목 | 값 |\n|---|---|\n| 온도<br>편차 | 12 |\n\n<br onclick=\"x\">\n");
+    await page.waitForTimeout(300);
+    const preview = page.locator(".card").filter({ hasText: "과제 개요" }).locator(".preview");
+    equal(await preview.locator("td br").count(), 1, "칸 안 줄바꿈");
+    expect((await preview.innerText()).includes("<br onclick"), "속성 붙은 태그가 글자로 남지 않았다");
+    await page.locator(".card").filter({ hasText: "과제 개요" }).getByRole("button", { name: "취소" }).click().catch(() => {});
+    await go(`#/projects/${seeded.projectA}`);
+  });
+
+  await check("엑셀 표를 붙이면 [그림으로 바꾸기] — 누르면 표 대신 그림 링크 (TODO 149)", async () => {
+    const made = await api.post("/api/intakes", { title: "그림으로 바꾸기 확인" });
+    await go(`#/intakes/${encodeURIComponent(made.id)}`);
+    await page.locator(".intake-body").getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(400);
+    await page.locator(".body-editor textarea").first().fill("");
+    await pasteInto(".body-editor textarea", EXCEL);
+    const offer = page.locator(".body-editor .paste-offer");
+    equal(await offer.count(), 1, "[그림으로 바꾸기] 줄");
+    await offer.getByRole("button", { name: "그림으로 바꾸기" }).click();
+    await page.waitForTimeout(1500);
+    const value = await page.locator(".body-editor textarea").first().inputValue();
+    expect(!value.includes("| 항목 | 값 |"), `표가 남았다: ${value}`);
+    expect(value.includes("![image.png]("), `그림 링크가 없다: ${value}`);
+    equal(await offer.count(), 0, "누른 뒤에는 줄이 사라진다");
+    // 그림 없이 표만 온 붙여넣기에는 권하지 않는다
+    await pasteInto(".body-editor textarea", { html: EXCEL.html, text: EXCEL.text });
+    equal(await offer.count(), 0, "그림 없는 표에 [그림으로 바꾸기]");
+    await page.locator(".body-editor").getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("검토 기록 편집기에는 그 기록의 첨부만 (TODO 150)", async () => {
+    const made = await api.post("/api/intakes", { title: "기록 첨부 확인" });
+    const id = encodeURIComponent(made.id);
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    const form = new FormData();
+    form.append("file", new Blob([png], { type: "image/png" }), "과제정의서화면.png");
+    await fetch(`${BASE}/api/intakes/${id}/attachments`, { method: "POST", body: form });
+    await go(`#/intakes/${id}`);
+    equal(await page.locator(".intake-files .attachments li").count(), 1, "왼쪽 카드는 전체");
+    await page.getByRole("button", { name: "기록 추가" }).click();
+    await page.waitForTimeout(400);
+    equal(await page.locator(".log-editor .attachments li").count(), 0, "새 기록 편집기의 첨부");
+    await pasteInto(".log-editor textarea", { image: true });
+    await page.waitForTimeout(1000);
+    equal(await page.locator(".log-editor .attachments li").count(), 1, "이번에 올린 첨부만");
+    await page.locator(".log-editor input").nth(1).fill("인터뷰 — 화면 캡처");
+    await page.locator(".log-editor").getByRole("button", { name: /^저장/ }).click();
+    await page.waitForTimeout(1000);
+    const card = page.locator(".intake-logs .entry").filter({ hasText: "인터뷰 — 화면 캡처" });
+    equal(await card.locator(".entry-files .file-chip").count(), 1, "기록 카드의 첨부 칩");
+  });
+
+  await check("병합할 과제는 낱말로 찾는다 — 띄어 쓰면 모두 든 것만 (TODO 151)", async () => {
+    const made = await api.post("/api/intakes", { title: "공정 자동화 요청" });
+    await go(`#/intakes/${encodeURIComponent(made.id)}`);
+    await page.locator(".decision-bar").getByRole("button", { name: "병합", exact: true }).click();
+    await page.waitForTimeout(900);
+    // 접수 제목과 낱말이 겹치는 과제가 위에 선다
+    expect((await page.locator(".decision-panel").innerText()).includes("접수 제목과 낱말이 겹치는 과제"), "닮은 과제 묶음");
+    const ids = await page.locator(".decision-panel .merge-list").last().locator(".merge-option-id").allInnerTexts();
+    const sorted = [...ids].sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
+    equal(ids.join(","), sorted.join(","), "과제 번호순");
+    await page.locator('.decision-panel input[type="search"]').fill("공정 없는낱말");
+    equal(await page.locator(".decision-panel .merge-option").count(), 0, "낱말이 모두 들어야 한다");
+    await page.locator(".decision-panel").getByRole("button", { name: "취소" }).click();
+  });
+
+  await check("메뉴 화면의 제목은 탭 이름 그대로, 설명과의 간격은 한 가지, 설정에 뒤로 가기 없음 (TODO 153)", async () => {
+    await go("#/");
+    const tabs = (await page.locator(".app-header nav a").allInnerTexts()).map((text) => text.trim());
+    const gaps = new Set();
+    for (const [index, hash] of ["#/", "#/intakes", "#/projects", "#/reports", "#/history", "#/skills", "#/settings", "#/help"].entries()) {
+      await go(hash);
+      const head = await page.evaluate(() => {
+        const h1 = document.querySelector("section h1");
+        const desc = h1.parentElement.querySelector("p.page-desc");
+        return {
+          title: h1.textContent.trim(),
+          gap: desc ? Math.round(desc.getBoundingClientRect().top - h1.getBoundingClientRect().bottom) : null,
+          back: !!document.querySelector("section > a.back"),
+        };
+      });
+      equal(head.title, tabs[index], `${hash} 의 제목`);
+      expect(head.gap !== null, `${hash} 에 설명 줄이 없다`);
+      gaps.add(head.gap);
+      expect(!head.back, `${hash} 에 메뉴로 왔는데 뒤로 가기가 선다`);
+    }
+    equal(gaps.size, 1, `제목과 설명 사이가 갈린다: ${[...gaps].join(", ")}`);
+  });
+
+  await check("접수 표는 과제목록 표와 같은 자리 · 열 머리로 정렬 (TODO 154)", async () => {
+    await go("#/intakes");
+    equal(await page.locator(".intake-pool .card table.grid").count(), 0, "카드 안에 한 번 더 감싸였다");
+    await page.locator(".intake-table th.sortable button", { hasText: "접수일" }).click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes("sort=received"), `정렬이 주소에 없다: ${page.url()}`);
+    await page.locator(".intake-table th.sortable button", { hasText: "접수일" }).click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes("order=asc"), `방향이 바뀌지 않았다: ${page.url()}`);
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

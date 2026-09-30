@@ -5,6 +5,7 @@ import { backTarget, screenLink, useAddressBar } from "../nav";
 import type { Intake, IntakeListing, Meta } from "../types";
 import { effectNumber } from "../util";
 import IntakeForm from "./IntakeForm";
+import SortHeader, { type SortState } from "./SortHeader";
 
 /**
  * 과제 접수 풀 (TODO 136).
@@ -33,6 +34,8 @@ const DEFAULTS = {
   decided_year: "",
   q: "",
   sort: "age",
+  // 열 머리를 누르면 방향도 정한다 — 비우면 그 정렬의 기본 방향 (TODO 154, 과제목록과 같은 방식)
+  order: "",
   back: "",
 };
 type Filters = typeof DEFAULTS;
@@ -74,7 +77,7 @@ export default function IntakePool({ meta, query }: Props) {
   const statusLabel = (key: string) => meta.intake_statuses.find((s) => s.key === key)?.label ?? key;
   const summary = data?.summary;
   const narrowed = Object.entries(filters).some(
-    ([key, value]) => !["sort", "back", "scope"].includes(key) && value !== DEFAULTS[key as keyof Filters],
+    ([key, value]) => !["sort", "order", "back", "scope"].includes(key) && value !== DEFAULTS[key as keyof Filters],
   );
 
   async function togglePicked(item: Intake) {
@@ -86,6 +89,21 @@ export default function IntakePool({ meta, query }: Props) {
     }
   }
 
+  // 열 머리 정렬 — 과제목록과 같은 부품(SortHeader). 방향을 비워 두면 그 정렬의 기본 방향이다.
+  const BASE_ORDER: Record<string, "asc" | "desc"> = {
+    age: "asc", received: "desc", priority: "asc", id: "asc", title: "asc", status: "asc", effect: "desc", decided: "desc",
+  };
+  const current: SortState = {
+    key: filters.sort,
+    order: (filters.order as "asc" | "desc") || BASE_ORDER[filters.sort] || "asc",
+  };
+  const header = (key: string, first: "asc" | "desc" = "asc") => ({
+    sortKey: key,
+    current,
+    first,
+    onSort: (next: SortState) => set({ sort: next.key, order: next.order === BASE_ORDER[next.key] ? "" : next.order }),
+  });
+
   return (
     <section className="intake-pool">
       {filters.back && (
@@ -96,7 +114,7 @@ export default function IntakePool({ meta, query }: Props) {
       <div className="page-head">
         <div>
           <h1>접수</h1>
-          <p className="hint">
+          <p className="hint page-desc">
             현업 요청을 받아 검토하고, 착수가 정해지면 <b>과제로 승격</b>합니다. 과제 번호는 승격할 때 붙습니다.
           </p>
         </div>
@@ -259,7 +277,7 @@ export default function IntakePool({ meta, query }: Props) {
               aria-label="접수 찾기"
             />
           </form>
-          <select value={filters.sort} onChange={(e) => set({ sort: e.target.value })} aria-label="정렬">
+          <select value={filters.sort} onChange={(e) => set({ sort: e.target.value, order: "" })} aria-label="정렬">
             <option value="age">오래 기다린 순</option>
             <option value="received">최근 접수순</option>
             <option value="priority">중요도순</option>
@@ -301,8 +319,10 @@ export default function IntakePool({ meta, query }: Props) {
         </div>
       )}
 
+      {/* 표는 과제목록과 **같은 자리·같은 모양** — 카드로 한 번 더 감싸지 않는다(.grid 가 제 테두리를 가진다),
+          열 머리를 눌러 정렬한다 (TODO 154) */}
       {data && data.items.length > 0 && (
-        <div className="card table-card">
+        <>
           <div className="table-scroll">
             <table className="grid intake-table">
               {/* 칸 폭은 번호가 아니라 **이름표**로 잡는다 — 칸이 늘거나 줄어도 밀리지 않는다 (134 · 139) */}
@@ -315,16 +335,18 @@ export default function IntakePool({ meta, query }: Props) {
               <thead>
                 <tr>
                   <th className="pick-col" title="착수 후보">★</th>
-                  <th>접수 번호</th>
-                  <th>과제명</th>
+                  <SortHeader {...header("id")}>접수 번호</SortHeader>
+                  <SortHeader {...header("title")}>과제명</SortHeader>
                   <th>과제리더 · 소속</th>
                   <th>성격 · 분류</th>
-                  <th>중요도</th>
-                  <th>상태</th>
-                  <th>접수일</th>
-                  <th className="num">경과</th>
+                  <SortHeader {...header("priority")}>중요도</SortHeader>
+                  <SortHeader {...header("status")}>상태</SortHeader>
+                  <SortHeader {...header("received", "desc")}>접수일</SortHeader>
+                  <SortHeader {...header("age")} className="num">경과</SortHeader>
                   <th className="num">검토</th>
-                  <th className="num" title="요청자 추정 — 과제로 옮기지 않습니다">요청 효과</th>
+                  <SortHeader {...header("effect", "desc")} className="num">
+                    <span title="요청자 추정 — 과제로 옮기지 않습니다">요청 효과</span>
+                  </SortHeader>
                 </tr>
               </thead>
               <tbody>
@@ -376,11 +398,11 @@ export default function IntakePool({ meta, query }: Props) {
               </tbody>
             </table>
           </div>
-          <p className="hint">
+          <p className="hint table-foot">
             {data.items.length}건 · 경과는 접수일부터 센 날수입니다. <b>{meta.intake_stale_days}일</b>이 지나도 판정이
-            없으면 빨갛게 표시됩니다(보류는 제외).
+            없으면 빨갛게 표시됩니다(보류는 제외). 열 이름을 누르면 그 열로 정렬합니다.
           </p>
-        </div>
+        </>
       )}
     </section>
   );

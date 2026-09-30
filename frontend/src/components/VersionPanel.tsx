@@ -14,6 +14,8 @@ export default function VersionPanel({ path, onRestored }: { path: string; onRes
   const [items, setItems] = useState<DocumentVersion[] | null>(null);
   const [preview, setPreview] = useState<{ stamp: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // 정보만 바뀐 저장(본문이 같은 버전)은 접어 둔다 — 되돌려도 달라지는 것이 없다 (TODO 152)
+  const [showAll, setShowAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -24,6 +26,8 @@ export default function VersionPanel({ path, onRestored }: { path: string; onRes
 
   if (error) return <p className="form-error">{error}</p>;
   if (items === null) return <p className="hint">불러오는 중…</p>;
+  const hiddenCount = items.filter((item) => item.body_changed === false).length;
+  const shown = showAll ? items : items.filter((item) => item.body_changed !== false);
 
   return (
     <div className="version-panel">
@@ -35,11 +39,19 @@ export default function VersionPanel({ path, onRestored }: { path: string; onRes
       ) : (
         <>
           <p className="hint">
-            고쳐 저장할 때마다 <b>직전 내용</b>이 남습니다. 되돌리기도 하나의 저장이라,
-            되돌린 뒤에 다시 되돌릴 수 있습니다.
+            고쳐 저장할 때마다 <b>직전 내용</b>이 남습니다. 되돌리기는 <b>본문만</b> 되돌립니다 — 과제명·상태·
+            담당 같은 정보는 지금 것 그대로입니다. 되돌리기도 하나의 저장이라, 되돌린 뒤에 다시 되돌릴 수 있습니다.
           </p>
+          {hiddenCount > 0 && (
+            <p className="hint version-folded">
+              과제명·상태 같은 <b>정보만 바뀐 저장 {hiddenCount}벌</b>은 본문이 같아 접어 두었습니다.{" "}
+              <button className="linkish" onClick={() => setShowAll((value) => !value)}>
+                {showAll ? "접기" : "펼치기"}
+              </button>
+            </p>
+          )}
           <ol className="version-list">
-            {items.map((item) => (
+            {shown.map((item) => (
               <li key={item.stamp} className={preview?.stamp === item.stamp ? "open" : undefined}>
                 <div className="version-head">
                   <span className="version-when">{item.saved_at}</span>
@@ -65,7 +77,11 @@ export default function VersionPanel({ path, onRestored }: { path: string; onRes
                     className="ghost small"
                     disabled={busy}
                     onClick={async () => {
-                      if (!window.confirm(`${item.saved_at} 내용으로 되돌릴까요? 지금 내용도 버전으로 남습니다.`))
+                      if (
+                        !window.confirm(
+                          `${item.saved_at} 의 본문으로 되돌릴까요?\n\n과제명·상태 같은 정보는 지금 것 그대로입니다. 지금 내용도 버전으로 남습니다.`,
+                        )
+                      )
                         return;
                       setBusy(true);
                       setError(null);

@@ -56,11 +56,17 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
 
   return (
     <section className="settings">
-      {/* 온 곳으로 돌아간다 (TODO 127). 예전에는 어디서 왔든 과제 목록으로 보냈다. */}
-      <a className="back" href={backTarget(back).href}>
-        ← {backTarget(back).label}
-      </a>
-      <h1 className="search-title">설정</h1>
+      {/* 온 곳으로 돌아간다 (TODO 127). **온 곳이 있을 때만** — 메뉴로 들어오면 그리지 않는다(128 의
+          규칙). 예전에는 늘 그려서, 온 곳이 없으면 기본값 "← 과제 목록" 이 섰다 (TODO 153). */}
+      {back && (
+        <a className="back" href={backTarget(back).href}>
+          ← {backTarget(back).label}
+        </a>
+      )}
+      <div className="page-head">
+        <h1>설정</h1>
+        <p className="hint page-desc">작성자·담당자 명부·과제 속성과 분류·보고 요일·서식·백업과 보관·점검을 정합니다.</p>
+      </div>
 
       {/*
         설정은 기능이 늘 때마다 카드가 하나씩 붙어 열넷이 되었고, 한 칸에 죽 늘어놓으니

@@ -658,7 +658,8 @@ def _readable_lines(body: str | None) -> list[str]:
     for line in (body or "").splitlines():
         if _SKIP_LINE.match(line):
             continue
-        text = _INLINE_MARK.sub("", line).strip()
+        # 표 칸 안의 줄바꿈(<br>) 은 발췌에서 띄어쓰기로 (TODO 148)
+        text = _INLINE_MARK.sub("", re.sub(r"<br\s*/?>", " ", line, flags=re.I)).strip()
         text = text.lstrip("-•").strip() if text.startswith(("- ", "* ", "• ")) else text
         if text:
             out.append(text)

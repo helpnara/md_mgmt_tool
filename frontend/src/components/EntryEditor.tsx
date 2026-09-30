@@ -5,7 +5,8 @@ import VersionPanel from "./VersionPanel";
 import type { Entry } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
-import { handleEditorPaste } from "../table";
+import PasteOfferBar from "./PasteOffer";
+import { type PasteOffer, handleEditorPaste } from "../table";
 import { scrollEditorIntoView, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
@@ -63,6 +64,9 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
 
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // 엑셀 표를 넣은 직후의 [그림으로 바꾸기] (TODO 149)
+  const [pasteOffer, setPasteOffer] = useState<PasteOffer | null>(null);
+  const closeOffer = useCallback(() => setPasteOffer(null), []);
 
   // 열리자마자 그 자리로 데려간다 (1단으로 바뀌며 위치가 달라지기 때문).
   useEffect(() => scrollEditorIntoView(rootRef.current), []);
@@ -320,6 +324,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
                 markDirty();
               },
               onFiles: (files) => void handleFiles(files),
+              onOffer: setPasteOffer,
             })
           }
           placeholder="진행 내용을 마크다운으로 작성합니다. 이미지는 Ctrl+V로 바로 붙여넣을 수 있습니다."
@@ -332,6 +337,17 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           />
         )}
       </div>
+
+      <PasteOfferBar
+        offer={pasteOffer}
+        area={textareaRef.current}
+        setValue={(next) => {
+          setBody(next);
+          markDirty();
+        }}
+        onFiles={(files) => void handleFiles(files)}
+        onClose={closeOffer}
+      />
 
       {uploads.length > 0 && (
         <ul className="uploads">

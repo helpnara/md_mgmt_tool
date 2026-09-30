@@ -123,19 +123,17 @@ export function tableFromClipboard(data: DataTransfer): string | null {
   return null;
 }
 
-// Ctrl+Shift+V 는 "그림으로 붙이기" 다 — 엑셀 차트·서식째 보여 줄 표는 그림이 맞다.
-// paste 이벤트에는 Shift 가 실리지 않아 바로 앞의 키 입력을 기억해 둔다.
-let shiftPasteAt = 0;
-if (typeof window !== "undefined") {
-  window.addEventListener(
-    "keydown",
-    (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "v") {
-        shiftPasteAt = Date.now();
-      }
-    },
-    true,
-  );
+/**
+ * 표로 넣은 붙여넣기에 **그림도 함께 왔을 때** — 붙인 직후 [그림으로 바꾸기]를 권한다 (TODO 149).
+ *
+ * 처음(137)에는 Ctrl+Shift+V 를 그림 넣기로 정했는데, 크롬·엣지의 Ctrl+Shift+V 는 *서식 없이 붙여넣기*
+ * 라 브라우저가 **글자만** 넘긴다 — 그림을 만들 재료가 오지 않는다. 그래서 단축키 대신, 붙인 순간 함께
+ * 온 그림을 들고 있다가 사람이 고르게 한다. 엑셀 차트처럼 그림이 맞는 것도 Ctrl+V 한 번 + 단추 한 번이다.
+ */
+export interface PasteOffer {
+  /** 방금 넣은 마크다운 표 — 바꿀 때 이 글을 찾아 지운다 */
+  table: string;
+  image: File;
 }
 
 /**
@@ -144,7 +142,7 @@ if (typeof window !== "undefined") {
  * 윈도우 엑셀은 셀을 복사하면 클립보드에 **탭 글 · 표 HTML · 그 범위를 찍은 그림**을 함께 담는다.
  * 예전 편집기들은 파일(그림)부터 보고 거기서 끝나, 엑셀 표가 그림으로 들어갔다. 순서는
  *
- *   1. 표 → 마크다운 표 (Ctrl+Shift+V 면 건너뛰고 그림으로)
+ *   1. 표 → 마크다운 표. 그림도 함께 왔으면 [그림으로 바꾸기] 를 권한다(`onOffer`, 149)
  *   2. 표에서 온 글인데 표가 아니면(셀 하나) → 기본 붙여넣기(글자)
  *   3. 파일(캡처·그림) → `onFiles` 로 첨부
  *   4. 나머지 → 기본 동작
@@ -153,21 +151,25 @@ if (typeof window !== "undefined") {
  */
 export function handleEditorPaste(
   event: React.ClipboardEvent<HTMLTextAreaElement>,
-  handlers: { onInsert: (text: string) => void; onFiles?: (files: File[]) => void },
+  handlers: {
+    onInsert: (text: string) => void;
+    onFiles?: (files: File[]) => void;
+    /** 표로 넣었는데 그림도 함께 왔다 — [그림으로 바꾸기] 를 띄울 자리 (TODO 149) */
+    onOffer?: (offer: PasteOffer) => void;
+  },
 ): boolean {
   const data = event.clipboardData;
-  const asImage = Date.now() - shiftPasteAt < 1500;
   const files = Array.from(data.files);
-  if (!asImage || files.length === 0 || !handlers.onFiles) {
-    const table = tableFromClipboard(data);
-    if (table) {
-      event.preventDefault();
-      handlers.onInsert(`\n${table}\n`);
-      return true;
-    }
-    // 엑셀 셀 하나: 글자로 붙인다 — 그림 한 장이 되면 고칠 수도 없다
-    if (/<table[\s>]/i.test(data.getData("text/html")) && data.getData("text/plain")) return false;
+  const table = tableFromClipboard(data);
+  if (table) {
+    event.preventDefault();
+    handlers.onInsert(`\n${table}\n`);
+    const image = files.find((file) => file.type.startsWith("image/"));
+    if (image && handlers.onFiles && handlers.onOffer) handlers.onOffer({ table, image });
+    return true;
   }
+  // 엑셀 셀 하나: 글자로 붙인다 — 그림 한 장이 되면 고칠 수도 없다
+  if (/<table[\s>]/i.test(data.getData("text/html")) && data.getData("text/plain")) return false;
   if (files.length > 0 && handlers.onFiles) {
     event.preventDefault();
     handlers.onFiles(files);

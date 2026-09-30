@@ -195,6 +195,12 @@ def list_intakes(
         order_by = order_by.replace(" ASC", " DESC")
     elif order == "asc" and sort in ("received", "decided"):
         order_by = order_by.replace(" DESC", " ASC")
+    # 열 머리를 눌러 뒤집는 두 가지 (TODO 154) — 비어 있는 값은 어느 쪽이든 맨 뒤
+    elif order == "asc" and sort == "effect":
+        order_by = "CASE WHEN i.effect_request IS NULL THEN 1 ELSE 0 END, i.effect_request ASC, i.id ASC"
+    elif order == "desc" and sort == "priority":
+        order_by = ("CASE i.priority WHEN '하' THEN 0 WHEN '중' THEN 1 WHEN '상' THEN 2 ELSE 3 END,"
+                    " COALESCE(i.received_on, '9999') ASC")
     rows = conn.execute(f"SELECT i.* FROM intake i {clause} ORDER BY {order_by}", params).fetchall()
     stale_days = settings_service.intake_stale_days()
     items = [svc.serialize(row, stale_days) for row in rows]

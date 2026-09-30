@@ -125,9 +125,9 @@ export default function ReportCandidates({ meta, query }: Props) {
       )}
       <div className="card-head page-head">
         <div>
-          <h1>보고 대상 후보</h1>
-          <p className="hint">
-            한 번도 보고하지 않은 과제가 맨 위, 그다음은 마지막 보고가 오래된 것부터입니다.
+          <h1>보고대상</h1>
+          <p className="hint page-desc">
+            보고 대상 후보 — 한 번도 보고하지 않은 과제가 맨 위, 그다음은 마지막 보고가 오래된 것부터입니다.
             열 이름을 누르면 그 열로 정렬합니다.
           </p>
         </div>

@@ -296,7 +296,11 @@ export default function Home({ meta }: { meta: Meta }) {
         </div>
       )}
       <div className="home-head">
-        <h1>과제 수행 현황</h1>
+        {/* 제목은 **탭 이름 그대로**, 무엇을 보는 화면인지는 설명 줄에 (TODO 153) */}
+        <div>
+          <h1>홈</h1>
+          <p className="hint page-desc">과제 수행 현황 — 그 해 우리 팀이 무엇을 했는지 봅니다. 숫자를 누르면 그 조건의 목록으로 갑니다.</p>
+        </div>
         <label className="home-year">
           기준 연도
           <select value={year} onChange={(event) => setYear(event.target.value)}>
