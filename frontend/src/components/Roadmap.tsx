@@ -382,6 +382,7 @@ function WarningRow({ lineage, warning }: { lineage: RoadmapLineage; warning: Ro
 }
 
 function periodText(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start && !end) return "기간 미정";
   const short = (text: string | null | undefined) => (text ? text.slice(0, 7).replace("-", ".") : "?");
   return `${short(start)} ~ ${short(end)}`;
 }

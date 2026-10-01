@@ -1849,7 +1849,8 @@ h1 .stage-band { font-size: 13px; line-height: 22px; padding: 0 10px; }
 /* 막대 색 = 상태 (목록의 상태 딱지와 같은 계열을 진하게) */
 .rm-status-planned { background: #e2e8f0; color: #334155; border-color: #cbd5e1; }
 .rm-status-reviewing { background: #fde68a; color: #78350f; }
-.rm-status-in_progress { background: #4ade80; color: #14532d; }
+/* 진행중은 파스텔 파랑 (TODO 179 — 사용자: 초록 대신) — 예정(회색 파랑)보다 진하고, 완료(진회색)와 갈린다 */
+.rm-status-in_progress { background: #bfdbfe; color: #1e3a8a; border-color: #93c5fd; }
 .rm-status-on_hold { background: #d1d5db; color: #374151; }
 .rm-status-done { background: #94a3b8; color: #fff; }
 .rm-status-dropped { background: #fecaca; color: #7f1d1d; text-decoration: line-through; }

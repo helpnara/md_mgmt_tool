@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Iterable, Any
 
 from ..config import CLASSIFICATION_KEYS, DEFAULT_STATUS, STATUS_KEYS, get_settings
 from ..vault import markdown as md
@@ -459,10 +459,58 @@ def _ancestors(conn: sqlite3.Connection, project_id: str) -> set[str]:
     return seen
 
 
+def assign_stages(nodes: Iterable[str], preds: dict[str, list[str]]) -> dict[str, int]:
+    """이어진 과제들의 단계 (TODO 172 · 178) — 과제 상세 · 단계 띠 · 로드맵이 **모두 이 함수 하나로** 센다.
+
+    1. 앞에서부터 — 선행을 따라 가장 길게 거슬러 올라간 길이 + 1 (172 의 규칙).
+    2. **뒤로 당긴다** — 후속이 있는 과제는 가장 이른 후속의 바로 앞 단계까지 당겨 선다.
+
+    2 가 없을 때(v11 사용자 확인): 1년차 A → 2년차 B → 3년차 D 에, 2년차에 **새로 시작해** D 로 합쳐지는 C 를 이으면
+    C 는 앞 과제가 없어 1단계가 됐다 — "1단계에 둘, 2단계에 하나". C 는 D 의 바로 앞 단계(2단계)가 맞다.
+    끝에서 멈춘 갈래(후속 없음)는 당기지 않는다 — 2단계에서 끝난 과제가 마지막 단계로 밀려가면 안 된다.
+    고리(손으로 고친 파일)와 찾을 수 없는 선행(보관함)에도 넘어지지 않는다 — 찾을 수 없는 과제는 앞이 없는 과제로 본다.
+    """
+    members = list(dict.fromkeys(nodes))
+    inside = set(members)
+    before = {node: [p for p in preds.get(node, []) if p in inside and p != node] for node in members}
+    after: dict[str, list[str]] = {node: [] for node in members}
+    for node in members:
+        for pred in before[node]:
+            after[pred].append(node)
+
+    forward: dict[str, int] = {}
+
+    def ahead(node: str, trail: frozenset[str]) -> int:
+        if node in forward:
+            return forward[node]
+        if node in trail:
+            return 1
+        value = 1 + max((ahead(p, trail | {node}) for p in before[node]), default=0)
+        forward[node] = value
+        return value
+
+    for node in members:
+        ahead(node, frozenset())
+
+    final: dict[str, int] = {}
+
+    def pulled(node: str, trail: frozenset[str]) -> int:
+        if node in final:
+            return final[node]
+        if node in trail or not after[node]:
+            return forward[node]
+        nearest = min(pulled(s, trail | {node}) for s in after[node])
+        value = max(forward[node], nearest - 1)
+        final[node] = value
+        return value
+
+    return {node: pulled(node, frozenset()) for node in members}
+
+
 def stage_map(conn: sqlite3.Connection) -> dict[str, int]:
     """선행으로 이어진 과제마다 몇 단계인가 (TODO 175) — 과제명 뒤의 단계 띠가 쓴다.
 
-    이어진 과제가 없는 과제는 **빠진다**(띠를 붙이지 않는다). 규칙은 줄기(172)와 같다 — 가장 긴 선행 길 + 1.
+    이어진 과제가 없는 과제는 **빠진다**(띠를 붙이지 않는다). 규칙은 `assign_stages` 하나 — 과제 상세 · 로드맵과 같다.
     표 한 번을 읽어 모두 센다: 과제목록처럼 여러 과제를 그릴 때 과제마다 따로 묻지 않게.
     """
     preds: dict[str, list[str]] = {}
@@ -473,18 +521,10 @@ def stage_map(conn: sqlite3.Connection) -> dict[str, int]:
     if not linked:
         return {}
     present = {row["id"] for row in conn.execute("SELECT id FROM project")}
-    stage: dict[str, int] = {}
-
-    def depth(node: str, trail: frozenset[str]) -> int:
-        if node in stage:
-            return stage[node]
-        if node in trail or node not in present:
-            return 1
-        value = 1 + max((depth(p, trail | {node}) for p in preds.get(node, [])), default=0)
-        stage[node] = value
-        return value
-
-    return {node: depth(node, frozenset()) for node in linked if node in present}
+    # 찾을 수 없는 과제(보관함)는 앞이 없는 과제로 — 그 너머는 보지 않는다
+    usable = {node: items for node, items in preds.items() if node in present}
+    stages = assign_stages(sorted(linked), usable)
+    return {node: value for node, value in stages.items() if node in present}
 
 
 LINEAGE_LIMIT = 60  # 한 줄기에 이보다 많으면 무언가 잘못 이어진 것이다 — 화면이 무거워지지 않게 끊는다
@@ -523,21 +563,11 @@ def lineage(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
     if len(nodes) <= 1:
         return {"stage": None, "stages": [], "predecessors": [], "successors": []}
 
-    # 단계 — 가장 긴 선행 길이 + 1 (고리는 막아 두었지만, 손으로 고친 파일에 대비해 깊이를 끊는다)
-    stage: dict[str, int] = {}
-
-    def depth(node: str, trail: frozenset[str]) -> int:
-        if node in stage:
-            return stage[node]
-        if node in trail or nodes[node]["missing"]:
-            return 1
-        preds = [p for p in _predecessors_of(conn, node) if p in nodes]
-        value = 1 + max((depth(p, trail | {node}) for p in preds), default=0)
-        stage[node] = value
-        return value
-
-    for node in nodes:
-        depth(node, frozenset())
+    # 단계 — 과제 상세 · 단계 띠 · 로드맵이 같은 함수로 센다 (TODO 178). 찾을 수 없는 과제는 앞이 없는 과제로.
+    stage = assign_stages(
+        nodes,
+        {node: _predecessors_of(conn, node) for node, info in nodes.items() if not info["missing"]},
+    )
     grouped: dict[int, list[dict[str, Any]]] = {}
     for node, info in nodes.items():
         grouped.setdefault(stage.get(node, 1), []).append({**info, "here": node == project_id})

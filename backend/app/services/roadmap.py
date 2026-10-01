@@ -4,7 +4,7 @@
 팀이 끌고 가는 다년도 과제가 **모두** 어디쯤 와 있고, 어느 줄기가 막혀 있고, 내년에 이어 세울 단계가
 무엇인지. 그래서 이어진 과제가 둘 이상인 묶음(줄기)을 모두 모아 기간 · 단계 · 상태와 **살펴볼 것**을 함께 준다.
 
-이 모듈은 색인만 읽는다 — 파일을 고치지 않는다. 단계를 세는 규칙은 172 와 같다(가장 긴 선행 길 + 1).
+이 모듈은 색인만 읽는다 — 파일을 고치지 않는다. 단계를 세는 규칙은 과제 상세와 같다(assign_stages — 178).
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from datetime import date
 from typing import Any
 
 from ..config import STATUS_LABELS
+from .projects import assign_stages
 
 ENDED = {"done", "dropped"}          # 끝난 과제 — 지연 · 선행 경고를 따지지 않는다
 STARTED = {"in_progress", "on_hold"}  # 이미 손을 댄 과제 — "선행이 아직" 을 따진다
@@ -75,22 +76,12 @@ def build(conn: sqlite3.Connection, today: date | None = None) -> dict[str, Any]
     for node in list(parent):
         groups.setdefault(find(node), []).append(node)
 
-    # 단계 — 가장 긴 선행 길 + 1 (172 와 같다). 손으로 고친 파일의 고리에 대비해 지나온 길을 들고 간다.
-    stage: dict[str, int] = {}
-
-    def depth(node: str, trail: frozenset[str]) -> int:
-        if node in stage:
-            return stage[node]
-        if node in trail or node not in rows:
-            return 1
-        value = 1 + max((depth(p, trail | {node}) for p in preds.get(node, [])), default=0)
-        stage[node] = value
-        return value
-
     lineages: list[dict[str, Any]] = []
     for members in groups.values():
         if len(members) < 2:
             continue
+        # 단계 — 과제 상세 · 단계 띠와 같은 함수 (TODO 178). 찾을 수 없는 선행은 앞이 없는 과제로.
+        stages = assign_stages(members, {node: preds.get(node, []) for node in members if node in rows})
         projects: list[dict[str, Any]] = []
         warnings: list[dict[str, Any]] = []
 
@@ -101,7 +92,7 @@ def build(conn: sqlite3.Connection, today: date | None = None) -> dict[str, Any]
             row = rows.get(node)
             if row is None:
                 projects.append({
-                    "id": node, "title": None, "status": None, "missing": True, "stage": 1,
+                    "id": node, "title": None, "status": None, "missing": True, "stage": stages[node],
                     "predecessors": [], "successors": sorted(succs.get(node, [])),
                 })
                 continue
@@ -119,7 +110,7 @@ def build(conn: sqlite3.Connection, today: date | None = None) -> dict[str, Any]
                 "end_date": end,
                 "effect_expected": row["effect_expected"],
                 "effect_verified": row["effect_verified"],
-                "stage": depth(node, frozenset()),
+                "stage": stages[node],
                 "predecessors": preds.get(node, []),
                 "successors": sorted(succs.get(node, [])),
                 "missing": False,

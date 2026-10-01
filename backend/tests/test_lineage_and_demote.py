@@ -159,3 +159,40 @@ def test_lineage_items_carry_period_and_sort_by_start(client):
     assert second[0]["end_date"] == "2025-11-30"  # 끝난 과제는 끝낸 날
     assert second[1]["end_date"] == "2025-12-31"
     assert stages[0]["items"][0]["end_date"] == "2024-12-20"
+
+
+# ── 178 단계를 뒤 과제 쪽으로 당겨 센다 ─────────────────────────────────────
+
+
+def _stage_titles(client, project_id):
+    lineage = client.get(f"/api/projects/{project_id}").json()["lineage"]
+    return [(group["stage"], sorted(item["title"] for item in group["items"])) for group in lineage["stages"]]
+
+
+def test_new_project_joining_a_later_stage_sits_right_before_it(client):
+    """v11 사용자 확인 — 2년차에 새로 시작해 3년차로 합쳐지는 과제가 1단계로 들어갔다 (TODO 178)."""
+    a = _project(client, "1년차 과제")
+    b = _project(client, "2년차 이어받은 과제", predecessors=[a["id"]])
+    c = _project(client, "2년차 새로 시작한 과제")  # 앞 과제가 없다
+    d = _project(client, "3년차 합친 과제", predecessors=[b["id"], c["id"]])
+    expected = [(1, ["1년차 과제"]), (2, ["2년차 새로 시작한 과제", "2년차 이어받은 과제"]), (3, ["3년차 합친 과제"])]
+    for item in (a, b, c, d):  # 어느 과제에서 봐도 같다
+        assert _stage_titles(client, item["id"]) == expected
+    # 단계 띠 · 로드맵도 같은 단계
+    listed = {row["id"]: row["stage"] for row in client.get("/api/projects").json()}
+    assert [listed[item["id"]] for item in (a, b, c, d)] == [1, 2, 2, 3]
+    roadmap = client.get("/api/roadmap").json()["lineages"][0]
+    assert {p["id"]: p["stage"] for p in roadmap["projects"]} == {a["id"]: 1, b["id"]: 2, c["id"]: 2, d["id"]: 3}
+
+
+def test_short_chain_is_pulled_next_to_its_successor_but_dead_ends_stay(client):
+    a = _project(client, "가1")
+    b = _project(client, "가2", predecessors=[a["id"]])
+    c = _project(client, "가3", predecessors=[b["id"]])
+    x = _project(client, "나1")
+    y = _project(client, "나2", predecessors=[x["id"]])
+    e = _project(client, "합류", predecessors=[c["id"], y["id"]])
+    ended = _project(client, "가2에서 갈라져 끝남", predecessors=[a["id"]])
+    stages = dict((title, stage) for stage, titles in _stage_titles(client, e["id"]) for title in titles)
+    assert stages == {"가1": 1, "가2": 2, "가3": 3, "나1": 2, "나2": 3, "합류": 4, "가2에서 갈라져 끝남": 2}
+    assert ended  # 후속이 없는 갈래는 당기지 않는다 — 마지막 단계로 밀려가지 않는다
