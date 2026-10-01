@@ -14,7 +14,7 @@ import IntakePool from "./components/IntakePool";
 import SearchResults from "./components/SearchResults";
 import type { Meta } from "./types";
 import { BACK_PARAM, SCREEN_TITLES, setPageTitle } from "./nav";
-import { confirmLeave, hasUnsaved, LEAVE_MESSAGE } from "./unsaved";
+import { confirmLeave, hasUnsaved, LEAVE_MESSAGE, migrateBrowserDrafts } from "./unsaved";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Toast from "./components/Toast";
 
@@ -23,7 +23,7 @@ type Route =
   | { name: "home" }
   // 목록 화면은 거른 조건을 주소에 두고 그대로 돌려받는다 (nav.ts).
   | { name: "list"; query: string }
-  | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null; edit?: boolean }
+  | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null; edit?: boolean; draft?: string | null }
   | { name: "search"; query: string; back: string | null }
   | { name: "reports"; query: string }
   | { name: "history"; query: string }
@@ -32,7 +32,16 @@ type Route =
   | { name: "help" }
   // 과제 접수 풀 (TODO 136)
   | { name: "intakes"; query: string }
-  | { name: "intake"; id: string; back: string | null };
+  | { name: "intake"; id: string; back: string | null; draft?: string | null };
+
+/** 주소 조각을 풀어 쓴다 — 잘못 적힌 `%` 가 있어도 넘어지지 않게 (그때는 그대로) */
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
 
 function readRoute(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
@@ -44,11 +53,16 @@ function readRoute(): Route {
     const entryId = params.get("entry");
     return {
       name: "project",
-      id: path.slice("projects/".length),
+      // 브라우저는 주소의 한글을 `%ED%8C%80` 처럼 바꿔 돌려준다. 그대로 쓰면 팀 코드에 한글이 든 과제
+      // (`2026-ABC팀-001`)에서 화면이 쓰는 번호와 서버가 준 번호가 **서로 다른 글자**가 된다 — v7 B-6 에서
+      // "작성 중이던 기록 있음" 이 안 뜬 까닭이 이것이었다(보관은 한글 번호로, 표시는 바뀐 번호로 찾았다). 접수처럼 풀어 쓴다.
+      id: safeDecode(path.slice("projects/".length)),
       reportId: reportId ? Number(reportId) : undefined,
       entryId: entryId ? Number(entryId) : undefined,
       back: params.get(BACK_PARAM),
       edit: params.get("edit") === "1",
+      // 홈의 "작성 중이던 글" 에서 — 그 편집기를 연다 (TODO 170)
+      draft: params.get("draft"),
     };
   }
   if (path.startsWith("search"))
@@ -59,7 +73,12 @@ function readRoute(): Route {
   if (path.startsWith("settings")) return { name: "settings", back: params.get(BACK_PARAM) };
   if (path.startsWith("help")) return { name: "help" };
   if (path.startsWith("intakes/"))
-    return { name: "intake", id: decodeURIComponent(path.slice("intakes/".length)), back: params.get(BACK_PARAM) };
+    return {
+      name: "intake",
+      id: safeDecode(path.slice("intakes/".length)),
+      back: params.get(BACK_PARAM),
+      draft: params.get("draft"),
+    };
   if (path.replace(/\/$/, "") === "intakes") return { name: "intakes", query: queryString ?? "" };
   if (path.replace(/\/$/, "") === "projects") return { name: "list", query: queryString ?? "" };
   // 아는 주소가 아니면 홈으로. 손으로 고친 주소에서 빈 화면을 만나는 것보다 낫다.
@@ -154,6 +173,10 @@ export default function App() {
   }, []);
 
   useEffect(loadMeta, [loadMeta]);
+  // 162 때 브라우저 안에 남은 쓰던 글을 데이터 폴더로 옮긴다 — 한 번, 조용히 (TODO 170)
+  useEffect(() => {
+    void migrateBrowserDrafts();
+  }, []);
 
   // 브라우저 탭 제목 (TODO 169) — 과제 · 접수를 여러 탭으로 열어도 구분되게. 과제 · 접수 화면은
   // 제목을 알고 나서 스스로 고친다(pageTitle).
@@ -261,6 +284,7 @@ export default function App() {
             openEntryId={route.entryId}
             back={route.back}
             edit={route.edit}
+            openDraft={route.draft}
           />
         )}
         {route.name === "reports" && <ReportCandidates meta={meta} query={route.query} />}
@@ -273,7 +297,14 @@ export default function App() {
         {route.name === "help" && <Help />}
         {route.name === "intakes" && <IntakePool meta={meta} query={route.query} />}
         {route.name === "intake" && (
-          <IntakeDetail key={route.id} intakeId={route.id} meta={meta} back={route.back} onMetaChange={loadMeta} />
+          <IntakeDetail
+            key={route.id}
+            intakeId={route.id}
+            meta={meta}
+            back={route.back}
+            onMetaChange={loadMeta}
+            openDraft={route.draft}
+          />
         )}
         </ErrorBoundary>
       </main>

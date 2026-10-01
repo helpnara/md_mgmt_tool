@@ -3,7 +3,7 @@ import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 import { backTarget, projectLink, setPageTitle } from "../nav";
 import LoadError from "./LoadError";
-import { dropDraft, takeDraft, useDraftKeeper, useUnsaved } from "../unsaved";
+import { dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useUnsaved } from "../unsaved";
 import PasteOfferBar from "./PasteOffer";
 import PrecheckDialog, { BandChip } from "./PrecheckDialog";
 import { type PasteOffer, handleEditorPaste } from "../table";
@@ -31,6 +31,8 @@ interface Props {
   meta: Meta;
   back: string | null;
   onMetaChange: () => void;
+  /** 홈의 "작성 중이던 글" 에서 왔다 — "body" 면 요청 내용 편집기를 연다 (TODO 170) */
+  openDraft?: string | null;
 }
 
 const STATUS_LINES: Record<string, string> = {
@@ -40,7 +42,7 @@ const STATUS_LINES: Record<string, string> = {
   merged: "병합",
 };
 
-export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Props) {
+export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openDraft }: Props) {
   const [intake, setIntake] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
@@ -52,6 +54,10 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
   const [prechecking, setPrechecking] = useState(false);
   const [deciding, setDeciding] = useState<string | null>(null);
   const [promoting, setPromoting] = useState(false);
+  // 남은 임시 보관 — 요청 내용 [수정] 옆 "작성 중" 표시가 본다 (TODO 170)
+  useDrafts();
+  // 홈의 "작성 중이던 글" 에서 왔으면 요청 내용 편집기를 연다 — 한 번만
+  const draftOpened = useRef(false);
 
   const load = useCallback(() => {
     api
@@ -63,6 +69,11 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
       .catch((err: Error) => setError(err.message));
   }, [intakeId]);
   useEffect(load, [load]);
+  useEffect(() => {
+    if (!intake || draftOpened.current || openDraft !== "body" || !intake.in_pool) return;
+    draftOpened.current = true;
+    setEditingBody(true);
+  }, [intake, openDraft]);
   // 브라우저 탭 제목 (TODO 169)
   useEffect(() => {
     if (intake) setPageTitle(`${intake.id} ${intake.title}`);
@@ -364,7 +375,14 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange }: Pro
       {/* ── 요청 내용 ─────────────────────────────────────────────── */}
       <div className="card intake-body">
         <div className="card-head">
-          <h2>요청 내용</h2>
+          <h2>
+            요청 내용
+            {!editingBody && hasDraft(`intake:${intake.id}`) && (
+              <span className="draft-waiting" title="저장하지 않은 요청 내용이 남아 있습니다 — [수정] 을 누르면 되살아납니다">
+                작성 중
+              </span>
+            )}
+          </h2>
           <div className="card-head-actions">
             {open && (
               <button
@@ -847,15 +865,28 @@ function BodyEditor({
   // 요청 내용 — 떠날 때 묻고, 쓰던 글은 임시 보관한다 (TODO 162)
   const draftKey = `intake:${intake.id}`;
   const original = intake.body ?? "";
-  const [kept] = useState(() => takeDraft(draftKey, original));
-  const [restored, setRestored] = useState(kept !== null);
-  const field = useMarkdownField(kept ?? original);
+  const [restored, setRestored] = useState(false);
+  const field = useMarkdownField(original);
+  // 남은 글이 있으면 되살린다 — 데이터 폴더에서 가져오므로 편집기가 열린 뒤 곧 채워진다 (TODO 170)
+  useEffect(() => {
+    let alive = true;
+    void loadDraft<string>(draftKey, (content) => content === original).then((kept) => {
+      if (!alive || typeof kept !== "string") return;
+      field.setValue(kept);
+      setRestored(true);
+    });
+    return () => {
+      alive = false;
+    };
+    // 편집기를 열 때 한 번
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const base = `/intake-files/${encodeURIComponent(intake.dir_name)}`;
   const dirty = field.value !== original;
   useUnsaved(draftKey, dirty);
-  useDraftKeeper(draftKey, field.value, original);
+  useDraftKeeper(draftKey, field.value, field.value === original);
 
   async function save() {
     if (busy) return;

@@ -3798,6 +3798,69 @@ async function main() {
     await page.setViewportSize({ width: 1500, height: 900 });
   });
 
+  console.log("\n[31] 쓰다 만 글을 데이터 폴더에 · 다른 창에서도 표시 · 홈 목록 · 한글 번호 (TODO 170)");
+
+  await check("팀 코드에 한글이 든 과제에서도 쓰다 만 기록이 표시된다 (170 — v7 B-6 의 원인)", async () => {
+    // 주소의 한글은 브라우저가 %ED… 로 바꿔 돌려준다 — 전에는 표시가 그 바뀐 번호로 찾아 못 찾았다
+    const before = await api.get("/api/settings");
+    await api.put("/api/settings", { project_code: "시험팀" });
+    const made = await api.post("/api/projects", { title: "한글 코드 과제" });
+    await api.put("/api/settings", { project_code: before.project_code ?? "" });
+    expect(made.id.includes("시험팀"), `번호: ${made.id}`);
+    // 창 A — 먼저 열어 둔다(사용자처럼 여러 창)
+    await go(`#/projects/${encodeURIComponent(made.id)}`);
+    equal(await page.locator(".draft-waiting").count(), 0, "처음에는 표시 없음");
+    // 창 B — 새 기록을 쓰다가 그 창만 닫는다
+    const writer = await browser.newPage();
+    writer.on("dialog", (dialog) => dialog.accept());
+    await writer.goto(`${BASE}/#/projects/${encodeURIComponent(made.id)}`);
+    await writer.waitForTimeout(900);
+    await writer.getByRole("button", { name: "기록 추가" }).click();
+    await writer.locator("textarea").first().fill("창 B 에서 쓰던 글");
+    await writer.waitForTimeout(1200);
+    await writer.close({ runBeforeUnload: true });
+    // 데이터 폴더에 남았다 — 브라우저 보관이 아니다
+    const saved = (await api.get("/api/drafts")).items.find((item) => item.key === `entry:new-${made.id}`);
+    expect(saved, "데이터 폴더의 임시 보관");
+    // 창 A 로 돌아오면(새로고침 없이) 표시가 선다
+    await page.bringToFront();
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await page.waitForTimeout(800);
+    expect((await page.locator(".draft-waiting").allInnerTexts()).includes("작성 중이던 기록 있음"), "창 A 의 표시");
+    // 홈의 "작성 중이던 글" 을 누르면 그 편집기가 열리고 글이 돌아온다
+    await go("#/");
+    const row = page.locator(".home-unsaved li", { hasText: "한글 코드 과제" });
+    equal(await row.count(), 1, "홈 목록");
+    await row.locator("a").click();
+    await page.waitForTimeout(1200);
+    expect((await page.locator("textarea").first().inputValue()).includes("창 B 에서 쓰던 글"), "되살린 글");
+    expect(await page.locator(".restored").count() > 0, "복구 안내");
+    // 편집기 [닫기] 로 버리면(묻고) 목록에서도 빠진다
+    nextDialog((dialog) => dialog.accept());
+    await page.locator(".entry-editor").getByRole("button", { name: "닫기" }).first().click();
+    await page.waitForTimeout(800);
+    expect(!(await api.get("/api/drafts")).items.some((item) => item.key === `entry:new-${made.id}`), "버리면 지운다");
+    await fetch(`${BASE}/api/projects/${encodeURIComponent(made.id)}/archive`, { method: "POST" });
+  });
+
+  await check("기존 기록을 고치다 만 것도 카드에 '작성 중' 이 선다 (170)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    const entry = page.locator("li.entry").first();
+    await entry.getByRole("button", { name: "수정" }).click();
+    await page.locator("textarea").first().click();
+    await page.keyboard.type(" 고치다 만 글");
+    await page.waitForTimeout(1200);
+    const other = await browser.newPage();
+    await other.goto(`${BASE}/#/projects/${seeded.projectA}`);
+    await other.waitForTimeout(1200);
+    expect((await other.locator("li.entry .draft-waiting").allInnerTexts()).includes("작성 중"), "다른 창의 카드 표시");
+    await other.close({ runBeforeUnload: false });
+    nextDialog((dialog) => dialog.accept());
+    await page.locator(".entry-editor").getByRole("button", { name: "닫기" }).first().click();
+    await page.waitForTimeout(800);
+    expect(!(await api.get("/api/drafts")).items.some((item) => item.label.startsWith("진행일지 고치기")), "버리면 지운다");
+  });
+
   pageErrors.length = errorsBefore30;
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

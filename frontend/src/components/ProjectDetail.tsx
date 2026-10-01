@@ -3,7 +3,7 @@ import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
 import { backTarget, intakeBackLink, listLink, projectLink, setPageTitle } from "../nav";
 import { attempt } from "../notify";
-import { dropDraft, hasDraft, takeDraft, useDraftKeeper, useUnsaved } from "../unsaved";
+import { dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useUnsaved } from "../unsaved";
 import type { Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -32,6 +32,8 @@ interface Props {
   back?: string | null;
   /** 과제 복제 직후처럼 정보 수정 칸을 열어 둔 채 들어온다 (TODO 109). */
   edit?: boolean;
+  /** 홈의 "작성 중이던 글" 에서 왔다 — 그 편집기를 열어 둔다 (TODO 170): entry-new · entry-<번호> · overview */
+  openDraft?: string | null;
 }
 
 /** 그 조건으로 걸러진 과제 목록. 홈의 것과 같은 규칙이다. */
@@ -110,6 +112,7 @@ export default function ProjectDetail({
   openEntryId,
   back,
   edit,
+  openDraft,
 }: Props) {
   const [project, setProject] = useState<Project | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -189,7 +192,36 @@ export default function ProjectDetail({
   const overviewOriginal = project?.body ?? "";
   const overviewDirty = editingOverview && overviewDraft !== overviewOriginal;
   useUnsaved(overviewKey, overviewDirty);
-  useDraftKeeper(editingOverview ? overviewKey : null, overviewDraft, overviewOriginal);
+  useDraftKeeper(editingOverview ? overviewKey : null, overviewDraft, overviewDraft === overviewOriginal);
+  // 남은 임시 보관 — [기록 추가] 옆 · 카드의 "작성 중" 표시가 본다. 다른 창에서 쓴 것도 창으로 돌아오면 다시 읽는다 (TODO 170)
+  useDrafts();
+
+  /** 개요 [수정] — 남은 글이 있으면 되살린다 */
+  async function startOverviewEdit() {
+    if (!project) return;
+    const original = project.body ?? "";
+    const kept = await loadDraft<string>(overviewKey, (content) => content === original);
+    setOverviewDraft(typeof kept === "string" ? kept : original);
+    setOverviewRestored(typeof kept === "string");
+    setEditingOverview(true);
+  }
+
+  // 홈의 "작성 중이던 글" 에서 왔으면 그 편집기를 연다 — 과제를 처음 읽었을 때 한 번만
+  const draftOpened = useRef<string | null>(null);
+  useEffect(() => {
+    if (!project || !openDraft || draftOpened.current === `${projectId}:${openDraft}`) return;
+    draftOpened.current = `${projectId}:${openDraft}`;
+    if (openDraft === "entry-new") setCreatingEntry(true);
+    else if (openDraft === "overview") void startOverviewEdit();
+    else if (openDraft.startsWith("entry-")) {
+      const id = Number(openDraft.slice("entry-".length));
+      if (Number.isFinite(id)) {
+        setExpandedIds((prev) => new Set(prev).add(id));
+        setEditingEntryId(id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, openDraft, projectId]);
 
   async function saveOverview() {
     if (!project || savingOverview) return;
@@ -706,6 +738,12 @@ export default function ProjectDetail({
                 아직 작성 전
               </span>
             )}
+            {/* 쓰다 만 개요가 데이터 폴더에 남아 있다 — [수정] 을 누르면 되살아난다 (TODO 170) */}
+            {!editingOverview && hasDraft(overviewKey) && (
+              <span className="draft-waiting" title="저장하지 않은 개요가 남아 있습니다 — [수정] 을 누르면 되살아납니다">
+                작성 중
+              </span>
+            )}
           </h2>
           <div className="overview-actions">
             <input
@@ -744,10 +782,7 @@ export default function ProjectDetail({
                   setEditingOverview(false);
                   return;
                 }
-                const kept = takeDraft(overviewKey, project.body ?? "");
-                setOverviewDraft(kept ?? project.body ?? "");
-                setOverviewRestored(kept !== null);
-                setEditingOverview(true);
+                void startOverviewEdit();
               }}
             >
               {editingOverview ? "취소" : "수정"}
@@ -875,6 +910,7 @@ export default function ProjectDetail({
               <li key={report.id} className={report.frozen ? "frozen" : "draft"}>
                 <button className="report-open" onClick={() => setOpenReport(report.id === openReport ? null : report.id)}>
                   <span className="report-date">{report.report_date}</span>
+                  {!report.frozen && hasDraft(`report:${report.id}`) && <span className="draft-waiting">작성 중</span>}
                   {report.audience ? (
                     <span className="report-audience" title={report.audience}>{report.audience}</span>
                   ) : (
@@ -994,7 +1030,7 @@ export default function ProjectDetail({
             </button>
           )}
           {/* 쓰다 만 새 기록이 브라우저에 남아 있으면 알린다 — 전에는 편집기를 열어야 알 수 있었다 (TODO 162) */}
-          {!creatingEntry && hasDraft(`new-${projectId}`) && (
+          {!creatingEntry && hasDraft(`entry:new-${projectId}`) && (
             <span className="draft-waiting" title="저장하지 않고 남은 기록이 있습니다 — [기록 추가] 를 누르면 되살아납니다">
               작성 중이던 기록 있음
             </span>
@@ -1133,6 +1169,12 @@ export default function ProjectDetail({
                   >
                     이어쓰기
                   </button>
+                  {/* 고치다 만 글이 남아 있다 — [수정] 을 누르면 되살아난다 (TODO 170) */}
+                  {hasDraft(`entry:${entry.id}`) && (
+                    <span className="draft-waiting" title="저장하지 않은 고친 내용이 남아 있습니다 — [수정] 을 누르면 되살아납니다">
+                      작성 중
+                    </span>
+                  )}
                   <button className="ghost" onClick={() => setEditingEntryId(entry.id)}>
                     수정
                   </button>

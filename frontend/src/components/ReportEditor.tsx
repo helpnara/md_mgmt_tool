@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
-import { dropDraft, takeDraft, useDraftKeeper, useUnsaved } from "../unsaved";
+import { dropDraft, loadDraft, useDraftKeeper, useUnsaved } from "../unsaved";
 import { filesBase, renderMarkdown } from "../markdown";
 import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import type { Report } from "../types";
@@ -84,14 +84,20 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   const draftKey = `report:${report.id}`;
   const [restored, setRestored] = useState(false);
   useUnsaved(draftKey, !frozen && (dirty || feedbackDirty));
-  useDraftKeeper(frozen ? null : draftKey, body, report.body ?? "");
+  useDraftKeeper(frozen ? null : draftKey, body, body === (report.body ?? ""));
   useEffect(() => {
     if (frozen) return;
-    const kept = takeDraft(draftKey, report.body ?? "");
-    if (kept === null) return;
-    setBody(kept);
-    setDirty(true);
-    setRestored(true);
+    let alive = true;
+    const original = report.body ?? "";
+    void loadDraft<string>(draftKey, (content) => content === original).then((kept) => {
+      if (!alive || typeof kept !== "string") return;
+      setBody(kept);
+      setDirty(true);
+      setRestored(true);
+    });
+    return () => {
+      alive = false;
+    };
     // 문서를 바꿔 열 때만 — 저장해서 본문이 바뀐 것은 되살릴 일이 아니다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.id]);

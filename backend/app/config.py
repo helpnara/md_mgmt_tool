@@ -165,6 +165,12 @@ class Settings:
         return self.vault_dir / ".logs"
 
     @property
+    def drafts_dir(self) -> Path:
+        """쓰다 만 글 (TODO 170). 브라우저가 아니라 **이 PC 의 데이터 폴더**에 둔다 — 창 · 프로필 · 주소가
+        달라도 같은 글이 돌아온다. 밖으로 나가는 것은 없다."""
+        return self.vault_dir / ".drafts"
+
+    @property
     def db_path(self) -> Path:
         return self.index_dir / "index.sqlite3"
 

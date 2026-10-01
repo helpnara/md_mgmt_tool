@@ -7,6 +7,7 @@ import { cellEffect, DASH, effectNumber, sumBy } from "../util";
 import LoadError from "./LoadError";
 import CopyTableButton from "./CopyTableButton";
 import TotalRow from "./TotalRow";
+import { dropDraft, useDrafts } from "../unsaved";
 import ProblemsBanner from "./ProblemsBanner";
 
 /** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
@@ -238,6 +239,8 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
   const [error, setError] = useState<string | null>(null);
   // 자동 백업이 죽어 있어도 홈은 몰랐다 (TODO 106-A). 문제가 있을 때만 한 줄 띄운다.
   const [backup, setBackup] = useState<BackupStatus | null>(null);
+  // 작성 중이던 글 (TODO 170) — 창으로 돌아올 때마다 다시 읽는다
+  const drafts = useDrafts();
   useEffect(() => {
     api.backupStatus().then(setBackup).catch(() => setBackup(null));
   }, []);
@@ -414,6 +417,38 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
             <strong>{week.drafts}건</strong>
           </a>
         </div>
+
+        {/* 쓰다 만 글 (TODO 170) — 어느 과제에서 쓰다 말았는지 기억하지 않아도 되게, 누르면 그 편집기로 */}
+        {drafts.length > 0 && (
+          <>
+            <p className="hint">
+              <b>작성 중이던 글 {drafts.length}건</b> — 저장하지 않고 남은 글입니다. 누르면 그 편집기가 열리고 글이 되살아납니다.
+            </p>
+            <ul className="home-drafts home-unsaved">
+              {drafts.map((item) => (
+                <li key={item.key}>
+                  {item.link && !item.missing ? (
+                    <a href={item.link}>{item.where || item.label}</a>
+                  ) : (
+                    <span className="muted">{item.where || item.label} (찾을 수 없음)</span>
+                  )}
+                  <span className="due">{item.label}</span>
+                  {item.updated_at && <span className="muted">{item.updated_at.slice(5, 16).replace("T", " ")}</span>}
+                  <button
+                    className="ghost small"
+                    title="남은 글을 지웁니다 — 되돌릴 수 없습니다"
+                    onClick={() => {
+                      if (window.confirm(`"${item.where || item.label}" 의 ${item.label} — 작성 중이던 글을 버릴까요?`))
+                        dropDraft(item.key);
+                    }}
+                  >
+                    버리기
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         {week.drafts > 0 && (
           <>

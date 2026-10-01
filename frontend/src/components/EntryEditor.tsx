@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
-import { useUnsaved } from "../unsaved";
+import { dropDraft, loadDraft, useDraftKeeper, useUnsaved } from "../unsaved";
 import { filesBase, renderMarkdown } from "../markdown";
 import VersionPanel from "./VersionPanel";
 import type { Entry } from "../types";
@@ -41,8 +41,16 @@ interface Props {
   onRestored?: () => void;
 }
 
+/** 임시 보관 열쇠 (TODO 170) — 새 기록은 과제로, 고치는 기록은 그 번호로. 데이터 폴더의 `.drafts/` 에 남는다. */
 function draftKey(projectId: string, entryId: number | null): string {
-  return `md-mgmt:draft:${entryId ?? `new-${projectId}`}`;
+  return `entry:${entryId ?? `new-${projectId}`}`;
+}
+
+interface EntryDraft {
+  date: string;
+  title: string;
+  body: string;
+  tags: string;
 }
 
 export default function EntryEditor({ projectId, knownTags = [], dirName, initial, onSaved, onCancel, docPath, onRestored }: Props) {
@@ -91,35 +99,32 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
     if (entryId) refreshAttachments(entryId);
   }, [entryId, refreshAttachments]);
 
-  // 저장 전에 창을 닫아도 작성 중이던 내용을 잃지 않도록 브라우저에 초안을 남긴다.
+  // 저장 전에 창을 닫아도 작성 중이던 내용을 잃지 않도록 **데이터 폴더에** 초안을 남긴다 (TODO 170).
+  // 전에는 브라우저 안에 남겨, 창 하나만 닫고 다른 창에서 열면 "작성 중이던 기록 있음" 이 안 뜨기도 했다(v7 B-6).
   useEffect(() => {
-    const key = draftKey(projectId, initial?.id ?? null);
-    const stored = localStorage.getItem(key);
-    if (!stored) return;
-    try {
-      const draft = JSON.parse(stored);
-      if (draft.body !== (initial?.body ?? "") || draft.title !== (initial?.title ?? "")) {
-        setDate(draft.date ?? date);
-        setTitle(draft.title ?? "");
-        setBody(draft.body ?? "");
-        setTags(draft.tags ?? "");
-        setRestored(true);
-        setDirty(true);
-      }
-    } catch {
-      localStorage.removeItem(key);
-    }
+    let alive = true;
+    const original = { body: initial?.body ?? "", title: initial?.title ?? "" };
+    void loadDraft<EntryDraft>(
+      draftKey(projectId, initial?.id ?? null),
+      (draft) => draft?.body === original.body && draft?.title === original.title,
+    ).then((draft) => {
+      if (!alive || !draft || typeof draft !== "object") return;
+      setDate(draft.date ?? todayIso());
+      setTitle(draft.title ?? "");
+      setBody(draft.body ?? "");
+      setTags(draft.tags ?? "");
+      setRestored(true);
+      setDirty(true);
+    });
+    return () => {
+      alive = false;
+    };
     // 최초 1회만 복구한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!dirty) return;
-    localStorage.setItem(
-      draftKey(projectId, initial?.id ?? null),
-      JSON.stringify({ date, title, body, tags }),
-    );
-  }, [dirty, projectId, initial?.id, date, title, body, tags]);
+  // 자동 저장으로 새 기록이 생긴 뒤에는 그 번호로 남긴다 — 다시 열 때 새 기록으로 한 번 더 생기지 않게
+  useDraftKeeper(draftKey(projectId, entryId), { date, title, body, tags }, !dirty);
 
   const save = useCallback(
     async (options: { close: boolean }): Promise<Entry> => {
@@ -140,7 +145,8 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
       setDirty(false);
       setRestored(false);
       setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }));
-      localStorage.removeItem(draftKey(projectId, initial?.id ?? null));
+      dropDraft(draftKey(projectId, initial?.id ?? null));
+      dropDraft(draftKey(projectId, entry.id));
       onSaved(entry, options);
       return entry;
     },
@@ -464,7 +470,16 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
               이전 버전
             </button>
           )}
-          <button type="button" className="ghost" onClick={onCancel}>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              // 쓴 것이 있으면 버릴지 묻는다 — 다른 편집기와 같게 (TODO 170)
+              if (dirty && !window.confirm("저장하지 않은 기록을 버릴까요?")) return;
+              dropDraft(draftKey(projectId, entryId));
+              onCancel();
+            }}
+          >
             닫기
           </button>
           <button

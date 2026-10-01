@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 
 from app.services import errorlog
+from datetime import date
 
 
 def logs_dir(vault_dir):
@@ -122,7 +123,8 @@ def test_a_log_that_cannot_be_written_does_not_break_the_request(client, vault_d
 
 def test_a_month_of_errors_does_not_grow_without_limit(client, vault_dir):
     """달마다 파일을 새로 열지만 한 달 치 크기에는 상한이 없었다 (TODO 62)."""
-    path = logs_dir(vault_dir) / "error-2026-09.log"
+    # 이번 달 파일 — 달이 바뀌면 시험이 깨지던 것을 고친다(2026-10-01 에 드러남)
+    path = logs_dir(vault_dir) / f"error-{date.today():%Y-%m}.log"
     path.parent.mkdir(parents=True, exist_ok=True)
     filler = json.dumps({"at": "2026-09-01T00:00:00", "action": "옛 오류", "trail": []},
                         ensure_ascii=False) + "\n"
@@ -143,7 +145,8 @@ def test_the_trim_says_what_it_threw_away(client, vault_dir):
     알림은 버려진 줄이 있던 자리, 곧 파일 맨 앞에 남는다. 화면의 [최근 오류]는
     새 것부터 20건만 보여 주므로 여기에는 안 나온다 — 그게 맞다.
     """
-    path = logs_dir(vault_dir) / "error-2026-09.log"
+    # 이번 달 파일 — 달이 바뀌면 시험이 깨지던 것을 고친다(2026-10-01 에 드러남)
+    path = logs_dir(vault_dir) / f"error-{date.today():%Y-%m}.log"
     path.parent.mkdir(parents=True, exist_ok=True)
     filler = json.dumps({"at": "2026-09-01T00:00:00", "action": "옛 오류", "trail": []},
                         ensure_ascii=False) + "\n"
