@@ -59,6 +59,10 @@ DEFAULTS: dict[str, Any] = {
     "precheck_items": None,
     # 점수 구간 — 이상이면 착수 권장 / 이상이면 보완 필요 / 그 아래 보류 검토
     "precheck_thresholds": [80, 60],
+    # 팀원 면담의 구분 (TODO 182). **null 이면 기본 목록**(정기 · 목표 설정 · 중간 점검 · 수시 · 고충).
+    "meeting_kinds": None,
+    # 마지막 면담에서 이 날수가 지나면 "면담에서 먼저 볼 사람" 에 세운다 (TODO 182)
+    "meeting_cycle_days": 90,
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
 _TEXT_KEYS = ("author", "report_template", "project_code",
@@ -71,8 +75,9 @@ def _path():
 
 # 값의 모양 (TODO 163). 손으로 고친 설정 파일의 값 하나가 모양이 다르면(`"backup_every_hours": "매일"`)
 # 그 값을 쓰는 곳이 모두 넘어졌다. 읽을 때 한 번 걸러 **그 값만** 기본값으로 둔다.
-_NULLABLE_SHAPES: dict[str, type] = {"project_types": list, "classifications": dict, "precheck_items": list}
-_POSITIVE_KEYS = ("backup_keep", "backup_every_hours", "intake_stale_days")
+_NULLABLE_SHAPES: dict[str, type] = {"project_types": list, "classifications": dict, "precheck_items": list,
+                                      "meeting_kinds": list}
+_POSITIVE_KEYS = ("backup_keep", "backup_every_hours", "intake_stale_days", "meeting_cycle_days")
 _ZERO_OK_KEYS = ("backup_keep_weekly", "backup_keep_monthly")
 
 # 마지막으로 읽을 때 기본값으로 바꾼 열쇠 — 설정 화면이 알린다.
@@ -157,8 +162,10 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = validate_project_types(updates[key])
         elif key == "classifications":
             current[key] = validate_classifications(updates[key])
-        elif key == "intake_stale_days":
+        elif key in ("intake_stale_days", "meeting_cycle_days"):
             current[key] = _positive_int(key, updates[key])
+        elif key == "meeting_kinds":
+            current[key] = validate_meeting_kinds(updates[key])
         elif key == "precheck_items":
             from . import precheck
 
@@ -180,6 +187,40 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return current
+
+
+# ── 팀원 면담 (TODO 182) ────────────────────
+
+DEFAULT_MEETING_KINDS = ["정기", "목표 설정", "중간 점검", "수시", "고충"]
+
+
+def meeting_kinds() -> list[str]:
+    stored = load().get("meeting_kinds")
+    return list(stored) if isinstance(stored, list) and stored else list(DEFAULT_MEETING_KINDS)
+
+
+def validate_meeting_kinds(value: Any) -> list[str] | None:
+    """줄바꿈 · 쉼표로 적어 보내도 받는다. 비우면 기본 목록으로(null)."""
+    items = value if isinstance(value, list) else str(value or "").replace(",", "\n").splitlines()
+    out: list[str] = []
+    for item in items:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if len(text) > CLASSIFICATION_MAX_LEN:
+            raise ValueError(f"면담 구분은 {CLASSIFICATION_MAX_LEN}자까지입니다: {text}")
+        if text not in out:
+            out.append(text)
+    if len(out) > CLASSIFICATION_MAX_ITEMS:
+        raise ValueError(f"면담 구분은 {CLASSIFICATION_MAX_ITEMS}개까지입니다.")
+    return out or None
+
+
+def meeting_cycle_days() -> int:
+    try:
+        return max(1, int(load()["meeting_cycle_days"]))
+    except (TypeError, ValueError):
+        return int(DEFAULTS["meeting_cycle_days"])
 
 
 def current_author(explicit: str | None = None) -> str:

@@ -1922,3 +1922,24 @@ a.stage-flow-item[href]:hover { border-color: var(--accent); }
 /* 연도 = 수행기간 (TODO 181) — 효과를 다른 해(끝나는 해)에 세는 과제는 흐리게, [신규 착수만] */
 .effect.elsewhere { opacity: 0.45; text-decoration: underline dotted; }
 .list-new-check { font-size: 13px; color: var(--muted-strong); }
+
+/* 팀원 면담 (TODO 182) */
+.meeting-panel .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.meeting-list, .meeting-open-list, .meeting-followups { list-style: none; margin: 8px 0 0; padding: 0; }
+.meeting-item { padding: 10px 0; border-top: 1px solid var(--border); }
+.meeting-item:first-child { border-top: 0; }
+.meeting-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.meeting-summary { font-weight: 600; }
+.meeting-followups { margin: 6px 0 0 4px; display: grid; gap: 2px; }
+.meeting-followups label { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.meeting-followups input { width: 15px; height: 15px; margin: 0; }
+.meeting-followups li.done span:first-of-type { text-decoration: line-through; color: var(--muted); }
+.meeting-body { white-space: pre-wrap; margin-top: 6px; padding: 8px 10px; background: #f8fafc; border-radius: 6px; font-size: 13px; }
+.meeting-open-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+.meeting-open-list input { width: 15px; height: 15px; margin: 0; }
+.meeting-form { margin: 10px 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #fafbfc; display: grid; gap: 8px; }
+.meeting-followup-edit { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.meeting-followup-row { display: flex; align-items: center; gap: 6px; }
+.meeting-followup-row input[type="checkbox"] { width: 15px; height: 15px; flex: 0 0 auto; }
+.meeting-followup-row input:not([type="checkbox"]) { flex: 1 1 auto; }
+.meeting-followup-edit > button { justify-self: start; }

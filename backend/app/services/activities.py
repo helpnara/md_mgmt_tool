@@ -380,6 +380,17 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
                 "quiet": row["n"] == 0 or (days_since is not None and days_since >= QUIET_DAYS),
             }
         )
+    # 면담 (TODO 182) — 역량 이력과 **따로 센다**. 사람 줄에 붙이기만 하고 "quiet"(역량이 뜸함)와 섞지 않는다.
+    from . import meetings as meetings_service
+
+    met = meetings_service.by_person(conn, year)
+    blank = {"meetings": 0, "last_meeting": None, "meeting_days_since": None, "open_followups": 0,
+             "next_meeting": None, "meeting_due": False}
+    for item in people:
+        info = met.get(item["name"], blank)
+        # 한 번도 면담하지 않은 사람은 "때가 지났다" 로 세우지 않는다 — 기능을 처음 켠 날 팀 전원이 서면 쓸모가 없다.
+        # 표의 "마지막 면담" 칸이 "기록 없음" 으로 알린다.
+        item.update(info)
     people.sort(key=lambda item: (-item["count"], item["name"]))
 
     clause = " WHERE SUBSTR(date, 1, 4) = ?" if year else ""
@@ -400,6 +411,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
         "years": available,
         "trend_years": trend_years,
         "quiet_days": QUIET_DAYS,
+        "meeting_cycle_days": settings_service.meeting_cycle_days(),
         "team": {
             "count": team["n"],
             "events": team["events"],

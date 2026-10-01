@@ -5,6 +5,7 @@ import type { Meta } from "../types";
 import AiPromptCard from "./AiPromptCard";
 import ReportTemplateCard from "./ReportTemplateCard";
 import IntakeSettingsCard from "./IntakeSettingsCard";
+import MeetingSettingsCard from "./MeetingSettingsCard";
 import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
 import PeopleCard from "./PeopleCard";
@@ -135,6 +136,8 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           </div>
 
           <PeopleCard onChanged={onSaved} />
+          {/* 팀원 면담의 구분 · 주기 (TODO 182) — 명부 곁에 */}
+          <MeetingSettingsCard meta={meta} onSaved={onSaved} />
           <ProjectTypeCard onSaved={onSaved} />
           <ProjectCodeCard onSaved={onSaved} />
         </div>

@@ -40,6 +40,9 @@ class SettingsUpdate(BaseModel):
     # 사전점검 (TODO 155) — 항목은 설정 칸의 글(한 줄에 하나) 또는 목록, 기준은 [착수 권장, 보완 필요]
     precheck_items: list[dict] | str | None = None
     precheck_thresholds: list[int] | None = None
+    # 팀원 면담 (TODO 182) — 구분(한 줄에 하나 또는 목록, 비우면 기본) · 주기(일)
+    meeting_kinds: list[str] | str | None = None
+    meeting_cycle_days: int | None = None
 
 
 @router.get("")

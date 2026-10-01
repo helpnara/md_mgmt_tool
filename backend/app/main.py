@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
 from .api import (activities, attachments, dashboard, drafts, entries, errors, export, folders, home, intakes,
-                  linkfix, meta, people, projects, reports, roadmap, search, settings, trash,
+                  linkfix, meetings, meta, people, projects, reports, roadmap, search, settings, trash,
                   versions)
 from .services import errorlog
 from .config import REPO_ROOT, get_settings
@@ -177,6 +177,8 @@ app.include_router(intakes.router)
 app.include_router(drafts.router)
 # 다년도 과제 로드맵 (TODO 174)
 app.include_router(roadmap.router)
+# 팀원 면담 (TODO 182)
+app.include_router(meetings.router)
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

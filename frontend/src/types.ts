@@ -15,6 +15,9 @@ export interface Meta {
   types: TypeInfo[];
   /** 역량 이력의 구분 (교육·세미나·박람회·학회·자격). 과제의 속성과 다른 축이다. */
   activity_kinds: TypeInfo[];
+  /** 팀원 면담의 구분 · 주기(일) (TODO 182) */
+  meeting_kinds: string[];
+  meeting_cycle_days: number;
   groups: string[];
   /** 그룹을 안 적은 과제가 있는가 — 거르기 상자에 [미지정] 을 세울지 정한다 (TODO 96) */
   groups_none: boolean;
@@ -360,6 +363,9 @@ export interface AppSettings {
   /** 사전점검 항목 — null 이면 기본 목록. 저장할 때는 설정 칸의 글(한 줄에 하나)로도 보낸다 (TODO 155) */
   precheck_items: PrecheckItemDef[] | string | null;
   precheck_thresholds: [number, number];
+  /** 팀원 면담 구분 — null 이면 기본 목록. 저장할 때는 한 줄에 하나인 글로도 (TODO 182) */
+  meeting_kinds: string[] | string | null;
+  meeting_cycle_days: number;
 }
 
 export interface TrashItem {
@@ -832,6 +838,14 @@ export interface ActivityPerson {
   days_since: number | null;
   /** 그 해 기록이 없거나 오래 뜸한 사람 — 면담에서 먼저 꺼낼 줄 */
   quiet: boolean;
+  /** 면담 (TODO 182) — 역량 이력과 따로 센다 */
+  meetings: number;
+  last_meeting: string | null;
+  meeting_days_since: number | null;
+  open_followups: number;
+  next_meeting: string | null;
+  /** 정한 다음 면담일이 지났거나, 마지막 면담에서 주기가 지났다 */
+  meeting_due: boolean;
 }
 
 export interface ActivitySummary {
@@ -839,6 +853,7 @@ export interface ActivitySummary {
   years: string[];
   trend_years: string[];
   quiet_days: number;
+  meeting_cycle_days: number;
   /** count 는 **참여 연인원**, events 는 **행사 수**다. 둘은 다르다 (TODO 85) */
   team: { count: number; events: number; hours: number; cost: number; people: number };
   people: ActivityPerson[];
@@ -992,4 +1007,30 @@ export interface Roadmap {
   today: string;
   lineages: RoadmapLineage[];
   summary: { lineages: number; projects: number; active: number; warn: number; next_open: number };
+}
+
+/** 팀원 면담 (TODO 182) — 하기로 한 것 하나 */
+export interface MeetingFollowup {
+  text: string;
+  /** 끝낸 날 — 비어 있으면 아직 열려 있다 */
+  done: string | null;
+}
+
+export interface Meeting {
+  id: number;
+  person: string;
+  date: string;
+  kind: string | null;
+  summary: string;
+  followups: MeetingFollowup[];
+  open_followups: number;
+  next_date: string | null;
+  body: string | null;
+  author: string | null;
+  updated_at: string | null;
+}
+
+export interface MeetingListing {
+  items: Meeting[];
+  open_followups: { meeting_id: number; index: number; person: string; date: string; text: string }[];
 }

@@ -214,6 +214,27 @@ CREATE TABLE IF NOT EXISTS activity (
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_person_date ON activity(person, date DESC);
+
+-- 팀원 면담 (TODO 182). 역량 이력과 **다른 표**다 — 섞으면 "역량 이력 N건" · "면담에서 먼저 볼 사람" 이 거짓이 된다.
+-- 원본은 people/<이름>/meetings/<날짜>-<구분>.md. 통합 검색 · AI 요약 · 내보내기에 넣지 않는다(민감한 기록).
+CREATE TABLE IF NOT EXISTS meeting (
+  id             INTEGER PRIMARY KEY,
+  person         TEXT NOT NULL,
+  rel_path       TEXT NOT NULL UNIQUE,
+  date           TEXT NOT NULL,
+  kind           TEXT,
+  summary        TEXT,
+  -- 하기로 한 것 — [{"text": …, "done": "2026-10-03" | null}] 를 JSON 으로. 열린 수는 따로 센다.
+  followups      TEXT,
+  open_followups INTEGER NOT NULL DEFAULT 0,
+  next_date      TEXT,
+  body           TEXT,
+  author         TEXT,
+  created_at     TEXT,
+  updated_at     TEXT,
+  file_mtime     REAL
+);
+CREATE INDEX IF NOT EXISTS idx_meeting_person_date ON meeting(person, date DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_date ON activity(date DESC);
 
 CREATE INDEX IF NOT EXISTS idx_entry_project_date ON entry(project_id, date DESC);

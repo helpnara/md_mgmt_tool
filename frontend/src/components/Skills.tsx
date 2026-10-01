@@ -6,6 +6,7 @@ import { backTarget, useAddressBar } from "../nav";
 import { splitPeople } from "../people";
 import LoadError from "./LoadError";
 import ActivityForm from "./ActivityForm";
+import MeetingPanel from "./MeetingPanel";
 import TotalRow from "./TotalRow";
 import { cellCount, DASH, sumBy } from "../util";
 
@@ -106,7 +107,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   // 붙은 이름은 사람이 아니므로 면담 대상에 세우지 않는다. 다만 **사람별 표에는 남겨 둔다** —
   // 거기서 보여야 사용자가 존재를 알고 정리한다 (TODO 74).
   const quiet = summary.people.filter(
-    (item) => item.quiet && splitPeople(item.name).length === 1,
+    // 역량이 뜸하거나 · **면담할 때가 지났거나**(TODO 182) — 까닭은 칩에 따로 적는다
+    (item) => (item.quiet || item.meeting_due) && splitPeople(item.name).length === 1,
   );
   // 쉼표로 여러 명을 적었다가 한 덩이로 굳은 이름. 지금은 서버가 나눠 주지만,
   // 그 전에 명부로 들어간 이름은 사람별 표에 **없는 사람**으로 남는다 (TODO 74).
@@ -215,8 +217,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         <div className="card skills-quiet">
           <h2>면담에서 먼저 볼 사람</h2>
           <p className="hint">
-            {year === ALL_YEARS ? "" : `${year}년에 `}기록이 없거나 마지막 활동이{" "}
-            {summary.quiet_days}일을 넘긴 사람입니다. 비어 있다는 사실 자체가 이야깃거리입니다.
+            {year === ALL_YEARS ? "" : `${year}년에 `}역량 기록이 없거나 마지막 활동이 {summary.quiet_days}일을 넘긴 사람,{" "}
+            그리고 <b>면담할 때가 지난 사람</b>(정한 다음 면담일이 지났거나 마지막 면담에서 {summary.meeting_cycle_days}일)입니다.
+            비어 있다는 사실 자체가 이야깃거리입니다.
           </p>
           <div className="skills-quiet-row">
             {quiet.map((item) => (
@@ -227,9 +230,12 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 title="이 사람의 기록만 봅니다"
               >
                 {item.name}
-                <span className="muted">
-                  {item.last_date ? ` 마지막 ${item.last_date}` : " 기록 없음"}
-                </span>
+                {item.quiet && (
+                  <span className="muted">{item.last_date ? ` 마지막 활동 ${item.last_date}` : " 역량 기록 없음"}</span>
+                )}
+                {item.meeting_due && (
+                  <span className="due due-warn"> 면담 {item.meeting_days_since !== null ? `D+${item.meeting_days_since}` : ""}</span>
+                )}
               </button>
             ))}
           </div>
@@ -269,6 +275,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 <th>비용</th>
                 <th>최근 추이</th>
                 <th>마지막 활동</th>
+                {/* 면담 (TODO 182) — 역량 이력과 따로 센다 */}
+                <th>마지막 면담</th>
+                <th title="면담에서 하기로 하고 아직 닫지 않은 것">하기로 한 것</th>
               </tr>
             </thead>
             <tbody>
@@ -322,6 +331,13 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                       <span className="due due-warn"> D+{item.days_since}</span>
                     )}
                   </td>
+                  <td className="muted one-line">
+                    {item.last_meeting ?? DASH}
+                    {item.meeting_due && item.meeting_days_since !== null && (
+                      <span className="due due-warn"> D+{item.meeting_days_since}</span>
+                    )}
+                  </td>
+                  <td className={item.open_followups ? "num" : "zero num"}>{cellCount(item.open_followups)}</td>
                 </tr>
               ))}
             </tbody>
@@ -343,6 +359,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 })(),
                 null,
                 null,
+                null,
+                cellCount(sumBy(summary.people, (item) => item.open_followups)),
               ]}
             />
           </table>
@@ -357,6 +375,15 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           </p>
         )}
       </div>
+
+      {/* ── 면담 (TODO 182) — 사람을 고르면 그 사람의 면담, 아니면 팀 전체의 하기로 한 것 ── */}
+      <MeetingPanel
+        meta={meta}
+        person={person}
+        people={summary.people.map((item) => item.name).filter((name) => splitPeople(name).length === 1)}
+        onChanged={load}
+        onPickPerson={setPerson}
+      />
 
       {/* ── 기록 목록 ──────────────────────────────────────────────── */}
       <div className="card wide">

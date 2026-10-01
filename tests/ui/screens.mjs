@@ -4081,6 +4081,53 @@ async function main() {
     await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
   });
 
+  console.log("\n[35] 팀원 면담 기록 — 하기로 한 것 · 먼저 볼 사람 · 검색 제외 (TODO 182)");
+
+  await check("면담을 남기고, 하기로 한 것을 닫고, 사람별 표에 마지막 면담이 선다 (182)", async () => {
+    await go(`#/skills?person=${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(800);
+    const panel = page.locator(".meeting-panel");
+    equal(await panel.count(), 1, "면담 칸");
+    await panel.getByRole("button", { name: "면담 추가" }).click();
+    const form = panel.locator(".meeting-form");
+    equal(await form.locator("input").first().inputValue(), "권경락", "고른 사람이 채워진다");
+    await form.locator('input[type="date"]').first().fill("2026-09-15");
+    await form.getByPlaceholder(/3분기 목표 점검/).fill("시험 면담 — 목표 점검");
+    await form.locator('input[aria-label="하기로 한 것 1"]').fill("교육 신청서 내기");
+    await form.getByRole("button", { name: "+ 줄 추가" }).click();
+    await form.locator('input[aria-label="하기로 한 것 2"]').fill("멘토 정하기");
+    await form.getByRole("button", { name: "저장" }).click();
+    await page.waitForTimeout(900);
+    const item = panel.locator(".meeting-item", { hasText: "시험 면담" });
+    equal(await item.count(), 1, "목록에 선다");
+    equal(await item.locator(".meeting-followups input").count(), 2, "하기로 한 것 둘");
+    // 하나 닫기
+    // 저장한 뒤 다시 읽어 표시한다 — 누른 즉시가 아니라 잠시 뒤에 바뀐다
+    await item.locator(".meeting-followups input").first().click();
+    await page.waitForTimeout(900);
+    equal(await item.locator(".meeting-followups li.done").count(), 1, "닫힌 줄");
+    // 사람별 표 — 마지막 면담 · 열린 것 1
+    const row = page.locator(".skills-table tr", { hasText: "권경락" });
+    expect((await row.innerText()).includes("2026-09-15"), "마지막 면담");
+    // 사람을 고르지 않으면 팀 전체의 열린 것
+    await go("#/skills");
+    await page.waitForTimeout(800);
+    expect((await page.locator(".meeting-open-list").innerText()).includes("멘토 정하기"), "팀 전체 열린 것");
+    // 통합 검색에 걸리지 않는다
+    await go(`#/search?q=${encodeURIComponent("시험 면담")}`);
+    await page.waitForTimeout(600);
+    equal(await page.locator(".result-list li", { hasText: "시험 면담" }).count(), 0, "검색 제외");
+    // 지우기 — 보관함 · 이전 버전 안내
+    await go(`#/skills?person=${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(800);
+    let asked = "";
+    nextDialog((dialog) => { asked = dialog.message(); dialog.accept(); });
+    await page.locator(".meeting-item", { hasText: "시험 면담" }).getByRole("button", { name: "삭제" }).click();
+    await page.waitForTimeout(800);
+    expect(asked.includes("보관함"), `확인 창: ${asked}`);
+    equal(await page.locator(".meeting-item", { hasText: "시험 면담" }).count(), 0, "지워졌다");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

@@ -88,6 +88,9 @@ def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         "types": settings_service.project_types(),
         # 팀원 역량 이력의 구분 (TODO 72). 과제의 속성과 다른 축이다.
         "activity_kinds": [{"key": key, "label": label} for key, label in ACTIVITY_KINDS],
+        # 팀원 면담 (TODO 182) — 구분 목록 · 주기(일)
+        "meeting_kinds": settings_service.meeting_kinds(),
+        "meeting_cycle_days": settings_service.meeting_cycle_days(),
         "groups": groups,
         # 과제 중 **그룹을 안 적은 것**이 있으면 [미지정] 으로 고를 수 있어야 한다.
         # 홈의 그룹별 표가 이미 그 줄을 세우고 `group=none` 으로 이어 준다 (TODO 90).

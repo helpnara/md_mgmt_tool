@@ -634,6 +634,64 @@ def index_activities(
     return len(seen)
 
 
+def index_meetings(
+    conn: sqlite3.Connection, problems: list[IndexProblem] | None = None
+) -> int:
+    """팀원 면담을 색인한다 (TODO 182). 사람은 front matter 의 `person` (역량 이력과 같은 규칙)."""
+    import json
+
+    settings = get_settings()
+    root = settings.vault_dir
+    seen: list[str] = []
+    for path in sorted(settings.people_dir.glob("*/meetings/*.md")):
+        doc = _load_doc(path, root, problems)
+        rel_path = path.relative_to(root).as_posix()
+        if doc is None:
+            seen.append(rel_path)
+            continue
+        raw = doc.meta.get("followups")
+        followups = []
+        for item in raw if isinstance(raw, list) else []:
+            if isinstance(item, dict) and _as_str(item.get("text")):
+                followups.append({"text": _as_str(item.get("text")), "done": _as_str(item.get("done"))})
+            elif isinstance(item, str) and item.strip():
+                followups.append({"text": item.strip(), "done": None})
+        conn.execute(
+            """
+            INSERT INTO meeting(person, rel_path, date, kind, summary, followups, open_followups,
+                                next_date, body, author, created_at, updated_at, file_mtime)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(rel_path) DO UPDATE SET
+              person=excluded.person, date=excluded.date, kind=excluded.kind, summary=excluded.summary,
+              followups=excluded.followups, open_followups=excluded.open_followups,
+              next_date=excluded.next_date, body=excluded.body, author=excluded.author,
+              created_at=excluded.created_at, updated_at=excluded.updated_at, file_mtime=excluded.file_mtime
+            """,
+            (
+                _as_str(doc.meta.get("person")) or path.parent.parent.name,
+                rel_path,
+                _as_date(doc.meta, "date", rel_path, problems) or path.name[:10],
+                _as_str(doc.meta.get("kind")),
+                _as_str(doc.meta.get("summary")),
+                json.dumps(followups, ensure_ascii=False),
+                sum(1 for item in followups if not item["done"]),
+                _as_date(doc.meta, "next_date", rel_path, problems),
+                doc.body,
+                _as_str(doc.meta.get("author")),
+                _as_str(doc.meta.get("created_at")),
+                _as_str(doc.meta.get("updated_at")),
+                path.stat().st_mtime,
+            ),
+        )
+        seen.append(rel_path)
+    if seen:
+        placeholders = ",".join("?" * len(seen))
+        conn.execute(f"DELETE FROM meeting WHERE rel_path NOT IN ({placeholders})", tuple(seen))
+    else:
+        conn.execute("DELETE FROM meeting")
+    return len(seen)
+
+
 def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
     """vault 전체 재인덱싱. DB를 지운 뒤에도 이것만 돌리면 복구된다.
 
@@ -667,6 +725,8 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
 
     # 역량 이력은 과제와 이어지지 않으므로 따로 훑는다 (TODO 72).
     index_activities(conn, problems)
+    # 팀원 면담 (TODO 182)
+    index_meetings(conn, problems)
     # 접수 풀도 따로 훑는다 (TODO 136)
     from ..services.intakes import reindex_intakes
 

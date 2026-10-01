@@ -1,4 +1,4 @@
-import type { DemotePlan, Roadmap, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
+import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
 
 /** 서버에 닿지 못했을 때 (TODO 165) — 브라우저의 영어 `Failed to fetch` 대신 */
@@ -128,6 +128,14 @@ export const api = {
   updateActivity: (id: number, payload: Partial<Activity>) =>
     request<{ ok: boolean }>(`/api/activities/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteActivity: (id: number) => request<void>(`/api/activities/${id}`, { method: "DELETE" }),
+  // 팀원 면담 (TODO 182)
+  meetings: (person?: string) =>
+    request<MeetingListing>(`/api/meetings${person ? `?person=${encodeURIComponent(person)}` : ""}`),
+  createMeeting: (payload: Partial<Meeting>) =>
+    request<{ id: number }>("/api/meetings", { method: "POST", body: JSON.stringify(payload) }),
+  updateMeeting: (id: number, payload: Partial<Meeting>) =>
+    request<{ ok: boolean }>(`/api/meetings/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteMeeting: (id: number) => request<void>(`/api/meetings/${id}`, { method: "DELETE" }),
   listProjects: (params: Record<string, string>) => {
     // `year=all` 은 **주소의 말**이다(연도 전체). 서버는 네 자리 연도나 빈 값만 받는다 —
     // 부르는 쪽마다 바꾸게 두면 한 곳이 빠진다(TODO 140: 병합 칸이 422 로 빈 목록을 보였다).
