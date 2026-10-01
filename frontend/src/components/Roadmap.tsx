@@ -5,7 +5,6 @@ import { backTarget, projectLink, useAddressBar } from "../nav";
 import { effectNumber } from "../util";
 import CopyTableButton from "./CopyTableButton";
 import LoadError from "./LoadError";
-import StatusBadge from "./StatusBadge";
 
 /**
  * 다년도 과제 로드맵 (TODO 174).
@@ -25,7 +24,7 @@ interface Props {
   query: string;
 }
 
-const ROW = 34; // 한 줄 높이(px) — 왼쪽 이름 칸과 오른쪽 막대 칸이 같은 높이로 맞물린다
+const ROW = 32; // 한 줄 높이(px) — 왼쪽 이름 칸과 오른쪽 막대 칸이 같은 높이로 맞물린다
 const DAY = 86400000;
 
 function toTime(text: string | null | undefined): number | null {
@@ -324,7 +323,7 @@ export default function Roadmap({ meta, query }: Props) {
           ) : (
             <div className="roadmap-scroll">
               <div className="roadmap-grid">
-                <div className="rm-head-label">줄기 · 단계 · 과제</div>
+                <div className="rm-head-label">단계 · 과제 번호</div>
                 <div className="rm-axis" ref={axisRef}>
                   {years.map((year) => (
                     <div key={year} className={year === thisYear ? "rm-year this-year" : "rm-year"} style={{ width: `${100 / years.length}%` }}>
@@ -429,10 +428,13 @@ function LineageBlock({
         const y1 = predIndex * ROW + ROW / 2;
         const x2 = pct(start) * width;
         const y2 = (rowOf.get(item.id) ?? 0) * ROW + ROW / 2;
-        const bend = Math.max(18, Math.abs(x2 - x1) / 2);
+        // 선행 막대의 **아래 끝**에서 출발해 내려가며 후속 막대의 앞으로 — 막대 오른쪽에 쓴 과제명을 가리지 않게 (TODO 177)
+        const sx = Math.max(x1 - 4, 2);
+        const sy = y1 + 11;
+        const bend = Math.max(18, Math.abs(x2 - sx) / 2);
         links.push({
           key: `${predId}-${item.id}`,
-          d: `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2 - 2} ${y2}`,
+          d: `M ${sx} ${sy} C ${sx} ${(sy + y2) / 2 + 4}, ${x2 - bend} ${y2}, ${x2 - 2} ${y2}`,
           broken: pred.status === "dropped",
         });
       }
@@ -475,10 +477,16 @@ function LineageBlock({
                 </span>
               ) : (
                 <>
-                  <a className="rm-name" href={projectLink(item.id)} title={item.title ?? ""}>
-                    <span className="project-id">{item.id}</span> {item.title}
+                  {/* 이름은 막대에 싣는다(TODO 177) — 여기는 단계 · 번호 · 상태 점만. 이름 칸에 과제명을 두면 칸이 좁아 잘렸다 */}
+                  <a className="rm-name" href={projectLink(item.id)} title={`${item.id} ${item.title ?? ""}`}>
+                    {item.id}
                   </a>
-                  {item.status && <StatusBadge status={item.status} meta={meta} />}
+                  {item.status && (
+                    <i
+                      className={`rm-dot rm-status-${item.status}`}
+                      title={meta.statuses.find((status) => status.key === item.status)?.label ?? item.status}
+                    />
+                  )}
                   {marks.length > 0 && (
                     <span
                       className={marks.some((w) => w.level === "warn") ? "rm-mark warn" : "rm-mark"}
@@ -498,7 +506,7 @@ function LineageBlock({
           <span key={year} className="rm-gridline" style={{ left: `${(index / years.length) * 100}%` }} />
         ))}
         {rows.map((item, index) => (
-          <Bar key={item.id} item={item} index={index} pct={pct} today={today} meta={meta} />
+          <Bar key={item.id} item={item} index={index} pct={pct} today={today} meta={meta} width={width} />
         ))}
         {inRange && <span className="rm-today" style={{ left: `${pct(today) * 100}%` }} />}
         {width > 0 && (
@@ -523,21 +531,37 @@ function LineageBlock({
   );
 }
 
+let measure: CanvasRenderingContext2D | null = null;
+/** 막대 글자의 폭(px) — 막대 안에 들어가는지 재는 데만 쓴다 */
+function textWidth(text: string): number {
+  try {
+    measure ??= document.createElement("canvas").getContext("2d");
+    if (!measure) return text.length * 12;
+    measure.font = `600 12px ${getComputedStyle(document.body).fontFamily}`;
+    return measure.measureText(text).width;
+  } catch {
+    return text.length * 12;
+  }
+}
+
 function Bar({
   item,
   index,
   pct,
   today,
   meta,
+  width,
 }: {
   item: RoadmapProject;
   index: number;
   pct: (time: number) => number;
   today: number;
   meta: Meta;
+  /** 막대 칸의 폭(px) — 과제명을 막대 안에 둘지 밖에 둘지 정한다 */
+  width: number;
 }) {
   if (item.missing) return null;
-  const top = index * ROW + 7;
+  const top = index * ROW + 5;
   const start = toTime(item.start_date);
   const end = toTime(item.end_date);
   const due = toTime(item.due_date);
@@ -553,24 +577,31 @@ function Bar({
   const go = () => (window.location.hash = projectLink(item.id));
   const alive = item.status !== "done" && item.status !== "dropped";
 
+  const name = item.title ?? item.id;
+
   if (start === null && end === null) {
     return (
-      <span className="rm-nodate" style={{ top }} title={tip}>
-        기간 미정
-      </span>
+      <button type="button" className="rm-nodate" style={{ top }} title={tip} onClick={go}>
+        기간 미정 · {name}
+      </button>
     );
   }
   if (start === null && end !== null) {
-    // 마감만 있으면 마감에 점 하나
+    // 마감만 있으면 마감에 점 하나, 이름은 그 오른쪽에
     return (
-      <button
-        type="button"
-        className={`rm-point rm-status-${item.status}`}
-        style={{ top, left: `${pct(end) * 100}%` }}
-        title={tip}
-        aria-label={item.id}
-        onClick={go}
-      />
+      <>
+        <button
+          type="button"
+          className={`rm-point rm-status-${item.status}`}
+          style={{ top, left: `${pct(end) * 100}%` }}
+          title={tip}
+          aria-label={item.id}
+          onClick={go}
+        />
+        <button type="button" className="rm-bar-label outside" style={{ top, left: `calc(${pct(end) * 100}% + 12px)` }} title={tip} onClick={go}>
+          {name}
+        </button>
+      </>
     );
   }
   const from = start as number;
@@ -582,6 +613,14 @@ function Bar({
   const overdue = alive && due !== null && due < today;
   const delayLeft = overdue ? pct(due as number) * 100 : 0;
   const delayRight = overdue ? pct(today) * 100 : 0;
+  // 과제명이 막대에 다 들어가면 안에, 아니면 막대(늦은 빗금까지) 오른쪽 밖에, 오른쪽도 모자라면 왼쪽 밖에.
+  // 어디에도 모자라면 막대 안에서 말줄임 — 전체 이름은 마우스를 올리면 보인다 (TODO 177)
+  const need = textWidth(name) + 16;
+  const barPx = ((right - left) / 100) * width;
+  const tailPx = (Math.max(right, delayRight) / 100) * width;
+  const headPx = (left / 100) * width;
+  const place: "inside" | "right" | "left" =
+    width === 0 || barPx >= need ? "inside" : tailPx + need + 4 <= width ? "right" : headPx - need - 4 >= 0 ? "left" : "inside";
   return (
     <>
       <button
@@ -591,8 +630,23 @@ function Bar({
         title={tip}
         onClick={go}
       >
-        <span>{item.id}</span>
+        {place === "inside" && <span>{name}</span>}
       </button>
+      {place !== "inside" && (
+        <button
+          type="button"
+          className="rm-bar-label outside"
+          style={
+            place === "right"
+              ? { top, left: `${tailPx + 6}px` }
+              : { top, left: `${headPx - need - 2}px`, width: `${need}px`, textAlign: "right" }
+          }
+          title={tip}
+          onClick={go}
+        >
+          {name}
+        </button>
+      )}
       {overdue && delayRight > delayLeft && (
         <span
           className="rm-delay"

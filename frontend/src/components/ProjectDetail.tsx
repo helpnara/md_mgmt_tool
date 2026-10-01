@@ -498,37 +498,6 @@ export default function ProjectDetail({
               </div>
             )}
             {/* 다년도 과제의 줄기 (TODO 172) — 이어진 과제를 단계별로. 한 단계에 여럿일 수 있다 */}
-            {project.lineage?.stage != null && (
-              <div className="meta-line lineage-line">
-                <span className="stage-chip" title="선행 과제를 따라 가장 길게 거슬러 올라가 센 단계입니다">
-                  {project.lineage.stage}단계
-                </span>
-                {project.lineage.stages.map((group, index) => (
-                  <span key={group.stage} className="lineage-stage">
-                    {index > 0 && <span className="lineage-arrow" aria-hidden="true">→</span>}
-                    <span className="muted lineage-stage-name">{group.stage}단계</span>
-                    {group.items.map((item) =>
-                      item.here ? (
-                        <b key={item.id} className="lineage-here" title="지금 보고 있는 과제">
-                          {item.id}
-                        </b>
-                      ) : item.missing ? (
-                        <span key={item.id} className="muted lineage-item" title="삭제 보관함에 있거나 찾을 수 없는 과제입니다">
-                          {item.id} (찾을 수 없음)
-                        </span>
-                      ) : (
-                        <a key={item.id} className="lineage-item" href={projectLink(item.id)} title={item.title ?? ""}>
-                          <span className="intake-link-id">{item.id}</span> {item.title}
-                        </a>
-                      ),
-                    )}
-                  </span>
-                ))}
-                <a className="lineage-roadmap" href={screenLink("roadmap", { focus: project.id })}>
-                  로드맵에서 보기 →
-                </a>
-              </div>
-            )}
             {/* 유관부서 (TODO 92). 누르면 그 팀·사람과 함께 하는 과제만 걸러 본다 —
                 "설비기술팀이랑 뭐뭐 하고 있더라" 가 실제로 자주 하는 물음이다. */}
             {(project.partners ?? []).length > 0 && (
@@ -615,6 +584,61 @@ export default function ProjectDetail({
             </button>
           </div>
         </div>
+
+        {/* 다년도 과제의 단계 흐름 (TODO 172 · 176). 한 줄 띠는 한 단계에 과제가 여럿이면 꺾여 어느 과제가 몇 단계인지
+            흐려졌다 — 단계마다 칸 하나, 같은 단계의 과제는 그 칸 안에 위아래로. 머리 아래 카드 폭 전체를 쓴다. */}
+        {project.lineage?.stage != null && (
+          <div className="stage-flow" aria-label="다년도 과제의 단계">
+            <div className="stage-flow-head">
+              <b>다년도 과제</b>
+              <span className="muted">
+                {project.lineage.stages.length}단계 중 <b className="stage-flow-now">{project.lineage.stage}단계</b>
+              </span>
+              <a className="lineage-roadmap" href={screenLink("roadmap", { focus: project.id })}>
+                로드맵에서 보기 →
+              </a>
+            </div>
+            <div className="stage-flow-columns">
+              {project.lineage.stages.map((group, index) => (
+                <Fragment key={group.stage}>
+                  {index > 0 && (
+                    <span className="stage-flow-arrow" aria-hidden="true">
+                      →
+                    </span>
+                  )}
+                  <div className={group.stage === project.lineage?.stage ? "stage-flow-col current" : "stage-flow-col"}>
+                    <div className="stage-flow-name">
+                      {group.stage}단계
+                      <span className="muted">{stageYears(group.items)}</span>
+                    </div>
+                    {group.items.map((item) =>
+                      item.missing ? (
+                        <div key={item.id} className="stage-flow-item missing" title="삭제 보관함에 있거나 찾을 수 없는 과제입니다">
+                          <span className="project-id">{item.id}</span>
+                          <span className="stage-flow-title">찾을 수 없음</span>
+                        </div>
+                      ) : (
+                        <a
+                          key={item.id}
+                          className={item.here ? "stage-flow-item here" : "stage-flow-item"}
+                          href={item.here ? undefined : projectLink(item.id)}
+                          title={`${item.id} ${item.title ?? ""}${item.here ? " — 지금 보고 있는 과제" : ""}`}
+                          aria-current={item.here ? "page" : undefined}
+                        >
+                          <span className="stage-flow-top">
+                            <span className="project-id">{item.id}</span>
+                            {item.status && <StatusBadge status={item.status} meta={meta} />}
+                          </span>
+                          <span className="stage-flow-title">{item.title}</span>
+                        </a>
+                      ),
+                    )}
+                  </div>
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        )}
 
         {cloneDraft && (
           <div className="card clone-panel">
@@ -1402,4 +1426,17 @@ function ReportEditorLoader({
       docPath={docPath}
     />
   );
+}
+
+/** 단계 칸 머리의 연도 — 그 단계 과제들의 시작 ~ 끝 연도 (TODO 176) */
+function stageYears(items: { start_date?: string | null; end_date?: string | null; missing?: boolean }[]): string {
+  const years = items
+    .filter((item) => !item.missing)
+    .flatMap((item) => [item.start_date, item.end_date])
+    .filter((text): text is string => Boolean(text && /^\d{4}/.test(text)))
+    .map((text) => Number(text.slice(0, 4)));
+  if (years.length === 0) return "";
+  const first = Math.min(...years);
+  const last = Math.max(...years);
+  return first === last ? String(first) : `${first}~${String(last).slice(2)}`;
 }

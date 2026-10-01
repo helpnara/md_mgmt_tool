@@ -3886,18 +3886,24 @@ async function main() {
     const mid = await api.post("/api/projects", { title: "2단계 통합", predecessors: [one.id, two.id] });
     const last = await api.post("/api/projects", { title: "3단계 양산", predecessors: [mid.id] });
     await go(`#/projects/${mid.id}`);
-    equal((await page.locator(".lineage-line .stage-chip").innerText()).trim(), "2단계", "단계 표시");
-    equal(await page.locator(".lineage-line .lineage-stage").count(), 3, "단계 묶음 셋");
-    const first = page.locator(".lineage-line .lineage-stage").first();
-    equal(await first.locator("a.lineage-item").count(), 2, "1단계에 과제 둘");
-    equal((await page.locator(".lineage-line .lineage-here").innerText()).includes(mid.id), true, "지금 과제 강조");
-    await first.locator("a.lineage-item").first().click();
+    equal((await page.locator(".stage-flow-now").innerText()).trim(), "2단계", "단계 표시");
+    equal(await page.locator(".stage-flow-col").count(), 3, "단계 칸 셋");
+    // 한 단계에 과제가 여럿이면 그 칸 안에 위아래로 — 꺾여 다른 단계와 섞이지 않는다 (176)
+    const boxes = await page.locator(".stage-flow-col").evaluateAll((cols) => cols.map((col) => col.getBoundingClientRect().top));
+    equal(new Set(boxes.map(Math.round)).size, 1, "단계 칸은 한 줄에 나란히");
+    equal(await page.locator(".stage-flow-col.current").count(), 1, "지금 단계 칸");
+    const first = page.locator(".stage-flow-col").first();
+    equal(await first.locator("a.stage-flow-item").count(), 2, "1단계에 과제 둘");
+    const [upper, lower] = await first.locator("a.stage-flow-item").evaluateAll((items) => items.map((item) => item.getBoundingClientRect().top));
+    expect(lower > upper, "같은 단계는 위아래로");
+    equal((await page.locator(".stage-flow-item.here").innerText()).includes(mid.id), true, "지금 과제 강조");
+    await first.locator("a.stage-flow-item").first().click();
     await page.waitForTimeout(700);
     expect(page.url().includes(`/projects/${one.id}`), `링크 이동: ${page.url()}`);
-    equal((await page.locator(".lineage-line .stage-chip").innerText()).trim(), "1단계", "앞 단계에서도 줄기가 보인다");
+    equal((await page.locator(".stage-flow-now").innerText()).trim(), "1단계", "앞 단계에서도 줄기가 보인다");
     // 줄이 없는 과제에는 띠가 없다
     await go(`#/projects/${seeded.projectA}`);
-    equal(await page.locator(".lineage-line").count(), 0, "외톨이 과제는 띠 없음");
+    equal(await page.locator(".stage-flow").count(), 0, "외톨이 과제는 단계 칸 없음");
     for (const item of [last, mid, two, one]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
   });
 
@@ -3918,7 +3924,7 @@ async function main() {
     await page.locator(".project-form").getByRole("button", { name: "저장" }).click();
     await page.waitForTimeout(800);
     equal(JSON.stringify((await api.get(`/api/projects/${after.id}`)).predecessors), JSON.stringify([before.id]), "저장된 선행");
-    equal(await page.locator(".lineage-line").count(), 1, "저장하자 줄기가 선다");
+    equal(await page.locator(".stage-flow").count(), 1, "저장하자 단계 칸이 선다");
     for (const item of [after, before]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
   });
 
@@ -3973,6 +3979,9 @@ async function main() {
     expect((await block.locator(".rm-lineage-head").innerText()).includes("3단계"), "단계 수");
     equal(await block.locator(".rm-label").count(), 3, "과제 셋");
     equal(await block.locator(".rm-bar").count(), 3, "막대 셋");
+    // 막대에는 번호가 아니라 과제명 — 막대 안이나 바로 옆에 (177)
+    const names = await block.locator(".rm-bar span, .rm-bar-label").allInnerTexts();
+    for (const title of ["로드맵 1단계", "로드맵 2단계", "로드맵 3단계"]) expect(names.includes(title), `막대 이름: ${title} / ${names}`);
     equal(await block.locator(".rm-links > path").count(), 2, "화살표 둘");
     equal(await block.locator(".rm-delay").count(), 1, "마감 지난 빗금");
     expect((await page.locator(".roadmap-warnings").innerText()).includes(two.id), "살펴볼 것에 늦은 과제");

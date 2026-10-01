@@ -504,10 +504,17 @@ def lineage(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
         current = queue.pop(0)
         if current in nodes:
             continue
-        row = conn.execute("SELECT id, title, status, start_date FROM project WHERE id = ?", (current,)).fetchone()
+        row = conn.execute(
+            "SELECT id, title, status, start_date, due_date, completed_at FROM project WHERE id = ?", (current,)
+        ).fetchone()
+        # 기간의 끝 — 끝난 과제는 끝낸 날, 아니면 마감일 (과제 상세의 단계 칸이 연도를 적는다, TODO 176)
         nodes[current] = (
-            {"id": row["id"], "title": row["title"], "status": row["status"], "start_date": row["start_date"], "missing": False}
-            if row else {"id": current, "title": None, "status": None, "start_date": None, "missing": True}
+            {
+                "id": row["id"], "title": row["title"], "status": row["status"], "start_date": row["start_date"],
+                "end_date": (row["completed_at"] if row["status"] == DONE_STATUS and row["completed_at"] else row["due_date"]),
+                "missing": False,
+            }
+            if row else {"id": current, "title": None, "status": None, "start_date": None, "end_date": None, "missing": True}
         )
         if row is None:
             continue  # 찾을 수 없는 과제 너머로는 가지 않는다
@@ -537,7 +544,7 @@ def lineage(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
     return {
         "stage": stage.get(project_id),
         "stages": [
-            {"stage": number, "items": sorted(items, key=lambda item: item["id"])}
+            {"stage": number, "items": sorted(items, key=lambda item: (item["start_date"] or "9999", item["id"]))}
             for number, items in sorted(grouped.items())
         ],
         "predecessors": _predecessors_of(conn, project_id),

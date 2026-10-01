@@ -1729,17 +1729,7 @@ a.class-chip:hover { background: #e2e8f0; }
 .home-members, .home-slices > *, .home-top > * { min-width: 0; }
 
 /* ── 다년도 과제의 줄기 (TODO 172) — 단계별로, 한 단계에 여럿 ───────────── */
-.lineage-line { gap: 6px; font-size: 13px; }
-.stage-chip {
-  display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700;
-  background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; white-space: nowrap;
-}
-.lineage-stage { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.lineage-stage-name { font-size: 12px; white-space: nowrap; }
-.lineage-arrow { color: var(--muted); }
-.lineage-item { text-decoration: none; padding: 1px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
-.lineage-item:hover { border-color: var(--accent); }
-.lineage-here { padding: 1px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-strong); }
+/* 과제 상세의 줄기는 아래 "단계 흐름"(TODO 176)이 그린다 — 한 줄 띠는 한 단계에 과제가 여럿이면 꺾였다 */
 /* 선행 과제 고르기 — 칩으로 여럿 (TODO 172) */
 .predecessor-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); grid-column: 1 / -1; }
 .predecessor-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -1765,7 +1755,7 @@ h1 .stage-band { font-size: 13px; line-height: 22px; padding: 0 10px; }
 .board-card h3 .stage-band { margin-left: 4px; }
 
 /* ── 로드맵 (TODO 174) — 줄기마다 이름 칸 | 막대 칸 ───────────── */
-.roadmap { --rm-label: 380px; }
+.roadmap { --rm-label: 200px; }
 .roadmap-toolbar .filters input:not([type="checkbox"]) { width: 180px; }
 .roadmap-range { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 .roadmap-range select { min-width: 110px; }
@@ -1841,8 +1831,8 @@ h1 .stage-band { font-size: 13px; line-height: 22px; padding: 0 10px; }
 .rm-links path.broken { stroke: var(--danger); stroke-dasharray: 4 3; }
 .rm-links marker path { fill: #94a3b8; stroke: none; }
 .rm-bar {
-  position: absolute; height: 20px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px;
-  font-size: 11px; font-weight: 600; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  position: absolute; height: 22px; padding: 0 7px; border: 1px solid transparent; border-radius: 5px;
+  font-size: 12px; font-weight: 600; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   cursor: pointer; z-index: 2; min-width: 4px;
 }
 .rm-bar span { pointer-events: none; }
@@ -1850,12 +1840,12 @@ h1 .stage-band { font-size: 13px; line-height: 22px; padding: 0 10px; }
 .rm-bar.open-end { -webkit-mask-image: linear-gradient(90deg, #000 70%, transparent); mask-image: linear-gradient(90deg, #000 70%, transparent); }
 .rm-bar.overdue { border-color: var(--danger); }
 .rm-delay {
-  position: absolute; height: 20px; z-index: 1; border-radius: 0 5px 5px 0;
+  position: absolute; height: 22px; z-index: 1; border-radius: 0 5px 5px 0;
   background: repeating-linear-gradient(135deg, rgba(192, 57, 43, 0.35) 0 4px, rgba(192, 57, 43, 0.1) 4px 8px);
 }
 .rm-delay-swatch { background: repeating-linear-gradient(135deg, rgba(192, 57, 43, 0.45) 0 3px, rgba(192, 57, 43, 0.12) 3px 6px); }
 .rm-point { position: absolute; width: 14px; height: 14px; margin-top: 3px; padding: 0; transform: translateX(-50%) rotate(45deg); border: 1px solid #64748b; cursor: pointer; z-index: 2; }
-.rm-nodate { position: absolute; left: 8px; height: 20px; font-size: 11px; color: var(--muted); border: 1px dashed #cbd5e1; border-radius: 5px; padding: 0 8px; line-height: 18px; }
+.rm-nodate { position: absolute; left: 8px; height: 22px; font-size: 12px; color: var(--muted-strong); background: var(--surface); border: 1px dashed #cbd5e1; border-radius: 5px; padding: 0 8px; line-height: 20px; cursor: pointer; z-index: 2; }
 /* 막대 색 = 상태 (목록의 상태 딱지와 같은 계열을 진하게) */
 .rm-status-planned { background: #e2e8f0; color: #334155; border-color: #cbd5e1; }
 .rm-status-reviewing { background: #fde68a; color: #78350f; }
@@ -1866,9 +1856,49 @@ h1 .stage-band { font-size: 13px; line-height: 22px; padding: 0 10px; }
 .rm-swatch.rm-status-planned { border: 1px solid #cbd5e1; }
 
 @media (max-width: 1200px) {
-  .roadmap { --rm-label: 300px; }
+  .roadmap { --rm-label: 184px; }
   .roadmap-legend { margin-left: 0; }
 }
 .rm-name .project-id, .rm-warning .project-id { display: inline; margin-right: 4px; }
 .roadmap-check { flex-direction: row; margin: 0; }
 .roadmap-check input { margin: 0; }
+
+/* ── 과제 상세의 단계 흐름 (TODO 176) — 단계마다 칸 하나, 같은 단계는 칸 안에 위아래로 ───────────── */
+.stage-flow { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.stage-flow-head { display: flex; align-items: baseline; gap: 10px; font-size: 13px; margin-bottom: 8px; }
+.stage-flow-head .lineage-roadmap { margin-left: auto; }
+.stage-flow-now { color: #3730a3; }
+.stage-flow-columns { display: flex; align-items: stretch; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.stage-flow-col {
+  flex: 1 1 0; min-width: 190px; max-width: 320px; display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; border-radius: 8px; background: #f8fafc; border: 1px solid var(--border);
+}
+.stage-flow-col.current { background: #eef2ff; border-color: #c7d2fe; }
+.stage-flow-name { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 700; color: #3730a3; }
+.stage-flow-name .muted { font-weight: 400; font-size: 11px; }
+.stage-flow-arrow { align-self: center; color: var(--muted); font-size: 16px; flex: 0 0 auto; }
+.stage-flow-item {
+  display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 6px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text); min-width: 0;
+}
+a.stage-flow-item[href]:hover { border-color: var(--accent); }
+.stage-flow-item.here { border: 2px solid var(--accent); padding: 5px 7px; cursor: default; }
+.stage-flow-item.missing { color: var(--muted); border-style: dashed; }
+.stage-flow-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.stage-flow-top .project-id { display: inline; }
+.stage-flow-top .status { font-size: 10px; padding: 0 6px; }
+.stage-flow-title {
+  font-size: 13px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.stage-flow-item.here .stage-flow-title { font-weight: 700; }
+
+/* 로드맵 다듬기 (TODO 177) — 이름은 막대에, 이름 칸은 단계 · 번호 · 상태 점만 */
+.rm-name { flex: 0 0 auto; font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted-strong); }
+.rm-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; border: 1px solid rgba(0, 0, 0, 0.08); }
+.rm-label .rm-mark { margin-left: auto; }
+.rm-bar-label.outside {
+  position: absolute; height: 22px; padding: 0 4px; border: 0; border-radius: 4px; cursor: pointer; z-index: 2;
+  font-size: 12px; font-weight: 600; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--text); background: rgba(255, 255, 255, 0.85);
+}
+.rm-bar-label.outside:hover, .rm-nodate:hover { color: var(--accent-strong); }

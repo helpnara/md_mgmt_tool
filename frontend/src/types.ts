@@ -911,6 +911,8 @@ export interface LineageItem {
   title: string | null;
   status: string | null;
   start_date?: string | null;
+  /** 기간의 끝 — 끝난 과제는 끝낸 날, 아니면 마감일 (TODO 176) */
+  end_date?: string | null;
   /** 보관함에 있거나 찾을 수 없는 과제 */
   missing?: boolean;
   /** 지금 보고 있는 과제 */

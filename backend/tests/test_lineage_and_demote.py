@@ -145,3 +145,17 @@ def test_demote_refuses_reported_or_promoted_projects(client):
     promoted = client.post(f"/api/intakes/{intake['id']}/promote", json={"title": "승격"}).json()
     plan = client.get(f"/api/projects/{promoted['project_id']}/to-intake").json()
     assert not plan["eligible"] and "재검토" in plan["reason"]
+
+
+def test_lineage_items_carry_period_and_sort_by_start(client):
+    """과제 상세의 단계 칸이 연도를 적고, 같은 단계는 먼저 시작한 과제가 위로 (TODO 176)."""
+    root = _project(client, "1단계", start_date="2024-03-01", due_date="2024-12-20")
+    late = _project(client, "2단계 늦게 시작", start_date="2025-05-01", due_date="2025-12-31", predecessors=[root["id"]])
+    early = _project(client, "2단계 먼저 시작", status="done", start_date="2025-01-02", due_date="2025-12-31",
+                     completed_at="2025-11-30", predecessors=[root["id"]])
+    stages = client.get(f"/api/projects/{root['id']}").json()["lineage"]["stages"]
+    second = stages[1]["items"]
+    assert [item["id"] for item in second] == [early["id"], late["id"]]
+    assert second[0]["end_date"] == "2025-11-30"  # 끝난 과제는 끝낸 날
+    assert second[1]["end_date"] == "2025-12-31"
+    assert stages[0]["items"][0]["end_date"] == "2024-12-20"
