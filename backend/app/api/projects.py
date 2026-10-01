@@ -148,7 +148,10 @@ def _partners(conn: sqlite3.Connection, project_id: str) -> list[dict]:
     return list(grouped.values())
 
 
-def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, stages: dict[str, int] | None = None) -> dict:
+    # 여러 과제를 한 번에 그릴 때는 단계를 미리 세어 넘긴다 (TODO 175)
+    if stages is None:
+        stages = svc.stage_map(conn)
     return {
         "id": row["id"],
         "title": row["title"],
@@ -177,6 +180,8 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "intake_id": row["intake_id"],
         # 선행 과제들 (TODO 172)
         "predecessors": svc._predecessors_of(conn, row["id"]),
+        # 다년도 과제의 단계 — 이어진 과제가 없으면 null (TODO 175)
+        "stage": stages.get(row["id"]),
         "tags": _tags(conn, row["id"]),
         "entry_count": conn.execute(
             "SELECT COUNT(*) AS n FROM entry WHERE project_id = ?", (row["id"],)
@@ -328,7 +333,8 @@ def list_projects(
     rows = conn.execute(
         f"SELECT p.* FROM project p {clause} ORDER BY {clause_order}", [*params, *order_params]
     ).fetchall()
-    return [_serialize(conn, row) for row in rows]
+    stages = svc.stage_map(conn)
+    return [_serialize(conn, row, stages) for row in rows]
 
 
 @router.post("", status_code=201)
@@ -442,17 +448,17 @@ def year_fix_apply(project_id: str, conn: sqlite3.Connection = Depends(get_db)) 
         raise HTTPException(status_code=423, detail=str(exc)) from exc
 
 
-@router.post("/{project_id}/clone", status_code=201)
-def clone_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    """이 과제를 바탕으로 새 과제 (TODO 109). 이력·보고·첨부는 가져오지 않는다."""
+@router.get("/{project_id}/clone")
+def clone_draft(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """이 과제를 바탕으로 새 과제 (TODO 109) — **미리 채울 값만** 준다. 만들지 않는다 (TODO 173).
+
+    화면이 이 값으로 새 과제 칸을 열고, [만들기] 가 `POST /api/projects` 를 부른다 — [취소] 하면
+    아무것도 남지 않고 번호도 쓰지 않는다.
+    """
     try:
-        new_id = svc.clone_project(conn, project_id)
+        return svc.clone_draft(conn, project_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    row = conn.execute("SELECT * FROM project WHERE id = ?", (new_id,)).fetchone()
-    return _serialize(conn, row)
 
 
 # ── 접수로 되돌리기 (TODO 171) ─────────────────────────────────────────────

@@ -8,6 +8,7 @@ import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
 import StatusBadge from "./StatusBadge";
 import CopyTableButton from "./CopyTableButton";
+import StageBand from "./StageBand";
 
 const PICKS_KEY = "md-mgmt:report-picks";
 /** 이만큼 지나면 붉게 — 주간 보고 기준으로 두 주를 넘긴 것. */
@@ -339,6 +340,7 @@ export default function ReportCandidates({ meta, query }: Props) {
                 <a className="plain-link" href={projectLink(item.id)}>
                   <span className="project-id">{item.id}</span>
                   <span className="project-title">{item.title}</span>
+                  <StageBand stage={item.stage} />
                 </a>
               </td>
               <td>

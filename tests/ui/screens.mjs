@@ -1786,7 +1786,7 @@ async function main() {
     await go("#/");
     const names = await page.locator(".nav a").allInnerTexts();
     equal(names.map((name) => name.trim()).join("|"),
-      "홈|접수|과제목록|보고대상|보고이력|팀원역량|설정|도움말", "메뉴 이름");
+      "홈|접수|과제목록|로드맵|보고대상|보고이력|팀원역량|설정|도움말", "메뉴 이름");
   });
 
   console.log("\n[10] 과제 번호의 연도는 착수년도 (TODO 95)");
@@ -2323,21 +2323,35 @@ async function main() {
     equal(await page.locator('[data-testid="open-feedback"]').count(), 0, "띠가 사라진다");
   });
 
-  await check("[이 과제로 새 과제]가 개요·담당자를 넘기고 수정 칸을 연 채 들어간다 (TODO 109)", async () => {
+  await check("[이 과제로 새 과제]는 미리 채운 칸만 열고, [만들기]를 눌러야 생긴다 (TODO 109 · 173)", async () => {
     await go(`#/projects/${seeded.projectA}`);
-    // 확인 창은 위쪽의 page.on("dialog") 가 받아 준다.
+    const before = (await api.get("/api/projects")).length;
     await page.getByRole("button", { name: "이 과제로 새 과제" }).click();
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(700);
+    const panel = page.locator(".clone-panel");
+    equal(await panel.count(), 1, "새 과제 칸");
+    equal(await panel.locator("input").first().inputValue(), "고강도 소재 개발", "과제명이 채워진다");
+    equal(await panel.locator(".predecessor-chip").count(), 1, "선행 과제 칩");
+    equal((await api.get("/api/projects")).length, before, "열기만 해서는 안 생긴다");
+    // [취소] — 아무것도 남지 않는다 (v9 C-1)
+    await panel.getByRole("button", { name: "취소" }).click();
+    await page.waitForTimeout(400);
+    equal(await page.locator(".clone-panel").count(), 0, "칸이 닫힌다");
+    equal((await api.get("/api/projects")).length, before, "취소하면 과제 수 그대로");
+    // 다시 열어 [만들기]
+    await page.getByRole("button", { name: "이 과제로 새 과제" }).click();
+    await page.waitForTimeout(700);
+    await page.locator(".clone-panel").getByRole("button", { name: "만들기" }).click();
+    await page.waitForTimeout(1200);
     const hash = page.url().split("#")[1] ?? "";
-    expect(hash.startsWith("/projects/") && hash.includes("edit=1"), `주소: ${hash}`);
-    const newId = hash.slice("/projects/".length).split("?")[0];
-    expect(newId !== seeded.projectA, "새 번호");
+    const newId = decodeURIComponent(hash.slice("/projects/".length).split("?")[0]);
+    expect(hash.startsWith("/projects/") && newId !== seeded.projectA, `주소: ${hash}`);
     const created = await api.get(`/api/projects/${newId}`);
     equal(created.status, "planned", "상태는 예정");
     expect(created.owners.includes("권경락"), "담당자가 넘어온다");
-    // 이전 과제는 본문이 아니라 선행 과제 칸으로 잇는다 (TODO 172)
     expect((created.predecessors ?? []).includes(seeded.projectA), "선행 과제로 이어짐");
-    equal(await page.locator(".project-form").count(), 1, "수정 칸이 열려 있다");
+    expect((created.body ?? "").length > 0, "개요가 넘어온다");
+    equal(created.stage, 2, "2단계");
     // 보관은 204 라 본문이 없다.
     await fetch(`${BASE}/api/projects/${newId}/archive`, { method: "POST" });
   });
@@ -3356,7 +3370,7 @@ async function main() {
     await go("#/");
     const tabs = (await page.locator(".app-header nav a").allInnerTexts()).map((text) => text.trim());
     const gaps = new Set();
-    for (const [index, hash] of ["#/", "#/intakes", "#/projects", "#/reports", "#/history", "#/skills", "#/settings", "#/help"].entries()) {
+    for (const [index, hash] of ["#/", "#/intakes", "#/projects", "#/roadmap", "#/reports", "#/history", "#/skills", "#/settings", "#/help"].entries()) {
       await go(hash);
       const head = await page.evaluate(() => {
         const h1 = document.querySelector("section h1");
@@ -3943,6 +3957,60 @@ async function main() {
     await panel.getByRole("button", { name: "닫기" }).click();
     equal(await page.locator(".demote-panel").count(), 0, "닫힌다");
     await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+  });
+
+  console.log("\n[33] 로드맵 · 과제명 뒤 단계 띠 (TODO 174 · 175)");
+
+  await check("로드맵이 줄기를 단계 순으로 그리고, 살펴볼 것과 선행 → 후속 화살표가 선다 (174)", async () => {
+    const year = new Date().getFullYear();
+    const one = await api.post("/api/projects", { title: "로드맵 1단계", status: "done", start_date: `${year - 2}-03-02`, due_date: `${year - 2}-12-18`, completed_at: `${year - 2}-12-18` });
+    const two = await api.post("/api/projects", { title: "로드맵 2단계", status: "in_progress", start_date: `${year - 1}-01-05`, due_date: `${year - 1}-12-18`, predecessors: [one.id] });
+    const three = await api.post("/api/projects", { title: "로드맵 3단계", status: "planned", start_date: `${year + 1}-01-05`, due_date: `${year + 1}-12-18`, predecessors: [two.id] });
+    await go("#/roadmap");
+    await page.waitForTimeout(800);
+    const block = page.locator(`.rm-lineage[data-lineage="${one.id}"]`);
+    equal(await block.count(), 1, "줄기 하나");
+    expect((await block.locator(".rm-lineage-head").innerText()).includes("3단계"), "단계 수");
+    equal(await block.locator(".rm-label").count(), 3, "과제 셋");
+    equal(await block.locator(".rm-bar").count(), 3, "막대 셋");
+    equal(await block.locator(".rm-links > path").count(), 2, "화살표 둘");
+    equal(await block.locator(".rm-delay").count(), 1, "마감 지난 빗금");
+    expect((await page.locator(".roadmap-warnings").innerText()).includes(two.id), "살펴볼 것에 늦은 과제");
+    // 혼자 가는 과제는 줄기가 아니다
+    equal(await page.locator('.rm-label[data-project="' + seeded.projectA + '"]').count(), 0, "외톨이 과제는 없다");
+    // 막대를 누르면 그 과제로, 돌아오는 길은 로드맵
+    await block.locator(".rm-bar").nth(1).click();
+    await page.waitForTimeout(800);
+    expect(page.url().includes(`/projects/${two.id}`), `이동: ${page.url()}`);
+    equal((await page.locator("a.back").first().innerText()).includes("로드맵"), true, "← 로드맵");
+    // 과제 상세의 [로드맵에서 보기]
+    await page.locator(".lineage-roadmap").click();
+    await page.waitForTimeout(900);
+    expect(page.url().includes("focus="), `주소: ${page.url()}`);
+    equal(await page.locator(".rm-lineage.focused").count(), 1, "그 줄기를 짚는다");
+    // 거르기 — 검색어는 주소에 남는다
+    await page.locator('.roadmap input[aria-label="검색어"]').fill("없는줄기");
+    await page.waitForTimeout(400);
+    equal(await page.locator(".rm-lineage").count(), 0, "거르면 사라진다");
+    expect(page.url().includes("q="), "주소에 조건");
+    for (const item of [three, two, one]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
+  });
+
+  await check("다년도 과제의 이름 뒤에 단계 띠가 선다 — 과제목록 · 상세 · 보고대상 · 검색 (175)", async () => {
+    const one = await api.post("/api/projects", { title: "띠확인 앞단계" });
+    const two = await api.post("/api/projects", { title: "띠확인 뒷단계", predecessors: [one.id] });
+    await go("#/projects");
+    const row = page.locator("tr", { hasText: "띠확인 뒷단계" });
+    equal((await row.locator(".stage-band").innerText()).trim(), "2단계", "목록");
+    equal(await page.locator("tr", { hasText: "고강도 소재 개발" }).locator(".stage-band").count(), 0, "단년도 과제에는 없다");
+    await go(`#/projects/${two.id}`);
+    equal((await page.locator("h1 .stage-band").innerText()).trim(), "2단계", "상세 제목");
+    await go("#/reports");
+    equal((await page.locator("tr", { hasText: "띠확인 앞단계" }).locator(".stage-band").innerText()).trim(), "1단계", "보고대상");
+    await go(`#/search?q=${encodeURIComponent("띠확인")}`);
+    await page.waitForTimeout(500);
+    expect((await page.locator(".result-list .stage-band").count()) >= 2, "검색");
+    for (const item of [two, one]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

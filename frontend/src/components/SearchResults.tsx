@@ -4,6 +4,7 @@ import { projectLink, backTarget, screenLink } from "../nav";
 import type { Meta, SearchResults as Results } from "../types";
 import { formatBytes } from "../upload";
 import StatusBadge from "./StatusBadge";
+import StageBand from "./StageBand";
 
 /** 검색어와 일치하는 부분을 강조한다. */
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -68,6 +69,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
                   <strong>
                     <Highlight text={project.title} query={query} />
                   </strong>
+                  <StageBand stage={project.stage} />
                   <StatusBadge status={project.status} meta={meta} />
                 </a>
                 <p className="snippet">

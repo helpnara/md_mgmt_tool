@@ -1750,3 +1750,125 @@ a.class-chip:hover { background: #e2e8f0; }
 .demote-panel { border-color: var(--accent); }
 .demote-panel ul { margin: 4px 0 8px 18px; padding: 0; }
 .demoted-tag { background: #f1f5f9; color: var(--muted-strong); }
+.lineage-roadmap { margin-left: auto; font-size: 12px; white-space: nowrap; }
+
+/* ── 과제명 뒤의 단계 띠 (TODO 175) — 다년도 과제에만. 단계가 깊을수록 진하게 ───────────── */
+.stage-band {
+  display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; vertical-align: middle;
+  font-size: 11px; font-weight: 700; line-height: 18px; white-space: nowrap;
+  background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;
+}
+.stage-band-2 { background: #e0e7ff; }
+.stage-band-3 { background: #c7d2fe; border-color: #a5b4fc; }
+.stage-band-4, .stage-band-5 { background: #4f46e5; border-color: #4338ca; color: #fff; }
+h1 .stage-band { font-size: 13px; line-height: 22px; padding: 0 10px; }
+.board-card h3 .stage-band { margin-left: 4px; }
+
+/* ── 로드맵 (TODO 174) — 줄기마다 이름 칸 | 막대 칸 ───────────── */
+.roadmap { --rm-label: 380px; }
+.roadmap-toolbar .filters input:not([type="checkbox"]) { width: 180px; }
+.roadmap-range { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.roadmap-range select { min-width: 110px; }
+.roadmap-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.roadmap-check input { width: 15px; height: 15px; }
+.roadmap-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.summary-chip {
+  display: inline-flex; gap: 4px; align-items: baseline; padding: 3px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border); font-size: 13px;
+}
+.summary-chip b { font-size: 15px; }
+.summary-chip.warn { border-color: #f5c08a; background: #fff7ed; color: var(--warn); }
+.roadmap-legend { display: inline-flex; flex-wrap: wrap; gap: 10px; margin-left: auto; font-size: 12px; color: var(--muted-strong); }
+.legend-item { display: inline-flex; align-items: center; gap: 4px; }
+.rm-swatch { display: inline-block; width: 18px; height: 10px; border-radius: 3px; }
+.rm-today-swatch { display: inline-block; width: 2px; height: 12px; background: var(--danger); }
+.roadmap-warnings { padding: 10px 16px; margin-bottom: 12px; }
+.roadmap-warnings summary { cursor: pointer; font-weight: 600; }
+.roadmap-warnings ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.rm-warning { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 13px; }
+.rm-warning a { text-decoration: none; }
+.rm-warning-mark, .rm-mark {
+  display: inline-flex; justify-content: center; align-items: center; width: 16px; height: 16px; flex: 0 0 auto;
+  border-radius: 50%; font-size: 11px; font-weight: 700; background: #e5e7eb; color: var(--muted-strong);
+}
+.rm-warning.warn .rm-warning-mark, .rm-mark.warn { background: var(--danger); color: #fff; }
+.empty-roadmap p { margin: 4px 0; }
+
+/* 넓이가 모자라면 이 안에서만 가로로 민다 — 화면 전체가 넘치지 않게 */
+.roadmap-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.roadmap-grid { min-width: 920px; }
+.roadmap-grid { display: grid; grid-template-columns: var(--rm-label) minmax(0, 1fr); }
+.rm-head-label {
+  padding: 8px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border);
+  position: sticky; left: 0; background: var(--surface); z-index: 3;
+}
+.rm-axis { position: relative; display: flex; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); }
+.rm-year { padding: 4px 0 2px; text-align: center; font-size: 12px; font-weight: 600; border-left: 1px solid var(--border); }
+.rm-year:first-child { border-left: 0; }
+.rm-year.this-year { background: #f8fafc; color: var(--accent-strong); }
+.rm-quarters { display: flex; font-size: 10px; font-weight: 400; color: var(--muted); }
+.rm-quarters span { flex: 1; border-left: 1px dotted #e5e7eb; }
+.rm-quarters span:first-child { border-left: 0; }
+.rm-today-label {
+  position: absolute; top: -1px; transform: translateX(-50%); font-size: 10px; font-weight: 700;
+  color: #fff; background: var(--danger); border-radius: 4px; padding: 0 4px; line-height: 15px;
+}
+
+.rm-lineage { grid-column: 1 / -1; display: grid; grid-template-columns: var(--rm-label) minmax(0, 1fr); border-bottom: 1px solid var(--border); }
+.rm-lineage:last-child { border-bottom: 0; }
+.rm-lineage.focused { box-shadow: inset 4px 0 0 var(--accent); }
+.rm-lineage-head {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 8px 12px 4px; font-size: 13px; background: #fafbfc;
+}
+.rm-lineage-head .stage-band { margin-left: 0; }
+.rm-labels { position: sticky; left: 0; background: var(--surface); z-index: 2; }
+.rm-label {
+  display: flex; align-items: center; gap: 6px; padding: 0 10px 0 12px; font-size: 13px; min-width: 0;
+}
+.rm-label.stage-start { border-top: 1px dashed #e5e7eb; }
+.rm-label.here { background: var(--accent-soft); }
+.rm-stage { flex: 0 0 40px; font-size: 11px; font-weight: 700; color: #4338ca; }
+.rm-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; color: var(--text); }
+.rm-name:hover { color: var(--accent-strong); }
+.rm-label .status { flex: 0 0 auto; font-size: 11px; }
+
+.rm-track { position: relative; border-left: 1px solid var(--border); overflow: hidden; }
+.rm-gridline { position: absolute; top: 0; bottom: 0; border-left: 1px solid #eef0f3; }
+.rm-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--danger); opacity: 0.55; z-index: 1; }
+.rm-links { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 1; }
+.rm-links path { fill: none; stroke: #94a3b8; stroke-width: 1.5; }
+.rm-links path.broken { stroke: var(--danger); stroke-dasharray: 4 3; }
+.rm-links marker path { fill: #94a3b8; stroke: none; }
+.rm-bar {
+  position: absolute; height: 20px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px;
+  font-size: 11px; font-weight: 600; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  cursor: pointer; z-index: 2; min-width: 4px;
+}
+.rm-bar span { pointer-events: none; }
+.rm-bar:hover { filter: brightness(0.95); box-shadow: 0 0 0 2px var(--accent-soft); }
+.rm-bar.open-end { -webkit-mask-image: linear-gradient(90deg, #000 70%, transparent); mask-image: linear-gradient(90deg, #000 70%, transparent); }
+.rm-bar.overdue { border-color: var(--danger); }
+.rm-delay {
+  position: absolute; height: 20px; z-index: 1; border-radius: 0 5px 5px 0;
+  background: repeating-linear-gradient(135deg, rgba(192, 57, 43, 0.35) 0 4px, rgba(192, 57, 43, 0.1) 4px 8px);
+}
+.rm-delay-swatch { background: repeating-linear-gradient(135deg, rgba(192, 57, 43, 0.45) 0 3px, rgba(192, 57, 43, 0.12) 3px 6px); }
+.rm-point { position: absolute; width: 14px; height: 14px; margin-top: 3px; padding: 0; transform: translateX(-50%) rotate(45deg); border: 1px solid #64748b; cursor: pointer; z-index: 2; }
+.rm-nodate { position: absolute; left: 8px; height: 20px; font-size: 11px; color: var(--muted); border: 1px dashed #cbd5e1; border-radius: 5px; padding: 0 8px; line-height: 18px; }
+/* 막대 색 = 상태 (목록의 상태 딱지와 같은 계열을 진하게) */
+.rm-status-planned { background: #e2e8f0; color: #334155; border-color: #cbd5e1; }
+.rm-status-reviewing { background: #fde68a; color: #78350f; }
+.rm-status-in_progress { background: #4ade80; color: #14532d; }
+.rm-status-on_hold { background: #d1d5db; color: #374151; }
+.rm-status-done { background: #94a3b8; color: #fff; }
+.rm-status-dropped { background: #fecaca; color: #7f1d1d; text-decoration: line-through; }
+.rm-swatch.rm-status-planned { border: 1px solid #cbd5e1; }
+
+@media (max-width: 1200px) {
+  .roadmap { --rm-label: 300px; }
+  .roadmap-legend { margin-left: 0; }
+}
+.rm-name .project-id, .rm-warning .project-id { display: inline; margin-right: 4px; }
+.roadmap-check { flex-direction: row; margin: 0; }
+.roadmap-check input { margin: 0; }

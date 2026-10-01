@@ -68,9 +68,20 @@ def test_predecessor_rules(client):
 
 def test_clone_links_the_new_project_as_next_stage(client):
     source = _project(client, "수명평가 표준화")
-    clone = client.post(f"/api/projects/{source['id']}/clone").json()
-    assert clone["predecessors"] == [source["id"]]
+    before = len(client.get("/api/projects").json())
+    next_id = client.get("/api/projects/next-id").json()["id"]
+    # 미리 채울 값만 — 만들지 않는다 (173): 과제 수도 다음 번호도 그대로
+    draft = client.get(f"/api/projects/{source['id']}/clone").json()
+    assert draft["predecessors"] == [source["id"]]
+    assert draft["status"] == "planned" and draft["title"] == "수명평가 표준화"
+    assert len(client.get("/api/projects").json()) == before
+    assert client.get("/api/projects/next-id").json()["id"] == next_id
+    # [만들기] = 보통의 과제 만들기
+    clone = client.post("/api/projects", json=draft).json()
+    assert clone["id"] == next_id and clone["predecessors"] == [source["id"]]
     assert client.get(f"/api/projects/{clone['id']}").json()["lineage"]["stage"] == 2
+    assert client.post(f"/api/projects/{source['id']}/clone").status_code == 405
+    assert client.get("/api/projects/2099-999/clone").status_code == 404
 
 
 def test_archived_predecessor_shows_as_missing(client):

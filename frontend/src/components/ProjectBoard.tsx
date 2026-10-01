@@ -3,6 +3,7 @@ import { projectLink } from "../nav";
 import type { Meta, Project } from "../types";
 import { dueLabel, formatDate } from "../util";
 import { TypeBadge } from "./StatusBadge";
+import StageBand from "./StageBand";
 
 interface Props {
   meta: Meta;
@@ -49,7 +50,9 @@ export default function ProjectBoard({ meta, projects }: Props) {
                       onClick={() => (window.location.hash = projectLink(project.id))}
                     >
                       <span className="project-id">{project.id}</span>
-                      <h3>{project.title}</h3>
+                      <h3>
+                        {project.title} <StageBand stage={project.stage} />
+                      </h3>
                       <div className="board-meta">
                         {project.type && <TypeBadge type={project.type} meta={meta} />}
                         {project.group && <span className="chip">{project.group}</span>}

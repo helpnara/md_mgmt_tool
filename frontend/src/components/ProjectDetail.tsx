@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
-import { backTarget, intakeBackLink, listLink, projectLink, setPageTitle } from "../nav";
+import { backTarget, intakeBackLink, listLink, projectLink, screenLink, setPageTitle } from "../nav";
 import { attempt, notifyError } from "../notify";
 import { dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useUnsaved } from "../unsaved";
 import type { DemotePlan, Entry, Meta, Project, Report, YearFix } from "../types";
@@ -19,6 +19,7 @@ import PreviewToggle, { usePreview } from "./PreviewToggle";
 import ProjectForm from "./ProjectForm";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
 import { leftLabel } from "../people";
+import StageBand from "./StageBand";
 
 interface Props {
   projectId: string;
@@ -147,6 +148,8 @@ export default function ProjectDetail({
   // 접수로 되돌리기 미리보기 (TODO 171) — 판이 열려 있으면 그 내용
   const [demotePlan, setDemotePlan] = useState<DemotePlan | null>(null);
   const [demoting, setDemoting] = useState(false);
+  // [이 과제로 새 과제] 의 미리 채운 값 (TODO 173) — 있으면 새 과제 칸이 열려 있다. 아직 아무것도 만들지 않았다.
+  const [cloneDraft, setCloneDraft] = useState<Partial<Project> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<{ items: Attachment[]; total_bytes: number; orphan_count: number }>(
     { items: [], total_bytes: 0, orphan_count: 0 },
@@ -237,9 +240,12 @@ export default function ProjectDetail({
     setEditingOverview(false);
     load();
   }
-  // 복제 직후 새 과제로 옮겨 오면 같은 부품이 그대로 쓰이므로 첫 상태만으로는 안 열린다 (TODO 109).
+  // 다른 과제로 옮겨 오면 같은 부품이 그대로 쓰이므로 첫 상태만으로는 안 열린다 (TODO 109).
+  // 앞 과제에서 열어 둔 판(새 과제 칸 · 접수로 되돌리기)은 닫는다 — 다른 과제의 것이다 (TODO 173).
   useEffect(() => {
     if (edit) setEditingProject(true);
+    setCloneDraft(null);
+    setDemotePlan(null);
   }, [projectId, edit]);
 
   // 다음 보고 예정일을 기본값으로 채워 둔다 (서버가 주간 주기로 계산한다).
@@ -433,7 +439,9 @@ export default function ProjectDetail({
         <div className="detail-head">
           <div>
             <span className="project-id">{project.id}</span>
-            <h1>{project.title}</h1>
+            <h1>
+              {project.title} <StageBand stage={project.stage} />
+            </h1>
             <div className="meta-line">
               <StatusBadge status={project.status} meta={meta} />
               {project.type && <TypeBadge type={project.type} meta={meta} />}
@@ -516,6 +524,9 @@ export default function ProjectDetail({
                     )}
                   </span>
                 ))}
+                <a className="lineage-roadmap" href={screenLink("roadmap", { focus: project.id })}>
+                  로드맵에서 보기 →
+                </a>
               </div>
             )}
             {/* 유관부서 (TODO 92). 누르면 그 팀·사람과 함께 하는 과제만 걸러 본다 —
@@ -545,17 +556,18 @@ export default function ProjectDetail({
             <button className="ghost" onClick={() => setEditingProject((value) => !value)}>
               {editingProject ? "닫기" : "과제 정보 수정"}
             </button>
-            {/* 끝난 과제의 후속 과제 (TODO 109). 개요·담당자·태그가 넘어오고 이력은 남지 않는다. */}
+            {/* 끝난 과제의 후속 과제 (TODO 109). 개요·담당자·태그가 넘어오고 이력은 남지 않는다.
+                누르면 **미리 채운 새 과제 칸**만 연다 — [만들기] 를 눌러야 생긴다 (TODO 173). */}
             <button
-              className="ghost"
-              title="이 과제의 개요·담당자·태그를 가져와 새 과제를 만듭니다. 진행일지·보고는 넘어오지 않습니다."
+              className={cloneDraft ? "ghost on" : "ghost"}
+              title="이 과제의 개요·담당자·태그를 가져와 새 과제 칸을 엽니다. 진행일지·보고는 넘어오지 않습니다."
               onClick={async () => {
-                if (!window.confirm(`"${project.title}" 을(를) 바탕으로 새 과제를 만들까요?\n개요·담당자·태그가 넘어오고, 진행일지와 보고는 넘어오지 않습니다.`))
+                if (cloneDraft) {
+                  setCloneDraft(null);
                   return;
+                }
                 try {
-                  const created = await api.cloneProject(project.id);
-                  onMetaChange();
-                  window.location.hash = projectLink(created.id, { edit: 1 });
+                  setCloneDraft(await api.cloneDraft(project.id));
                 } catch (err) {
                   setError((err as Error).message);
                 }
@@ -603,6 +615,30 @@ export default function ProjectDetail({
             </button>
           </div>
         </div>
+
+        {cloneDraft && (
+          <div className="card clone-panel">
+            <h2>새 과제 — {project.id} 를 바탕으로</h2>
+            <p className="hint">
+              과제명 · 담당자 · 유관부서 · 태그 · 분류와 <b>개요</b>가 넘어오고, 이 과제가 <b>선행 과제</b>로 이어집니다. 진행일지 ·
+              보고 · 첨부 · 효과 금액 · 기간은 넘어오지 않습니다. <b>[만들기]</b>를 눌러야 과제가 생깁니다 — [취소]하면 아무것도
+              남지 않습니다.
+            </p>
+            <ProjectForm
+              meta={meta}
+              onMetaChange={onMetaChange}
+              initial={cloneDraft}
+              submitLabel="만들기"
+              onCancel={() => setCloneDraft(null)}
+              onSubmit={async (payload) => {
+                const created = await api.createProject({ ...payload, body: cloneDraft.body });
+                setCloneDraft(null);
+                onMetaChange();
+                window.location.hash = projectLink(created.id);
+              }}
+            />
+          </div>
+        )}
 
         {demotePlan && (
           <div className="archive-panel demote-panel">

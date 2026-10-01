@@ -459,6 +459,34 @@ def _ancestors(conn: sqlite3.Connection, project_id: str) -> set[str]:
     return seen
 
 
+def stage_map(conn: sqlite3.Connection) -> dict[str, int]:
+    """선행으로 이어진 과제마다 몇 단계인가 (TODO 175) — 과제명 뒤의 단계 띠가 쓴다.
+
+    이어진 과제가 없는 과제는 **빠진다**(띠를 붙이지 않는다). 규칙은 줄기(172)와 같다 — 가장 긴 선행 길 + 1.
+    표 한 번을 읽어 모두 센다: 과제목록처럼 여러 과제를 그릴 때 과제마다 따로 묻지 않게.
+    """
+    preds: dict[str, list[str]] = {}
+    linked: set[str] = set()
+    for row in conn.execute("SELECT project_id, predecessor_id FROM project_predecessor"):
+        preds.setdefault(row["project_id"], []).append(row["predecessor_id"])
+        linked.update((row["project_id"], row["predecessor_id"]))
+    if not linked:
+        return {}
+    present = {row["id"] for row in conn.execute("SELECT id FROM project")}
+    stage: dict[str, int] = {}
+
+    def depth(node: str, trail: frozenset[str]) -> int:
+        if node in stage:
+            return stage[node]
+        if node in trail or node not in present:
+            return 1
+        value = 1 + max((depth(p, trail | {node}) for p in preds.get(node, [])), default=0)
+        stage[node] = value
+        return value
+
+    return {node: depth(node, frozenset()) for node in linked if node in present}
+
+
 LINEAGE_LIMIT = 60  # 한 줄기에 이보다 많으면 무언가 잘못 이어진 것이다 — 화면이 무거워지지 않게 끊는다
 
 
@@ -624,41 +652,46 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
     conn.commit()
 
 
-def clone_project(conn: sqlite3.Connection, source_id: str) -> str:
-    """이 과제를 바탕으로 새 과제 (TODO 109).
+def clone_draft(conn: sqlite3.Connection, source_id: str) -> dict[str, Any]:
+    """이 과제를 바탕으로 새 과제 — **미리 채울 값만** 돌려준다 (TODO 109 · 173).
 
     해마다 도는 과제("2025년 수명평가 표준화" → "2026년 …")는 속성·그룹·담당자·유관부서가
     같다. 지금까지는 처음부터 다시 쳤다. **가져오는 것**은 그 정보와 개요 본문이고,
     **가져오지 않는 것**은 진행일지·보고·첨부·효과 금액·날짜다 — 새 과제의 이력은 비어
-    있어야 하고, 효과와 기간은 새로 정할 일이다. 시작일을 비우므로 번호는 올해로 붙는다.
-    원래 과제를 **선행 과제**로 이어(172) 두 과제가 한 줄기임이 파일과 상세 위쪽에 보이게 한다.
+    있어야 하고, 효과와 기간은 새로 정할 일이다. 원래 과제를 **선행 과제**로 이어(172) 두 과제가
+    한 줄기임이 파일과 상세 위쪽에 보이게 한다.
+
+    여기서는 **만들지 않는다**(173). 처음(109)에는 누르는 순간 만들고 수정 칸을 열었는데, 그 칸의
+    [취소]가 만든 과제를 지우지 않아 "취소했는데 과제가 생겼다" — 게다가 번호는 다시 쓰지 않으므로(146)
+    취소할 때마다 그해 번호가 하나씩 비었다. 화면이 이 값으로 새 과제 칸을 채우고, [만들기]가
+    보통의 과제 만들기(`POST /api/projects`)를 부른다.
     """
     row = conn.execute("SELECT * FROM project WHERE id = ?", (source_id,)).fetchone()
     if row is None:
         raise KeyError(source_id)
     doc = md.load(project_dir(conn, source_id) / "index.md")
     meta = doc.meta
-    body = doc.body or ""
-    return create_project(
-        conn,
-        {
-            "title": str(meta.get("title") or row["title"]),
-            "status": "planned",
-            "type": meta.get("type"),
-            "group": meta.get("group"),
-            "tags": list(meta.get("tags") or []),
-            "owners": list(meta.get("owners") or []),
-            "partners": meta.get("partners") or [],
-            "no_report": bool(meta.get("no_report")),
-            "no_effect": bool(meta.get("no_effect")),
-            # 같은 줄기의 과제라 분류도 같다 (TODO 136). 접수 번호는 넘기지 않는다.
-            **{key: meta.get(key) for key in CLASSIFICATION_KEYS},
-            # 다음 단계 과제 — 원래 과제를 선행으로 잇는다 (TODO 172). 개요 끝에 "## 이전 과제" 를
-            # 적던 것(109)을 대신한다. 상세 위쪽에 줄기가 서고, 아니면 [과제 정보 수정] 에서 지운다.
-            "predecessors": [source_id],
-            "body": body,
-        },
-    )
+    return {
+        "title": str(meta.get("title") or row["title"]),
+        "status": "planned",
+        "type": meta.get("type"),
+        "group": meta.get("group"),
+        "tags": list(meta.get("tags") or []),
+        "owners": list(meta.get("owners") or []),
+        "partners": normalize_partners(meta.get("partners")),
+        "no_report": bool(meta.get("no_report")),
+        "no_effect": bool(meta.get("no_effect")),
+        # 같은 줄기의 과제라 분류도 같다 (TODO 136). 접수 번호는 넘기지 않는다.
+        **{key: meta.get(key) for key in CLASSIFICATION_KEYS},
+        # 다음 단계 과제 — 원래 과제를 선행으로 잇는다 (TODO 172). 칸에서 뺄 수 있다.
+        "predecessors": [source_id],
+        "body": doc.body or "",
+    }
+
+
+def clone_project(conn: sqlite3.Connection, source_id: str) -> str:
+    """미리 채운 값 그대로 만든다 — 시험과 손으로 부르는 길을 위해 남긴다."""
+    return create_project(conn, clone_draft(conn, source_id))
 
 
 def archive_project(conn: sqlite3.Connection, project_id: str) -> None:

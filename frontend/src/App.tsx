@@ -5,6 +5,7 @@ import ProjectDetail from "./components/ProjectDetail";
 import ProjectList from "./components/ProjectList";
 import ReportCandidates from "./components/ReportCandidates";
 import ReportHistory from "./components/ReportHistory";
+import Roadmap from "./components/Roadmap";
 import ScrollTop from "./components/ScrollTop";
 import Settings from "./components/Settings";
 import Skills from "./components/Skills";
@@ -27,6 +28,8 @@ type Route =
   | { name: "search"; query: string; back: string | null }
   | { name: "reports"; query: string }
   | { name: "history"; query: string }
+  // 다년도 과제 로드맵 (TODO 174)
+  | { name: "roadmap"; query: string }
   | { name: "skills"; query: string }
   | { name: "settings"; back: string | null }
   | { name: "help" }
@@ -68,6 +71,7 @@ function readRoute(): Route {
   if (path.startsWith("search"))
     return { name: "search", query: params.get("q") ?? "", back: params.get(BACK_PARAM) };
   if (path.startsWith("history")) return { name: "history", query: queryString ?? "" };
+  if (path.startsWith("roadmap")) return { name: "roadmap", query: queryString ?? "" };
   if (path.startsWith("reports")) return { name: "reports", query: queryString ?? "" };
   if (path.startsWith("skills")) return { name: "skills", query: queryString ?? "" };
   if (path.startsWith("settings")) return { name: "settings", back: params.get(BACK_PARAM) };
@@ -219,6 +223,10 @@ export default function App() {
           <a href="#/projects" className={route.name === "list" ? "active" : undefined}>
             과제목록
           </a>
+          {/* 다년도 과제의 줄기를 한 화면에 (TODO 174) — 과제목록 바로 뒤: 과제를 다른 모양으로 보는 자리다 */}
+          <a href="#/roadmap" className={route.name === "roadmap" ? "active" : undefined}>
+            로드맵
+          </a>
           <a href="#/reports" className={route.name === "reports" ? "active" : undefined}>
             보고대상
           </a>
@@ -289,6 +297,7 @@ export default function App() {
         )}
         {route.name === "reports" && <ReportCandidates meta={meta} query={route.query} />}
         {route.name === "history" && <ReportHistory meta={meta} query={route.query} />}
+        {route.name === "roadmap" && <Roadmap meta={meta} query={route.query} />}
         {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} back={route.back} />}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} back={route.back} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}

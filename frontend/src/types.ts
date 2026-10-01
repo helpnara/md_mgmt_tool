@@ -148,6 +148,8 @@ export interface Project {
   intake_id?: string | null;
   /** 선행 과제 번호들 — 다년도 과제의 앞 단계, 여럿일 수 있다 (TODO 172) */
   predecessors?: string[];
+  /** 다년도 과제의 단계 — 이어진 과제가 없으면 null (TODO 175) */
+  stage?: number | null;
   /** 다년도 과제의 줄기 (상세 조회에서만, TODO 172) */
   lineage?: Lineage;
   /** 이 과제로 승격된 접수 · 이 과제에 병합된 접수 (상세 조회에서만) */
@@ -208,6 +210,7 @@ export interface SearchResults {
   projects: {
     id: string;
     title: string;
+    stage?: number | null;
     status: string;
     group: string | null;
     updated_at: string | null;
@@ -279,6 +282,7 @@ export interface Report {
 export interface ReportCandidate {
   id: string;
   title: string;
+  stage?: number | null;
   status: string;
   type: string | null;
   group: string | null;
@@ -933,4 +937,53 @@ export interface DemotePlan {
   successors: number;
   received_on: string;
   next_intake_id: string;
+}
+
+/** 로드맵 (TODO 174) — 선행으로 이어진 줄기 하나의 과제 한 줄 */
+export interface RoadmapProject {
+  id: string;
+  title: string | null;
+  status: string | null;
+  type?: string | null;
+  group?: string | null;
+  owners?: string[];
+  start_date?: string | null;
+  due_date?: string | null;
+  completed_at?: string | null;
+  /** 막대의 끝 — 끝난 과제는 끝낸 날, 아니면 마감일 */
+  end_date?: string | null;
+  effect_expected?: number | null;
+  effect_verified?: number | null;
+  stage: number;
+  predecessors: string[];
+  successors: string[];
+  /** 보관함에 있거나 찾을 수 없는 선행 */
+  missing: boolean;
+}
+
+export interface RoadmapWarning {
+  project_id: string;
+  kind: "overdue" | "pred_dropped" | "missing" | "pred_open" | "no_dates" | "next_open";
+  level: "warn" | "info";
+  text: string;
+}
+
+export interface RoadmapLineage {
+  key: string;
+  title: string;
+  state: "active" | "planned" | "ended";
+  stage_count: number;
+  current_stage: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  effect_expected: number;
+  effect_verified: number;
+  projects: RoadmapProject[];
+  warnings: RoadmapWarning[];
+}
+
+export interface Roadmap {
+  today: string;
+  lineages: RoadmapLineage[];
+  summary: { lineages: number; projects: number; active: number; warn: number; next_open: number };
 }

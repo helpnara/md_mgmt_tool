@@ -1,4 +1,4 @@
-import type { DemotePlan, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
+import type { DemotePlan, Roadmap, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
 
 /** 서버에 닿지 못했을 때 (TODO 165) — 브라우저의 영어 `Failed to fetch` 대신 */
@@ -159,7 +159,10 @@ export const api = {
   /** 미리보기대로 이 과제 하나의 번호를 옮긴다. */
   yearFixApply: (id: string) => request<YearFix>(`/api/projects/${id}/year-fix`, { method: "POST" }),
   /** 끝난 과제를 바탕으로 새 과제를 만든다 (TODO 109). 개요·담당자·태그가 넘어오고 이력은 남지 않는다. */
-  cloneProject: (id: string) => request<Project>(`/api/projects/${id}/clone`, { method: "POST" }),
+  // 다년도 과제 로드맵 (TODO 174)
+  roadmap: () => request<Roadmap>("/api/roadmap"),
+  // 미리 채울 값만 — 만들지 않는다. [만들기] 가 createProject 를 부른다 (TODO 173)
+  cloneDraft: (id: string) => request<Partial<Project>>(`/api/projects/${encodeURIComponent(id)}/clone`),
   listEntries: (projectId: string) => request<Entry[]>(`/api/projects/${projectId}/entries`),
   createEntry: (projectId: string, payload: Partial<Entry>) =>
     request<Entry>(`/api/projects/${projectId}/entries`, {

@@ -14,6 +14,7 @@ import ProjectForm from "./ProjectForm";
 import CopyTableButton from "./CopyTableButton";
 import { leftLabel } from "../people";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
+import StageBand from "./StageBand";
 
 interface Props {
   meta: Meta;
@@ -440,6 +441,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                 <td className="col-title">
                   <span className="project-id">{project.id}</span>
                   <span className="project-title">{project.title}</span>
+                  <StageBand stage={project.stage} />
                 </td>
                 <td className="one-line">
                   <StatusBadge status={project.status} meta={meta} />

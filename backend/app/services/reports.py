@@ -20,7 +20,7 @@ from ..vault import paths
 from ..vault.indexer import index_project
 from . import settings as settings_service
 from . import trash as trash_service
-from .projects import now_iso, project_dir
+from .projects import now_iso, project_dir, stage_map
 
 # 진행일지 본문의 첨부 링크(../assets/…)를 보고 문서 위치에서 본 경로로 바꾼다.
 _ENTRY_LINK = re.compile(r"\]\(\s*\.\./(assets/[^)\s]+)")
@@ -390,6 +390,7 @@ def candidates(
     active = {key for key, _, candidate in STATUSES if candidate}
     today = date_cls.today()
 
+    stages = stage_map(conn)  # 과제명 뒤 단계 띠 (TODO 175)
     results = []
     for project in conn.execute("SELECT * FROM project ORDER BY id"):
         # 보고가 필요 없다고 정해 둔 과제. 상태와 무관하게 후보에서 뺀다.
@@ -420,6 +421,7 @@ def candidates(
             {
                 "id": project["id"],
                 "title": project["title"],
+                "stage": stages.get(project["id"]),
                 "status": project["status"],
                 "type": project["type"],
                 "group": project["grp"],

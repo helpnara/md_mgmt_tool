@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from .projects import overview_is_blank
+from .projects import overview_is_blank, stage_map
 
 SNIPPET_RADIUS = 70
 MIN_FTS_LENGTH = 3
@@ -116,6 +116,7 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None) -> di
     report_ids = [int(ref) for ref in report_refs]
 
     projects = []
+    stages = stage_map(conn) if project_ids else {}  # 과제명 뒤 단계 띠 (TODO 175)
     if project_ids:
         placeholders = ",".join("?" * len(project_ids))
         for row in conn.execute(
@@ -126,6 +127,7 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None) -> di
                 {
                     "id": row["id"],
                     "title": row["title"],
+                    "stage": stages.get(row["id"]),
                     "status": row["status"],
                     "group": row["grp"],
                     "updated_at": row["updated_at"],
