@@ -24,6 +24,23 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
     ...meta.people.filter((name) => !left.has(name)),
     ...meta.owners.filter((name) => !meta.people.includes(name) && !left.has(name)),
   ];
+  // 선행 과제 고르기 (TODO 172) — 번호와 이름을 함께 보여 고른다. 자기 자신은 뺀다.
+  const [projectOptions, setProjectOptions] = useState<{ id: string; title: string }[]>([]);
+  useEffect(() => {
+    api
+      .listProjects({})
+      .then((rows) => setProjectOptions(rows.filter((row) => row.id !== initial?.id).map((row) => ({ id: row.id, title: row.title }))))
+      .catch(() => setProjectOptions([]));
+  }, [initial?.id]);
+  // 선행 과제 — 여럿일 수 있다(앞 단계 과제 둘을 이어받는 과제). 칩으로 넣고 뺀다 (TODO 172)
+  const [predecessors, setPredecessors] = useState<string[]>(initial?.predecessors ?? []);
+  const [predecessorInput, setPredecessorInput] = useState("");
+  const addPredecessor = (raw: string) => {
+    const id = raw.trim().split(/\s+/)[0];
+    if (!id) return;
+    setPredecessors((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setPredecessorInput("");
+  };
   const [form, setForm] = useState({
     title: initial?.title ?? "",
     status: initial?.status ?? "in_progress",
@@ -97,7 +114,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   // "완료했는데 실증효과 미입력" 에 계속 남으면, 줄지 않는 그 숫자를 곧 안 보게 된다.
   const [noEffect, setNoEffect] = useState(Boolean(initial?.no_effect));
   // 쓰다가 떠나면 묻는다 (TODO 162)
-  useFormUnsaved(`project-form:${initial?.id ?? "new"}`, { form, noReport, noEffect }, busy);
+  useFormUnsaved(`project-form:${initial?.id ?? "new"}`, { form, noReport, noEffect, predecessors }, busy);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -125,6 +142,13 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
         category: classes.category || null,
         delivery: classes.delivery || null,
         cost_kind: classes.cost_kind || null,
+        // 칸에 적어 두고 [추가] 를 안 눌렀어도 함께 보낸다 — 번호만(서버도 번호만 쓴다). [] 이면 모두 끊는다.
+        predecessors: [
+          ...predecessors,
+          ...(predecessorInput.trim() && !predecessors.includes(predecessorInput.trim().split(/\s+/)[0])
+            ? [predecessorInput.trim().split(/\s+/)[0]]
+            : []),
+        ],
         // 팀 이름이 빈 줄은 보내지 않는다. 사람 이름을 나누는 일은 **서버가** 한다 (TODO 74).
         partners: partners
           .filter((row) => row.team.trim())
@@ -174,6 +198,51 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             ))}
           </select>
         </label>
+        <div className="label-like predecessor-field">
+          <span>선행 과제 (다년도 과제의 앞 단계 — 여럿이면 하나씩 추가)</span>
+          <div className="predecessor-chips">
+            {predecessors.map((id) => (
+              <span key={id} className="chip predecessor-chip">
+                {id} {projectOptions.find((option) => option.id === id)?.title ?? ""}
+                <button
+                  type="button"
+                  className="ghost small"
+                  aria-label={`${id} 빼기`}
+                  onClick={() => setPredecessors((prev) => prev.filter((item) => item !== id))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              list="predecessor-options"
+              value={predecessorInput}
+              onChange={(event) => {
+                const value = event.target.value;
+                // 목록에서 고르면 바로 칩으로
+                if (projectOptions.some((option) => option.id === value.trim())) addPredecessor(value);
+                else setPredecessorInput(value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addPredecessor(predecessorInput);
+                }
+              }}
+              placeholder={predecessors.length ? "더 이을 과제 번호" : "예: 2025-003 — 1단계면 비워 둡니다"}
+              aria-label="선행 과제 번호"
+            />
+            <datalist id="predecessor-options">
+              {projectOptions
+                .filter((option) => !predecessors.includes(option.id))
+                .map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.title}
+                  </option>
+                ))}
+            </datalist>
+          </div>
+        </div>
         <label>
           그룹 (예 : 회의체, 지시사항 등)
           <input

@@ -2,9 +2,9 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
 import { backTarget, intakeBackLink, listLink, projectLink, setPageTitle } from "../nav";
-import { attempt } from "../notify";
+import { attempt, notifyError } from "../notify";
 import { dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useUnsaved } from "../unsaved";
-import type { Entry, Meta, Project, Report, YearFix } from "../types";
+import type { DemotePlan, Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
 import PasteOfferBar from "./PasteOffer";
@@ -144,6 +144,9 @@ export default function ProjectDetail({
   const lastEditedEntry = useRef<number | null>(null);
   // 접수에서 온 과제를 지우려 할 때 — [중단]을 먼저 권한다 (TODO 145)
   const [confirmingArchive, setConfirmingArchive] = useState(false);
+  // 접수로 되돌리기 미리보기 (TODO 171) — 판이 열려 있으면 그 내용
+  const [demotePlan, setDemotePlan] = useState<DemotePlan | null>(null);
+  const [demoting, setDemoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<{ items: Attachment[]; total_bytes: number; orphan_count: number }>(
     { items: [], total_bytes: 0, orphan_count: 0 },
@@ -486,6 +489,35 @@ export default function ProjectDetail({
                 ))}
               </div>
             )}
+            {/* 다년도 과제의 줄기 (TODO 172) — 이어진 과제를 단계별로. 한 단계에 여럿일 수 있다 */}
+            {project.lineage?.stage != null && (
+              <div className="meta-line lineage-line">
+                <span className="stage-chip" title="선행 과제를 따라 가장 길게 거슬러 올라가 센 단계입니다">
+                  {project.lineage.stage}단계
+                </span>
+                {project.lineage.stages.map((group, index) => (
+                  <span key={group.stage} className="lineage-stage">
+                    {index > 0 && <span className="lineage-arrow" aria-hidden="true">→</span>}
+                    <span className="muted lineage-stage-name">{group.stage}단계</span>
+                    {group.items.map((item) =>
+                      item.here ? (
+                        <b key={item.id} className="lineage-here" title="지금 보고 있는 과제">
+                          {item.id}
+                        </b>
+                      ) : item.missing ? (
+                        <span key={item.id} className="muted lineage-item" title="삭제 보관함에 있거나 찾을 수 없는 과제입니다">
+                          {item.id} (찾을 수 없음)
+                        </span>
+                      ) : (
+                        <a key={item.id} className="lineage-item" href={projectLink(item.id)} title={item.title ?? ""}>
+                          <span className="intake-link-id">{item.id}</span> {item.title}
+                        </a>
+                      ),
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
             {/* 유관부서 (TODO 92). 누르면 그 팀·사람과 함께 하는 과제만 걸러 본다 —
                 "설비기술팀이랑 뭐뭐 하고 있더라" 가 실제로 자주 하는 물음이다. */}
             {(project.partners ?? []).length > 0 && (
@@ -531,6 +563,26 @@ export default function ProjectDetail({
             >
               이 과제로 새 과제
             </button>
+            {/* 접수를 거치지 않고 만든 스마트과제를 풀로 (TODO 171) — 무엇이 어디로 가는지 판에서 먼저 보인다 */}
+            {(project.intakes ?? []).length === 0 && project.type === meta.classified_type && (
+              <button
+                className={demotePlan ? "ghost on" : "ghost"}
+                title="이 과제를 접수로 되돌려 풀에서 검토 · 사전점검 · 판정을 받게 합니다"
+                onClick={async () => {
+                  if (demotePlan) {
+                    setDemotePlan(null);
+                    return;
+                  }
+                  try {
+                    setDemotePlan(await api.toIntakePlan(project.id));
+                  } catch (err) {
+                    setError((err as Error).message);
+                  }
+                }}
+              >
+                접수로 되돌리기
+              </button>
+            )}
             <button
               className="ghost danger"
               onClick={async () => {
@@ -551,6 +603,66 @@ export default function ProjectDetail({
             </button>
           </div>
         </div>
+
+        {demotePlan && (
+          <div className="archive-panel demote-panel">
+            {demotePlan.eligible ? (
+              <>
+                <p>
+                  이 과제를 접수 <b>{demotePlan.next_intake_id}</b>(검토중)로 되돌려 <b>풀에서 관리</b>합니다.
+                </p>
+                <ul className="hint">
+                  <li>과제 개요 → 요청 내용 · 분류와 기대효과 → 그대로(기대효과는 요청 효과 자리에)</li>
+                  <li>진행일지 {demotePlan.entries}건 → 검토 기록 · 첨부 {demotePlan.attachments}개 → 복사</li>
+                  <li>
+                    접수일은 처음 과제로 등록한 날({demotePlan.received_on})이 됩니다 — 풀의 경과가 실제로 기다린 날수가 되게
+                  </li>
+                  <li>
+                    과제 <b>{project.id}</b> 는 삭제 보관함으로 갑니다. 이 번호는 다시 쓰지 않고, 접수에서 다시 착수하면 새 번호가
+                    붙습니다.
+                  </li>
+                  {demotePlan.successors > 0 && (
+                    <li className="warn-text">
+                      이 과제를 선행으로 둔 후속 과제가 {demotePlan.successors}건 있습니다 — 그쪽 줄기에는 "찾을 수 없음" 으로
+                      남습니다.
+                    </li>
+                  )}
+                </ul>
+                <div className="form-actions left">
+                  <button
+                    disabled={demoting}
+                    onClick={async () => {
+                      setDemoting(true);
+                      try {
+                        const done = await api.toIntake(project.id);
+                        onMetaChange();
+                        window.location.hash = `#/intakes/${encodeURIComponent(done.intake_id)}`;
+                      } catch (err) {
+                        notifyError((err as Error).message);
+                      } finally {
+                        setDemoting(false);
+                      }
+                    }}
+                  >
+                    {demoting ? "되돌리는 중…" : "접수로 되돌리기"}
+                  </button>
+                  <button className="ghost" onClick={() => setDemotePlan(null)}>
+                    취소
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p>{demotePlan.reason}</p>
+                <div className="form-actions left">
+                  <button className="ghost" onClick={() => setDemotePlan(null)}>
+                    닫기
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {confirmingArchive && (
           <div className="archive-panel">

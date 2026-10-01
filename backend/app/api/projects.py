@@ -175,6 +175,8 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         # 과제 분류 넷 · 승격된 접수 번호 (TODO 136)
         **{key: row[key] for key in CLASSIFICATION_KEYS},
         "intake_id": row["intake_id"],
+        # 선행 과제들 (TODO 172)
+        "predecessors": svc._predecessors_of(conn, row["id"]),
         "tags": _tags(conn, row["id"]),
         "entry_count": conn.execute(
             "SELECT COUNT(*) AS n FROM entry WHERE project_id = ?", (row["id"],)
@@ -392,6 +394,8 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     from ..services.intakes import related_to_project
 
     data["intakes"] = related_to_project(conn, project_id)
+    # 다년도 과제의 줄기 — 앞 단계들 · 다음 단계 · 단계 번호 (TODO 172)
+    data["lineage"] = svc.lineage(conn, project_id)
     return data
 
 
@@ -449,6 +453,33 @@ def clone_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = conn.execute("SELECT * FROM project WHERE id = ?", (new_id,)).fetchone()
     return _serialize(conn, row)
+
+
+# ── 접수로 되돌리기 (TODO 171) ─────────────────────────────────────────────
+# 접수를 거치지 않고 만든 과제를 풀로 — 미리보기와 실행을 나눈다(무엇이 어디로 가는지 먼저 보인다).
+
+@router.get("/{project_id}/to-intake")
+def to_intake_plan(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    from ..services import intakes as intakes_service
+
+    try:
+        return intakes_service.demote_plan(conn, project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+
+
+@router.post("/{project_id}/to-intake", status_code=201)
+def to_intake(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    from ..services import intakes as intakes_service
+
+    try:
+        return {"intake_id": intakes_service.demote(conn, project_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
 
 
 @router.post("/{project_id}/archive", status_code=204)

@@ -1,4 +1,4 @@
-import type { Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
+import type { DemotePlan, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
 
 /** 서버에 닿지 못했을 때 (TODO 165) — 브라우저의 영어 `Failed to fetch` 대신 */
@@ -142,6 +142,10 @@ export const api = {
   updateProject: (id: string, payload: Partial<Project>) =>
     request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   archiveProject: (id: string) => request<void>(`/api/projects/${id}/archive`, { method: "POST" }),
+  /** 접수로 되돌리기 (TODO 171) — 미리보기 · 실행 */
+  toIntakePlan: (id: string) => request<DemotePlan>(`/api/projects/${encodeURIComponent(id)}/to-intake`),
+  toIntake: (id: string) =>
+    request<{ intake_id: string }>(`/api/projects/${encodeURIComponent(id)}/to-intake`, { method: "POST" }),
   /**
    * 이 시작일로 만들면 어떤 번호가 붙는지 (TODO 95).
    * 번호의 연도는 **등록한 날이 아니라 착수년도**다 — 적어 두기보다 실제 번호를 보여 준다.

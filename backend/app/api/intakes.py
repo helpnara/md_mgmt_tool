@@ -258,8 +258,10 @@ def get_intake(intake_id: str, conn: sqlite3.Connection = Depends(get_db)) -> di
         from ..services import precheck as precheck_service
         from ..vault import markdown as md
 
-        stored = md.load(svc.intake_dir(conn, intake_id) / svc.REQUEST_FILE).meta.get("precheck")
-        data["precheck"] = precheck_service.summarize(stored)
+        meta = md.load(svc.intake_dir(conn, intake_id) / svc.REQUEST_FILE).meta
+        data["precheck"] = precheck_service.summarize(meta.get("precheck"))
+        # 직접 만든 과제를 되돌린 접수면 그 과제 번호 (TODO 171) — 머리에 한 줄
+        data["demoted_from"] = meta.get("demoted_from")
         # 이어진 과제가 아직 있는지 — 과제를 지웠으면 링크 대신 그렇다고 말한다
         linked = row["project_id"] or row["merged_into"]
         data["linked_project"] = None

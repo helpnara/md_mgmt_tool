@@ -2335,7 +2335,8 @@ async function main() {
     const created = await api.get(`/api/projects/${newId}`);
     equal(created.status, "planned", "상태는 예정");
     expect(created.owners.includes("권경락"), "담당자가 넘어온다");
-    expect(created.body.includes("## 이전 과제"), "이전 과제 표시");
+    // 이전 과제는 본문이 아니라 선행 과제 칸으로 잇는다 (TODO 172)
+    expect((created.predecessors ?? []).includes(seeded.projectA), "선행 과제로 이어짐");
     equal(await page.locator(".project-form").count(), 1, "수정 칸이 열려 있다");
     // 보관은 204 라 본문이 없다.
     await fetch(`${BASE}/api/projects/${newId}/archive`, { method: "POST" });
@@ -3862,6 +3863,87 @@ async function main() {
   });
 
   pageErrors.length = errorsBefore30;
+
+  console.log("\n[32] 다년도 과제의 단계 줄기 · 선행 과제 칸 · 스마트과제를 접수로 되돌리기 (TODO 171 · 172)");
+
+  await check("선행 과제가 여럿이고 한 단계에 과제가 여럿이어도 줄기가 단계별로 묶여 보인다 (172)", async () => {
+    const one = await api.post("/api/projects", { title: "1단계 소재 A" });
+    const two = await api.post("/api/projects", { title: "1단계 소재 B" });
+    const mid = await api.post("/api/projects", { title: "2단계 통합", predecessors: [one.id, two.id] });
+    const last = await api.post("/api/projects", { title: "3단계 양산", predecessors: [mid.id] });
+    await go(`#/projects/${mid.id}`);
+    equal((await page.locator(".lineage-line .stage-chip").innerText()).trim(), "2단계", "단계 표시");
+    equal(await page.locator(".lineage-line .lineage-stage").count(), 3, "단계 묶음 셋");
+    const first = page.locator(".lineage-line .lineage-stage").first();
+    equal(await first.locator("a.lineage-item").count(), 2, "1단계에 과제 둘");
+    equal((await page.locator(".lineage-line .lineage-here").innerText()).includes(mid.id), true, "지금 과제 강조");
+    await first.locator("a.lineage-item").first().click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes(`/projects/${one.id}`), `링크 이동: ${page.url()}`);
+    equal((await page.locator(".lineage-line .stage-chip").innerText()).trim(), "1단계", "앞 단계에서도 줄기가 보인다");
+    // 줄이 없는 과제에는 띠가 없다
+    await go(`#/projects/${seeded.projectA}`);
+    equal(await page.locator(".lineage-line").count(), 0, "외톨이 과제는 띠 없음");
+    for (const item of [last, mid, two, one]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
+  });
+
+  await check("수정 칸에서 선행 과제를 골라 칩으로 넣고 빼고 저장한다 (172)", async () => {
+    const before = await api.post("/api/projects", { title: "앞 과제" });
+    const after = await api.post("/api/projects", { title: "뒤 과제" });
+    await go(`#/projects/${after.id}?edit=1`);
+    await page.waitForTimeout(500);
+    const input = page.locator('input[aria-label="선행 과제 번호"]');
+    await input.fill(before.id);
+    await page.waitForTimeout(200);
+    equal(await page.locator(".predecessor-chip").count(), 1, "목록에서 고르면 칩");
+    await input.fill(seeded.projectA);
+    await input.press("Enter");
+    equal(await page.locator(".predecessor-chip").count(), 2, "Enter 로도 칩");
+    await page.locator(".predecessor-chip").nth(1).getByRole("button").click();
+    equal(await page.locator(".predecessor-chip").count(), 1, "× 로 뺀다");
+    await page.locator(".project-form").getByRole("button", { name: "저장" }).click();
+    await page.waitForTimeout(800);
+    equal(JSON.stringify((await api.get(`/api/projects/${after.id}`)).predecessors), JSON.stringify([before.id]), "저장된 선행");
+    equal(await page.locator(".lineage-line").count(), 1, "저장하자 줄기가 선다");
+    for (const item of [after, before]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
+  });
+
+  await check("직접 만든 스마트과제를 접수로 되돌리면 풀의 검토중 접수가 되고 그리로 간다 (171)", async () => {
+    const meta = await api.get("/api/meta");
+    const made = await api.post("/api/projects", { title: "자체 스마트 과제", type: meta.classified_type, body: "## 과제 개요\n\n현장 요청으로 바로 세운 과제\n" });
+    await api.post(`/api/projects/${made.id}/entries`, { date: "2026-09-20", title: "현장 확인", body: "## 내용\n\n라인 3 확인\n" });
+    await go(`#/projects/${made.id}`);
+    await page.getByRole("button", { name: "접수로 되돌리기" }).click();
+    await page.waitForTimeout(500);
+    const panel = page.locator(".demote-panel");
+    equal(await panel.count(), 1, "판이 열린다");
+    expect((await panel.innerText()).includes("진행일지 1건"), "옮겨 갈 것이 보인다");
+    await panel.getByRole("button", { name: "접수로 되돌리기" }).click();
+    await page.waitForTimeout(1200);
+    const hash = decodeURIComponent(page.url().split("#")[1] ?? "");
+    expect(hash.startsWith("/intakes/"), `주소: ${hash}`);
+    expect((await page.locator(".demoted-tag").innerText()).includes(made.id), "되돌림 표시");
+    const intakeId = hash.slice("/intakes/".length);
+    const intake = await api.get(`/api/intakes/${encodeURIComponent(intakeId)}`);
+    equal(intake.status, "reviewing", "검토중");
+    expect(intake.logs.some((log) => log.title === "현장 확인"), "진행일지가 검토 기록으로");
+    equal((await fetch(`${BASE}/api/projects/${made.id}`)).status, 404, "과제는 보관함으로");
+  });
+
+  await check("보고가 있는 과제는 되돌리지 못하고 그 까닭을 말한다 (171)", async () => {
+    const meta = await api.get("/api/meta");
+    const made = await api.post("/api/projects", { title: "보고한 스마트 과제", type: meta.classified_type });
+    await api.post(`/api/projects/${made.id}/reports/draft`, { report_date: "2026-09-15", audience: "팀 주간회의" });
+    await go(`#/projects/${made.id}`);
+    await page.getByRole("button", { name: "접수로 되돌리기" }).click();
+    await page.waitForTimeout(500);
+    const panel = page.locator(".demote-panel");
+    expect((await panel.innerText()).includes("보고"), `사유: ${await panel.innerText()}`);
+    equal(await panel.getByRole("button", { name: "접수로 되돌리기" }).count(), 0, "되돌리기 버튼 없음");
+    await panel.getByRole("button", { name: "닫기" }).click();
+    equal(await page.locator(".demote-panel").count(), 0, "닫힌다");
+    await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+  });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {

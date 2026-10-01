@@ -117,6 +117,17 @@ def _sync_owners(conn: sqlite3.Connection, project_id: str, owners: list[str]) -
         )
 
 
+def _sync_predecessors(conn: sqlite3.Connection, project_id: str, predecessors: list[str]) -> None:
+    """선행 과제 (TODO 172) — 여럿일 수 있다. 자기 자신은 건너뛴다(손으로 고친 파일)."""
+    conn.execute("DELETE FROM project_predecessor WHERE project_id = ?", (project_id,))
+    for predecessor in predecessors:
+        if predecessor and predecessor != project_id:
+            conn.execute(
+                "INSERT OR IGNORE INTO project_predecessor(project_id, predecessor_id) VALUES (?, ?)",
+                (project_id, predecessor),
+            )
+
+
 def _sync_partners(conn: sqlite3.Connection, project_id: str, partners: list[dict]) -> None:
     """유관부서 (TODO 92). (팀, 사람) 한 쌍이 한 줄이다.
 
@@ -324,6 +335,7 @@ def index_project(
     _sync_tags(conn, "project_tag", "project_id", project_id, _as_list(doc.meta.get("tags")))
     _sync_owners(conn, project_id, owners)
     _sync_partners(conn, project_id, _as_partners(doc.meta.get("partners")))
+    _sync_predecessors(conn, project_id, _as_list(doc.meta.get("predecessors")))
 
     latest_entry = _index_entries(conn, project_id, project_dir, problems)
     if latest_entry and (updated_at is None or latest_entry > updated_at):

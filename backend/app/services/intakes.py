@@ -91,6 +91,8 @@ META_ORDER = [
     # 과제를 지워 착수·병합이 풀렸을 때 그 과제 번호와 관계(started/merged) — 보관함에서 과제를
     # 되돌리면 이 접수가 아직 풀에 있을 때 다시 잇는 근거다 (TODO 145)
     "detached_from", "detached_as",
+    # 직접 만든 과제를 접수로 되돌린 경우 그 과제 번호 (TODO 171)
+    "demoted_from",
     # 사전점검 체크리스트 (TODO 155) — 그때의 항목 이름 · 단계 · 점수 · 만점을 함께 적은 스냅샷
     "precheck",
     "tags", "created_by", "created_at", "updated_at",
@@ -1000,6 +1002,116 @@ def promote(conn: sqlite3.Connection, intake_id: str, data: dict[str, Any]) -> s
     index_intake(conn, directory)
     conn.commit()
     return project_id
+
+
+# ── 과제 → 접수로 되돌리기 (TODO 171) ───────────────────────────────────────
+#
+# 접수를 거치지 않고 과제로 바로 만든 스마트과제를 **풀로 되돌린다** — 풀에서 다른 요청과 함께 검토 ·
+# 사전점검 · 판정을 받게. 승격(promote)의 거꾸로다.
+#
+#   * 개요 → 요청 내용, 진행일지 → 검토 기록(태그 "과제 진행일지"), 첨부 → 복사. 같은 폴더 모양이라 링크가 그대로 산다.
+#   * 과제는 **삭제 보관함**으로 간다(보관함에서 되돌릴 수 있다). 과제 번호는 다시 쓰지 않는다(146).
+#   * **보고가 있는 과제는 되돌리지 않는다** — 보고 이력은 "언제 무엇을 보고했는가" 라는 기록이고, 보고까지 한
+#     과제는 이미 착수된 것이다. 접수에서 승격된 과제도 되돌리지 않는다 — 그쪽은 접수의 [재검토] 가 길이다.
+
+TAG_FROM_PROJECT = "과제 진행일지"
+
+
+def demote_plan(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
+    """되돌리기 전에 무엇이 어떻게 되는지 (화면이 확인 판에 그대로 쓴다)."""
+    row = conn.execute("SELECT * FROM project WHERE id = ?", (project_id,)).fetchone()
+    if row is None:
+        raise KeyError(project_id)
+    count = lambda sql: conn.execute(sql, (project_id,)).fetchone()[0]  # noqa: E731
+    reports = count("SELECT COUNT(*) FROM report WHERE project_id = ?")
+    entries = count("SELECT COUNT(*) FROM entry WHERE project_id = ?")
+    attachments = count("SELECT COUNT(*) FROM attachment WHERE project_id = ?")
+    successors = count("SELECT COUNT(*) FROM project_predecessor WHERE predecessor_id = ?")
+    reason = None
+    if row["intake_id"]:
+        reason = (f"접수 {row['intake_id']} 에서 승격된 과제입니다 — 접수 화면의 [재검토] 로 되돌리세요"
+                  " (과제를 지우면 그 접수가 풀로 돌아갑니다).")
+    elif reports:
+        reason = f"보고 이력이 {reports}건 있는 과제는 되돌릴 수 없습니다 — 이미 보고한 과제는 착수된 것입니다."
+    received_on = (row["created_at"] or "")[:10] or today()
+    return {
+        "project_id": project_id,
+        "title": row["title"],
+        "eligible": reason is None,
+        "reason": reason,
+        "entries": entries,
+        "attachments": attachments,
+        "reports": reports,
+        "successors": successors,
+        "received_on": received_on,
+        "next_intake_id": next_intake_id(intake_year(received_on)),
+    }
+
+
+def demote(conn: sqlite3.Connection, project_id: str) -> str:
+    """과제를 접수로 되돌린다. 새 접수 번호를 돌려준다."""
+    from . import projects as projects_service
+
+    plan = demote_plan(conn, project_id)
+    if not plan["eligible"]:
+        raise ValueError(plan["reason"])
+    source = projects_service.project_dir(conn, project_id)
+    doc = md.load(source / "index.md")
+    meta = doc.meta
+    intake_id = create_intake(conn, {
+        "title": str(meta.get("title") or plan["title"]),
+        **{key: meta.get(key) for key in CLASSIFICATION_KEYS},
+        "start_date": meta.get("start_date"),
+        "due_date": meta.get("due_date"),
+        # 팀이 적어 둔 기대효과를 요청 효과 자리에 — 풀에서 견줄 수 있게(과제로 다시 갈 때는 옮기지 않는다)
+        "effect_request": meta.get("effect_expected"),
+        "tags": list(meta.get("tags") or []),
+        # 처음 과제로 등록한 날을 접수일로 — 풀의 "경과" 가 실제로 기다린 날수가 되게
+        "received_on": plan["received_on"],
+        "body": doc.body,
+    })
+    directory = intake_dir(conn, intake_id)
+    # 첨부 — 과제와 같은 assets/ 모양이라 개요 · 기록의 링크가 그대로 산다
+    if (source / "assets").exists():
+        shutil.copytree(source / "assets", directory / "assets", dirs_exist_ok=True)
+    # 진행일지 → 검토 기록 (logs/ 의 같은 이름 · 같은 상대 경로)
+    moved = 0
+    for path in sorted((source / "logs").glob("*.md")) if (source / "logs").exists() else []:
+        try:
+            entry = md.load(path)
+        except Exception:
+            continue
+        tags = [str(tag) for tag in (entry.meta.get("tags") or [])]
+        if STATUS_CHANGE_TAG not in tags:
+            tags.append(TAG_FROM_PROJECT)
+        log_meta = {
+            "date": str(entry.meta.get("date") or path.name[:10])[:10],
+            "title": entry.meta.get("title") or path.stem,
+            "author": entry.meta.get("author"),
+            "tags": tags,
+            "created_at": entry.meta.get("created_at"),
+            "updated_at": entry.meta.get("updated_at"),
+        }
+        target = paths.unique_path(directory / "logs", path.stem, ".md")
+        md.save(target, md.MarkdownDoc(log_meta, entry.body))
+        moved += 1
+    # 접수 쪽 표시 — 검토중으로 풀에 서고, 어느 과제에서 왔는지 남긴다
+    request = directory / REQUEST_FILE
+    request_doc = md.load(request)
+    request_meta = md.merge_meta(request_doc.meta, {"status": "reviewing", "demoted_from": project_id})
+    request_meta["updated_at"] = now_iso()
+    md.save(request, md.MarkdownDoc(_ordered(request_meta), request_doc.body))
+    _log_line(
+        directory,
+        f"(되돌림) 과제 {project_id} 에서 접수로",
+        f"직접 만든 과제 **{project_id} {plan['title']}** 을(를) 풀로 되돌렸다. 개요는 요청 내용으로, "
+        f"진행일지 {moved}건은 검토 기록으로(태그 `{TAG_FROM_PROJECT}`), 첨부는 복사했다. 과제는 삭제 보관함에 있다.\n",
+    )
+    # 과제는 보관함으로 — 번호는 다시 쓰지 않는다
+    projects_service.archive_project(conn, project_id)
+    index_intake(conn, directory)
+    conn.commit()
+    return intake_id
 
 
 # ── 색인 ────────────────────────────────────────────────────────────────────

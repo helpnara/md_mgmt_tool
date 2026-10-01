@@ -135,6 +135,15 @@ CREATE TABLE IF NOT EXISTS attachment (
 );
 
 -- 과제 담당자 (한 명부터 여러 명까지)
+-- 선행 과제 (TODO 172) — 다년도 과제의 앞 단계. **여럿일 수 있다**(앞 단계의 과제 둘을 이어받는 과제).
+-- 선행 쪽에는 FK 를 걸지 않는다 — 보관함에 간 과제를 가리켜도 줄은 남아 "찾을 수 없음" 으로 보인다.
+CREATE TABLE IF NOT EXISTS project_predecessor (
+  project_id     TEXT REFERENCES project(id) ON DELETE CASCADE,
+  predecessor_id TEXT NOT NULL,
+  PRIMARY KEY(project_id, predecessor_id)
+);
+CREATE INDEX IF NOT EXISTS idx_predecessor ON project_predecessor(predecessor_id);
+
 CREATE TABLE IF NOT EXISTS project_owner (
   project_id TEXT REFERENCES project(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,

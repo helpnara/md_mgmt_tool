@@ -230,6 +230,13 @@ def apply(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
 
     rewritten = trash_service.rewrite_origins(folder_map)
 
+    # 다른 파일이 적어 둔 옛 번호(후속 과제의 선행 · 접수의 과제 링크)도 새 번호로 (TODO 172)
+    from . import projects as projects_service
+
+    projects_service.rewrite_project_refs(
+        conn, {item["id"]: item["new_id"] for item in [*done, *trashed_done]}
+    )
+
     # 파일이 원본이다. 전부 옮긴 뒤 색인을 통째로 다시 만든다.
     reindex_all(conn)
     conn.commit()
@@ -353,6 +360,10 @@ def year_apply(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
     from . import trash as trash_service
 
     trash_service.rewrite_origins({preview["dir_name"]: new_dir_name})
+    # 후속 과제의 선행 · 접수의 과제 링크도 새 번호로 (TODO 172)
+    from . import projects as projects_service
+
+    projects_service.rewrite_project_refs(conn, {project_id: preview["new_id"]})
 
     reindex_all(conn)
     conn.commit()

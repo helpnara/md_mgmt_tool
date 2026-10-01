@@ -45,6 +45,8 @@ class ProjectCreate(BaseModel):
     category: str | None = None
     delivery: str | None = None
     cost_kind: str | None = None
+    # 선행 과제 번호들 — 다년도 과제의 앞 단계, 여럿일 수 있다 (TODO 172)
+    predecessors: list[str] = Field(default_factory=list)
 
 
 class ProjectUpdate(BaseModel):
@@ -67,6 +69,8 @@ class ProjectUpdate(BaseModel):
     category: str | None = None
     delivery: str | None = None
     cost_kind: str | None = None
+    # 선행 과제들 (TODO 172). [] 을 보내면 모두 끊는다.
+    predecessors: list[str] | None = None
 
     def changes(self) -> dict[str, Any]:
         # 보내지 않은 항목만 건너뛴다. 보낸 값이 null 이면 그 항목을 비우겠다는 뜻이다

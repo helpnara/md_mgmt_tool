@@ -146,6 +146,10 @@ export interface Project {
   cost_kind?: string | null;
   /** 이 과제가 승격된 접수 번호 (TODO 136). 직접 만든 과제는 null */
   intake_id?: string | null;
+  /** 선행 과제 번호들 — 다년도 과제의 앞 단계, 여럿일 수 있다 (TODO 172) */
+  predecessors?: string[];
+  /** 다년도 과제의 줄기 (상세 조회에서만, TODO 172) */
+  lineage?: Lineage;
   /** 이 과제로 승격된 접수 · 이 과제에 병합된 접수 (상세 조회에서만) */
   intakes?: IntakeLink[];
   tags: string[];
@@ -710,6 +714,8 @@ export interface IntakeAttachment {
 }
 
 export interface IntakeDetail extends Intake {
+  /** 직접 만든 과제를 되돌린 접수면 그 과제 번호 (TODO 171) */
+  demoted_from?: string | null;
   body: string;
   file_mtime: number;
   logs: IntakeLog[];
@@ -892,4 +898,39 @@ export interface UnfinishedDraft {
   report_date: string;
   /** 보고일이 지났으면 며칠이나 지났는지. 아직 안 지났으면 0 */
   overdue_days: number;
+}
+
+
+/** 다년도 과제의 줄기 (TODO 172) — 앞 단계들(오래된 것부터) · 바로 다음 단계 · 이 과제의 단계 번호 */
+export interface LineageItem {
+  id: string;
+  title: string | null;
+  status: string | null;
+  start_date?: string | null;
+  /** 보관함에 있거나 찾을 수 없는 과제 */
+  missing?: boolean;
+  /** 지금 보고 있는 과제 */
+  here?: boolean;
+}
+export interface Lineage {
+  /** 이 과제의 단계 — 이어진 과제가 없으면(단년도) null */
+  stage: number | null;
+  /** 이어진 과제 전부를 단계별로 — 한 단계에 여럿일 수 있다 */
+  stages: { stage: number; items: LineageItem[] }[];
+  predecessors: string[];
+  successors: string[];
+}
+
+/** 과제 → 접수로 되돌리기 미리보기 (TODO 171) */
+export interface DemotePlan {
+  project_id: string;
+  title: string;
+  eligible: boolean;
+  reason: string | null;
+  entries: number;
+  attachments: number;
+  reports: number;
+  successors: number;
+  received_on: string;
+  next_intake_id: string;
 }

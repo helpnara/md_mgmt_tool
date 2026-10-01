@@ -94,6 +94,8 @@ META_ORDER = [
     "no_report", "no_effect", "partners",
     # 이 과제가 어느 접수에서 승격됐는가 (TODO 136). 직접 만든 과제는 비어 있다.
     "intake_id",
+    # 선행 과제 — 다년도 과제의 앞 단계 번호들 (TODO 172). 1단계면 비어 있다. 여럿일 수 있다.
+    "predecessors",
     "created_by", "created_at", "updated_at",
 ]
 
@@ -278,6 +280,9 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     project_type = data.get("type") or None
     if project_type and project_type not in settings_service.type_keys():
         raise ValueError(f"알 수 없는 속성: {project_type}")
+    # 선행 과제 (TODO 172) — 폴더를 만들기 전에 본다(거절하면 빈 폴더가 남지 않게).
+    # 새 과제는 아직 번호가 없으므로 고리가 생길 수 없다. 있는 과제인지만 본다.
+    predecessors = check_predecessors(conn, None, data.get("predecessors"))
 
     # 번호의 연도는 **등록한 날이 아니라 착수년도**다 (TODO 95).
     project_id = next_project_id(project_year(data.get("start_date")))
@@ -310,6 +315,7 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         **{key: normalize_label(data.get(key)) for key in CLASSIFICATION_KEYS},
         # 접수에서 승격된 과제면 그 접수 번호 (TODO 136)
         "intake_id": (str(data.get("intake_id") or "").strip() or None),
+        "predecessors": predecessors,
         # 단순 현황 관리를 과제로 세운 경우가 있다. 그런 과제는 보고 대상 후보에서 뺀다
         # — 매주 "이건 보고 안 해도 되는데" 를 눈으로 걸러 내지 않아도 되게 (TODO 80).
         "no_report": bool(data.get("no_report")),
@@ -402,6 +408,151 @@ def log_system_line(directory: Path, title: str, body: str) -> None:
         pass
 
 
+def check_predecessors(conn: sqlite3.Connection, project_id: str | None, value: object) -> list[str]:
+    """선행 과제 번호들을 받는다 (TODO 172). 비우면 [].
+
+    * 여럿일 수 있다 — 앞 단계의 과제 둘을 이어받는 과제가 있다.
+    * 있는 과제여야 한다 — 없는 번호를 적어 두면 위쪽 줄이 늘 "찾을 수 없음" 이 된다.
+    * 자기 자신이나 **자기의 후속 과제**를 선행으로 둘 수 없다 — 고리가 생기면 단계를 셀 수 없다.
+    """
+    if value is None or value == "":
+        return []
+    items = value if isinstance(value, list) else str(value).split(",")
+    out: list[str] = []
+    for item in items:
+        # 화면이 "2025-003 고강도 소재" 처럼 이름까지 보내도 번호만 쓴다
+        text = str(item or "").strip().split()[0] if str(item or "").strip() else ""
+        if not text or text in out:
+            continue
+        if project_id is not None and text == project_id:
+            raise ValueError("자기 자신을 선행 과제로 둘 수 없습니다.")
+        if conn.execute("SELECT 1 FROM project WHERE id = ?", (text,)).fetchone() is None:
+            raise ValueError(f"선행 과제 {text} 를 찾을 수 없습니다.")
+        if project_id is not None and project_id in _ancestors(conn, text):
+            raise ValueError(f"{text} 는 이 과제의 후속 과제라 선행 과제로 둘 수 없습니다.")
+        out.append(text)
+    return out
+
+
+def _predecessors_of(conn: sqlite3.Connection, project_id: str) -> list[str]:
+    return [row[0] for row in conn.execute(
+        "SELECT predecessor_id FROM project_predecessor WHERE project_id = ? ORDER BY predecessor_id", (project_id,)
+    ).fetchall()]
+
+
+def _successors_of(conn: sqlite3.Connection, project_id: str) -> list[str]:
+    return [row[0] for row in conn.execute(
+        "SELECT project_id FROM project_predecessor WHERE predecessor_id = ? ORDER BY project_id", (project_id,)
+    ).fetchall()]
+
+
+def _ancestors(conn: sqlite3.Connection, project_id: str) -> set[str]:
+    """이 과제의 앞 단계 전부(선행의 선행 …)."""
+    seen: set[str] = set()
+    stack = _predecessors_of(conn, project_id)
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        stack.extend(_predecessors_of(conn, current))
+    return seen
+
+
+LINEAGE_LIMIT = 60  # 한 줄기에 이보다 많으면 무언가 잘못 이어진 것이다 — 화면이 무거워지지 않게 끊는다
+
+
+def lineage(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
+    """다년도 과제의 줄기 (TODO 172) — 선행 · 후속으로 이어진 과제 **전부**를 단계별로.
+
+    한 단계에 과제가 여럿일 수 있고(1단계 둘을 이어받는 2단계), 선행도 여럿일 수 있다.
+    단계는 **선행을 따라 가장 길게 거슬러 올라간 길이 + 1** — 1단계 과제와 2단계 과제를 함께 이어받으면 3단계.
+    선행이 보관함에 있거나 지워졌으면 그 자리에 `missing` 으로 남긴다 — 줄기가 끊겼다는 사실도 보여야 한다.
+    """
+    # 이어진 과제를 모두 모은다(선행 · 후속 양쪽으로)
+    nodes: dict[str, dict[str, Any]] = {}
+    queue = [project_id]
+    while queue and len(nodes) < LINEAGE_LIMIT:
+        current = queue.pop(0)
+        if current in nodes:
+            continue
+        row = conn.execute("SELECT id, title, status, start_date FROM project WHERE id = ?", (current,)).fetchone()
+        nodes[current] = (
+            {"id": row["id"], "title": row["title"], "status": row["status"], "start_date": row["start_date"], "missing": False}
+            if row else {"id": current, "title": None, "status": None, "start_date": None, "missing": True}
+        )
+        if row is None:
+            continue  # 찾을 수 없는 과제 너머로는 가지 않는다
+        queue.extend(_predecessors_of(conn, current))
+        queue.extend(_successors_of(conn, current))
+    if len(nodes) <= 1:
+        return {"stage": None, "stages": [], "predecessors": [], "successors": []}
+
+    # 단계 — 가장 긴 선행 길이 + 1 (고리는 막아 두었지만, 손으로 고친 파일에 대비해 깊이를 끊는다)
+    stage: dict[str, int] = {}
+
+    def depth(node: str, trail: frozenset[str]) -> int:
+        if node in stage:
+            return stage[node]
+        if node in trail or nodes[node]["missing"]:
+            return 1
+        preds = [p for p in _predecessors_of(conn, node) if p in nodes]
+        value = 1 + max((depth(p, trail | {node}) for p in preds), default=0)
+        stage[node] = value
+        return value
+
+    for node in nodes:
+        depth(node, frozenset())
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for node, info in nodes.items():
+        grouped.setdefault(stage.get(node, 1), []).append({**info, "here": node == project_id})
+    return {
+        "stage": stage.get(project_id),
+        "stages": [
+            {"stage": number, "items": sorted(items, key=lambda item: item["id"])}
+            for number, items in sorted(grouped.items())
+        ],
+        "predecessors": _predecessors_of(conn, project_id),
+        "successors": _successors_of(conn, project_id),
+    }
+
+
+def rewrite_project_refs(conn: sqlite3.Connection, mapping: dict[str, str]) -> int:
+    """과제 번호가 바뀌었을 때 **다른 파일이 적어 둔 그 번호**를 고친다 (TODO 172).
+
+    번호 일괄 변경 · 연도 맞추기가 과제 자신의 id 와 폴더만 바꿔, 후속 과제의 `predecessors` 와 접수의
+    `project_id` · `merged_into` · `demoted_from` 이 옛 번호를 가리킨 채 남았다(접수 링크는 136 부터 있던 틈).
+    """
+    if not mapping:
+        return 0
+    settings = get_settings()
+    changed = 0
+    for path in settings.projects_dir.glob("*/index.md"):
+        try:
+            doc = md.load(path)
+        except Exception:  # 읽지 못하는 파일은 색인이 따로 알린다
+            continue
+        old = doc.meta.get("predecessors")
+        if not isinstance(old, list) or not any(str(item) in mapping for item in old):
+            continue
+        doc.meta["predecessors"] = [mapping.get(str(item), str(item)) for item in old]
+        md.save(path, doc)
+        changed += 1
+    for path in settings.intakes_dir.glob("*/request.md"):
+        try:
+            doc = md.load(path)
+        except Exception:
+            continue
+        updates = {key: mapping[str(doc.meta.get(key))]
+                   for key in ("project_id", "merged_into", "demoted_from") if str(doc.meta.get(key) or "") in mapping}
+        if not updates:
+            continue
+        doc.meta.update(updates)
+        md.save(path, doc)
+        changed += 1
+    return changed
+
+
 def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str, Any]) -> None:
     directory = project_dir(conn, project_id)
     index_md = directory / "index.md"
@@ -429,6 +580,8 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
             updates[key] = normalize_label(updates[key])
     # 승격으로 붙은 접수 번호는 화면에서 고치지 않는다 — 양쪽 링크가 어긋난다.
     updates.pop("intake_id", None)
+    if "predecessors" in updates:
+        updates["predecessors"] = check_predecessors(conn, project_id, updates["predecessors"])
     if "owners" in updates or "owner" in updates:
         updates["owners"] = normalize_owners(updates.pop("owners", None) or updates.pop("owner", None))
     if "completed_at" in updates:
@@ -478,15 +631,14 @@ def clone_project(conn: sqlite3.Connection, source_id: str) -> str:
     같다. 지금까지는 처음부터 다시 쳤다. **가져오는 것**은 그 정보와 개요 본문이고,
     **가져오지 않는 것**은 진행일지·보고·첨부·효과 금액·날짜다 — 새 과제의 이력은 비어
     있어야 하고, 효과와 기간은 새로 정할 일이다. 시작일을 비우므로 번호는 올해로 붙는다.
-    개요 맨 아래에 이전 과제 번호를 남겨 두 과제가 이어져 있음이 파일에도 보이게 한다.
+    원래 과제를 **선행 과제**로 이어(172) 두 과제가 한 줄기임이 파일과 상세 위쪽에 보이게 한다.
     """
     row = conn.execute("SELECT * FROM project WHERE id = ?", (source_id,)).fetchone()
     if row is None:
         raise KeyError(source_id)
     doc = md.load(project_dir(conn, source_id) / "index.md")
     meta = doc.meta
-    body = (doc.body or "").rstrip("\n")
-    body += f"\n\n## 이전 과제\n\n- {source_id} {row['title']}\n"
+    body = doc.body or ""
     return create_project(
         conn,
         {
@@ -501,6 +653,9 @@ def clone_project(conn: sqlite3.Connection, source_id: str) -> str:
             "no_effect": bool(meta.get("no_effect")),
             # 같은 줄기의 과제라 분류도 같다 (TODO 136). 접수 번호는 넘기지 않는다.
             **{key: meta.get(key) for key in CLASSIFICATION_KEYS},
+            # 다음 단계 과제 — 원래 과제를 선행으로 잇는다 (TODO 172). 개요 끝에 "## 이전 과제" 를
+            # 적던 것(109)을 대신한다. 상세 위쪽에 줄기가 서고, 아니면 [과제 정보 수정] 에서 지운다.
+            "predecessors": [source_id],
             "body": body,
         },
     )
