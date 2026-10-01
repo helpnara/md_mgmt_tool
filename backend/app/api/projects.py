@@ -8,6 +8,7 @@ from ..config import CLASSIFICATION_KEYS, FINISHED_STATUSES, STATUS_KEYS, get_se
 from ..deps import get_db
 from ..vault.markdown import ExternalChangeError
 from ..vault.paths import FileInUseError
+from ..services import period as period_service
 from ..services import projects as svc
 from ..services import renumber as renumber_service
 from ..services import search as search_svc
@@ -17,10 +18,9 @@ from ..schemas import ProjectCreate, ProjectUpdate
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 def year_clause() -> str:
-    """과제 번호 앞 네 자리로 연도를 가른다 (`2026-001`, `2026-소재-001` 둘 다).
+    """번호의 연도(= 착수년도) — 과제목록의 [신규 착수만] 거르기가 쓴다 (TODO 181).
 
-    시작일이 아니라 **번호의 연도**를 쓴다. 번호는 만들 때 정해져 바뀌지 않으므로
-    "그 해에 시작한 과제" 라는 뜻이 흔들리지 않는다.
+    연도 거르기 자체는 **수행기간**으로 바뀌었다(`period` — 다년도 과제는 해마다 보인다).
     """
     return "SUBSTR(p.id, 1, 4) = ?"
 
@@ -180,6 +180,8 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, stages: dict[str, int
         "intake_id": row["intake_id"],
         # 선행 과제들 (TODO 172)
         "predecessors": svc._predecessors_of(conn, row["id"]),
+        # 효과 금액을 세는 해 — 끝나는 해 (TODO 181). 목록(연도 거르기)에서만 온다.
+        "effect_year": row["y_effect_year"] if "y_effect_year" in row.keys() else None,
         # 다년도 과제의 단계 — 이어진 과제가 없으면 null (TODO 175)
         "stage": stages.get(row["id"]),
         "tags": _tags(conn, row["id"]),
@@ -213,8 +215,10 @@ def list_projects(
     partner: str | None = None,
     q: str | None = None,
     due: str | None = None,
-    # 과제 번호의 연도 (2026-001 → 2026). 비우면 전체.
+    # 연도 — 수행기간이 그 해와 겹치는 과제 (TODO 181). 비우면 전체. 상태 · 효과 거르기도 **그 해 기준**이 된다.
     year: str | None = Query(None, pattern=r"^(\d{4})?$"),
+    # 그 해에 새로 착수한 과제만 — 번호의 연도 (TODO 181). 홈의 "신규 N" 이 이리로 이어 준다.
+    new: str | None = Query(None, pattern="^(1)?$"),
     # **완료일**의 연도 (TODO 104). 홈의 "올해 끝낸 과제" 가 이리로 이어 준다.
     done_year: str | None = Query(None, pattern=r"^(\d{4})?$"),
     # 완료했는데 실증효과를 안 적은 과제만 (TODO 106-C). "none" 하나만 받는다.
@@ -237,11 +241,13 @@ def list_projects(
     order: str | None = Query(None, pattern="^(asc|desc)$"),
 ) -> list[dict]:
     where, params = [], []
+    # 그 해의 과제 · 그 해의 상태 · 그 해에 세는 효과 (TODO 181) — 홈 · 대시보드와 같은 모듈
+    source, source_params = period_service.scope(year or None)
     if effect == "expected":
         # 홈의 분모(ee_n)와 **같은 조건**이어야 한다 — 세는 수와 거르는 수가 같아야 한다.
-        where.append("COALESCE(p.effect_expected, 0) > 0")
+        where.append("COALESCE(p.y_ee, 0) > 0")
     elif effect == "verified":
-        where.append("COALESCE(p.effect_verified, 0) > 0")
+        where.append("COALESCE(p.y_ev, 0) > 0")
     if no_effect == "none":
         where.append("p.no_effect = 1")  # 비대상만
     elif no_effect == "only":
@@ -271,7 +277,7 @@ def list_projects(
     elif from_intake == "no":
         where.append("(p.intake_id IS NULL OR p.intake_id = '')")
     if status:
-        where.append("p.status = ?")
+        where.append("p.y_status = ?")
         params.append(status)
     if type == "none":
         # 속성을 아직 안 정한 과제만. 대시보드의 '미지정' 칸이 이 값을 쓴다.
@@ -306,14 +312,15 @@ def list_projects(
         params.append(owner)
     if due in DUE_FILTERS:
         where.append(DUE_FILTERS[due])
-    if year:
+    if year and new:
         where.append(year_clause())
         params.append(year)
     if done_year:
         where.append("p.status = 'done' AND SUBSTR(p.completed_at, 1, 4) = ?")
         params.append(done_year)
     if verified == "none":
-        where.append("p.status = 'done' AND (p.effect_verified IS NULL OR p.effect_verified <= 0)")
+        # 홈의 done_unverified 와 같은 조건 — 그 해에 끝낸 과제 중 실증 미입력 (181: 그 해의 상태)
+        where.append("p.y_status = 'done' AND (p.effect_verified IS NULL OR p.effect_verified <= 0)")
     if q and q.strip():
         # 과제 본문뿐 아니라 진행일지·첨부 파일명에 걸려도 그 과제를 남긴다.
         matched = search_svc.project_ids_matching(conn, q.strip())
@@ -331,7 +338,7 @@ def list_projects(
     if order is not None:
         clause_order = _flip(clause_order, order)
     rows = conn.execute(
-        f"SELECT p.* FROM project p {clause} ORDER BY {clause_order}", [*params, *order_params]
+        f"SELECT p.* FROM {source} {clause} ORDER BY {clause_order}", [*source_params, *params, *order_params]
     ).fetchall()
     stages = svc.stage_map(conn)
     return [_serialize(conn, row, stages) for row in rows]

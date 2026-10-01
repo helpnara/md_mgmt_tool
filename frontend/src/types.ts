@@ -150,6 +150,8 @@ export interface Project {
   predecessors?: string[];
   /** 다년도 과제의 단계 — 이어진 과제가 없으면 null (TODO 175) */
   stage?: number | null;
+  /** 효과 금액을 세는 해 — 끝나는 해 (TODO 181). 과제목록에서만 온다 */
+  effect_year?: string | null;
   /** 다년도 과제의 줄기 (상세 조회에서만, TODO 172) */
   lineage?: Lineage;
   /** 이 과제로 승격된 접수 · 이 과제에 병합된 접수 (상세 조회에서만) */
@@ -549,6 +551,8 @@ export interface HomeTeam {
   effect_verified_projects?: number;
   /** 완료일 기준으로 센 완료 수 (TODO 104). done 은 번호의 연도 기준이라 둘이 다르다. */
   done_in_year?: number;
+  /** 그 해에 새로 착수한 과제 — 번호의 연도 (TODO 181) */
+  new?: number;
   /** 완료했는데 실증효과를 안 적은 과제 수 (TODO 106-C) */
   done_unverified?: number;
 }

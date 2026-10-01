@@ -7,7 +7,9 @@
 
 | 무엇 | 기준 | 왜 |
 |---|---|---|
-| 과제 수 · 완료 · 효과 금액 | **과제 번호 앞 네 자리** | 대시보드·목록과 같은 기준이어야 수가 어긋나지 않는다 (DESIGN 5.8) |
+| 과제 수 · 상태 | **수행기간이 그 해와 겹치는 과제**(TODO 181, `period`) — 다년도 과제는 해마다 하나씩 | 대시보드·목록과 같은 기준이어야 수가 어긋나지 않는다 (DESIGN 5.8) |
+| 효과 금액 | **끝나는 해**(완료년도, 아니면 마감년도) — 기대 · 실증을 같은 해에 | 해마다 겹쳐 세지 않게. 계획 대비 실적을 그 해에 맞춰 본다 (181) |
+| 신규 | **과제 번호 앞 네 자리**(착수년도) | 그 해에 새로 시작한 과제 (181) |
 | 보고 횟수 | **보고일(`report_date`)의 연도** | "올해 몇 번 보고했나"는 보고한 날로 세는 것이 자연스럽다 |
 
 둘을 억지로 하나로 맞추면 어느 한쪽이 이상해진다. 대신 **화면이 이 사실을 글자로 밝힌다.**
@@ -25,6 +27,7 @@ from datetime import date as date_cls
 
 from ..config import CLASSIFICATION_KEYS, CLASSIFIED_TYPE, FINISHED_STATUSES, STATUS_KEYS, STATUSES
 from . import intakes as intakes_service
+from . import period as period_service
 from . import reports as reports_service
 from . import settings as settings_service
 
@@ -59,45 +62,43 @@ def _full(counts: dict[str, int] | None) -> dict[str, int]:
 
 
 def _year_clause(year: str | None, alias: str = "p") -> tuple[str, list]:
-    """과제 연도 조건. 과제 번호 앞 네 자리를 본다 (dashboard 와 같은 기준)."""
-    if not year:
-        return "", []
-    return f" AND SUBSTR({alias}.id, 1, 4) = ?", [year]
+    """과제 연도 조건 — 수행기간이 그 해와 겹치는 과제 (TODO 181, `period` 하나가 정한다)."""
+    return period_service.overlap(year, alias)
 
 
 def years(conn: sqlite3.Connection) -> list[str]:
-    """과제가 실제로 있는 해. 최근 것부터."""
-    rows = conn.execute(
-        "SELECT DISTINCT SUBSTR(id, 1, 4) AS y FROM project"
-        " WHERE SUBSTR(id, 1, 4) GLOB '[0-9][0-9][0-9][0-9]' ORDER BY y DESC"
-    )
-    return [row["y"] for row in rows]
+    """고를 수 있는 해 — 수행기간이 걸친 해 전부. 최근 것부터 (TODO 181)."""
+    return period_service.years(conn)
 
 
 def _team(conn: sqlite3.Connection, year: str | None, period: str | None = None) -> dict:
-    clause, params = _year_clause(year)
+    # 그 해의 과제 · 그 해의 상태 · 그 해에 세는 효과 금액 (TODO 181)
+    source, params = period_service.scope(year)
     row = conn.execute(
         "SELECT COUNT(*) AS total,"
-        f"       SUM(CASE WHEN status = '{_DONE}' THEN 1 ELSE 0 END) AS done,"
-        "       SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,"
-        "       COALESCE(SUM(effect_expected), 0) AS effect_expected,"
-        "       COALESCE(SUM(effect_verified), 0) AS effect_verified,"
-        "       SUM(CASE WHEN COALESCE(effect_expected, 0) > 0 THEN 1 ELSE 0 END) AS ee_n,"
-        "       SUM(CASE WHEN COALESCE(effect_verified, 0) > 0 THEN 1 ELSE 0 END) AS ev_n,"
+        f"       SUM(CASE WHEN y_status = '{_DONE}' THEN 1 ELSE 0 END) AS done,"
+        "       SUM(CASE WHEN y_status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,"
+        "       SUM(y_new) AS new_count,"
+        "       COALESCE(SUM(y_ee), 0) AS effect_expected,"
+        "       COALESCE(SUM(y_ev), 0) AS effect_verified,"
+        "       SUM(CASE WHEN COALESCE(y_ee, 0) > 0 THEN 1 ELSE 0 END) AS ee_n,"
+        "       SUM(CASE WHEN COALESCE(y_ev, 0) > 0 THEN 1 ELSE 0 END) AS ev_n,"
         # 완료했는데 실증효과를 안 적은 과제 (TODO 106-C). 홈이 세어 두어야 연말에 빈칸을 만난다.
         # **효과성 관리 비대상은 뺀다** (TODO 125) — 금액으로 재지 않는 과제가 여기 계속
         # 남으면 숫자가 줄지 않고, 줄지 않는 경고는 곧 안 보게 된다.
-        f"       SUM(CASE WHEN status = '{_DONE}' AND no_effect = 0"
+        f"       SUM(CASE WHEN y_status = '{_DONE}' AND no_effect = 0"
         "             AND COALESCE(effect_verified, 0) <= 0 THEN 1 ELSE 0 END) AS done_unverified,"
         # 효과 금액으로 관리하는 과제 수 — 분모를 "전체" 라고 적으면 비대상까지 센 것처럼 읽힌다.
         "       SUM(CASE WHEN no_effect = 0 THEN 1 ELSE 0 END) AS managed_n"
-        f" FROM project p WHERE 1=1{clause}",
+        f" FROM {source}",
         params,
     ).fetchone()
     return {
         "total": row["total"] or 0,
         "done": row["done"] or 0,
         "in_progress": row["in_progress"] or 0,
+        # 그 해에 새로 착수한 과제 — 번호의 연도 (TODO 181). 연도를 고르지 않으면 0.
+        "new": row["new_count"] or 0,
         "effect_expected": round(row["effect_expected"] or 0, 2),
         "effect_verified": round(row["effect_verified"] or 0, 2),
         # 효과 금액에는 **분모를 함께 보낸다** (TODO 86). 기대와 실증을 화살표로 잇기만 하면
@@ -188,21 +189,21 @@ def _members(conn: sqlite3.Connection, year: str | None, period: str | None = No
 
     여기에 **역량 이력 건수**를 한 칸 더 붙였다 (TODO 89).
     """
-    clause, params = _year_clause(year)
+    source, params = period_service.scope(year)
     activities = _activity_counts(conn, year, period)
     rows = conn.execute(
         "SELECT po.name AS name, COUNT(*) AS total,"
-        "       COALESCE(SUM(p.effect_expected), 0) AS effect_expected,"
-        "       COALESCE(SUM(p.effect_verified), 0) AS effect_verified"
-        " FROM project_owner po JOIN project p ON p.id = po.project_id"
-        f" WHERE 1=1{clause} GROUP BY po.name",
+        "       COALESCE(SUM(p.y_ee), 0) AS effect_expected,"
+        "       COALESCE(SUM(p.y_ev), 0) AS effect_verified"
+        f" FROM project_owner po JOIN {source} ON p.id = po.project_id"
+        " GROUP BY po.name",
         params,
     ).fetchall()
     statuses = _by_status(
         conn.execute(
-            "SELECT po.name AS name, p.status AS status, COUNT(*) AS n"
-            " FROM project_owner po JOIN project p ON p.id = po.project_id"
-            f" WHERE 1=1{clause} GROUP BY po.name, p.status",
+            "SELECT po.name AS name, p.y_status AS status, COUNT(*) AS n"
+            f" FROM project_owner po JOIN {source} ON p.id = po.project_id"
+            " GROUP BY po.name, p.y_status",
             params,
         ).fetchall(),
         "name",
@@ -241,21 +242,21 @@ def _members(conn: sqlite3.Connection, year: str | None, period: str | None = No
 
 def _types(conn: sqlite3.Connection, year: str | None) -> list[dict]:
     """속성별 과제 수와 효과 금액. 상부 보고에서 자주 요구되는 절단면이다."""
-    clause, params = _year_clause(year)
+    source, params = period_service.scope(year)
     rows = {
         (row["type"] or ""): row
         for row in conn.execute(
             "SELECT type, COUNT(*) AS n,"
-            "       COALESCE(SUM(effect_expected), 0) AS ee,"
-            "       COALESCE(SUM(effect_verified), 0) AS ev"
-            f" FROM project p WHERE 1=1{clause} GROUP BY type",
+            "       COALESCE(SUM(y_ee), 0) AS ee,"
+            "       COALESCE(SUM(y_ev), 0) AS ev"
+            f" FROM {source} GROUP BY type",
             params,
         )
     }
     statuses = _by_status(
         conn.execute(
-            "SELECT COALESCE(type, '') AS type, status, COUNT(*) AS n"
-            f" FROM project p WHERE 1=1{clause} GROUP BY type, status",
+            "SELECT COALESCE(type, '') AS type, y_status AS status, COUNT(*) AS n"
+            f" FROM {source} GROUP BY type, y_status",
             params,
         ).fetchall(),
         "type",
@@ -294,18 +295,18 @@ def _groups(conn: sqlite3.Connection, year: str | None) -> list[dict]:
 
     **그룹은 자유 입력이라 수가 늘 수 있다.** 화면이 접어서 보여 준다.
     """
-    clause, params = _year_clause(year)
+    source, params = period_service.scope(year)
     rows = conn.execute(
         "SELECT COALESCE(NULLIF(TRIM(grp), ''), '') AS g, COUNT(*) AS n,"
-        "       COALESCE(SUM(effect_expected), 0) AS ee,"
-        "       COALESCE(SUM(effect_verified), 0) AS ev"
-        f" FROM project p WHERE 1=1{clause} GROUP BY g",
+        "       COALESCE(SUM(y_ee), 0) AS ee,"
+        "       COALESCE(SUM(y_ev), 0) AS ev"
+        f" FROM {source} GROUP BY g",
         params,
     ).fetchall()
     statuses = _by_status(
         conn.execute(
-            "SELECT COALESCE(NULLIF(TRIM(grp), ''), '') AS g, status, COUNT(*) AS n"
-            f" FROM project p WHERE 1=1{clause} GROUP BY g, status",
+            "SELECT COALESCE(NULLIF(TRIM(grp), ''), '') AS g, y_status AS status, COUNT(*) AS n"
+            f" FROM {source} GROUP BY g, y_status",
             params,
         ).fetchall(),
         "g",
@@ -341,24 +342,24 @@ def _classified(conn: sqlite3.Connection, year: str | None, column: str) -> list
     """
     if column not in CLASSIFICATION_KEYS:
         raise ValueError(column)
-    clause, params = _year_clause(year)
+    source, params = period_service.scope(year)
     value = f"COALESCE(NULLIF(TRIM(p.{column}), ''), '')"
     scope = f"(p.type = ? OR {value} <> '')"
     rows = {
         row["v"]: row
         for row in conn.execute(
             f"SELECT {value} AS v, COUNT(*) AS n,"
-            "       COALESCE(SUM(effect_expected), 0) AS ee,"
-            "       COALESCE(SUM(effect_verified), 0) AS ev"
-            f" FROM project p WHERE {scope}{clause} GROUP BY v",
-            (CLASSIFIED_TYPE, *params),
+            "       COALESCE(SUM(y_ee), 0) AS ee,"
+            "       COALESCE(SUM(y_ev), 0) AS ev"
+            f" FROM {source} WHERE {scope} GROUP BY v",
+            (*params, CLASSIFIED_TYPE),
         )
     }
     statuses = _by_status(
         conn.execute(
-            f"SELECT {value} AS v, status, COUNT(*) AS n"
-            f" FROM project p WHERE {scope}{clause} GROUP BY v, status",
-            (CLASSIFIED_TYPE, *params),
+            f"SELECT {value} AS v, y_status AS status, COUNT(*) AS n"
+            f" FROM {source} WHERE {scope} GROUP BY v, y_status",
+            (*params, CLASSIFIED_TYPE),
         ).fetchall(),
         "v",
     )
@@ -387,12 +388,12 @@ def _classified(conn: sqlite3.Connection, year: str | None, column: str) -> list
 
 def _effect_by_cost(conn: sqlite3.Connection, year: str | None) -> list[dict]:
     """기대효과를 비용구분(고정비·변동비·혼합)으로 나눠 본다 (TODO 136). 적힌 과제만."""
-    clause, params = _year_clause(year)
+    source, params = period_service.scope(year)
     rows = conn.execute(
         "SELECT TRIM(cost_kind) AS k, COUNT(*) AS n,"
-        "       COALESCE(SUM(effect_expected), 0) AS ee,"
-        "       COALESCE(SUM(effect_verified), 0) AS ev"
-        f" FROM project p WHERE cost_kind IS NOT NULL AND TRIM(cost_kind) <> ''{clause}"
+        "       COALESCE(SUM(y_ee), 0) AS ee,"
+        "       COALESCE(SUM(y_ev), 0) AS ev"
+        f" FROM {source} WHERE cost_kind IS NOT NULL AND TRIM(cost_kind) <> ''"
         " GROUP BY k",
         params,
     ).fetchall()
@@ -411,7 +412,8 @@ def _compare(conn: sqlite3.Connection) -> list[dict]:
     """최근 몇 해를 나란히. 한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다."""
     return [
         {"year": year, **{k: v for k, v in _team(conn, year).items()}}
-        for year in years(conn)[:COMPARE_YEARS]
+        # 아직 오지 않은 해(다년도 과제의 마감년도)는 추이에 세우지 않는다 (TODO 181)
+        for year in [item for item in years(conn) if item <= str(date_cls.today().year)][:COMPARE_YEARS]
     ][::-1]  # 화면에는 왼쪽이 과거
 
 

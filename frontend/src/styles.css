@@ -1918,3 +1918,7 @@ a.stage-flow-item[href]:hover { border-color: var(--accent); }
   font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace;
 }
 .rm-hover-hint { color: var(--muted); }
+
+/* 연도 = 수행기간 (TODO 181) — 효과를 다른 해(끝나는 해)에 세는 과제는 흐리게, [신규 착수만] */
+.effect.elsewhere { opacity: 0.45; text-decoration: underline dotted; }
+.list-new-check { font-size: 13px; color: var(--muted-strong); }

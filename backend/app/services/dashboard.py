@@ -18,6 +18,7 @@ import sqlite3
 from ..config import FINISHED_STATUSES, STATUSES
 from . import settings as settings_service
 from . import reports as reports_service
+from . import period as period_service
 
 # 대시보드에 세우는 보고 대상 후보 수. 주간 회의에서 훑을 만큼만 보여 준다.
 CANDIDATE_LIMIT = 5
@@ -26,16 +27,16 @@ DUE_SOON_DAYS = 7
 
 
 def _year_filter(year: str | None) -> tuple[str, list]:
-    """연도 조건. 목록과 **같은 기준**이어야 수와 목록이 어긋나지 않는다 (5.8)."""
-    if not year:
-        return "", []
-    return " AND SUBSTR(p.id, 1, 4) = ?", [year]
+    """연도 조건 — 수행기간이 그 해와 겹치는 과제 (TODO 181). 목록 · 홈과 **같은 기준**이어야 수가 어긋나지 않는다 (5.8)."""
+    return period_service.overlap(year)
 
 
 def _counts(conn: sqlite3.Connection, column: str, year: str | None) -> dict[str, int]:
-    clause, params = _year_filter(year)
+    # 상태는 **그 해의 상태**로 센다 — 그 해 뒤에 끝난 과제는 그 해에 진행중이었다 (TODO 181)
+    source, params = period_service.scope(year)
+    key = "y_status" if column == "status" else column
     rows = conn.execute(
-        f"SELECT {column} AS key, COUNT(*) AS n FROM project p WHERE 1=1{clause} GROUP BY {column}",
+        f"SELECT {key} AS key, COUNT(*) AS n FROM {source} GROUP BY {key}",
         params,
     )
     return {(row["key"] or ""): row["n"] for row in rows}
@@ -102,17 +103,9 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT, year: str | 
             f"SELECT COUNT(*) AS n FROM project p WHERE 1=1{year_clause}", year_params
         ).fetchone()["n"],
         "year": year,
-        # 지난해 번호인데 아직 끝나지 않은 과제. 연도로 걸러 두면 이것이 숨는다 —
-        # "작년 과제인데 아직 하고 있다" 는 흔한 일이라, 숨었다는 사실은 알려 줘야 한다.
-        "other_year_active": (
-            conn.execute(
-                f"SELECT COUNT(*) AS n FROM project p"
-                f" WHERE SUBSTR(p.id, 1, 4) <> ? AND status NOT IN ({placeholders})",
-                (year, *FINISHED_STATUSES),
-            ).fetchone()["n"]
-            if year
-            else 0
-        ),
+        # 지난해 번호인데 아직 끝나지 않은 과제 — 연도를 번호로 가르던 때(95)의 빈틈 안내였다.
+        # 이제 수행기간으로 가르므로(181) 그 과제들이 그 해에 보인다. 화면이 옛 값을 기다리지 않게 0 을 둔다.
+        "other_year_active": 0,
         # 0건인 칸은 보내지 않는다. 빈 칸이 늘어나면 눈이 갈 곳을 잃는다.
         "statuses": [
             {"key": key, "label": label, "count": status_counts[key]}

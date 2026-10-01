@@ -350,7 +350,7 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
         {year !== ALL_YEARS && (
           <label className="home-period">
             기간
-            <select value={period} onChange={(event) => setPeriod(event.target.value)} title="보고 횟수·그해 끝낸 과제·역량 이력처럼 날짜가 있는 숫자만 이 기간을 따릅니다. 과제 수는 연도 기준 그대로입니다.">
+            <select value={period} onChange={(event) => setPeriod(event.target.value)} title="보고 횟수·완료·역량 이력처럼 날짜가 있는 숫자만 이 기간을 따릅니다. 과제 수는 연도 기준 그대로입니다.">
               {PERIODS.map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
@@ -362,7 +362,7 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
       </div>
       {data.period && (
         <p className="hint home-period-note">
-          <b>{PERIODS.find(([key]) => key === data.period)?.[1]}</b> — 보고 횟수·그해 끝낸 과제·역량 이력처럼{" "}
+          <b>{PERIODS.find(([key]) => key === data.period)?.[1]}</b> — 보고 횟수·완료·역량 이력처럼{" "}
           <b>날짜가 있는 숫자만</b> 이 기간을 따릅니다. 과제 수·상태별 수는 연도 기준 그대로입니다.
         </p>
       )}
@@ -572,28 +572,42 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
       <div className="card home-team">
         <h2>{year === ALL_YEARS ? "전체" : `${year}년`} 팀 현황</h2>
         <div className="home-stats">
-          <a className="home-stat" href={listLink({ year: yearParam })}>
+          {/* 과제 = 그 해에 수행한 과제(수행기간이 그 해와 겹침) — 다년도 과제는 해마다 하나씩 (TODO 181) */}
+          <a
+            className="home-stat"
+            href={listLink({ year: yearParam })}
+            title={yearParam ? "그 해에 수행한 과제 — 여러 해에 걸친 과제는 해마다 셉니다" : undefined}
+          >
             <span className="home-stat-label">과제</span>
             <strong>{team.total}건</strong>
           </a>
+          {yearParam && (
+            <a className="home-stat" href={listLink({ year: yearParam, new: "1" })} title="그 해에 새로 착수한 과제(과제 번호의 연도)">
+              <span className="home-stat-label">신규 착수</span>
+              <strong>{team.new ?? 0}건</strong>
+            </a>
+          )}
           <a className="home-stat" href={listLink({ status: "in_progress", year: yearParam })}>
             <span className="home-stat-label">진행중</span>
             <strong>{team.in_progress}건</strong>
           </a>
-          <a className="home-stat" href={listLink({ status: "done", year: yearParam })}>
-            <span className="home-stat-label">완료</span>
-            <strong>{team.done}건</strong>
-          </a>
-          {/* 완료일 기준 (TODO 104). 위 [완료]는 번호의 연도라, 지난해 시작해 올해 끝낸 과제가
-              올해 성과에 안 잡힌다. 어느 쪽이 "성과" 인지는 사용자가 정할 일이라 둘 다 세운다. */}
-          <a
-            className="home-stat"
-            href={yearParam ? `#/projects?done_year=${yearParam}&year=all` : listLink({ status: "done" })}
-            title="완료일이 그 해인 과제 — 시작 연도와 무관하게"
-          >
-            <span className="home-stat-label">{yearParam ? "그해 끝낸 과제" : "끝낸 과제"}</span>
-            <strong>{team.done_in_year ?? 0}건</strong>
-          </a>
+          {/* 완료 = **그 해에 끝낸 과제** 하나 (TODO 181 — 예전에는 번호 연도의 "완료" 와 완료일의 "그해 끝낸 과제" 둘이었다).
+              반기 · 분기를 고르면 그 기간에 끝낸 것만(완료일). */}
+          {data.period ? (
+            <a className="home-stat" href={`#/projects?done_year=${yearParam}&year=all`} title="이 기간에 완료일이 든 과제">
+              <span className="home-stat-label">완료</span>
+              <strong>{team.done_in_year ?? 0}건</strong>
+            </a>
+          ) : (
+            <a
+              className="home-stat"
+              href={listLink({ status: "done", year: yearParam })}
+              title={yearParam ? "그 해에 끝낸 과제 — 시작한 해와 무관하게" : undefined}
+            >
+              <span className="home-stat-label">완료</span>
+              <strong>{team.done}건</strong>
+            </a>
+          )}
           <a
             className="home-stat"
             href={
@@ -609,7 +623,9 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
               나오므로 그 비율은 성립하지 않는다. **몇 건에서 나온 값인지**를 함께 적어
               분모를 드러낸다 (TODO 86). */}
           <div className="home-stat effect">
-            <span className="home-stat-label">효과 금액 (억원/년)</span>
+            <span className="home-stat-label" title={yearParam ? "기대 · 실증 모두 과제가 끝나는 해(완료년도, 아니면 마감년도)에 셉니다" : undefined}>
+              효과 금액 (억원/년){yearParam ? " · 끝나는 해 기준" : ""}
+            </span>
             <strong>
               기대 {money(team.effect_expected)}
               <span className="home-arrow"> → </span>
@@ -663,7 +679,8 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
           </div>
         </div>
         <p className="hint">
-          과제 수·완료·효과 금액은 <b>과제 번호의 연도</b>로, 보고 횟수는 <b>보고한 날의 연도</b>로 셉니다.
+          과제 수는 <b>그 해에 수행한 과제</b>(여러 해에 걸친 과제는 해마다), 완료는 <b>그 해에 끝낸 과제</b>, 신규는{" "}
+          <b>그 해에 착수한 과제</b>, 효과 금액은 <b>끝나는 해</b>(기대 · 실증을 같은 해에), 보고 횟수는 <b>보고한 날의 연도</b>로 셉니다.
           {" "}보고 횟수는 <b>확정된 보고</b>만 셉니다 — 초안은 아직 보고한 것이 아닙니다.
           {" "}<b>실증효과는 끝난 과제에서만 나오므로 기대 대비 달성률이 아닙니다.</b>
         </p>

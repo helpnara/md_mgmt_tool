@@ -32,6 +32,8 @@ const DEFAULT_FILTERS = {
   // 홈에서만 거는 조건 — 상자는 없고 주소로만 온다. 완료일의 연도(TODO 104)와
   // "완료했는데 실증효과를 안 적은 것"(TODO 106-C).
   done_year: "", verified: "",
+  // 그 해에 새로 착수한 과제만 — 번호의 연도 (TODO 181). 홈의 "신규 착수" 가 이리로 온다.
+  new: "",
   // 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 홈이 이리로 데려온다.
   owner_left: "",
   // 효과 금액이 적힌 과제 (TODO 124) · 효과성 관리 비대상 (TODO 125)
@@ -51,7 +53,7 @@ const DEFAULT_FILTERS = {
  * 있었으니 화면마다 말이 달랐다.
  *
  * 세우는 것은 셋을 합친 것이다.
- * - 과제가 실제로 있는 해 (`meta.years` — 서버가 과제 번호 앞 네 자리로 센다)
+ * - 과제가 실제로 있는 해 (`meta.years` — 과제의 수행기간이 걸친 해 전부, TODO 181)
  * - **올해** — 아직 올해 과제가 없어도 "올해만 보기" 는 뜻이 통해야 하고, 그것이 기본값이다
  * - 지금 주소가 가리키는 해 — 즐겨찾기해 둔 `?year=2019` 가 빈칸으로 보이면 안 된다
  */
@@ -161,6 +163,10 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
     const column = COLUMN_SORTS[label];
     return { sortKey: column?.key, first: column?.first, current: sortState, onSort, className };
   };
+
+  // 합계 줄이 더하는 효과 — 연도를 골랐으면 **그 해에 세는 것만**(끝나는 해가 그 해). 홈의 금액과 같다 (TODO 181)
+  const effectRows =
+    filters.year === ALL_YEARS ? projects : projects.filter((p) => !p.effect_year || p.effect_year === filters.year);
 
   return (
     <section className="project-list">
@@ -298,6 +304,17 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               </option>
             ))}
           </select>
+          {/* 연도는 그 해에 수행한 과제 전부(다년도 과제는 해마다). 그중 그 해에 시작한 것만 (TODO 181) */}
+          {filters.year !== ALL_YEARS && (
+            <label className="roadmap-check list-new-check" title="과제 번호의 연도가 이 해인 과제 — 그 해에 새로 착수한 과제">
+              <input
+                type="checkbox"
+                checked={filters.new === "1"}
+                onChange={(event) => setFilter("new", event.target.checked ? "1" : "")}
+              />
+              신규 착수만
+            </label>
+          )}
           <select value={filters.due} onChange={(event) => setFilter("due", event.target.value)}>
             <option value="">마감 전체</option>
             <option value="overdue">기한 초과</option>
@@ -497,17 +514,22 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                     const expected = project.effect_expected;
                     const verified = project.effect_verified;
                     if (expected == null && verified == null) return <span className="muted">{DASH}</span>;
+                    // 연도를 골랐는데 효과를 다른 해(끝나는 해)에 세는 과제 — 흐리게, 합계에서 뺀다 (TODO 181)
+                    const elsewhere =
+                      filters.year !== ALL_YEARS && project.effect_year && project.effect_year !== filters.year;
                     const text =
                       expected != null && verified != null
                         ? `${cellEffect(expected)} → ${cellEffect(verified)}`
                         : cellEffect(verified ?? expected);
                     return (
                       <span
-                        className={`effect${verified != null ? " verified" : ""}`}
+                        className={`effect${verified != null ? " verified" : ""}${elsewhere ? " elsewhere" : ""}`}
                         title={
-                          verified != null
-                            ? `실증효과 확인됨 (${EFFECT_UNIT})`
-                            : `기대효과 — 아직 실증 전 (${EFFECT_UNIT})`
+                          elsewhere
+                            ? `효과는 끝나는 해(${project.effect_year}년)에 셉니다 — 이 해의 합계에는 들지 않습니다`
+                            : verified != null
+                              ? `실증효과 확인됨 (${EFFECT_UNIT})`
+                              : `기대효과 — 아직 실증 전 (${EFFECT_UNIT})`
                         }
                       >
                         {text}
@@ -541,9 +563,10 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               null,
               null,
               {
+                // 연도를 골랐으면 그 해에 세는 효과만 — 홈의 금액과 같게 (TODO 181)
                 text: effectTotal(
-                  sumBy(projects, (p) => p.effect_expected),
-                  sumBy(projects, (p) => p.effect_verified),
+                  sumBy(effectRows, (p) => p.effect_expected),
+                  sumBy(effectRows, (p) => p.effect_verified),
                 ),
                 className: "num",
                 title: `기대효과 합계 → 실증효과 합계 (${EFFECT_UNIT})`,

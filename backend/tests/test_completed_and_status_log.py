@@ -50,16 +50,18 @@ def test_a_bad_completion_date_is_refused(client):
 
 
 def test_home_counts_finished_by_completion_year(client):
-    # 2025 번호인데 2026 에 끝냈다 — 번호 기준 완료 수에는 안 잡히지만 완료일 기준에는 잡힌다.
+    # 2025 번호인데 2026 에 끝냈다 — 수행기간이 2025 ~ 2026 이라 두 해 모두에 있고(181),
+    # "완료" 는 **그 해에 끝낸 과제**만이다: 2026 에 완료, 2025 에는 진행중이었다.
     late = make(client, "지난해 시작", start_date="2025-03-01")
     assert late["id"].startswith("2025-")
     client.patch(f"/api/projects/{late['id']}", json={"status": "done", "completed_at": "2026-02-02"})
 
     team_2026 = client.get("/api/home", params={"year": "2026"}).json()["team"]
-    assert team_2026["done"] == 0
+    assert team_2026["total"] == 1 and team_2026["done"] == 1 and team_2026["new"] == 0
     assert team_2026["done_in_year"] == 1
     team_2025 = client.get("/api/home", params={"year": "2025"}).json()["team"]
-    assert team_2025["done"] == 1
+    assert team_2025["total"] == 1 and team_2025["done"] == 0 and team_2025["in_progress"] == 1
+    assert team_2025["new"] == 1
     assert team_2025["done_in_year"] == 0
 
 

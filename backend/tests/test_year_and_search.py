@@ -36,62 +36,96 @@ def with_id(client, project_id, title, status="in_progress"):
 
 # ── 연도 거르기 (TODO 67) ────────────────────────────────────────────────────
 
-def test_a_year_keeps_only_that_years_projects(client):
-    make(client, "올해 과제")                       # 2026-001
-    with_id(client, "2025-007", "지난해 과제")
-    with_id(client, "2024-003", "재작년 과제")
+def test_a_year_keeps_the_projects_that_ran_that_year(client):
+    """연도 = 수행기간이 그 해와 겹치는 과제 (TODO 181). 끝난 지난 과제는 그 해에만."""
+    make(client, "올해 과제")                                      # 2026-001
+    with_id(client, "2025-007", "지난해 끝난 과제", status="done")
+    with_id(client, "2024-003", "재작년 끝난 과제", status="done")
+    with_id(client, "2025-008", "지난해 시작해 아직 하는 과제")
 
-    listed = lambda **q: [row["title"] for row in client.get("/api/projects", params=q).json()]
-    assert listed(year="2026") == ["올해 과제"]
-    assert listed(year="2025") == ["지난해 과제"]
-    assert sorted(listed()) == ["올해 과제", "재작년 과제", "지난해 과제"]
+    listed = lambda **q: sorted(row["title"] for row in client.get("/api/projects", params=q).json())
+    assert listed(year="2026") == ["올해 과제", "지난해 시작해 아직 하는 과제"]
+    assert listed(year="2025") == ["지난해 끝난 과제", "지난해 시작해 아직 하는 과제"]
+    assert listed(year="2024") == ["재작년 끝난 과제"]
+    assert len(listed()) == 4
+    # 신규 — 그 해에 착수한 과제만(번호의 연도)
+    assert listed(year="2026", new="1") == ["올해 과제"]
 
 
-def test_the_year_comes_from_the_project_number(client):
-    """시작일이 아니라 **번호의 연도**를 쓴다 — 번호는 만들 때 정해져 흔들리지 않는다.
+def test_a_multi_year_project_is_counted_in_each_year(client):
+    """2026.01 ~ 2027.12 과제는 2026 에도 2027 에도 하나 (사용자 요청 — TODO 181)."""
+    make(client, "다년도", start_date="2026-01-01", due_date="2027-12-31", effect_expected=3)
+    for year in ("2026", "2027"):
+        assert [row["title"] for row in client.get("/api/projects", params={"year": year}).json()] == ["다년도"]
+        assert client.get("/api/dashboard", params={"year": year}).json()["total"] == 1
+        assert client.get("/api/home", params={"year": year}).json()["team"]["total"] == 1
+    # 효과 금액은 끝나는 해에만 — 기대 · 실증을 같은 해에 (사용자 결정 ①)
+    assert client.get("/api/home", params={"year": "2026"}).json()["team"]["effect_expected"] == 0
+    assert client.get("/api/home", params={"year": "2027"}).json()["team"]["effect_expected"] == 3
+    assert client.get("/api/projects", params={"year": "2026", "effect": "expected"}).json() == []
+    assert len(client.get("/api/projects", params={"year": "2027", "effect": "expected"}).json()) == 1
 
-    번호를 지을 때 시작일을 보므로(TODO 95) 둘은 대개 같다. 다른 것은 시작일을
-    **나중에 고쳤을 때**다. 그때도 번호가 기준이고, 번호는 사용자가 옮기기 전까지
-    그대로다 — 그래야 "그 해에 시작한 과제" 라는 뜻이 저절로 흔들리지 않는다.
-    """
-    project = make(client, "지난해 착수", start_date="2025-01-05")
-    assert project["id"].startswith("2025-")
 
-    client.patch(f"/api/projects/{project['id']}", json={"start_date": "2026-01-05"})
+def test_an_overdue_running_project_stays_in_this_year(client):
+    make(client, "마감 지났는데 아직", start_date="2025-03-01", due_date="2025-08-31")
+    assert len(client.get("/api/projects", params={"year": "2026"}).json()) == 1
     assert len(client.get("/api/projects", params={"year": "2025"}).json()) == 1
+    # 효과는 마감년도(끝나기로 한 해)에 — 계획 대비 실적을 그 해에서 본다
+    team = client.get("/api/home", params={"year": "2026"}).json()["team"]
+    assert team["new"] == 0 and team["in_progress"] == 1
+
+
+def test_a_future_project_waits_for_its_year(client):
+    make(client, "내년 예정", status="planned", start_date="2027-02-01", due_date="2027-11-30")
     assert client.get("/api/projects", params={"year": "2026"}).json() == []
+    assert len(client.get("/api/projects", params={"year": "2027"}).json()) == 1
+
+
+def test_the_year_follows_the_start_date(client):
+    """시작일을 고치면 수행기간이 따라간다 — 번호(이름)는 그대로 (TODO 181)."""
+    project = make(client, "지난해 착수", start_date="2025-01-05", due_date="2025-12-31",
+                   status="done", completed_at="2025-12-20")
+    assert project["id"].startswith("2025-")
+    client.patch(f"/api/projects/{project['id']}", json={"start_date": "2026-01-05", "due_date": "2026-06-30",
+                                                          "completed_at": "2026-06-20"})
+    assert client.get("/api/projects", params={"year": "2025"}).json() == []
+    assert len(client.get("/api/projects", params={"year": "2026"}).json()) == 1
 
 
 def test_the_dashboard_follows_the_same_year(client):
     """수와 목록이 어긋나면 'N건'을 눌렀을 때 다른 수가 나온다 (DESIGN 5.8)."""
     make(client, "올해 진행", status="in_progress")
     make(client, "올해 검토", status="reviewing")
-    with_id(client, "2025-001", "지난해 진행", status="in_progress")
+    with_id(client, "2025-001", "지난해 시작해 진행", status="in_progress")
+    make(client, "지난해 시작 올해 완료", start_date="2025-02-01", status="done", completed_at="2026-03-01")
 
-    data = client.get("/api/dashboard", params={"year": "2026"}).json()
-    assert data["total"] == 2
-    for item in data["statuses"]:
-        listed = client.get("/api/projects", params={"status": item["key"], "year": "2026"}).json()
-        assert len(listed) == item["count"], item
+    for year in ("2026", "2025"):
+        data = client.get("/api/dashboard", params={"year": year}).json()
+        assert data["total"] == len(client.get("/api/projects", params={"year": year}).json())
+        for item in data["statuses"]:
+            listed = client.get("/api/projects", params={"status": item["key"], "year": year}).json()
+            assert len(listed) == item["count"], (year, item)
+    # 2025 에는 아직 진행중이었다 — 그 해의 상태 (사용자 결정 ②)
+    statuses_2025 = {item["key"]: item["count"] for item in client.get("/api/dashboard", params={"year": "2025"}).json()["statuses"]}
+    assert statuses_2025 == {"in_progress": 2}
 
 
 def test_the_dashboard_owner_counts_follow_the_year(client):
     make(client, "올해 과제", owners=["권경락"])
-    with_id(client, "2025-001", "지난해 과제")
+    with_id(client, "2025-001", "지난해 끝난 과제", status="done")
 
     owners = client.get("/api/dashboard", params={"year": "2026"}).json()["owners"]
     assert [item["key"] for item in owners] == ["권경락"]
 
 
-def test_it_says_how_many_older_projects_are_still_running(client):
-    """'작년 과제인데 아직 하고 있다' 는 흔하다. 숨었다는 사실은 알려 줘야 한다."""
+def test_older_running_projects_are_no_longer_hidden(client):
+    """예전에는 '지난해 번호인데 아직 하는 과제 N건' 을 따로 알렸다 — 이제 그 해에 보인다 (TODO 181)."""
     make(client, "올해 과제")
     with_id(client, "2025-001", "지난해에 시작해 아직 하는 과제", status="in_progress")
     with_id(client, "2025-002", "지난해에 끝난 과제", status="done")
 
     data = client.get("/api/dashboard", params={"year": "2026"}).json()
-    assert data["other_year_active"] == 1  # 끝난 것은 세지 않는다
-    assert client.get("/api/dashboard").json()["other_year_active"] == 0  # 전체 보기면 숨은 것이 없다
+    assert data["total"] == 2 and data["other_year_active"] == 0
 
 
 def test_a_bad_year_is_refused(client):

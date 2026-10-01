@@ -937,8 +937,10 @@ def month_grid(conn: sqlite3.Connection, year: str | None) -> dict:
     ]
 
     reported = {item["project_id"] for item in reports}
-    clause = " AND SUBSTR(p.id, 1, 4) = ?"
-    params = [year]
+    # 그 해에 수행한 과제 — 수행기간이 그 해와 겹치는 과제 (TODO 181, 홈 · 목록과 같은 기준)
+    from . import period as period_service
+
+    clause, params = period_service.overlap(year)
     projects = [
         {"id": row["id"], "title": row["title"], "status": row["status"]}
         for row in conn.execute(
@@ -950,7 +952,7 @@ def month_grid(conn: sqlite3.Connection, year: str | None) -> dict:
         f"SELECT COUNT(*) AS n FROM project p WHERE no_report = 1{clause}", params
     ).fetchone()["n"]
     known = {item["id"] for item in projects}
-    # 그 해 번호가 아닌데 그 해에 보고한 과제 — 번호가 다르므로 화면에서 바로 구분된다.
+    # 그 해에 수행하지 않은 것으로 보이는데 그 해에 보고한 과제(날짜를 고친 경우 등)도 줄에 넣는다.
     outside = [item for item in reported if item not in known]
     if outside:
         placeholders = ",".join("?" * len(outside))

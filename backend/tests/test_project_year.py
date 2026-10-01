@@ -140,10 +140,11 @@ def test_the_moved_project_is_counted_in_its_own_year(client):
     client.patch(f"/api/projects/{project['id']}", json={"start_date": "2025-01-02"})
     client.post(f"/api/projects/{project['id']}/year-fix")
 
-    # 연도를 가르는 기준은 번호 앞 네 자리다 (DESIGN 5.8). 옮긴 뒤 2025 쪽에 선다.
-    listed = client.get("/api/projects", params={"year": "2025"}).json()
+    # 옮긴 뒤 2025 의 **신규**로 선다. 마감 없이 아직 진행중이라 올해에도 보인다 (TODO 181 — 수행기간).
+    listed = client.get("/api/projects", params={"year": "2025", "new": "1"}).json()
     assert [row["id"] for row in listed] == ["2025-001"]
-    assert client.get("/api/projects", params={"year": this_year()}).json() == []
+    assert client.get("/api/projects", params={"year": this_year(), "new": "1"}).json() == []
+    assert [row["id"] for row in client.get("/api/projects", params={"year": this_year()}).json()] == ["2025-001"]
     assert client.get("/api/dashboard", params={"year": "2025"}).json()["total"] == 1
 
 

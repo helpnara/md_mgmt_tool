@@ -45,16 +45,23 @@ def test_years_are_only_the_years_that_have_projects(client):
     assert meta(client)["years"] == [this_year(), "2025"]
 
 
-def test_years_follow_the_project_number_not_the_start_date(client):
+def test_years_follow_the_period_not_only_the_number(client):
     project = make(client, "번호는 올해, 시작일은 지난해")
     client.patch(f"/api/projects/{project['id']}", json={"start_date": "2025-01-01"})
-    # 연도를 가르는 기준은 번호 앞 네 자리다 (DESIGN 5.8). 목록도 같은 기준이어야 한다.
-    assert meta(client)["years"] == [this_year()]
+    # 연도는 **수행기간**이 걸친 해 전부다 (TODO 181) — 지난해 시작해 아직 하고 있으면 두 해 모두
+    assert meta(client)["years"] == [this_year(), "2025"]
 
 
-def test_moving_a_project_moves_the_year_out_of_the_list(client):
+def test_a_multi_year_project_offers_the_years_it_spans(client):
+    make(client, "다년도", start_date=f"{this_year()}-01-01", due_date=f"{int(this_year()) + 1}-12-31")
+    # 아직 오지 않은 해도 고를 수 있다 — 2026~2027 과제의 2027 (TODO 181)
+    assert meta(client)["years"] == [str(int(this_year()) + 1), this_year()]
+
+
+def test_moving_a_project_keeps_it_in_the_years_it_runs(client):
     project = make(client, "뒤늦게 등록한 지난해 과제")
-    client.patch(f"/api/projects/{project['id']}", json={"start_date": "2025-01-01"})
+    client.patch(f"/api/projects/{project['id']}", json={"start_date": "2025-01-01", "due_date": "2025-12-31",
+                                                         "status": "done", "completed_at": "2025-12-20"})
     client.post(f"/api/projects/{project['id']}/year-fix")
     assert meta(client)["years"] == ["2025"]
 

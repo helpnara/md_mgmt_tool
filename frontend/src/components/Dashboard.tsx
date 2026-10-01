@@ -174,19 +174,8 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
           </button>
         </div>
       )}
-      {/* 연도로 걸러 두면 "작년에 시작해 아직 하고 있는 과제" 가 숨는다.
-          흔한 일이라, 숨었다는 사실과 함께 보는 길을 준다 (TODO 67). */}
-      {data.other_year_active > 0 && (
-        <div className="dash-row hidden-note">
-          <span className="dash-note">
-            {data.year}년 밖에 있지만 <b>아직 진행 중인 과제 {data.other_year_active}건</b>이
-            이 화면에서 빠져 있습니다.
-          </span>
-          <button className="dash-mini go" onClick={() => onFilter("year", "")}>
-            연도 전체로 보기 →
-          </button>
-        </div>
-      )}
+      {/* "작년에 시작해 아직 하고 있는 과제 N건이 빠져 있다" 는 안내(TODO 67)는 뺐다 — 연도가 수행기간이 되어(181)
+          그 과제들이 그 해에 보인다. */}
 
       <div className="dash-row">
         <button

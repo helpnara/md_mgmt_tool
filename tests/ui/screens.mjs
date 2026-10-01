@@ -4046,6 +4046,41 @@ async function main() {
     for (const item of [two, one]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
   });
 
+  console.log("\n[34] 연도 = 수행기간 · 신규 착수 · 효과는 끝나는 해 (TODO 181)");
+
+  await check("다년도 과제가 다음 해에도 보이고, 효과는 끝나는 해에만 더한다 (181)", async () => {
+    const year = new Date().getFullYear();
+    const made = await api.post("/api/projects", {
+      title: "두 해 과제", status: "in_progress", start_date: `${year}-01-05`, due_date: `${year + 1}-12-18`, effect_expected: 7,
+    });
+    // 올해 목록: 보이지만 효과는 흐리게(내년에 센다) · 합계에서 빠진다
+    await go(`#/projects?year=${year}`);
+    await page.reload(); // 연도 목록은 켤 때 읽는다 — API 로 만든 과제라 화면이 모른다(화면에서 만들면 다시 읽는다)
+    await page.waitForTimeout(1000);
+    const row = page.locator("tr", { hasText: "두 해 과제" });
+    equal(await row.count(), 1, "올해 목록");
+    equal(await row.locator(".effect.elsewhere").count(), 1, "효과는 다른 해에 센다(흐리게)");
+    // 내년을 고를 수 있고, 거기에도 보인다
+    const options = await page.locator('select[aria-label="연도"] option').allInnerTexts();
+    expect(options.includes(`${year + 1}년`), `연도 목록: ${options}`);
+    await go(`#/projects?year=${year + 1}`);
+    await page.waitForTimeout(700);
+    equal(await page.locator("tr", { hasText: "두 해 과제" }).locator(".effect.elsewhere").count(), 0, "내년 목록 — 효과를 센다");
+    expect((await page.locator("tfoot").innerText()).includes("7.0"), "내년 합계 줄에 7.0");
+    // [신규 착수만] — 내년에는 신규가 아니다
+    await page.locator(".list-new-check input").check();
+    await page.waitForTimeout(600);
+    equal(await page.locator("tr", { hasText: "두 해 과제" }).count(), 0, "내년의 신규가 아니다");
+    // 홈: 올해 신규 착수 칸, 효과 기준 안내
+    await go("#/");
+    await page.waitForTimeout(900);
+    const stats = await page.locator(".home-team .home-stat-label").allInnerTexts();
+    expect(stats.includes("신규 착수"), `팀 현황 칸: ${stats}`);
+    expect(stats.some((text) => text.includes("끝나는 해 기준")), "효과 금액 기준");
+    equal(stats.filter((text) => text.includes("끝낸 과제")).length, 0, "완료 숫자는 하나");
+    await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
