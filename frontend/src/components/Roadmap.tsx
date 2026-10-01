@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { Meta, Roadmap as RoadmapData, RoadmapLineage, RoadmapProject, RoadmapWarning } from "../types";
 import { backTarget, projectLink, useAddressBar } from "../nav";
@@ -63,6 +63,8 @@ export default function Roadmap({ meta, query }: Props) {
   const [focus] = useState(() => initial.get("focus") ?? "");
   const [back] = useState(() => initial.get("back") ?? "");
   const [data, setData] = useState<RoadmapData | null>(null);
+  // 마우스를 올린 과제 — 그 과제의 앞 · 뒤 과제만 선으로 잇고 나머지는 흐리게 (TODO 180)
+  const [active, setActive] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = () =>
@@ -292,7 +294,7 @@ export default function Roadmap({ meta, query }: Props) {
                 <i className="rm-today-swatch" />
                 오늘
               </span>
-              <span className="legend-item">→ 선행에서 후속으로</span>
+              <span className="legend-item rm-hover-hint">막대에 마우스를 올리면 앞 · 뒤 과제가 이어집니다</span>
             </span>
           </div>
 
@@ -322,7 +324,12 @@ export default function Roadmap({ meta, query }: Props) {
             <p className="hint">조건에 맞는 줄기가 없습니다.</p>
           ) : (
             <div className="roadmap-scroll">
-              <div className="roadmap-grid">
+              {/* 한 단계에 과제가 여럿인 줄기가 있으면 이름 칸에 "← 앞 과제" 를 적을 자리를 더 준다 (TODO 180) */}
+              <div
+                className="roadmap-grid"
+                style={lineages.some(isBranching) ? ({ "--rm-label": "270px" } as CSSProperties) : undefined}
+                onMouseLeave={() => setActive(null)}
+              >
                 <div className="rm-head-label">단계 · 과제 번호</div>
                 <div className="rm-axis" ref={axisRef}>
                   {years.map((year) => (
@@ -354,6 +361,8 @@ export default function Roadmap({ meta, query }: Props) {
                     inRange={today >= rangeStart && today < rangeEnd}
                     width={width}
                     focus={focus}
+                    active={active}
+                    onActive={setActive}
                   />
                 ))}
               </div>
@@ -381,6 +390,15 @@ function WarningRow({ lineage, warning }: { lineage: RoadmapLineage; warning: Ro
   );
 }
 
+/** 한 단계에 과제가 둘 이상인 줄기 — 막대 위치만으로는 누가 누구를 이었는지 모른다 (TODO 180) */
+function isBranching(lineage: RoadmapLineage): boolean {
+  const counts = new Map<number, number>();
+  for (const item of lineage.projects) {
+    if (!item.missing) counts.set(item.stage, (counts.get(item.stage) ?? 0) + 1);
+  }
+  return [...counts.values()].some((count) => count > 1);
+}
+
 function periodText(start: string | null | undefined, end: string | null | undefined): string {
   if (!start && !end) return "기간 미정";
   const short = (text: string | null | undefined) => (text ? text.slice(0, 7).replace("-", ".") : "?");
@@ -396,6 +414,8 @@ function LineageBlock({
   inRange,
   width,
   focus,
+  active,
+  onActive,
 }: {
   lineage: RoadmapLineage;
   meta: Meta;
@@ -405,6 +425,8 @@ function LineageBlock({
   inRange: boolean;
   width: number;
   focus: string;
+  active: string | null;
+  onActive: (id: string | null) => void;
 }) {
   const rows = lineage.projects;
   const rowOf = new Map(rows.map((item, index) => [item.id, index]));
@@ -412,17 +434,36 @@ function LineageBlock({
   const heavy = lineage.warnings.filter((item) => item.level === "warn").length;
   const focused = Boolean(focus) && rows.some((item) => item.id === focus);
   const effect = lineage.effect_verified > 0 ? lineage.effect_verified : lineage.effect_expected;
+  const branching = isBranching(lineage);
 
-  // 선행 → 후속 화살표. 선행의 끝(없으면 시작) 에서 후속의 시작으로.
+  // 마우스를 올린 과제의 줄 — 앞으로(선행의 선행 …) · 뒤로(후속의 후속 …) 이어진 과제 전부 (TODO 180)
+  let chain: Set<string> | null = null;
+  if (active && rowOf.has(active)) {
+    chain = new Set([active]);
+    const byId = new Map(rows.map((item) => [item.id, item]));
+    const walk = (id: string, next: (item: RoadmapProject) => string[]) => {
+      for (const other of next(byId.get(id) as RoadmapProject)) {
+        if (!chain!.has(other) && byId.has(other)) {
+          chain!.add(other);
+          walk(other, next);
+        }
+      }
+    };
+    walk(active, (item) => item.predecessors);
+    walk(active, (item) => item.successors);
+  }
+
+  // 선행 → 후속 화살표 — **평소에는 그리지 않는다**(선이 겹쳐 지저분했다, TODO 180). 마우스를 올린 과제의 줄만. 선행의 끝(없으면 시작) 에서 후속의 시작으로.
   const links: { key: string; d: string; broken: boolean }[] = [];
-  if (width > 0) {
+  if (width > 0 && chain) {
     for (const item of rows) {
+      if (!chain.has(item.id)) continue;
       const start = toTime(item.start_date) ?? toTime(item.end_date);
       if (start === null || item.missing) continue;
       for (const predId of item.predecessors) {
         const pred = rows.find((row) => row.id === predId);
         const predIndex = rowOf.get(predId);
-        if (!pred || predIndex === undefined || pred.missing) continue;
+        if (!pred || predIndex === undefined || pred.missing || !chain.has(predId)) continue;
         const predEnd = toTime(pred.end_date) ?? toTime(pred.start_date);
         if (predEnd === null) continue;
         const x1 = pct(predEnd) * width;
@@ -467,9 +508,12 @@ function LineageBlock({
           return (
             <div
               key={item.id}
-              className={`rm-label${item.id === focus ? " here" : ""}${firstOfStage && index > 0 ? " stage-start" : ""}`}
+              className={`rm-label${item.id === focus ? " here" : ""}${firstOfStage && index > 0 ? " stage-start" : ""}${
+                item.stage % 2 === 0 ? " even" : ""
+              }${chain ? (chain.has(item.id) ? " lit" : " dim") : ""}`}
               style={{ height: ROW }}
               data-project={item.id}
+              onMouseEnter={() => onActive(item.id)}
             >
               <span className="rm-stage">{firstOfStage ? `${item.stage}단계` : ""}</span>
               {item.missing ? (
@@ -482,6 +526,12 @@ function LineageBlock({
                   <a className="rm-name" href={projectLink(item.id)} title={`${item.id} ${item.title ?? ""}`}>
                     {item.id}
                   </a>
+                  {/* 한 단계에 여럿인 줄기만 — 누가 누구를 이었는지 글자로 (TODO 180) */}
+                  {branching && item.predecessors.length > 0 && (
+                    <span className="rm-preds" title={`앞 과제: ${item.predecessors.join(", ")}`}>
+                      ← {item.predecessors.join(", ")}
+                    </span>
+                  )}
                   {item.status && (
                     <i
                       className={`rm-dot rm-status-${item.status}`}
@@ -503,11 +553,25 @@ function LineageBlock({
         })}
       </div>
       <div className="rm-track" style={{ height }}>
+        {/* 단계마다 줄 바탕을 번갈아 — 선 없이도 단계 묶음이 보이게 (TODO 180) */}
+        {rows.map((item, index) =>
+          item.stage % 2 === 0 ? <span key={`band-${item.id}`} className="rm-band" style={{ top: index * ROW, height: ROW }} /> : null,
+        )}
         {years.map((year, index) => (
           <span key={year} className="rm-gridline" style={{ left: `${(index / years.length) * 100}%` }} />
         ))}
         {rows.map((item, index) => (
-          <Bar key={item.id} item={item} index={index} pct={pct} today={today} meta={meta} width={width} />
+          <Bar
+            key={item.id}
+            item={item}
+            index={index}
+            pct={pct}
+            today={today}
+            meta={meta}
+            width={width}
+            dim={Boolean(chain && !chain.has(item.id))}
+            onActive={onActive}
+          />
         ))}
         {inRange && <span className="rm-today" style={{ left: `${pct(today) * 100}%` }} />}
         {width > 0 && (
@@ -552,6 +616,8 @@ function Bar({
   today,
   meta,
   width,
+  dim,
+  onActive,
 }: {
   item: RoadmapProject;
   index: number;
@@ -560,6 +626,9 @@ function Bar({
   meta: Meta;
   /** 막대 칸의 폭(px) — 과제명을 막대 안에 둘지 밖에 둘지 정한다 */
   width: number;
+  /** 다른 과제에 마우스를 올려 이 과제가 그 줄에 들지 않을 때 흐리게 */
+  dim: boolean;
+  onActive: (id: string | null) => void;
 }) {
   if (item.missing) return null;
   const top = index * ROW + 5;
@@ -572,17 +641,25 @@ function Bar({
     `${label} · ${item.start_date ?? "시작일 없음"} ~ ${item.end_date ?? "마감일 없음"}`,
     (item.owners ?? []).length ? `담당 ${(item.owners ?? []).join(", ")}` : "",
     item.effect_expected != null ? `기대효과 ${effectNumber(item.effect_expected)}억원/년` : "",
+    item.predecessors.length ? `앞 과제 ${item.predecessors.join(", ")}` : "",
   ]
     .filter(Boolean)
     .join("\n");
   const go = () => (window.location.hash = projectLink(item.id));
+  // 마우스 · 키보드(Tab) 모두 — 올리면 그 과제의 줄이 이어진다
+  const hover = {
+    onMouseEnter: () => onActive(item.id),
+    onFocus: () => onActive(item.id),
+    onBlur: () => onActive(null),
+  };
+  const fade = dim ? " dim" : "";
   const alive = item.status !== "done" && item.status !== "dropped";
 
   const name = item.title ?? item.id;
 
   if (start === null && end === null) {
     return (
-      <button type="button" className="rm-nodate" style={{ top }} title={tip} onClick={go}>
+      <button type="button" className={`rm-nodate${fade}`} style={{ top }} title={tip} onClick={go} {...hover}>
         기간 미정 · {name}
       </button>
     );
@@ -593,13 +670,21 @@ function Bar({
       <>
         <button
           type="button"
-          className={`rm-point rm-status-${item.status}`}
+          className={`rm-point rm-status-${item.status}${fade}`}
           style={{ top, left: `${pct(end) * 100}%` }}
           title={tip}
           aria-label={item.id}
           onClick={go}
+          {...hover}
         />
-        <button type="button" className="rm-bar-label outside" style={{ top, left: `calc(${pct(end) * 100}% + 12px)` }} title={tip} onClick={go}>
+        <button
+          type="button"
+          className={`rm-bar-label outside${fade}`}
+          style={{ top, left: `calc(${pct(end) * 100}% + 12px)` }}
+          title={tip}
+          onClick={go}
+          {...hover}
+        >
           {name}
         </button>
       </>
@@ -626,17 +711,19 @@ function Bar({
     <>
       <button
         type="button"
-        className={`rm-bar rm-status-${item.status}${openEnd ? " open-end" : ""}${overdue ? " overdue" : ""}`}
+        className={`rm-bar rm-status-${item.status}${openEnd ? " open-end" : ""}${overdue ? " overdue" : ""}${fade}`}
         style={{ top, left: `${left}%`, width: `${Math.max(right - left, 0.4)}%` }}
         title={tip}
         onClick={go}
+        {...hover}
       >
         {place === "inside" && <span>{name}</span>}
       </button>
       {place !== "inside" && (
         <button
           type="button"
-          className="rm-bar-label outside"
+          className={`rm-bar-label outside${fade}`}
+          {...hover}
           style={
             place === "right"
               ? { top, left: `${tailPx + 6}px` }
@@ -650,7 +737,7 @@ function Bar({
       )}
       {overdue && delayRight > delayLeft && (
         <span
-          className="rm-delay"
+          className={`rm-delay${fade}`}
           style={{ top, left: `${delayLeft}%`, width: `${delayRight - delayLeft}%` }}
           title={`마감 ${item.due_date} 이 지났습니다`}
         />

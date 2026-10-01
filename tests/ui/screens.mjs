@@ -3982,7 +3982,15 @@ async function main() {
     // 막대에는 번호가 아니라 과제명 — 막대 안이나 바로 옆에 (177)
     const names = await block.locator(".rm-bar span, .rm-bar-label").allInnerTexts();
     for (const title of ["로드맵 1단계", "로드맵 2단계", "로드맵 3단계"]) expect(names.includes(title), `막대 이름: ${title} / ${names}`);
-    equal(await block.locator(".rm-links > path").count(), 2, "화살표 둘");
+    // 선은 평소에 없다 — 마우스를 올린 과제의 줄만 (180)
+    equal(await block.locator(".rm-links > path").count(), 0, "평소에는 선 없음");
+    await block.locator(".rm-bar").nth(1).hover();
+    await page.waitForTimeout(200);
+    equal(await block.locator(".rm-links > path").count(), 2, "2단계에 올리면 앞 · 뒤 선 둘");
+    await block.locator(".rm-bar").nth(0).hover();
+    await page.waitForTimeout(200);
+    equal(await block.locator(".rm-links > path").count(), 2, "1단계에 올려도 줄 전체(1→2→3)");
+    equal(await block.locator(".rm-label.even").count(), 1, "2단계 줄은 바탕을 번갈아");
     equal(await block.locator(".rm-delay").count(), 1, "마감 지난 빗금");
     expect((await page.locator(".roadmap-warnings").innerText()).includes(two.id), "살펴볼 것에 늦은 과제");
     // 혼자 가는 과제는 줄기가 아니다
@@ -4003,6 +4011,22 @@ async function main() {
     equal(await page.locator(".rm-lineage").count(), 0, "거르면 사라진다");
     expect(page.url().includes("q="), "주소에 조건");
     for (const item of [three, two, one]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
+  });
+
+  await check("한 단계에 여럿이면 이름 칸에 '← 앞 과제', 다른 갈래는 올렸을 때 흐려진다 (180)", async () => {
+    const root = await api.post("/api/projects", { title: "갈래 뿌리", start_date: "2025-01-02", due_date: "2025-12-19" });
+    const left = await api.post("/api/projects", { title: "갈래 왼쪽", start_date: "2026-01-05", due_date: "2026-12-18", predecessors: [root.id] });
+    const right = await api.post("/api/projects", { title: "갈래 오른쪽", start_date: "2026-02-02", due_date: "2026-11-30", predecessors: [root.id] });
+    await go("#/roadmap");
+    await page.waitForTimeout(800);
+    const block = page.locator(`.rm-lineage[data-lineage="${root.id}"]`);
+    equal(await block.locator(".rm-preds").count(), 2, "← 앞 과제 둘");
+    expect((await block.locator(".rm-preds").first().innerText()).includes(root.id), "앞 과제 번호");
+    await block.locator(`.rm-label[data-project="${left.id}"]`).hover();
+    await page.waitForTimeout(200);
+    expect((await block.locator(`.rm-label[data-project="${right.id}"]`).getAttribute("class")).includes("dim"), "다른 갈래는 흐리게");
+    equal(await block.locator(".rm-links > path").count(), 1, "선은 그 과제와 앞 과제 사이 하나");
+    for (const item of [right, left, root]) await fetch(`${BASE}/api/projects/${item.id}/archive`, { method: "POST" });
   });
 
   await check("다년도 과제의 이름 뒤에 단계 띠가 선다 — 과제목록 · 상세 · 보고대상 · 검색 (175)", async () => {

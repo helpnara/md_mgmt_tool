@@ -1903,3 +1903,18 @@ a.stage-flow-item[href]:hover { border-color: var(--accent); }
   color: var(--text); background: rgba(255, 255, 255, 0.85);
 }
 .rm-bar-label.outside:hover, .rm-nodate:hover { color: var(--accent-strong); }
+
+/* 로드맵 연결선 대안 (TODO 180) — 선은 마우스를 올린 과제의 줄만, 단계마다 줄 바탕 번갈아, 한 단계 여럿이면 "← 앞 과제" */
+.rm-band { position: absolute; left: 0; right: 0; background: #f4f6fa; pointer-events: none; }
+.rm-label.even { background: #f4f6fa; }
+.rm-label.here { background: var(--accent-soft); }
+.rm-label.lit { background: #e8f0fe; }
+.rm-label.dim, .rm-bar.dim, .rm-bar-label.dim, .rm-point.dim, .rm-nodate.dim, .rm-delay.dim { opacity: 0.3; }
+.rm-bar, .rm-bar-label, .rm-point, .rm-label { transition: opacity 0.12s; }
+.rm-links path { stroke: #64748b; stroke-width: 1.8; }
+.rm-links marker path { fill: #64748b; }
+.rm-preds {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace;
+}
+.rm-hover-hint { color: var(--muted); }
