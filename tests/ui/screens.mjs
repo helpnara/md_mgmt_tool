@@ -4128,6 +4128,65 @@ async function main() {
     equal(await page.locator(".meeting-item", { hasText: "시험 면담" }).count(), 0, "지워졌다");
   });
 
+  console.log("\n[36] 지난해 목록의 상태 칸 · 팀원역량에서 고른 사람 풀기 (TODO 183 · 184)");
+
+  await check("지난해를 고르면 상태 칸이 그 해의 상태 — 옆에 지금 상태 (184)", async () => {
+    const year = new Date().getFullYear();
+    const made = await api.post("/api/projects", {
+      title: "이듬해 끝낸 과제", status: "done", start_date: `${year - 1}-01-01`, due_date: `${year}-06-30`,
+      completed_at: `${year}-06-20`,
+    });
+    await go(`#/projects?year=${year - 1}`);
+    await page.reload(); // 연도 목록은 켤 때 읽는다
+    await page.waitForTimeout(1000);
+    const last = page.locator("tr", { hasText: "이듬해 끝낸 과제" });
+    equal(await last.locator(".status").innerText(), "진행중", "지난해에는 진행중");
+    expect((await last.locator(".year-status-now").innerText()).includes(`${year}-06-20`), "옆에 지금 상태(완료일)");
+    // [진행중] 으로 거른 줄의 딱지는 모두 진행중 — 숫자와 같은 기준
+    await go(`#/projects?year=${year - 1}&status=in_progress`);
+    await page.waitForTimeout(800);
+    const badges = await page.locator("tbody .status").allInnerTexts();
+    expect(badges.length > 0 && badges.every((text) => text === "진행중"), `딱지: ${badges}`);
+    // 올해에는 완료, 덧붙임 없음
+    await go(`#/projects?year=${year}`);
+    await page.waitForTimeout(800);
+    const now = page.locator("tr", { hasText: "이듬해 끝낸 과제" });
+    equal(await now.locator(".status").innerText(), "완료", "올해에는 완료");
+    equal(await now.locator(".year-status-now").count(), 0, "지금 상태와 같으면 덧붙이지 않는다");
+    await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+  });
+
+  await check("고른 사람을 머리의 × · 면담 칸 [팀 전체로] · 다시 누르기로 푼다 (183)", async () => {
+    await go(`#/skills?person=${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(800);
+    const chip = page.locator(".skills-person-chip");
+    expect((await chip.innerText()).includes("권경락"), "머리에 보는 사람");
+    equal(await page.locator(".skills-table tr.picked-row", { hasText: "권경락" }).count(), 1, "표에서 고른 줄");
+    // 머리의 × 로 풀기
+    await chip.getByRole("button", { name: "팀 전체로 돌아가기" }).click();
+    await page.waitForTimeout(700);
+    equal(await chip.count(), 0, "보는 사람이 사라진다");
+    expect(!page.url().includes("person="), `주소에서도 빠진다: ${page.url()}`);
+    expect((await page.locator(".meeting-panel h2").innerText()).includes("팀 전체"), "면담 칸이 팀 전체로");
+    // 표에서 고르고 면담 칸의 [팀 전체로]
+    await page.locator(".skills-table button", { hasText: "권경락" }).click();
+    await page.waitForTimeout(700);
+    equal(await chip.count(), 1, "표에서 고르면 머리에 선다");
+    await page.locator(".meeting-panel").getByRole("button", { name: "팀 전체로" }).click();
+    await page.waitForTimeout(700);
+    equal(await chip.count(), 0, "면담 칸에서 풀린다");
+    // 먼저 볼 사람 칩 — 다시 누르면 풀린다
+    const quiet = page.locator(".skills-quiet-chip").first();
+    if ((await quiet.count()) > 0) {
+      await quiet.click();
+      await page.waitForTimeout(700);
+      equal(await page.locator(".skills-quiet-chip.on").count(), 1, "고른 칩은 눌린 모양");
+      await page.locator(".skills-quiet-chip.on").click();
+      await page.waitForTimeout(700);
+      equal(await chip.count(), 0, "칩을 다시 누르면 풀린다");
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

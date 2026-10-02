@@ -110,6 +110,40 @@ def test_the_dashboard_follows_the_same_year(client):
     assert statuses_2025 == {"in_progress": 2}
 
 
+def test_the_list_shows_the_status_that_year(client):
+    """목록 한 줄의 상태 칸도 그 해의 상태다 (TODO 184 — v14 D-1).
+
+    2025.01 ~ 2026.06 과제를 2026 년에 끝냈다. 2025 를 고르면 홈 · 대시보드는 진행중으로 세고 [진행중] 으로 거르면
+    나오는데, 그 줄의 딱지만 지금 상태(완료)를 말해 숫자와 어긋났다. `status` 는 지금 상태 그대로 둔다.
+    """
+    make(client, "A과제", start_date="2025-01-01", due_date="2026-06-30", status="done", completed_at="2026-06-20")
+
+    (row_2025,) = client.get("/api/projects", params={"year": "2025"}).json()
+    assert row_2025["year_status"] == "in_progress" and row_2025["status"] == "done"
+    (row_2026,) = client.get("/api/projects", params={"year": "2026"}).json()
+    assert row_2026["year_status"] == "done"
+    # 숫자를 눌러 나온 줄의 그 해 상태 = 누른 숫자의 상태
+    for year in ("2025", "2026"):
+        for key in ("in_progress", "done"):
+            listed = client.get("/api/projects", params={"year": year, "status": key}).json()
+            assert all(row["year_status"] == key for row in listed), (year, key)
+    # 전체(연도 없음)는 지금 상태
+    (row_all,) = client.get("/api/projects", params={"year": ""}).json()
+    assert row_all["year_status"] == "done"
+
+
+def test_sorting_by_status_uses_the_status_that_year(client):
+    """상태 열 정렬도 그 해의 상태로 — 딱지 순서와 줄 순서가 같아야 한다 (TODO 184)."""
+    # 이름순으로는 "가" 가 앞이다 — 지금 상태로 세우면 [진행중(가), 완료(나), 진행중(다)] 로 딱지가 섞인다
+    make(client, "가 이듬해 끝낸 과제", start_date="2025-01-01", due_date="2026-06-30", status="done",
+         completed_at="2026-06-20")
+    make(client, "나 그해 끝낸 과제", start_date="2025-01-01", due_date="2025-12-31", status="done", completed_at="2025-12-20")
+    make(client, "다 지난해 시작해 진행", start_date="2025-03-01", status="in_progress")
+    rows = client.get("/api/projects", params={"year": "2025", "sort": "status"}).json()
+    shown = [row["year_status"] for row in rows]
+    assert shown == sorted(shown), shown
+
+
 def test_the_dashboard_owner_counts_follow_the_year(client):
     make(client, "올해 과제", owners=["권경락"])
     with_id(client, "2025-001", "지난해 끝난 과제", status="done")

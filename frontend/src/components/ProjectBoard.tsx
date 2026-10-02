@@ -2,15 +2,17 @@ import { useState } from "react";
 import { projectLink } from "../nav";
 import type { Meta, Project } from "../types";
 import { dueLabel, formatDate } from "../util";
-import { TypeBadge } from "./StatusBadge";
+import { TypeBadge, shownStatus } from "./StatusBadge";
 import StageBand from "./StageBand";
 
 interface Props {
   meta: Meta;
   projects: Project[];
+  /** 고른 연도 — 있으면 칸은 그 해의 상태로 나뉜다 (TODO 184) */
+  year?: string;
 }
 
-export default function ProjectBoard({ meta, projects }: Props) {
+export default function ProjectBoard({ meta, projects, year }: Props) {
   // 완료·중단은 기본으로 접어 둔다 (평소에는 볼 일이 적다).
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(meta.statuses.filter((status) => status.collapsed).map((status) => status.key)),
@@ -28,7 +30,8 @@ export default function ProjectBoard({ meta, projects }: Props) {
   return (
     <div className="board">
       {meta.statuses.map((status) => {
-        const items = projects.filter((project) => project.status === status.key);
+        // 연도를 고르면 그 해의 상태로 칸을 나눈다 — 목록의 상태 칸 · 홈의 숫자와 같은 기준 (TODO 184)
+        const items = projects.filter((project) => shownStatus(project) === status.key);
         const isCollapsed = collapsed.has(status.key);
         return (
           <section
@@ -49,7 +52,17 @@ export default function ProjectBoard({ meta, projects }: Props) {
                       className="board-card"
                       onClick={() => (window.location.hash = projectLink(project.id))}
                     >
+                      <div className="board-card-top">
                       <span className="project-id">{project.id}</span>
+                      {shownStatus(project) !== project.status && (
+                        <span
+                          className="year-status-now"
+                          title={`${year ? `${year}년` : "그 해"} 말에는 아직 ${status.label}이었습니다`}
+                        >
+                          → 지금 {meta.statuses.find((item) => item.key === project.status)?.label ?? project.status}
+                        </span>
+                      )}
+                      </div>
                       <h3>
                         {project.title} <StageBand stage={project.stage} />
                       </h3>

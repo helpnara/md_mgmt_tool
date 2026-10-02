@@ -75,7 +75,9 @@ SORTS = {
     # ── 열 머리글로 고르는 정렬 (TODO 57) ───────────────────────────────
     # 빈 값은 어느 방향에서나 뒤로 간다 (_flip 주석 참고).
     "id": "p.id ASC",
-    "status": "p.status ASC, p.title ASC",
+    # 연도를 고르면 **그 해의 상태**로 줄을 세운다 — 화면의 상태 칸이 그것을 보인다 (TODO 184).
+    # 전체(연도 없음)에서는 y_status = status 다.
+    "status": "p.y_status ASC, p.title ASC",
     "type": "CASE WHEN p.type IS NULL OR p.type = '' THEN 1 ELSE 0 END, p.type ASC, p.title ASC",
     "group": "CASE WHEN p.grp IS NULL OR p.grp = '' THEN 1 ELSE 0 END, p.grp ASC, p.title ASC",
     # 담당자·태그는 여러 개일 수 있다. **맨 앞 하나**를 기준으로 삼는다 —
@@ -182,6 +184,11 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, stages: dict[str, int
         "predecessors": svc._predecessors_of(conn, row["id"]),
         # 효과 금액을 세는 해 — 끝나는 해 (TODO 181). 목록(연도 거르기)에서만 온다.
         "effect_year": row["y_effect_year"] if "y_effect_year" in row.keys() else None,
+        # 그 해의 상태 (TODO 184) — 목록(연도 거르기)에서만 온다. 2025~2026 과제를 2025 에서 보면 진행중.
+        # 세고 거르는 곳(홈 · 대시보드 · [진행중] 거르기)이 모두 이것을 쓰므로 상태 칸도 이것을 보여야
+        # 숫자를 눌러 나온 줄의 딱지가 그 숫자와 같다(DESIGN 5.8). `status` 는 **지금 상태** 그대로 둔다 —
+        # 마감 경고 · 상세 화면 · 상태 바꾸기는 지금을 본다.
+        "year_status": row["y_status"] if "y_status" in row.keys() else None,
         # 다년도 과제의 단계 — 이어진 과제가 없으면 null (TODO 175)
         "stage": stages.get(row["id"]),
         "tags": _tags(conn, row["id"]),

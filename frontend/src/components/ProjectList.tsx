@@ -13,7 +13,7 @@ import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
 import CopyTableButton from "./CopyTableButton";
 import { leftLabel } from "../people";
-import StatusBadge, { TypeBadge } from "./StatusBadge";
+import { TypeBadge, YearStatusBadge, shownStatus } from "./StatusBadge";
 import StageBand from "./StageBand";
 
 interface Props {
@@ -360,7 +360,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               projects.map((project) => [
                 project.id,
                 project.title,
-                meta.statuses.find((status) => status.key === project.status)?.label ?? project.status,
+                meta.statuses.find((status) => status.key === shownStatus(project))?.label ?? shownStatus(project),
                 meta.types.find((type) => type.key === project.type)?.label ?? project.type ?? "",
                 project.nature ?? "",
                 project.group ?? "",
@@ -424,7 +424,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
       {/* 읽지 못한 파일 · 값 — [다시 읽기] 를 누르기 전에도 늘 보인다 (TODO 164) */}
       <ProblemsBanner problems={meta.problems ?? []} onReindexed={() => { load(); onMetaChange(); }} />
 
-      {view === "board" && <ProjectBoard meta={meta} projects={projects} />}
+      {view === "board" && <ProjectBoard meta={meta} projects={projects} year={filters.year === ALL_YEARS ? undefined : filters.year} />}
 
       {view === "table" && (
       /* 좁은 화면에서는 표만 가로로 민다 — 한 줄 칸을 다시 꺾지 않는다 (TODO 160) */
@@ -461,7 +461,8 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                   <StageBand stage={project.stage} />
                 </td>
                 <td className="one-line">
-                  <StatusBadge status={project.status} meta={meta} />
+                  {/* 연도를 고르면 그 해의 상태 — 숫자 · 거르기와 같은 기준 (TODO 184) */}
+                  <YearStatusBadge project={project} meta={meta} year={filters.year === ALL_YEARS ? undefined : filters.year} />
                 </td>
                 <td className="one-line">
                   {/* 속성이 없으면 표의 빈 값 `-` (158) — 딱지 부품의 `—` 는 표 밖의 규칙이다 (TODO 169) */}

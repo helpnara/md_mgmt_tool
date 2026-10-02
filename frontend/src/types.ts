@@ -155,6 +155,8 @@ export interface Project {
   stage?: number | null;
   /** 효과 금액을 세는 해 — 끝나는 해 (TODO 181). 과제목록에서만 온다 */
   effect_year?: string | null;
+  /** 그 해의 상태 — 그 해 뒤에 끝났으면 진행중 (TODO 184). 과제목록에서만 온다. `status` 는 지금 상태 */
+  year_status?: string | null;
   /** 다년도 과제의 줄기 (상세 조회에서만, TODO 172) */
   lineage?: Lineage;
   /** 이 과제로 승격된 접수 · 이 과제에 병합된 접수 (상세 조회에서만) */

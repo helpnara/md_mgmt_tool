@@ -150,6 +150,22 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           </p>
         </div>
         <div className="skills-head-right">
+          {/* 지금 보는 사람 (TODO 183) — 표 · 칩 · 면담 칸 · 기록 목록 어디서 골랐든 푸는 자리는 여기 하나.
+              고른 사람은 화면 전체가 함께 쓰는 값이라, 고른 칸 안에만 풀 곳이 있으면 다른 칸에서 길을 잃는다. */}
+          {person && (
+            <span className="skills-person-chip">
+              보는 사람 <b>{person}</b>
+              <button
+                type="button"
+                className="skills-person-clear"
+                onClick={() => setPerson(ALL)}
+                aria-label="팀 전체로 돌아가기"
+                title="팀 전체로 돌아가기"
+              >
+                ×
+              </button>
+            </span>
+          )}
           <label className="home-year">
             기준 연도
             <select value={year} onChange={(event) => setYear(event.target.value)}>
@@ -225,9 +241,11 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             {quiet.map((item) => (
               <button
                 key={item.name}
-                className="skills-quiet-chip"
-                onClick={() => setPerson(item.name)}
-                title="이 사람의 기록만 봅니다"
+                className={person === item.name ? "skills-quiet-chip on" : "skills-quiet-chip"}
+                // 다시 누르면 푼다 — 사람별 표의 이름과 같은 규칙 (TODO 183)
+                onClick={() => setPerson(person === item.name ? ALL : item.name)}
+                aria-pressed={person === item.name}
+                title={person === item.name ? "다시 누르면 팀 전체로 돌아갑니다" : "이 사람의 기록과 면담만 봅니다"}
               >
                 {item.name}
                 {item.quiet && (
@@ -282,11 +300,17 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             </thead>
             <tbody>
               {summary.people.map((item) => (
-                <tr key={item.name} className={item.quiet ? "quiet-row" : undefined}>
+                <tr
+                  key={item.name}
+                  // 지금 보는 사람의 줄은 옅게 칠한다 — 표에서도 누구를 보는지 보이게 (TODO 183)
+                  className={[item.quiet ? "quiet-row" : "", person === item.name ? "picked-row" : ""].filter(Boolean).join(" ") || undefined}
+                >
                   <td>
                     <button
                       className={person === item.name ? "linkish on" : "linkish"}
                       onClick={() => setPerson(person === item.name ? ALL : item.name)}
+                      aria-pressed={person === item.name}
+                      title={person === item.name ? "다시 누르면 팀 전체로 돌아갑니다" : "이 사람의 기록과 면담만 봅니다"}
                     >
                       {item.name}
                     </button>
