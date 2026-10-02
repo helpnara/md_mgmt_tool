@@ -4128,7 +4128,7 @@ async function main() {
     equal(await page.locator(".meeting-item", { hasText: "시험 면담" }).count(), 0, "지워졌다");
   });
 
-  console.log("\n[36] 지난해 목록의 상태 칸 · 팀원역량에서 고른 사람 풀기 (TODO 183 · 184)");
+  console.log("\n[36] 지난해 목록의 상태 칸 · 팀원역량에서 고른 사람 풀기 (TODO 183 · 184 · 185)");
 
   await check("지난해를 고르면 상태 칸이 그 해의 상태 — 옆에 지금 상태 (184)", async () => {
     const year = new Date().getFullYear();
@@ -4156,25 +4156,34 @@ async function main() {
     await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
   });
 
-  await check("고른 사람을 머리의 × · 면담 칸 [팀 전체로] · 다시 누르기로 푼다 (183)", async () => {
+  await check("고른 사람은 좁혀지는 두 칸 위의 띠 [팀 전체로 ×] · 다시 누르기로 푼다 (183 · 185)", async () => {
     await go(`#/skills?person=${encodeURIComponent("권경락")}`);
     await page.waitForTimeout(800);
-    const chip = page.locator(".skills-person-chip");
-    expect((await chip.innerText()).includes("권경락"), "머리에 보는 사람");
+    const bar = page.locator(".skills-person-bar");
+    expect((await bar.innerText()).includes("권경락"), "띠에 보는 사람");
+    // 기준 연도 옆(화면 머리)에는 없다 — 화면 전체가 바뀐 것처럼 읽혔다 (185)
+    equal(await page.locator(".home-head .skills-person-bar, .home-head .skills-person-chip").count(), 0, "머리에는 없다");
+    // 띠는 사람별 표 아래, 면담 칸 바로 위
+    const order = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll(".card")];
+      const at = (selector) => cards.findIndex((card) => card.matches(selector) || card.querySelector(selector));
+      return { table: at(".skills-table"), bar: at(".skills-person-bar"), meeting: at(".meeting-panel") };
+    });
+    expect(order.table < order.bar && order.bar + 1 === order.meeting, `칸 순서: ${JSON.stringify(order)}`);
     equal(await page.locator(".skills-table tr.picked-row", { hasText: "권경락" }).count(), 1, "표에서 고른 줄");
-    // 머리의 × 로 풀기
-    await chip.getByRole("button", { name: "팀 전체로 돌아가기" }).click();
+    // 띠의 [팀 전체로 ×]
+    await bar.getByRole("button", { name: /팀 전체로/ }).click();
     await page.waitForTimeout(700);
-    equal(await chip.count(), 0, "보는 사람이 사라진다");
+    equal(await bar.count(), 0, "띠가 사라진다");
     expect(!page.url().includes("person="), `주소에서도 빠진다: ${page.url()}`);
     expect((await page.locator(".meeting-panel h2").innerText()).includes("팀 전체"), "면담 칸이 팀 전체로");
-    // 표에서 고르고 면담 칸의 [팀 전체로]
+    // 표에서 고르면 띠가 서고, 이름을 한 번 더 누르면 풀린다
     await page.locator(".skills-table button", { hasText: "권경락" }).click();
     await page.waitForTimeout(700);
-    equal(await chip.count(), 1, "표에서 고르면 머리에 선다");
-    await page.locator(".meeting-panel").getByRole("button", { name: "팀 전체로" }).click();
+    equal(await bar.count(), 1, "표에서 고르면 띠가 선다");
+    await page.locator(".skills-table button", { hasText: "권경락" }).click();
     await page.waitForTimeout(700);
-    equal(await chip.count(), 0, "면담 칸에서 풀린다");
+    equal(await bar.count(), 0, "이름을 다시 누르면 풀린다");
     // 먼저 볼 사람 칩 — 다시 누르면 풀린다
     const quiet = page.locator(".skills-quiet-chip").first();
     if ((await quiet.count()) > 0) {
@@ -4183,7 +4192,7 @@ async function main() {
       equal(await page.locator(".skills-quiet-chip.on").count(), 1, "고른 칩은 눌린 모양");
       await page.locator(".skills-quiet-chip.on").click();
       await page.waitForTimeout(700);
-      equal(await chip.count(), 0, "칩을 다시 누르면 풀린다");
+      equal(await bar.count(), 0, "칩을 다시 누르면 풀린다");
     }
   });
 

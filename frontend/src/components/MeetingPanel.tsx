@@ -72,12 +72,6 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
         <h2>
           면담 기록
           {person ? <span className="hint"> · {person} · {items.length}건</span> : <span className="hint"> · 팀 전체의 하기로 한 것</span>}
-          {/* 사람을 고른 바로 이 칸에서 팀 전체로 돌아간다 (TODO 183 — 여기에 풀 곳이 없어 막혔다) */}
-          {person && (
-            <button type="button" className="ghost small meeting-all" onClick={() => onPickPerson("")}>
-              팀 전체로
-            </button>
-          )}
         </h2>
         <button onClick={() => { setAdding((value) => !value); setEditing(null); }} className={adding ? "ghost on" : undefined}>
           면담 추가

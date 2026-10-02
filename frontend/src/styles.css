@@ -1038,19 +1038,14 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 }
 .skills-quiet-chip:hover { border-color: var(--warn); }
 .skills-quiet-chip.on { border-color: var(--warn); background: #fdf3e1; box-shadow: inset 0 0 0 1px var(--warn); }
-/* 지금 보는 사람 (TODO 183) — 기준 연도 옆, × 로 팀 전체로 */
-.skills-person-chip {
-  display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px; border-radius: 999px;
-  background: var(--accent-soft); color: var(--text); font-size: 13px; white-space: nowrap;
+/* 지금 보는 사람 (TODO 183 · 185) — 좁혀지는 두 칸(면담 · 역량 기록) 바로 위의 띠 */
+.skills-person-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px;
+  background: var(--accent-soft); border-color: #c7d7fb; font-size: 14px;
 }
-.skills-person-chip b { color: var(--accent-strong); }
-button.skills-person-clear {
-  width: 22px; height: 22px; padding: 0; border: 0; border-radius: 999px; background: transparent;
-  color: var(--accent-strong); font-size: 16px; line-height: 1; cursor: pointer;
-}
-button.skills-person-clear:hover { background: var(--surface); }
+.skills-person-bar button { margin-left: auto; white-space: nowrap; }
+.skills-person-name { color: var(--accent-strong); }
 .skills-table tr.picked-row td { background: var(--accent-soft); }
-.meeting-panel h2 .meeting-all { margin-left: 10px; vertical-align: middle; }
 .skills-quiet-chip .muted { font-weight: 400; font-size: 11px; color: var(--muted); }
 
 .skills-table td, .skills-table th { white-space: nowrap; }

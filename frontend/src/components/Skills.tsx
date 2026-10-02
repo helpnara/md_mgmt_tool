@@ -150,22 +150,6 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           </p>
         </div>
         <div className="skills-head-right">
-          {/* 지금 보는 사람 (TODO 183) — 표 · 칩 · 면담 칸 · 기록 목록 어디서 골랐든 푸는 자리는 여기 하나.
-              고른 사람은 화면 전체가 함께 쓰는 값이라, 고른 칸 안에만 풀 곳이 있으면 다른 칸에서 길을 잃는다. */}
-          {person && (
-            <span className="skills-person-chip">
-              보는 사람 <b>{person}</b>
-              <button
-                type="button"
-                className="skills-person-clear"
-                onClick={() => setPerson(ALL)}
-                aria-label="팀 전체로 돌아가기"
-                title="팀 전체로 돌아가기"
-              >
-                ×
-              </button>
-            </span>
-          )}
           <label className="home-year">
             기준 연도
             <select value={year} onChange={(event) => setYear(event.target.value)}>
@@ -399,6 +383,21 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           </p>
         )}
       </div>
+
+      {/* ── 지금 보는 사람 (TODO 183 · 185) ──────────────────────────────
+          사람을 골라도 위쪽(합계 · 먼저 볼 사람 · 사람별 표)은 팀 전체 그대로다. 좁혀지는 것은 **아래 두 칸**뿐이라,
+          띠도 그 두 칸 바로 위에 둔다. 처음(183)에는 기준 연도 옆에 두어 화면 전체가 바뀐 것처럼 읽혔다(v16 C-1).
+          표 · 칩 · 면담 칸 · 기록 목록 어디서 골랐든 푸는 자리는 여기 하나다. */}
+      {person && (
+        <div className="card wide skills-person-bar" role="status">
+          <span>
+            아래 <b>면담 기록 · 역량 기록</b>은 <b className="skills-person-name">{person}</b> 님만 보는 중
+          </span>
+          <button type="button" className="ghost small" onClick={() => setPerson(ALL)} title="면담 기록 · 역량 기록을 팀 전체로">
+            팀 전체로 ×
+          </button>
+        </div>
+      )}
 
       {/* ── 면담 (TODO 182) — 사람을 고르면 그 사람의 면담, 아니면 팀 전체의 하기로 한 것 ── */}
       <MeetingPanel
