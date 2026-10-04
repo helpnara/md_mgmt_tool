@@ -775,7 +775,8 @@ GET /api/projects/{id}/export?format=md&assets=zip|inline|link
 ### 5.5 외부 편집 동기화
 
 * 앱 기동 시 vault 전체 스캔 → `file_mtime` 비교로 변경분만 재인덱싱.
-* 실행 중에는 `watchdog`으로 vault 감시, 변경 파일만 증분 인덱싱(디바운스 500ms).
+* ~~실행 중에는 `watchdog`으로 vault 감시, 변경 파일만 증분 인덱싱(디바운스 500ms).~~ **만들지 않았다** — 보류(TODO 의 *T22 watchdog 자동 감시*,
+  착수 신호: [다시 읽기]를 자주 누르게 될 때). 지금은 기동할 때의 스캔과 [다시 읽기]가 맡는다. `requirements.txt` 에는 그때를 위해 남아 있다(2026-10-04 문서 점검).
 * `POST /api/reindex`로 전체 재구축 가능. DB를 지워도 데이터 손실이 없다.
 
 ### 5.6 보고 작성 흐름 (초안 자동 생성 → 정리 → 확정)
@@ -966,7 +967,7 @@ score = elapsed + unreported_entries × 0.5
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET | `/api/projects` | 목록. `?status=&type=&group=&tag=&owner=&partner=&q=&year=&done_year=&verified=&owner_left=&effect=&no_effect=&nature=&category=&delivery=&cost_kind=&from_intake=&due=&sort=&order=` (분류 넷은 `none` 이 *비어 있는 것* · `from_intake=yes\|no` — 136) (`effect=expected\|verified` 금액이 적힌 과제 — 124 · `no_effect=none\|only` 효과성 비대상/대상 — 125) (`owner_left=1` 떠난 담당자가 남은 **끝나지 않은** 과제 — 122) (`done_year` 완료일 기준 · `verified=none` 실증효과 미입력 — TODO 104 · 106) |
+| GET | `/api/projects` | 목록. `?status=&type=&group=&tag=&owner=&partner=&q=&year=&done_year=&verified=&owner_left=&effect=&no_effect=&nature=&category=&delivery=&cost_kind=&from_intake=&due=&new=&sort=&order=` (분류 넷은 `none` 이 *비어 있는 것* · `from_intake=yes\|no` — 136) (`effect=expected\|verified` 금액이 적힌 과제 — 124 · `no_effect=none\|only` 효과성 비대상/대상 — 125) (`owner_left=1` 떠난 담당자가 남은 **끝나지 않은** 과제 — 122) (`done_year` 완료일 기준 · `verified=none` 실증효과 미입력 — TODO 104 · 106) (`year` 는 **수행기간이 그 해와 겹치는 과제**, 상태 · 효과 거르기도 그 해 기준 · `new=1` 그 해에 착수한 과제만 — 181) · 한 줄에 `effect_year`(효과를 세는 해 — 181) · `year_status`(그 해의 상태 — 184, `status` 는 지금 상태), `sort=status` 는 그 해의 상태로 |
 | POST | `/api/projects` | 과제 생성 (폴더 + index.md 생성). 번호의 연도는 **시작일**을 따른다 (95) |
 | GET | `/api/projects/next-id` | 저장하면 붙을 번호를 미리 보여 준다 (`?start_date=`, 95) |
 | GET | `/api/projects/{id}` | 개요 + 일지 목록 요약. 답하지 않은 지시·다음 할 일·개요 작성 여부를 함께 준다 (107 · 112 · 106-B) |
@@ -1091,13 +1092,19 @@ score = elapsed + unreported_entries × 0.5
 | 백엔드 | FastAPI + Uvicorn | 요청 스택. 파일 업로드·정적 서빙·OpenAPI 문서 기본 제공 |
 | DB | SQLite (WAL) + FTS5 | 설치 불필요, 단독 사용에 충분 |
 | 마크다운 파싱 | `python-frontmatter` + `markdown-it-py` | front matter 왕복(round-trip) 보존 |
-| 파일 감시 | `watchdog` | 외부 편집 동기화 |
+| 파일 감시 | ~~`watchdog`~~ — **보류** | 외부 편집은 기동 시 스캔 + [다시 읽기]. 자동 감시는 T22 착수 신호를 기다린다(5.5) |
 | 이미지 처리 | `Pillow` | 썸네일 생성 |
 | 엑셀 읽기 | `openpyxl` | 보고용 xlsx 표·삽입 이미지 미리보기 |
 | 프론트엔드 | Vite + React + TypeScript | 에디터/보드 UI 구성 용이 |
-| 에디터 | CodeMirror 6 (markdown) | 붙여넣기 이벤트 후킹이 쉬움, 가벼움 |
-| 렌더링 | markdown-it + highlight.js | 백엔드와 동일 렌더링 규칙 |
-| 배포 | `uv`/venv + 단일 실행 스크립트 (추후 Docker) | 로컬 실행 우선 |
+| 에디터 | 브라우저 기본 `textarea` + 붙여넣기 처리 | 초안의 CodeMirror 6 은 쓰지 않았다 — 그림 · 엑셀 표 붙여넣기는 `textarea` 의 paste 이벤트로 충분했고, 의존성이 하나 줄었다 |
+| 렌더링 | markdown-it (코드 강조 없음) | 백엔드와 동일 렌더링 규칙. 초안의 highlight.js 는 넣지 않았다 — 진행일지에 코드를 적을 일이 거의 없다 |
+| 배포 | 오프라인 ZIP — `tools/make_dist.py` 가 `vendor/` wheel 과 빌드된 `frontend/dist` 를 담는다. 받는 쪽은 `setup.bat` → `run.bat` | 사내 PC 는 인터넷이 막혀 있고 Node.js 가 없다(M5.5). 초안의 `uv` · Docker 는 쓰지 않았다 |
+
+> **구현 방식 — FastAPI(JSON API) + 별도 React 화면** (2026-10-02 사용자 질문으로 정리). 파이썬 UI 프레임워크(NiceGUI · Gradio · Reflex)로
+> 전부 쓰는 길, FastAPI + 서버 렌더링(Jinja + HTMX) 길과 견주면 셋째 길이다. 서버는 끝점 105개가 JSON 만 내고, 화면 상태와 주소(`#/…`)는
+> 브라우저가 든다. 빌드한 `frontend/dist` 를 **저장소에 커밋**하고 FastAPI 가 정적 파일로 함께 내보내므로 사용자 PC 에는 파이썬 하나면 된다.
+> 값은 화면을 고칠 때마다 빌드하고 API 와 화면의 타입(`frontend/src/api.ts` · `types.ts`)을 둘 다 맞춰야 한다는 것, 얻는 것은 사내 AI 플랫폼이나
+> 다른 시스템에 붙일 때 JSON API 만 열면 된다는 것(71-(나) · 113 이 이 길을 전제로 미뤄 둔 것)이다.
 
 ```
 md_mgmt_tool/
@@ -1178,8 +1185,8 @@ md_mgmt_tool/
 | **M5.13. 쓰던 글은 데이터 폴더에** ✅ | 임시 보관을 브라우저에서 데이터 폴더로(170) — 다른 창 · 프로필 · 주소에서도 돌아오고, 기록 · 개요 · 보고 · 요청 카드의 "작성 중" 표시와 홈 "작성 중이던 글" 목록. 한글 팀 코드 번호가 주소에서 바뀌던 것도 풀어 쓴다 | 어디서 쓰다 말았는지 기억하지 않아도 된다 |
 | **M5.14. 다년도 과제 · 풀로 되돌리기** ✅ | 선행 과제 목록과 단계 줄기(172 — 여러 단계 · 단계마다 여러 과제, 스키마 15), 직접 만든 스마트과제를 접수로 되돌리기(171). 번호 다시 매기기가 선행 · 접수 연결까지 고친다 | 지금 보는 과제가 어느 줄기의 몇 단계인지 한눈에 보이고, 접수를 거치지 않은 과제도 풀에서 함께 고른다 |
 | **M5.15. 로드맵 · 단계 띠** ✅ | 다년도 과제의 줄기를 간트처럼 한 화면에(174 — 막대 · 화살표 · 오늘 선 · 살펴볼 것), 이름 뒤의 **N단계 띠**(175), [이 과제로 새 과제] 는 [만들기] 를 눌러야 생긴다(173) | 관리자가 팀의 다년도 과제가 어디쯤 와 있고, 어느 줄기가 늦거나 끊겼고, 내년에 이어 세울 단계가 무엇인지 한 화면에서 본다 |
-| **M5.17. 팀원 면담** ✅ | 팀원역량 화면 안의 면담 기록 — 한 줄 요약 · 하기로 한 것(닫을 때까지) · 다음 면담, 사람별 마지막 면담 · 열린 것, 면담할 때가 지난 사람(182, 스키마 16) | 역량 이력을 놓고 한 면담의 결과가 남고, 다음 면담에서 "하기로 한 것" 부터 꺼낸다 |
-| **M5.16. 연도 = 수행기간** ✅ | 연도를 고르면 그 해에 수행한 과제 모두(다년도 과제는 해마다), 완료 = 그 해에 끝낸 과제, 효과 = 끝나는 해, 신규 착수 칸 · 거르기(181) | 해가 바뀌어도 하고 있는 과제가 첫 화면에서 사라지지 않고, 그 해의 계획 대비 실적을 같은 해에서 본다 |
+| **M5.17. 팀원 면담** ✅ | 팀원역량 화면 안의 면담 기록 — 한 줄 요약 · 하기로 한 것(닫을 때까지) · 다음 면담, 사람별 마지막 면담 · 열린 것, 면담할 때가 지난 사람(182, 스키마 16). 고른 사람은 좁혀지는 두 칸 위의 띠 [팀 전체로 ×] · 이름 다시 누르기로 푼다(183 · 185) | 역량 이력을 놓고 한 면담의 결과가 남고, 다음 면담에서 "하기로 한 것" 부터 꺼낸다 |
+| **M5.16. 연도 = 수행기간** ✅ | 연도를 고르면 그 해에 수행한 과제 모두(다년도 과제는 해마다), 완료 = 그 해에 끝낸 과제, 효과 = 끝나는 해, 신규 착수 칸 · 거르기(181). 과제목록 · 보드의 상태 칸도 그 해의 상태, 지금 상태가 다르면 옆에 작게(184) | 해가 바뀌어도 하고 있는 과제가 첫 화면에서 사라지지 않고, 그 해의 계획 대비 실적을 같은 해에서 본다 |
 | **M6. 서버 확장 (선택)** ◀ 선택 | Docker 이미지, 간단 인증, 다중 사용자 대비 잠금 | 사내 서버에 올려 팀원이 조회 가능 |
 
 M1~M2까지가 첨부 관련 불편을 해소하는 최소 유용 제품(MVP)이고, **M4가 "보고 시점 예측"이라는 두 번째 핵심 가치**를 완성한다.
