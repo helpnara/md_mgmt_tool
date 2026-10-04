@@ -1140,6 +1140,7 @@ md_mgmt_tool/
 │   └── dist/                    # 빌드 결과. Node 없는 PC 를 위해 저장소에 함께 둔다
 ├── tests/ui/                    # Playwright 화면 자동 시험 (screens.mjs, contrast.mjs)
 ├── tools/make_dist.py           # 오프라인 배포 ZIP 생성 (vendor/ wheel 동봉)
+├── tools/releases.txt           # 만든 배포본 이름의 기록 — 판 번호가 어디서든 이어지게 (TODO 186)
 ├── docs/                        # DESIGN · TODO · ROADMAP · 비용산정 · 발표 자료
 ├── vault/                       # 기본 데이터 위치 (.gitignore)
 ├── setup.py · setup.bat         # 오프라인 설치 (vendor/ 우선)

@@ -448,12 +448,15 @@ cd frontend && npm run build && cd ..     # 화면을 먼저 빌드한다
 python tools/make_dist.py                 # dist/느린나이테-<날짜>-v<판>.zip (파이썬 3.14 · win_amd64)
 python tools/make_dist.py --python 3.13   # 사내 PC 의 파이썬이 다를 때
 python tools/make_dist.py --no-vendor     # 인터넷이 되는 PC 용 (용량이 작다)
+python tools/make_dist.py --version 3     # 판 번호를 직접 — 그날 이미 쓴 번호면 멈춘다
+git add tools/releases.txt && git commit -m "chore: 배포본 기록"   # 만든 뒤 — 다른 곳에서도 번호가 이어지게
 ```
 
 이름의 판 번호는 **그날 이미 만든 것 다음 번호**로 붙는다 — 같은 날 다시 만들어도
 앞의 배포본을 덮지 않는다.
-> **주의 — 판 번호는 이 PC 의 `dist/` 폴더만 보고 정한다.** `dist/` 는 저장소에 올라가지 않으므로, 새로 클론한 곳(웹 세션의 새 컨테이너 등)에서
-> 같은 날 만들면 이미 전달한 `v1` 과 같은 이름이 다시 붙는다. 만들기 전에 [TODO](docs/TODO.md) 머리의 *최신 배포본* 이름을 확인한다(TODO 186).
+판 번호는 이 PC 의 `dist/` 와 **저장소의 기록 `tools/releases.txt`** 를 함께 보고 정한다(TODO 186). `dist/` 는 저장소에 올라가지 않아
+새로 클론한 곳(웹 세션의 새 컨테이너 등)에서는 비어 있으므로, 기록이 없으면 이미 전달한 `v1` 과 같은 이름이 다시 붙는다.
+만들면 기록 끝에 이름이 한 줄 더해진다 — **그 파일을 커밋 · 푸시**해야 다른 곳에서도 번호가 이어진다.
 
 담기는 파일은 **git 이 추적하는 것**으로 정해진다(`git archive`). 그래서 `vault`·`.venv`·
 `__pycache__` 가 딸려 갈 일이 없고, **커밋하지 않은 변경은 담기지 않는다.**

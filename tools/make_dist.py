@@ -33,6 +33,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "dist"
 NAME = "느린나이테"
+# 만든 배포본 이름의 기록 (TODO 186). `dist/` 는 git 이 무시하므로 새 클론 · 웹 세션의 새 컨테이너에서는 비어 있다 —
+# 그것만 세면 이미 전달한 `v1` 과 같은 이름이 다시 붙는다. 이 파일은 **저장소에 커밋**되어 어디서 만들어도 번호가 이어진다.
+RELEASES = ROOT / "tools" / "releases.txt"
 
 
 def run(command: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -81,21 +84,52 @@ def fetch_wheels(target: Path, python_version: str, platform: str) -> int:
     return len(list(target.glob("*.whl")))
 
 
-def next_version(stamp: str) -> int:
+def released_names(releases: Path | None = None) -> list[str]:
+    """기록에 적힌 배포본 이름들. `#` 로 시작하는 줄과 빈 줄은 설명이다."""
+    path = releases or RELEASES
+    if not path.is_file():
+        return []
+    return [
+        line.strip() for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def used_versions(stamp: str, out_dir: Path | None = None, releases: Path | None = None) -> set[int]:
+    """그날 이미 쓴 판 번호 — **이 PC 의 `dist/`** 와 **저장소의 기록**(TODO 186) 둘 다에서."""
+    head = f"{NAME}-{stamp}-v"
+    names = [path.stem for path in (out_dir or OUT_DIR).glob(f"{head}*.zip")]
+    names += [name for name in released_names(releases) if name.startswith(head)]
+    used: set[int] = set()
+    for name in names:
+        # `-v2` 도 `-v2-no-vendor` 도 같은 날의 판이다. 번호는 하나로 센다.
+        number = name[len(head):].split("-")[0]
+        if number.isdigit():
+            used.add(int(number))
+    return used
+
+
+def next_version(stamp: str, out_dir: Path | None = None, releases: Path | None = None) -> int:
     """그날의 다음 판 번호 (`…-20260909-v3.zip` → 4).
 
     예전에는 이름이 날짜까지라, **같은 날 다시 만들면 앞의 것을 말없이 덮었다.**
     하루에 두세 번 고쳐 내보내는 일이 실제로 있고, 그때 "어제 받은 그것" 과
     "방금 받은 그것" 을 파일 이름으로 구분할 수 없었다.
+
+    그다음에는 `dist/` 만 세어, 새 환경에서는 이미 전달한 번호를 다시 붙였다(TODO 186) — 기록도 함께 센다.
     """
-    head = f"{NAME}-{stamp}-v"
-    used = 0
-    for path in OUT_DIR.glob(f"{head}*.zip"):
-        # `-v2` 도 `-v2-no-vendor` 도 같은 날의 판이다. 번호는 하나로 센다.
-        number = path.stem[len(head):].split("-")[0]
-        if number.isdigit():
-            used = max(used, int(number))
-    return used + 1
+    return max(used_versions(stamp, out_dir, releases), default=0) + 1
+
+
+def record_release(name: str, releases: Path | None = None) -> None:
+    """만든 배포본 이름을 기록 끝에 더한다. 커밋해야 다른 곳에서도 번호가 이어진다."""
+    path = releases or RELEASES
+    if name in released_names(path):
+        return
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if text and not text.endswith("\n"):
+        text += "\n"
+    path.write_text(text + name + "\n", encoding="utf-8")
 
 
 def write_build_info(
@@ -150,7 +184,23 @@ def main() -> int:
     parser.add_argument("--python", default="3.14", help="사내 PC 의 파이썬 버전 (기본 3.14)")
     parser.add_argument("--platform", default="win_amd64")
     parser.add_argument("--no-vendor", action="store_true", help="wheel 을 담지 않는다")
+    parser.add_argument("--version", type=int, help="판 번호를 직접 정한다 — 그날 이미 쓴 번호면 멈춘다 (TODO 186)")
     args = parser.parse_args()
+
+    # 이름부터 정한다 — wheel 을 한참 모은 뒤에 번호가 겹친다고 멈추면 시간만 버린다
+    stamp = date.today().strftime("%Y%m%d")
+    used = used_versions(stamp)
+    if args.version is not None:
+        if args.version < 1:
+            print("[오류] --version 은 1 이상이어야 합니다.")
+            return 1
+        if args.version in used:
+            print(f"[오류] {NAME}-{stamp}-v{args.version} 은 이미 쓴 이름입니다"
+                  f" (dist/ 또는 {RELEASES.relative_to(ROOT)}). 다른 번호를 고르거나 --version 을 빼세요.")
+            return 1
+        version = args.version
+    else:
+        version = max(used, default=0) + 1
 
     if subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
                       capture_output=True, text=True).stdout.strip():
@@ -174,8 +224,6 @@ def main() -> int:
         wheels = fetch_wheels(payload / "vendor", args.python, args.platform)
         print(f"  wheel {wheels}개")
 
-    stamp = date.today().strftime("%Y%m%d")
-    version = next_version(stamp)
     write_build_info(payload, f"{NAME}-{stamp}-v{version}", args.python, args.platform, wheels)
 
     # vendor 없는 배포본은 이름으로 구분되어야 한다 — 받는 쪽에서 열어 보기 전에는
@@ -185,8 +233,11 @@ def main() -> int:
     make_zip(payload, zip_path, NAME)
     shutil.rmtree(stage)
 
+    record_release(f"{NAME}-{stamp}-v{version}")
+
     size = zip_path.stat().st_size / 1024 / 1024
     print(f"\n만들었습니다: {zip_path.relative_to(ROOT)}  ({size:.1f} MB)")
+    print(f"{RELEASES.relative_to(ROOT)} 에 이름을 적었습니다 — **커밋 · 푸시**해야 다른 곳에서도 판 번호가 이어집니다.")
     return 0
 
 
