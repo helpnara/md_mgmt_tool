@@ -3,6 +3,7 @@
  *
  *   node docs/promo/render.mjs              # 느린나이테-소개-16x9.mp4 (1920×1080, 30fps, 소리 없음) + 표지 png
  *   node docs/promo/render.mjs --fps 24     # 가볍게
+ *   node docs/promo/render.mjs --vertical   # 세로형 느린나이테-소개-9x16.mp4 (1080×1920 — 릴스 · 쇼츠)
  *
  * promo.html 의 seek(t) 로 한 장씩 그려 ffmpeg 에 바로 넘긴다 — 재생 속도와 상관없이 매번 같은 영상이 나온다.
  * 준비물: ffmpeg, playwright(전역), 글꼴(fonts/ 가 없으면 npm 으로 Noto Sans KR 을 받아 채운다 — OFL).
@@ -24,6 +25,8 @@ const { chromium } = (() => {
 })();
 
 const fps = Number(process.argv[process.argv.indexOf("--fps") + 1]) || 30;
+const vertical = process.argv.includes("--vertical");
+const [WIDTH, HEIGHT, TAG] = vertical ? [1080, 1920, "9x16"] : [1920, 1080, "16x9"];
 
 // 글꼴 — 저장소에 넣지 않는다(.gitignore). 없으면 받아 온다.
 const FONTS = join(HERE, "fonts");
@@ -38,12 +41,12 @@ if (!NEED.every((f) => existsSync(join(FONTS, f)))) {
 }
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-await page.goto(`file://${join(HERE, "promo.html")}`);
+const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
+await page.goto(`file://${join(HERE, "promo.html")}${vertical ? "?v" : ""}`);
 await page.evaluate(() => document.fonts.ready);
 const duration = await page.evaluate(() => window.DURATION);
 
-const out = join(HERE, "느린나이테-소개-16x9.mp4");
+const out = join(HERE, `느린나이테-소개-${TAG}.mp4`);
 const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-",
   "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "slow", "-movflags", "+faststart", out], { stdio: ["pipe", "inherit", "inherit"] });
 const frames = Math.round(duration * fps);
@@ -58,6 +61,6 @@ await new Promise((r) => ff.on("close", r));
 
 // 표지 — 블로그 · SNS 미리보기용 (인트로가 다 그려진 때)
 await page.evaluate(() => window.seek(4.0));
-await page.screenshot({ path: join(HERE, "느린나이테-소개-표지.png") });
+await page.screenshot({ path: join(HERE, vertical ? "느린나이테-소개-표지-9x16.png" : "느린나이테-소개-표지.png") });
 await browser.close();
 console.log(`\n만들었습니다: ${out} (${frames} 장, ${duration}초)`);

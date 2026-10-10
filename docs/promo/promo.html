@@ -143,6 +143,30 @@ body { font-family: NL, NK, sans-serif; color: var(--ink); }
 .cross { position: absolute; left: 1530px; top: 418px; font-size: 56px; color: var(--red); font-weight: 700; opacity: 0; }
 .pills { position: absolute; left: 900px; top: 740px; display: flex; gap: 16px; }
 .pills .chip { font-size: 22px; padding: 10px 20px; background: #fff; border: 1.5px solid var(--line); opacity: 0; }
+
+/* ── 세로형 9:16 (?v) — 글은 위, 창은 아래. 창 안쪽 크기(940×700)는 같아서 장면 안 좌표를 그대로 쓴다 ── */
+html.v, html.v body, html.v #stage { width: 1080px; height: 1920px; }
+html.v #bgrings { right: -320px; bottom: -280px; width: 820px; height: 820px; }
+html.v #corner { left: 80px; top: 96px; font-size: 30px; }
+html.v #corner svg { width: 50px; height: 50px; }
+html.v .copy { left: 80px; top: 330px; width: 920px; }
+html.v .kicker { font-size: 27px; }
+html.v .copy h2 { font-size: 78px; }
+html.v .copy p { font-size: 33px; }
+html.v .win { left: 70px; top: 950px; }
+html.v #s0-rings { left: 390px !important; top: 500px !important; }
+html.v #s0-title { top: 860px !important; }
+html.v #s0-tag { top: 1030px !important; }
+html.v #s0-note { top: 1110px !important; }
+html.v #s9-rings { left: 415px !important; top: 520px !important; }
+html.v #s9-title { top: 840px !important; }
+html.v #s9-tag { top: 1010px !important; }
+html.v #s9-note { top: 1100px !important; font-size: 26px; }
+html.v #s1-folder { left: 360px; top: 1150px; }
+html.v .pc { left: 230px; top: 970px; }
+html.v .cloud { left: 430px; top: 1550px; }
+html.v .cross { left: 515px; top: 1450px; }
+html.v .pills { left: 0; right: 0; top: 1760px; justify-content: center; }
 </style>
 </head>
 <body>
@@ -175,11 +199,11 @@ body { font-family: NL, NK, sans-serif; color: var(--ink); }
     <div class="copy"><span class="kicker">왜 만들었나</span>
       <h2>기록은 흩어지고<br>보고는 <em>기억</em>에 기댔다</h2>
       <p id="s1-p">메모 · 메일 · 엑셀 · 폴더에 나뉜 이력.<br>매주 무엇을 보고할지 판단할 근거가 없었습니다.</p></div>
-    <div class="scrap" data-x="900" data-y="250"><span class="ico">📝</span>메모</div>
-    <div class="scrap" data-x="1300" data-y="200"><span class="ico">✉️</span>메일</div>
-    <div class="scrap" data-x="1620" data-y="360"><span class="ico">📊</span>엑셀</div>
-    <div class="scrap" data-x="980" data-y="620"><span class="ico">📈</span>그래프</div>
-    <div class="scrap" data-x="1460" data-y="700"><span class="ico">🗂️</span>폴더</div>
+    <div class="scrap" data-x="900" data-y="250" data-vx="110" data-vy="970"><span class="ico">📝</span>메모</div>
+    <div class="scrap" data-x="1300" data-y="200" data-vx="600" data-vy="940"><span class="ico">✉️</span>메일</div>
+    <div class="scrap" data-x="1620" data-y="360" data-vx="800" data-vy="1170"><span class="ico">📊</span>엑셀</div>
+    <div class="scrap" data-x="980" data-y="620" data-vx="150" data-vy="1390"><span class="ico">📈</span>그래프</div>
+    <div class="scrap" data-x="1460" data-y="700" data-vx="660" data-vy="1490"><span class="ico">🗂️</span>폴더</div>
     <div id="s1-folder"><b>과제 하나 = 한자리</b><span>개요 · 진행일지 · 첨부</span></div>
   </div>
 
@@ -318,6 +342,9 @@ body { font-family: NL, NK, sans-serif; color: var(--ink); }
 
 <script>
 // ── 시간표 (초) ─────────────────────────────────────────────────────────────
+// 세로형 — promo.html?v (render.mjs --vertical)
+const V = location.search.includes("v");
+if (V) document.documentElement.classList.add("v");
 const SCENES = [[0, 4.6], [4.6, 10], [10, 16.4], [16.4, 22.8], [22.8, 28.8], [28.8, 35.2], [35.2, 40.8], [40.8, 46.8], [46.8, 52.4], [52.4, 58]];
 const DURATION = 58;
 const $ = (s, r = document) => r.querySelector(s);
@@ -401,7 +428,8 @@ function seek(T) {
 }
 
 // 창 안 좌표 → 화면 좌표 (창: left 860, top 190, 몸통은 62 아래)
-const W = (x, y) => ({ x: 860 + x, y: 190 + 62 + y });
+const WIN = V ? { x: 70, y: 950 } : { x: 860, y: 190 };
+const W = (x, y) => ({ x: WIN.x + x, y: WIN.y + 62 + y });
 const moveCursor = (t, a, b, from, to) => { const p = prog(t, a, b, easeInOut); return { x: lerp(from.x, to.x, p), y: lerp(from.y, to.y, p) }; };
 
 const SCENE_FN = [
@@ -410,11 +438,11 @@ const SCENE_FN = [
     rise($("#s0-title"), t, 1.5, .8, 40); rise($("#s0-tag"), t, 2.2); rise($("#s0-note"), t, 2.8); },
   // s1 흩어진 것 → 한자리
   (t, el) => { const scraps = $$(".scrap", el);
-    scraps.forEach((s, i) => { const x0 = +s.dataset.x, y0 = +s.dataset.y;
+    scraps.forEach((s, i) => { const x0 = +(V ? s.dataset.vx : s.dataset.x), y0 = +(V ? s.dataset.vy : s.dataset.y);
       s.style.left = `${x0}px`; s.style.top = `${y0}px`;
       const ap = prog(t, .4 + i * .15, .9 + i * .15);
       const g = prog(t, 2.6 + i * .08, 3.6 + i * .08, easeInOut);
-      const fx = 1235 - x0, fy = 470 - y0;
+      const fx = (V ? 445 : 1235) - x0, fy = (V ? 1235 : 470) - y0;
       const bob = Math.sin((t + i) * 2.2) * 6 * (1 - g);
       put(s, { o: ap * (1 - prog(t, 3.4 + i * .08, 3.8 + i * .08)), x: fx * g, y: fy * g + bob, s: lerp(1, .4, g), r: (i % 2 ? 6 : -5) * (1 - g) }); });
     const f = prog(t, 3.5, 4.1); put($("#s1-folder"), { o: f, s: lerp(.85, 1, f) }); },
