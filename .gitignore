@@ -28,3 +28,6 @@ __pycache__/
 
 # 배포본 산출물
 /dist/
+
+# 홍보 영상 글꼴 — render.mjs 가 받아 온다 (TODO 188)
+/docs/promo/fonts/

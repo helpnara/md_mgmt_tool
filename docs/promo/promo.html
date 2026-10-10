@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>느린 나이테 — 소개 모션그래픽</title>
+<!--
+  느린 나이테 홍보용 모션그래픽 (TODO 188). render.mjs 가 이 페이지를 띄우고 seek(t) 로 한 장씩 찍어 mp4 로 묶는다.
+  화면 속 자료는 모두 지어낸 것이다 — 회사 · 팀 · 사람 · 과제 이름 · 금액 · 사내 분류 체계 없음. 실제 화면 캡처도 쓰지 않는다.
+  브라우저에서 그냥 열면 ?play 로 재생해 볼 수 있다.
+-->
+<style>
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-400-normal.woff2'); font-weight: 400; }
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-500-normal.woff2'); font-weight: 500; }
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-700-normal.woff2'); font-weight: 700; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-400-normal.woff2'); font-weight: 400; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-500-normal.woff2'); font-weight: 500; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-700-normal.woff2'); font-weight: 700; }
+:root { --bg: #faf6ef; --ink: #2b2118; --muted: #7a6a58; --line: #e6d9c6; --brown: #6f431e; --wood: #f2e1c6; --soft: #fdfaf5;
+        --green: #2f7d4f; --green-bg: #e3f1e7; --blue: #2f5f9e; --blue-bg: #e4ecf7; --red: #a0442c; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+body { font-family: NL, NK, sans-serif; color: var(--ink); }
+#stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+.abs { position: absolute; }
+.scene { position: absolute; inset: 0; opacity: 0; }
+
+/* 배경 나이테 장식 */
+#bgrings { position: absolute; right: -260px; bottom: -300px; width: 900px; height: 900px; opacity: .22; }
+#corner { position: absolute; left: 120px; top: 72px; display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 700; color: var(--brown); opacity: 0; }
+#corner svg { width: 44px; height: 44px; }
+#progress { position: absolute; left: 0; bottom: 0; height: 6px; background: var(--brown); width: 0; opacity: .55; }
+
+/* 왼쪽 글 */
+.copy { position: absolute; left: 120px; top: 300px; width: 660px; }
+.kicker { display: inline-block; font-size: 24px; font-weight: 700; color: #fff; background: var(--brown); padding: 8px 20px; border-radius: 99px; }
+.copy h2 { font-size: 68px; line-height: 1.22; font-weight: 700; letter-spacing: -1.5px; margin-top: 30px; }
+.copy h2 em { font-style: normal; color: var(--brown); }
+.copy p { font-size: 29px; line-height: 1.6; color: var(--muted); margin-top: 30px; }
+
+/* 오른쪽 창 */
+.win { position: absolute; left: 860px; top: 190px; width: 940px; height: 700px; background: #fff; border-radius: 26px;
+       box-shadow: 0 30px 80px rgba(80, 50, 20, .14), 0 0 0 1.5px var(--line); overflow: hidden; }
+.bar { height: 62px; display: flex; align-items: center; gap: 10px; padding: 0 24px; border-bottom: 1.5px solid var(--line); background: var(--soft); }
+.dot { width: 14px; height: 14px; border-radius: 99px; background: #e2d4c0; }
+.bar .tab { margin-left: 18px; font-size: 21px; font-weight: 500; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+.bar .tab svg { width: 26px; height: 26px; }
+.body { position: absolute; left: 0; right: 0; top: 62px; bottom: 0; padding: 34px 40px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 99px; font-size: 20px; font-weight: 500; background: #eee6da; color: #6b5a47; }
+.badge-ip { background: var(--green-bg); color: var(--green); }
+.badge-done { background: #e8e4de; color: #4f463c; }
+
+/* 커서 */
+#cursor { position: absolute; width: 40px; height: 40px; left: 0; top: 0; opacity: 0; z-index: 50; }
+#ripple { position: absolute; width: 70px; height: 70px; border-radius: 99px; border: 4px solid var(--brown); opacity: 0; z-index: 49; }
+
+/* s0 · s9 가운데 */
+.center { position: absolute; left: 0; right: 0; text-align: center; }
+.title { font-size: 120px; font-weight: 700; letter-spacing: -3px; }
+.tagline { font-size: 40px; color: var(--muted); }
+.note { font-size: 27px; color: var(--brown); font-weight: 500; }
+
+/* s1 흩어진 것 */
+.scrap { position: absolute; width: 190px; height: 130px; border-radius: 18px; background: #fff; box-shadow: 0 12px 30px rgba(80,50,20,.12), 0 0 0 1.5px var(--line);
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 24px; font-weight: 700; }
+.scrap .ico { font-size: 46px; line-height: 1; }
+#s1-folder { position: absolute; left: 1150px; top: 380px; width: 360px; height: 300px; border-radius: 26px; background: var(--wood);
+             border: 3px solid var(--brown); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; opacity: 0; }
+#s1-folder b { font-size: 34px; } #s1-folder span { font-size: 24px; color: var(--muted); }
+
+/* s2 편집기 */
+.editor { font-family: NL, NK, monospace; font-size: 27px; line-height: 1.75; white-space: pre-wrap; color: #3d3127; min-height: 210px; }
+.caret { display: inline-block; width: 3px; height: 30px; background: var(--brown); vertical-align: -5px; margin-left: 2px; }
+.keycap { position: absolute; padding: 12px 22px; border-radius: 14px; background: var(--ink); color: #fff; font-size: 28px; font-weight: 700; box-shadow: 0 8px 0 #000; }
+.tile { position: absolute; border-radius: 18px; border: 1.5px solid var(--line); background: var(--soft); padding: 18px; }
+.mini-bars { display: flex; align-items: flex-end; gap: 14px; height: 130px; }
+.mini-bars i { display: block; width: 34px; background: var(--brown); border-radius: 6px 6px 0 0; opacity: .8; }
+.xl { display: grid; grid-template-columns: repeat(3, 92px); }
+.xl span { height: 38px; border: 1px solid #d9cbb6; font-size: 18px; display: flex; align-items: center; justify-content: center; background: #fff; }
+.xl span.h { background: var(--wood); font-weight: 700; }
+.toast { position: absolute; right: 40px; bottom: 34px; padding: 14px 24px; border-radius: 14px; background: var(--green-bg); color: var(--green); font-size: 24px; font-weight: 700; }
+
+/* s3 홈 */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+.stat { border: 1.5px solid var(--line); border-radius: 18px; padding: 20px 22px; background: var(--soft); position: relative; }
+.stat small { font-size: 20px; color: var(--muted); }
+.stat b { display: block; font-size: 54px; margin-top: 6px; letter-spacing: -1px; }
+.members { margin-top: 34px; display: flex; flex-direction: column; gap: 20px; }
+.mrow { display: grid; grid-template-columns: 120px 1fr 60px; align-items: center; gap: 18px; font-size: 23px; }
+.mrow .track { height: 22px; background: #f1e9dd; border-radius: 99px; overflow: hidden; }
+.mrow .track { display: block; } .mrow .fill { display: block; height: 100%; background: var(--brown); border-radius: 99px; width: 0; opacity: .75; }
+.panel { position: absolute; top: 62px; right: 0; bottom: 0; width: 520px; background: #fff; border-left: 1.5px solid var(--line); box-shadow: -20px 0 40px rgba(80,50,20,.08); padding: 30px 32px; }
+.panel h3 { font-size: 30px; } .panel h3 span { color: var(--green); }
+.prow { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1.5px solid #f1e9dd; font-size: 22px; }
+
+/* s4 후보 */
+.crow { position: absolute; left: 40px; right: 40px; height: 92px; border-radius: 16px; border: 1.5px solid var(--line); background: #fff;
+        display: grid; grid-template-columns: 1fr 190px 220px; align-items: center; padding: 0 26px; font-size: 24px; }
+.crow .t { font-weight: 700; } .crow .d { color: var(--muted); font-size: 21px; }
+.crow .cnt { display: flex; align-items: center; gap: 12px; font-size: 20px; color: var(--muted); white-space: nowrap; }
+.crow .cnt i { display: block; height: 16px; border-radius: 99px; background: var(--brown); opacity: .7; }
+.crow.top { background: var(--wood); border-color: var(--brown); border-width: 2.5px; }
+.pick { position: absolute; right: -14px; top: -16px; padding: 4px 14px; border-radius: 99px; background: var(--brown); color: #fff; font-size: 17px; font-weight: 700; opacity: 0; }
+
+/* s5 초안 */
+.log { position: absolute; left: 40px; width: 360px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--soft); padding: 16px 20px; font-size: 20px; }
+.log b { display: block; font-size: 18px; color: var(--brown); margin-bottom: 6px; }
+.btn { position: absolute; padding: 14px 26px; border-radius: 14px; background: var(--brown); color: #fff; font-size: 23px; font-weight: 700; }
+.doc { position: absolute; left: 450px; top: 34px; width: 450px; height: 560px; border-radius: 18px; border: 2px solid var(--line); background: #fff; padding: 26px 28px; }
+.doc h4 { font-size: 26px; } .doc .sec { margin-top: 18px; font-size: 19px; color: var(--brown); font-weight: 700; }
+.doc .ln { height: 14px; border-radius: 99px; background: #eee3d3; margin-top: 12px; }
+.stamp { position: absolute; left: 530px; top: 300px; padding: 16px 30px; border: 5px solid var(--red); color: var(--red); border-radius: 16px;
+         font-size: 36px; font-weight: 700; background: rgba(255,255,255,.85); opacity: 0; }
+
+/* s6 로드맵 */
+.years { position: absolute; left: 40px; right: 40px; top: 30px; display: grid; grid-template-columns: repeat(3, 1fr); font-size: 22px; color: var(--muted); font-weight: 700; }
+.years span { border-left: 1.5px dashed #e0d2bd; padding-left: 12px; }
+.gbar { position: absolute; height: 54px; border-radius: 12px; background: var(--wood); border: 2px solid var(--brown); font-size: 20px; font-weight: 700;
+        display: flex; align-items: center; padding: 0 16px; overflow: hidden; white-space: nowrap; transform-origin: left center; }
+.gbar.done { background: #ece6dd; border-color: #b9a993; color: #6b5a47; }
+.garrow { position: absolute; font-size: 30px; color: var(--brown); opacity: 0; }
+.stemlabel { position: absolute; left: 40px; font-size: 19px; color: var(--muted); }
+#today { position: absolute; top: 80px; bottom: 30px; width: 3px; background: var(--red); transform-origin: top; }
+#today i { position: absolute; top: -34px; left: -30px; font-style: normal; font-size: 18px; color: var(--red); font-weight: 700; white-space: nowrap; }
+
+/* s7 사람 */
+.pcard { position: absolute; top: 34px; width: 268px; height: 250px; border-radius: 18px; border: 1.5px solid var(--line); background: var(--soft); padding: 22px; }
+.pcard b { font-size: 26px; } .pcard .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.pcard .chips .chip { font-size: 17px; padding: 4px 12px; }
+.meet { position: absolute; left: 40px; right: 40px; top: 320px; height: 280px; border-radius: 18px; border: 2px solid var(--brown); background: #fff; padding: 24px 28px; }
+.meet h4 { font-size: 25px; } .meet .row { display: flex; align-items: center; gap: 16px; font-size: 23px; margin-top: 20px; }
+.box { width: 30px; height: 30px; border-radius: 8px; border: 2.5px solid var(--brown); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 700; }
+.box.on { background: var(--brown); }
+.strike { text-decoration: line-through; color: var(--muted); }
+.lock { position: absolute; right: 28px; bottom: 24px; padding: 10px 18px; border-radius: 99px; background: #f6e6e1; color: var(--red); font-size: 19px; font-weight: 700; opacity: 0; }
+
+/* s8 원칙 */
+.pc { position: absolute; left: 900px; top: 230px; width: 620px; height: 460px; border-radius: 26px; border: 3px solid var(--brown); background: #fff; }
+.pc .lbl { position: absolute; top: -20px; left: 30px; padding: 6px 16px; border-radius: 99px; background: var(--brown); color: #fff; font-size: 21px; }
+.md { position: absolute; width: 120px; height: 150px; border-radius: 14px; border: 2px solid var(--brown); background: var(--wood); display: flex; align-items: center; justify-content: center;
+      font-size: 26px; font-weight: 700; color: var(--brown); opacity: 0; }
+.cloud { position: absolute; left: 1590px; top: 380px; width: 220px; height: 150px; border-radius: 30px; border: 3px dashed #c9b9a3; display: flex; align-items: center; justify-content: center;
+         font-size: 22px; color: var(--muted); text-align: center; }
+.cross { position: absolute; left: 1530px; top: 418px; font-size: 56px; color: var(--red); font-weight: 700; opacity: 0; }
+.pills { position: absolute; left: 900px; top: 740px; display: flex; gap: 16px; }
+.pills .chip { font-size: 22px; padding: 10px 20px; background: #fff; border: 1.5px solid var(--line); opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="bgrings" viewBox="0 0 100 100"><g fill="none" stroke="#6f431e" stroke-width=".5">
+    <ellipse cx="50" cy="50" rx="48" ry="46"/><ellipse cx="50" cy="50.5" rx="40" ry="38"/><ellipse cx="49.5" cy="51" rx="31" ry="29.5"/>
+    <ellipse cx="49" cy="51" rx="23" ry="22"/><ellipse cx="49" cy="51.5" rx="15" ry="14"/><ellipse cx="49" cy="51.5" rx="7.5" ry="7"/></g></svg>
+
+  <div id="corner"><svg viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#f2e1c6"/><g fill="none" stroke="#6f431e" stroke-width="1.6">
+    <ellipse cx="16" cy="16.5" rx="11" ry="10.5"/><ellipse cx="15.6" cy="16.8" rx="7" ry="6.6"/><ellipse cx="15.4" cy="17" rx="3.4" ry="3.1"/></g></svg>느린 나이테</div>
+
+  <!-- s0 인트로 -->
+  <div class="scene" id="s0">
+    <svg id="s0-rings" class="abs" style="left:810px;top:150px;width:300px;height:300px" viewBox="0 0 100 100">
+      <g fill="none" stroke="#6f431e" stroke-linecap="round">
+        <ellipse class="ring" cx="50" cy="51" rx="46" ry="44" stroke-width="2.2"/>
+        <ellipse class="ring" cx="49.5" cy="51.5" rx="36" ry="34.5" stroke-width="2.2"/>
+        <ellipse class="ring" cx="49" cy="52" rx="27" ry="25.5" stroke-width="2.2"/>
+        <ellipse class="ring" cx="48.6" cy="52.4" rx="18.5" ry="17.5" stroke-width="2.2"/>
+        <ellipse class="ring" cx="48.3" cy="52.6" rx="10.5" ry="10" stroke-width="2.2"/>
+        <ellipse class="ring" cx="48" cy="52.8" rx="3.5" ry="3.2" stroke-width="2.2"/>
+      </g></svg>
+    <div class="center title" id="s0-title" style="top:500px">느린 나이테</div>
+    <div class="center tagline" id="s0-tag" style="top:660px">팀 과제의 이력이 한 겹씩 쌓이는 곳</div>
+    <div class="center note" id="s0-note" style="top:740px">웹 · 내 PC 안에서 도는 팀 과제 관리 도구</div>
+  </div>
+
+  <!-- s1 문제 -->
+  <div class="scene" id="s1">
+    <div class="copy"><span class="kicker">왜 만들었나</span>
+      <h2>기록은 흩어지고<br>보고는 <em>기억</em>에 기댔다</h2>
+      <p id="s1-p">메모 · 메일 · 엑셀 · 폴더에 나뉜 이력.<br>매주 무엇을 보고할지 판단할 근거가 없었습니다.</p></div>
+    <div class="scrap" data-x="900" data-y="250"><span class="ico">📝</span>메모</div>
+    <div class="scrap" data-x="1300" data-y="200"><span class="ico">✉️</span>메일</div>
+    <div class="scrap" data-x="1620" data-y="360"><span class="ico">📊</span>엑셀</div>
+    <div class="scrap" data-x="980" data-y="620"><span class="ico">📈</span>그래프</div>
+    <div class="scrap" data-x="1460" data-y="700"><span class="ico">🗂️</span>폴더</div>
+    <div id="s1-folder"><b>과제 하나 = 한자리</b><span>개요 · 진행일지 · 첨부</span></div>
+  </div>
+
+  <!-- s2 진행일지 -->
+  <div class="scene" id="s2">
+    <div class="copy"><span class="kicker">기능 1 · 진행일지</span>
+      <h2>쓰고, 붙여넣으면<br><em>기록</em>이 된다</h2>
+      <p>그림 · 엑셀 표도 Ctrl+V 한 번으로.<br>날짜마다 한 겹씩 쌓입니다.</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">주간 지표 대시보드 · 진행일지 10-08</span></div>
+      <div class="body">
+        <div class="editor" id="s2-ed"></div>
+        <div class="keycap" id="s2-key" style="left:640px;top:250px;opacity:0">Ctrl + V</div>
+        <div class="tile" id="s2-img" style="left:40px;top:300px;width:300px;opacity:0"><div class="mini-bars"><i style="height:40%"></i><i style="height:65%"></i><i style="height:52%"></i><i style="height:88%"></i><i style="height:74%"></i></div></div>
+        <div class="tile" id="s2-xl" style="left:370px;top:300px;opacity:0"><div class="xl">
+          <span class="h">항목</span><span class="h">9월</span><span class="h">10월</span><span>지표 1</span><span>82</span><span>91</span><span>지표 2</span><span>14</span><span>9</span></div></div>
+        <div class="toast" id="s2-toast" style="opacity:0">저장됨 ✓</div>
+      </div></div>
+  </div>
+
+  <!-- s3 홈 -->
+  <div class="scene" id="s3">
+    <div class="copy"><span class="kicker">기능 2 · 팀 현황</span>
+      <h2>올해 우리 팀이<br><em>무엇</em>을 했는가</h2>
+      <p>모든 숫자는 누르면<br>그 숫자만큼의 목록으로 이어집니다.</p></div>
+    <div class="win" id="s3-win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">홈 · 2026년 팀 현황</span></div>
+      <div class="body">
+        <div class="stats">
+          <div class="stat"><small>과제</small><b data-n="24">0</b></div>
+          <div class="stat" id="s3-ip"><small>진행중</small><b data-n="11">0</b></div>
+          <div class="stat"><small>완료</small><b data-n="7">0</b></div>
+          <div class="stat"><small>보고</small><b data-n="38">0</b></div>
+        </div>
+        <div class="members">
+          <div class="mrow"><span>팀원 A</span><span class="track"><i class="fill" data-w="78"></i></span><span>9</span></div>
+          <div class="mrow"><span>팀원 B</span><span class="track"><i class="fill" data-w="56"></i></span><span>6</span></div>
+          <div class="mrow"><span>팀원 C</span><span class="track"><i class="fill" data-w="64"></i></span><span>7</span></div>
+          <div class="mrow"><span>팀원 D</span><span class="track"><i class="fill" data-w="34"></i></span><span>4</span></div>
+        </div>
+      </div>
+      <div class="panel" id="s3-panel"><h3>진행중 <span>11건</span></h3>
+        <div class="prow">주간 지표 대시보드 <span class="chip badge-ip">진행중</span></div>
+        <div class="prow">문서 검색 개선 <span class="chip badge-ip">진행중</span></div>
+        <div class="prow">알림 자동화 <span class="chip badge-ip">진행중</span></div>
+        <div class="prow">업무 매뉴얼 정비 <span class="chip badge-ip">진행중</span></div>
+        <div class="prow">데이터 표준화 <span class="chip badge-ip">진행중</span></div>
+        <div class="prow" style="color:var(--muted)">… 6건 더</div></div>
+    </div>
+  </div>
+
+  <!-- s4 보고 대상 후보 -->
+  <div class="scene" id="s4">
+    <div class="copy"><span class="kicker">기능 3 · 보고 대상</span>
+      <h2>이번 주에<br><em>무엇</em>을 보고할까</h2>
+      <p>마지막 보고 뒤 지난 날과 쌓인 기록으로<br>감이 아니라 기록으로 고릅니다.</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">보고 대상 후보</span></div>
+      <div class="body" id="s4-body"></div></div>
+  </div>
+
+  <!-- s5 초안 · 확정 -->
+  <div class="scene" id="s5">
+    <div class="copy"><span class="kicker">기능 4 · 보고</span>
+      <h2>초안은 자동으로,<br>확정하면 <em>그날 그대로</em></h2>
+      <p>지난 보고 뒤의 기록만 모아 초안을 만들고,<br>확정한 문서는 나중에도 바뀌지 않습니다.</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">문서 검색 개선 · 보고</span></div>
+      <div class="body" style="padding:0">
+        <div class="log" style="top:34px"><b>10-01</b>검색 색인 범위 정리</div>
+        <div class="log" style="top:150px"><b>10-04</b>시험 사용자 의견 반영</div>
+        <div class="log" style="top:266px"><b>10-08</b>속도 비교 결과 첨부</div>
+        <div class="btn" id="s5-btn1" style="left:40px;top:420px">보고 초안 만들기</div>
+        <div class="doc" id="s5-doc"><h4>보고 · 10-09</h4>
+          <div class="sec">보고 요약</div><div class="ln" style="width:90%"></div><div class="ln" style="width:70%"></div>
+          <div class="sec">진행 내용</div><div class="ln dl" style="width:85%"></div><div class="ln dl" style="width:78%"></div><div class="ln dl" style="width:88%"></div>
+          <div class="sec">다음 계획</div><div class="ln" style="width:60%"></div></div>
+        <div class="btn" id="s5-btn2" style="left:40px;top:510px;background:var(--red)">확정</div>
+        <div class="stamp" id="s5-stamp">🔒 확정 · 10-09</div>
+      </div></div>
+  </div>
+
+  <!-- s6 로드맵 -->
+  <div class="scene" id="s6">
+    <div class="copy"><span class="kicker">기능 5 · 로드맵</span>
+      <h2>여러 해에 걸친 과제도<br><em>한 줄기</em>로</h2>
+      <p>해마다 이어지는 과제를 단계별로 묶어<br>한 화면에서 봅니다.</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">로드맵</span></div>
+      <div class="body" id="s6-body" style="padding:0">
+        <div class="years"><span>2025</span><span>2026</span><span>2027</span></div>
+        <div id="today" style="left:520px"><i>오늘</i></div>
+      </div></div>
+  </div>
+
+  <!-- s7 사람 -->
+  <div class="scene" id="s7">
+    <div class="copy"><span class="kicker">기능 6 · 팀원</span>
+      <h2>과제뿐 아니라<br><em>사람</em>도 쌓인다</h2>
+      <p>교육 · 세미나 이력과 면담의 "하기로 한 것"까지.<br>면담은 검색 · 내보내기에서 뺍니다.</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">팀원역량</span></div>
+      <div class="body" style="padding:0">
+        <div class="pcard" style="left:40px"><b>팀원 A</b><div class="chips"><span class="chip">교육 2</span><span class="chip">세미나 1</span><span class="chip">학회 1</span></div></div>
+        <div class="pcard" style="left:336px"><b>팀원 B</b><div class="chips"><span class="chip">교육 1</span><span class="chip">자격 1</span></div></div>
+        <div class="pcard" style="left:632px"><b>팀원 C</b><div class="chips"><span class="chip">세미나 2</span></div></div>
+        <div class="meet" id="s7-meet"><h4>면담 · 팀원 A · 하기로 한 것</h4>
+          <div class="row"><span class="box" id="s7-b1"></span><span id="s7-t1">심화 교육 신청하기</span></div>
+          <div class="row"><span class="box"></span><span>다음 분기 목표 함께 정하기</span></div>
+          <div class="lock" id="s7-lock">🔒 검색 · AI 요약 · 내보내기 제외</div></div>
+      </div></div>
+  </div>
+
+  <!-- s8 원칙 -->
+  <div class="scene" id="s8">
+    <div class="copy"><span class="kicker">설계</span>
+      <h2>파일이 원본,<br><em>내 PC 안에서만</em></h2>
+      <p>기록은 평범한 마크다운 파일입니다.<br>도구를 바꿔도 기록은 남고,<br>밖으로 나가는 연결은 없습니다.</p></div>
+    <div class="pc"><span class="lbl">내 PC</span>
+      <div class="md" style="left:60px;top:80px">.md</div><div class="md" style="left:200px;top:80px">.md</div><div class="md" style="left:340px;top:80px">.md</div>
+      <div class="md" style="left:130px;top:250px">📎</div><div class="md" style="left:270px;top:250px">.md</div><div class="md" style="left:410px;top:250px">📎</div></div>
+    <div class="cross">✕</div>
+    <div class="cloud">인터넷 ·<br>외부 서비스</div>
+    <div class="pills"><span class="chip">설치 파일 하나</span><span class="chip">인터넷 없이 설치</span><span class="chip">자동 백업 · 이전 버전</span></div>
+  </div>
+
+  <!-- s9 아웃트로 -->
+  <div class="scene" id="s9">
+    <svg id="s9-rings" class="abs" style="left:835px;top:170px;width:250px;height:250px" viewBox="0 0 100 100">
+      <g fill="none" stroke="#6f431e" stroke-linecap="round" stroke-width="2.4">
+        <ellipse class="ring" cx="50" cy="51" rx="46" ry="44"/><ellipse class="ring" cx="49.5" cy="51.5" rx="36" ry="34.5"/><ellipse class="ring" cx="49" cy="52" rx="27" ry="25.5"/>
+        <ellipse class="ring" cx="48.6" cy="52.4" rx="18.5" ry="17.5"/><ellipse class="ring" cx="48.3" cy="52.6" rx="10.5" ry="10"/><ellipse class="ring" cx="48" cy="52.8" rx="3.5" ry="3.2"/></g></svg>
+    <div class="center title" id="s9-title" style="top:470px">느린 나이테</div>
+    <div class="center tagline" id="s9-tag" style="top:630px">한 해에 한 겹, 팀의 기록이 굵어집니다</div>
+    <div class="center note" id="s9-note" style="top:730px;color:var(--muted);font-weight:400">느린 시리즈 — 느린 부자의 기록 · 느린 여백 · 느린 나이테</div>
+  </div>
+
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2 L3 19 L8 14.5 L11.5 22 L14.5 20.6 L11 13.2 L17.5 13.2 Z" fill="#2b2118" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  <div id="ripple"></div>
+  <div id="progress"></div>
+</div>
+
+<script>
+// ── 시간표 (초) ─────────────────────────────────────────────────────────────
+const SCENES = [[0, 4.6], [4.6, 10], [10, 16.4], [16.4, 22.8], [22.8, 28.8], [28.8, 35.2], [35.2, 40.8], [40.8, 46.8], [46.8, 52.4], [52.4, 58]];
+const DURATION = 58;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+const easeInOut = (p) => (p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const prog = (t, a, b, ease = easeOut) => ease(clamp((t - a) / (b - a)));
+const lerp = (a, b, p) => a + (b - a) * p;
+function put(el, { o, x = 0, y = 0, s = 1, r = 0 } = {}) {
+  if (o !== undefined) el.style.opacity = o;
+  el.style.transform = `translate(${x}px, ${y}px) scale(${s}) rotate(${r}deg)`;
+}
+// 나타나기: 시각 a 부터 d 초 동안 아래에서 떠오른다
+const rise = (el, t, a, d = .6, dy = 30) => { const p = prog(t, a, a + d); put(el, { o: p, y: (1 - p) * dy }); };
+
+// 링 그리기 준비
+$$(".ring").forEach((el) => { const L = el.getTotalLength(); el.style.strokeDasharray = L; el.dataset.len = L; });
+const drawRings = (svg, t, a, step = .22, d = .7) => $$(".ring", svg).forEach((el, i) => {
+  const p = prog(t, a + i * step, a + i * step + d, easeInOut); el.style.strokeDashoffset = el.dataset.len * (1 - p);
+});
+
+// s4 후보 줄 만들기
+const CANDS = [
+  { t: "업무 매뉴얼 정비", d: 9, n: 2 }, { t: "알림 자동화", d: 41, n: 7 }, { t: "데이터 표준화", d: 16, n: 3 },
+  { t: "문서 검색 개선", d: 28, n: 6 }, { t: "주간 지표 대시보드", d: 35, n: 5 },
+];
+const SORTED = [...CANDS].sort((a, b) => b.d - a.d);
+CANDS.forEach((c) => {
+  const row = document.createElement("div");
+  row.className = "crow";
+  row.innerHTML = `<span class=t>${c.t}</span><span class=d>마지막 보고 D+${c.d}</span><span class=cnt><i style="width:${c.n * 15}px"></i>기록 ${c.n}건</span><span class=pick>이번 주 후보</span>`;
+  $("#s4-body").appendChild(row); c.el = row;
+});
+
+// s6 로드맵 막대 (x 는 창 안 좌표, 한 해 = 287px, 2025 시작 = 40)
+const Y0 = 40, YW = 287;
+const STEMS = [
+  { label: "줄기 1", top: 110, bars: [["1단계", 0, .9, true], ["2단계", 1, .95, false], ["3단계", 2, .7, false]] },
+  { label: "줄기 2", top: 290, bars: [["1단계", .35, 1, true], ["2단계", 1.4, 1.1, false]] },
+  { label: "줄기 3", top: 470, bars: [["1단계", 1.05, .8, false], ["2단계", 1.95, .85, false]] },
+];
+STEMS.forEach((stem, si) => {
+  const lab = document.createElement("div"); lab.className = "stemlabel"; lab.style.top = `${stem.top - 30}px`; lab.textContent = stem.label; $("#s6-body").appendChild(lab); stem.lab = lab;
+  stem.els = stem.bars.map(([name, start, len, done], bi) => {
+    const b = document.createElement("div"); b.className = "gbar" + (done ? " done" : "");
+    b.style.left = `${Y0 + start * YW}px`; b.style.top = `${stem.top}px`; b.style.width = `${len * YW - 12}px`; b.textContent = name;
+    $("#s6-body").appendChild(b);
+    let arrow = null;
+    if (bi > 0) { arrow = document.createElement("div"); arrow.className = "garrow"; arrow.textContent = "→";
+      arrow.style.left = `${Y0 + start * YW - 30}px`; arrow.style.top = `${stem.top + 6}px`; $("#s6-body").appendChild(arrow); }
+    return { b, arrow };
+  });
+});
+
+const TYPED = "## 진행 내용\n- 지표 정의서 초안 검토\n- 화면 시안 두 가지 비교\n- 다음 주: 시험 운영";
+
+// ── 한 장 그리기 ────────────────────────────────────────────────────────────
+function seek(T) {
+  $("#progress").style.width = `${(T / DURATION) * 100}%`;
+  $("#bgrings").style.transform = `rotate(${T * 1.2}deg)`;
+  // 모서리 로고 — 기능 장면 동안
+  put($("#corner"), { o: prog(T, 4.8, 5.4) * (1 - prog(T, 52, 52.6)) });
+  let cursor = null, ripple = null;
+
+  SCENES.forEach(([a, b], i) => {
+    const el = $(`#s${i}`), last = i === SCENES.length - 1;
+    const o = prog(T, a, a + .5) * (last ? 1 : 1 - prog(T, b - .5, b));
+    el.style.opacity = o; el.style.visibility = o > 0.001 ? "visible" : "hidden";
+    if (o <= 0.001) return;
+    const t = T - a;
+    const copy = $(".copy", el);
+    if (copy) { rise($(".kicker", copy), t, .15); rise($("h2", copy), t, .3, .7, 40); rise($("p", copy), t, .55); }
+    const win = $(".win", el); if (win) { const p = prog(t, .2, 1); put(win, { o: p, y: (1 - p) * 50, s: lerp(.97, 1, p) }); }
+    const r = SCENE_FN[i](t, el); if (r) { if (r.cursor) cursor = r.cursor; if (r.ripple) ripple = r.ripple; }
+  });
+
+  // 커서 · 누름 표시
+  if (cursor) put($("#cursor"), { o: cursor.o ?? 1, x: cursor.x, y: cursor.y, s: cursor.s ?? 1 }); else $("#cursor").style.opacity = 0;
+  if (ripple) { put($("#ripple"), { o: (1 - ripple.p) * .8, x: ripple.x - 35, y: ripple.y - 35, s: lerp(.3, 1.6, ripple.p) }); } else $("#ripple").style.opacity = 0;
+}
+
+// 창 안 좌표 → 화면 좌표 (창: left 860, top 190, 몸통은 62 아래)
+const W = (x, y) => ({ x: 860 + x, y: 190 + 62 + y });
+const moveCursor = (t, a, b, from, to) => { const p = prog(t, a, b, easeInOut); return { x: lerp(from.x, to.x, p), y: lerp(from.y, to.y, p) }; };
+
+const SCENE_FN = [
+  // s0 인트로
+  (t) => { drawRings($("#s0-rings"), t, .1, .2, .8);
+    rise($("#s0-title"), t, 1.5, .8, 40); rise($("#s0-tag"), t, 2.2); rise($("#s0-note"), t, 2.8); },
+  // s1 흩어진 것 → 한자리
+  (t, el) => { const scraps = $$(".scrap", el);
+    scraps.forEach((s, i) => { const x0 = +s.dataset.x, y0 = +s.dataset.y;
+      s.style.left = `${x0}px`; s.style.top = `${y0}px`;
+      const ap = prog(t, .4 + i * .15, .9 + i * .15);
+      const g = prog(t, 2.6 + i * .08, 3.6 + i * .08, easeInOut);
+      const fx = 1235 - x0, fy = 470 - y0;
+      const bob = Math.sin((t + i) * 2.2) * 6 * (1 - g);
+      put(s, { o: ap * (1 - prog(t, 3.4 + i * .08, 3.8 + i * .08)), x: fx * g, y: fy * g + bob, s: lerp(1, .4, g), r: (i % 2 ? 6 : -5) * (1 - g) }); });
+    const f = prog(t, 3.5, 4.1); put($("#s1-folder"), { o: f, s: lerp(.85, 1, f) }); },
+  // s2 진행일지
+  (t) => { const n = Math.floor(TYPED.length * prog(t, .9, 3.0, (p) => p));
+    $("#s2-ed").innerHTML = TYPED.slice(0, n).replace(/</g, "&lt;") + (t < 3.3 && Math.floor(t * 2) % 2 === 0 ? "<span class=caret></span>" : "");
+    const k = prog(t, 3.2, 3.45); put($("#s2-key"), { o: k * (1 - prog(t, 4.3, 4.6)), s: lerp(.6, 1, k), y: Math.sin(prog(t, 3.5, 3.7) * Math.PI) * 6 });
+    const im = prog(t, 3.6, 4.1); put($("#s2-img"), { o: im, y: (1 - im) * 40, s: lerp(.9, 1, im) });
+    const xl = prog(t, 4.0, 4.5); put($("#s2-xl"), { o: xl, y: (1 - xl) * 40, s: lerp(.9, 1, xl) });
+    const to = prog(t, 5.0, 5.3); put($("#s2-toast"), { o: to, y: (1 - to) * 20 }); },
+  // s3 홈 — 숫자가 오르고, 진행중을 누르면 목록
+  (t, el) => { $$(".stat b", el).forEach((b, i) => { b.textContent = Math.round(+b.dataset.n * prog(t, .7 + i * .1, 2.0 + i * .1)); });
+    $$(".fill", el).forEach((f, i) => { f.style.width = `${+f.dataset.w * prog(t, 1.2 + i * .12, 2.4 + i * .12)}%`; });
+    const ip = $("#s3-ip"); const hl = prog(t, 3.6, 3.8) * (1 - prog(t, 4.6, 5));
+    ip.style.boxShadow = `0 0 0 ${hl * 4}px var(--brown)`;
+    const pp = prog(t, 3.9, 4.5); put($("#s3-panel"), { o: pp, x: (1 - pp) * 540 });
+    const target = W(359, 92);
+    const c = moveCursor(t, 2.6, 3.5, W(700, 520), target);
+    return { cursor: { ...c, o: prog(t, 2.5, 2.8) * (1 - prog(t, 5.2, 5.5)), s: t > 3.6 && t < 3.8 ? .88 : 1 },
+             ripple: t > 3.65 && t < 4.3 ? { ...target, p: prog(t, 3.65, 4.3, (p) => p) } : null }; },
+  // s4 후보 — 줄이 다시 서고 위 셋이 후보로
+  (t) => { const sp = prog(t, 1.9, 3.0, easeInOut);
+    CANDS.forEach((c, i) => { const j = SORTED.indexOf(c); const y = lerp(30 + i * 112, 30 + j * 112, sp);
+      const ap = prog(t, .6 + i * .1, 1.1 + i * .1);
+      c.el.style.top = `${y}px`; c.el.style.opacity = ap;
+      const top = j < 3 && t > 3.4; c.el.classList.toggle("top", top);
+      $(".pick", c.el).style.opacity = top ? prog(t, 3.4 + j * .15, 3.7 + j * .15) : 0; }); },
+  // s5 초안 → 확정
+  (t) => { const b1 = W(160, 450), b2 = W(90, 540);
+    const docp = prog(t, 1.6, 2.4); put($("#s5-doc"), { o: lerp(.25, 1, docp) });
+    $$("#s5-doc .dl").forEach((l, i) => { l.style.background = prog(t, 1.9 + i * .2, 2.2 + i * .2) > .5 ? "var(--brown)" : "#eee3d3"; l.style.opacity = prog(t, 1.9 + i * .2, 2.2 + i * .2) > .5 ? .55 : 1; });
+    const st = prog(t, 4.1, 4.45); put($("#s5-stamp"), { o: st, s: lerp(1.8, 1, st), r: lerp(-20, -8, st) });
+    $("#s5-doc").style.borderColor = t > 4.1 ? "var(--red)" : "var(--line)";
+    let c;
+    if (t < 2.6) c = moveCursor(t, .6, 1.2, W(400, 640), b1); else c = moveCursor(t, 2.8, 3.6, b1, b2);
+    const click1 = t > 1.25 && t < 1.9, click2 = t > 3.7 && t < 4.35;
+    return { cursor: { ...c, o: prog(t, .5, .8) * (1 - prog(t, 5.3, 5.6)), s: (t > 1.25 && t < 1.4) || (t > 3.7 && t < 3.85) ? .88 : 1 },
+             ripple: click1 ? { ...b1, p: prog(t, 1.25, 1.9, (p) => p) } : click2 ? { ...b2, p: prog(t, 3.7, 4.35, (p) => p) } : null }; },
+  // s6 로드맵 — 줄기마다 막대가 자라고 화살표
+  (t) => { STEMS.forEach((stem, si) => { stem.lab.style.opacity = prog(t, .7 + si * .5, 1.0 + si * .5);
+      stem.els.forEach(({ b, arrow }, bi) => { const a = .9 + si * .5 + bi * .45; const p = prog(t, a, a + .5);
+        b.style.opacity = p > 0 ? 1 : 0; b.style.transform = `scaleX(${p})`;
+        if (arrow) arrow.style.opacity = prog(t, a - .1, a + .15); }); });
+    $("#today").style.transform = `scaleY(${prog(t, 3.4, 4.0)})`; $("#today i").style.opacity = prog(t, 3.8, 4.1); },
+  // s7 사람 — 하기로 한 것을 닫는다
+  (t, el) => { $$(".pcard", el).forEach((c, i) => rise(c, t, .7 + i * .15));
+    const m = prog(t, 1.4, 2.0); put($("#s7-meet"), { o: m, y: (1 - m) * 40 });
+    const box = W(83, 418); const on = t > 3.3;
+    $("#s7-b1").classList.toggle("on", on); $("#s7-b1").textContent = on ? "✓" : ""; $("#s7-t1").classList.toggle("strike", on);
+    const lk = prog(t, 4.1, 4.5); put($("#s7-lock"), { o: lk, y: (1 - lk) * 16 });
+    const c = moveCursor(t, 2.4, 3.2, W(500, 620), box);
+    return { cursor: { ...c, o: prog(t, 2.3, 2.6) * (1 - prog(t, 5.0, 5.3)), s: t > 3.25 && t < 3.4 ? .88 : 1 },
+             ripple: t > 3.25 && t < 3.9 ? { ...box, p: prog(t, 3.25, 3.9, (p) => p) } : null }; },
+  // s8 원칙 — 파일이 쌓이고, 바깥은 끊는다
+  (t, el) => { const pc = prog(t, .3, .9); put($(".pc", el), { o: pc, y: (1 - pc) * 40 });
+    $$(".md", el).forEach((m, i) => { const p = prog(t, 1.0 + i * .18, 1.4 + i * .18); put(m, { o: p, y: (1 - p) * -40, s: lerp(.8, 1, p) }); });
+    const cl = prog(t, 2.4, 2.9); $(".cloud", el).style.opacity = cl;
+    const cr = prog(t, 3.0, 3.3); put($(".cross", el), { o: cr, s: lerp(1.8, 1, cr) });
+    $$(".pills .chip", el).forEach((c, i) => rise(c, t, 3.6 + i * .2, .5, 20)); },
+  // s9 아웃트로
+  (t) => { drawRings($("#s9-rings"), t, .1, .18, .7);
+    rise($("#s9-title"), t, 1.2, .8, 40); rise($("#s9-tag"), t, 1.9); rise($("#s9-note"), t, 2.6); },
+];
+
+window.seek = seek; window.DURATION = DURATION;
+seek(0);
+// 브라우저에서 미리보기: promo.html?play
+if (location.search.includes("play")) { const t0 = performance.now(); const loop = () => { const T = ((performance.now() - t0) / 1000) % DURATION; seek(T); requestAnimationFrame(loop); }; loop(); }
+</script>
+</body>
+</html>
