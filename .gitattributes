@@ -6,3 +6,7 @@
 # `git archive` 가 이 표시를 보고 뺀다 (tools/make_dist.py). 사내 PC 에 설치하는 것은
 # 도구지 발표물이 아니고, 영상 하나가 배포본을 10MB 넘게 불린다.
 docs/poster/ export-ignore
+# 홍보 영상 · 블로그 글 · 검토 그림도 같은 이유로 뺀다 (TODO 187 · 188 · 189 — 영상 둘이 7MB)
+docs/promo/ export-ignore
+docs/blog/ export-ignore
+docs/review/ export-ignore
