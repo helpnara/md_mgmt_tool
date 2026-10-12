@@ -458,6 +458,11 @@ git add tools/releases.txt && git commit -m "chore: 배포본 기록"   # 만든
 새로 클론한 곳(웹 세션의 새 컨테이너 등)에서는 비어 있으므로, 기록이 없으면 이미 전달한 `v1` 과 같은 이름이 다시 붙는다.
 만들면 기록 끝에 이름이 한 줄 더해진다 — **그 파일을 커밋 · 푸시**해야 다른 곳에서도 번호가 이어진다.
 
+**전달은 링크로** (2026-10-12 사용자 — *"배포본은 링크로 제공해 줘"*). 만든 ZIP 은 코드 브랜치가 아니라 **`releases` 브랜치**에 올린다 —
+ZIP 만 담는 브랜치라 코드 기록이 판마다 14MB 씩 무거워지지 않는다. 내려받기 주소는
+`https://github.com/helpnara/md_mgmt_tool/raw/releases/<배포본 이름>.zip`(한글은 주소에서 %로 바뀐다),
+목록은 `https://github.com/helpnara/md_mgmt_tool/tree/releases`. 저장소에 권한이 있는 GitHub 계정으로 로그인해야 받아진다.
+
 담기는 파일은 **git 이 추적하는 것**으로 정해진다(`git archive`). 그래서 `vault`·`.venv`·
 `__pycache__` 가 딸려 갈 일이 없고, **커밋하지 않은 변경은 담기지 않는다.**
 `vendor/` 는 이 명령을 실행하는 PC 에서 PyPI 로 내려받으므로 **빌드하는 쪽은 인터넷이 필요하다.**
