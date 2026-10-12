@@ -4196,6 +4196,52 @@ async function main() {
     }
   });
 
+  console.log("\n[37] 단추 색은 목적별로 — 파랑 만들기 · 보라 보고 · 갈색 확정 · 빨강 삭제 · 연한 선택 (TODO 189)");
+
+  const bgOf = (locator) => locator.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const readable = async (locator, label) => {
+    await locator.scrollIntoViewIfNeeded(); await page.mouse.move(0, 0); await page.waitForTimeout(120);
+    const value = await locator.evaluate((el) => __contrast(el));
+    expect(value >= AA, `${label} 글자 대비 ${value} < ${AA}`);
+  };
+
+  await check("보고는 어느 화면에서나 보라, 확정은 갈색, 그 자리의 저장은 흰 단추 (189)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    const make = page.getByRole("button", { name: "보고 초안 만들기", exact: true }).first();
+    equal(await bgOf(make), "rgb(109, 40, 217)", "과제 상세의 [보고 초안 만들기] 는 보라");
+    await readable(make, "[보고 초안 만들기]");
+    await go("#/reports");
+    const row = page.locator("button.report.ghost", { hasText: "보고 초안" }).first();
+    equal(await row.count(), 1, "보고대상 줄의 [보고 초안] 도 보고 갈래");
+    equal(await bgOf(row), "rgb(245, 243, 255)", "줄마다는 연보라");
+    await readable(row, "줄의 [보고 초안]");
+    // 앞선 시험이 씨앗의 초안을 확정했을 수 있다 — 새 초안을 하나 만들어 연다
+    const fresh = await api.post(`/api/projects/${seeded.projectB}/reports/draft`, { report_date: null, audience: null });
+    await go(`#/projects/${seeded.projectB}?report=${fresh.id}`);
+    const freeze = page.getByRole("button", { name: "보고 확정", exact: true }).first();
+    equal(await bgOf(freeze), "rgb(111, 67, 30)", "[보고 확정] 은 갈색");
+    await readable(freeze, "[보고 확정]");
+    const save = page.locator(".report-editor button.ghost", { hasText: "저장" }).first();
+    if (await save.count()) equal(await bgOf(save), "rgb(255, 255, 255)", "보고 편집기의 [저장] 은 흰 단추 그대로");
+  });
+
+  await check("착수는 갈색, 삭제는 빨간 테두리, 고른 보기는 채우지 않는다 (189)", async () => {
+    const made = await api.post("/api/intakes", { title: "단추 색 확인 접수" });
+    await go(`#/intakes/${made.id}`);
+    const promote = page.getByRole("button", { name: "착수 · 과제로 승격" }).first();
+    equal(await bgOf(promote), "rgb(111, 67, 30)", "[착수 · 과제로 승격] 은 갈색");
+    await readable(promote, "[착수 · 과제로 승격]");
+    const del = page.locator("button.ghost.danger").first();
+    equal(await del.evaluate((el) => getComputedStyle(el).borderTopColor), "rgb(254, 202, 202)", "삭제 단추에 빨간 테두리");
+    await readable(del, "[삭제]");
+    await go("#/projects");
+    const active = page.locator(".view-switch button.active").first();
+    expect((await bgOf(active)) !== "rgb(47, 111, 235)", "고른 [표] 가 파랑으로 채워져 있다");
+    await readable(active, "고른 보기");
+    const add = page.getByRole("button", { name: "과제 추가" }).first();
+    equal(await bgOf(add), "rgb(47, 111, 235)", "[과제 추가] 는 파랑 그대로");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

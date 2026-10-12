@@ -248,6 +248,14 @@ export default function Help() {
               칸과 <b>[표 복사]</b> 로 나가는 값에는 1.25 가 그대로 있습니다. 합계는 원래 값으로 더한 뒤 한 번만
               반올림합니다.
             </dd>
+            <dt>단추 색은 무엇을 뜻하나요?</dt>
+            <dd>
+              색이 채워진 단추는 그 자리의 <b>대표 기능</b>입니다. <span className="help-swatch" style={{ background: "#2f6feb" }} /> <b>파랑</b> 은
+              만들기 · 저장, <span className="help-swatch" style={{ background: "#6d28d9" }} /> <b>보라</b> 는 보고(보고 초안),{" "}
+              <span className="help-swatch" style={{ background: "#6f431e" }} /> <b>갈색</b> 은 보고 확정 · 착수처럼 되돌리기 어려운 결정,{" "}
+              <b style={{ color: "#b91c1c" }}>빨간 글</b> 은 삭제 · 빼기입니다. 연한 파랑은 "지금 고른 것"(표 · 보드, 거르기 칩)이고, 나머지 흰 단추는
+              보조 기능입니다. 같은 기능은 어느 화면에서 만나도 같은 색입니다.
+            </dd>
             <dt>표에 있는 - 는 무엇인가요?</dt>
             <dd>
               표 안에서는 <b>0 이나 빈 값</b>을 <code>-</code> 로 적습니다 — 어디가 비었는지가 먼저 보이게. 합계 줄의{" "}

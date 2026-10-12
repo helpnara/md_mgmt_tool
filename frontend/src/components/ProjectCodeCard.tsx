@@ -160,7 +160,7 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
               취소
             </button>
             {plan.changes.length > 0 && (
-              <button disabled={busy} onClick={() => void applyPlan()}>
+              <button className="commit" disabled={busy} onClick={() => void applyPlan()}>
                 {busy ? "바꾸는 중…" : `${plan.changes.length}건 바꾸기`}
               </button>
             )}

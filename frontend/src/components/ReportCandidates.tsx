@@ -295,7 +295,7 @@ export default function ReportCandidates({ meta, query }: Props) {
             {picked.map((item) => (
               <li key={item.id}>
                 <a href={projectLink(item.id)}>{item.title}</a>
-                <button className="ghost small" disabled={busy} onClick={() => makeDraft(item.id)}>
+                <button className="ghost small report" disabled={busy} onClick={() => makeDraft(item.id)}>
                   보고 초안 만들기
                 </button>
               </li>
@@ -392,7 +392,7 @@ export default function ReportCandidates({ meta, query }: Props) {
               </td>
               <td>{cellCount(item.unreported_entries, "건")}</td>
               <td>
-                <button className="ghost small" disabled={busy} onClick={() => makeDraft(item.id)}>
+                <button className="ghost small report" disabled={busy} onClick={() => makeDraft(item.id)}>
                   보고 초안
                 </button>
               </td>

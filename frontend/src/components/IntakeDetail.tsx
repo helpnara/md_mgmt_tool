@@ -192,7 +192,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
           <div className="detail-actions">
             {open ? (
               <>
-                <button className="primary" onClick={() => setPromoting(true)}>
+                <button className="primary commit" onClick={() => setPromoting(true)}>
                   착수 · 과제로 승격
                 </button>
                 <button className="ghost" onClick={() => setEditingMeta((v) => !v)}>
@@ -1426,7 +1426,7 @@ function PromoteDialog({
             취소
           </button>
           <button
-            className="primary"
+            className="primary commit"
             disabled={busy || !plan || !form.title?.trim()}
             onClick={async () => {
               setBusy(true);

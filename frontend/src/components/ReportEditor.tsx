@@ -610,6 +610,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                 저장
               </button>
               <button
+                className="commit"
                 disabled={busy}
                 onClick={async () => {
                   if (!window.confirm("보고를 확정하면 이 문서는 읽기 전용이 되고, 미보고 분량이 초기화됩니다.")) return;

@@ -1057,6 +1057,7 @@ export default function ProjectDetail({
               title="이 날짜로 보고 초안을 만듭니다. 만든 뒤에도 바꿀 수 있습니다."
             />
             <button
+              className="report"
               disabled={!draftDate}
               onClick={async () => {
                 setReportError(null);

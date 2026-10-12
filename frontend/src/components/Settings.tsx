@@ -205,7 +205,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
               원본만 담습니다.
             </p>
             <div className="form-actions">
-              <a className="button-like primary-link" href="/api/backup">
+              <a className="button-like" href="/api/backup">
                 전체 백업 내려받기
               </a>
             </div>
