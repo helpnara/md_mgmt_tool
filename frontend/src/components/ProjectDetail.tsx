@@ -359,7 +359,7 @@ export default function ProjectDetail({
               </button>
             )}
             {missing && (
-              <button
+              <button data-write
                 className="ghost"
                 onClick={async () => {
                   if (await attempt(() => api.reindex())) load();
@@ -522,12 +522,12 @@ export default function ProjectDetail({
           </div>
           <div className="detail-actions">
             <ExportMenu projectId={project.id} />
-            <button className="ghost" onClick={() => setEditingProject((value) => !value)}>
+            <button data-write className="ghost" onClick={() => setEditingProject((value) => !value)}>
               {editingProject ? "닫기" : "과제 정보 수정"}
             </button>
             {/* 끝난 과제의 후속 과제 (TODO 109). 개요·담당자·태그가 넘어오고 이력은 남지 않는다.
                 누르면 **미리 채운 새 과제 칸**만 연다 — [만들기] 를 눌러야 생긴다 (TODO 173). */}
-            <button
+            <button data-write
               className={cloneDraft ? "ghost on" : "ghost"}
               title="이 과제의 개요·담당자·태그를 가져와 새 과제 칸을 엽니다. 진행일지·보고는 넘어오지 않습니다."
               onClick={async () => {
@@ -936,14 +936,14 @@ export default function ProjectDetail({
             >
               {uploading ? `올리는 중… ${uploading}` : "📎 파일 첨부"}
             </button>
-            <button
+            <button data-write
               className={showOverviewVersions ? "ghost on" : "ghost"}
               onClick={() => setShowOverviewVersions((value) => !value)}
               title="과제 개요의 이전 내용으로 되돌립니다."
             >
               이전 버전
             </button>
-            <button
+            <button data-write
               className="ghost"
               onClick={() => {
                 if (editingOverview) {
@@ -1331,7 +1331,7 @@ export default function ProjectDetail({
                   ))}
                 </div>
                 <div className="entry-actions">
-                  <button
+                  <button data-write
                     className="ghost"
                     title="이 기록의 내용을 가져와 오늘 날짜로 새 기록을 씁니다"
                     onClick={(event) => {
@@ -1348,7 +1348,7 @@ export default function ProjectDetail({
                       작성 중
                     </span>
                   )}
-                  <button className="ghost" onClick={() => setEditingEntryId(entry.id)}>
+                  <button data-write className="ghost" onClick={() => setEditingEntryId(entry.id)}>
                     수정
                   </button>
                   <button

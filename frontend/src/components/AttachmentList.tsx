@@ -33,7 +33,7 @@ export default function AttachmentList({ attachments, onInsert, onDelete, onPrev
           </div>
           <div className="attachment-actions">
             {onPreview && attachment.preview_url && (
-              <button className="ghost small" onClick={() => onPreview(attachment)}>
+              <button data-write className="ghost small" onClick={() => onPreview(attachment)}>
                 내용 보기
               </button>
             )}

@@ -31,7 +31,7 @@ export default function ProblemsBanner({
           <button className="ghost small" onClick={() => setOpen((value) => !value)}>
             {open ? "접기" : "무엇인지 보기"}
           </button>
-          <button
+          <button data-write
             className="ghost small"
             disabled={busy}
             onClick={async () => {

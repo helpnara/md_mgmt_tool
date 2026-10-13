@@ -110,7 +110,13 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--vault", help="데이터 폴더 (기본: 이 폴더 아래 vault)")
     parser.add_argument("--no-browser", action="store_true", help="브라우저를 열지 않는다")
+    parser.add_argument("--share", action="store_true",
+                        help="팀원이 읽기 전용으로 볼 수 있게 바깥에 연다 (이 PC 에서는 지금처럼 쓸 수 있다)")
     args = parser.parse_args()
+    if args.share:
+        # 바깥에 열면서 같은 순간 읽기 전용 규칙을 켠다 (TODO 191 · 192) — 둘이 따로 켜지지 않게
+        args.host = "0.0.0.0"
+        os.environ["MD_MGMT_SHARE"] = "1"
 
     # 윈도우 콘솔의 기본 인코딩(cp949)에서도 한글이 깨지지 않게 한다.
     os.environ.setdefault("PYTHONUTF8", "1")
@@ -120,8 +126,11 @@ def main() -> None:
     check_python_version()
     check_dependencies()
 
-    url = f"http://{args.host}:{args.port}"
-    running = already_running(args.host, args.port)
+    # 브라우저와 "이미 켜져 있나" 검사는 늘 127.0.0.1 로 — 0.0.0.0 은 듣는 주소지 가는 주소가 아니다
+    # (윈도우에서는 0.0.0.0 으로 접속이 되지 않아 늘 "안 켜져 있다" 로 읽혔다, TODO 192)
+    local = "127.0.0.1" if args.host in ("0.0.0.0", "") else args.host
+    url = f"http://{local}:{args.port}"
+    running = already_running(local, args.port)
     if running == "self":
         print(f"\n  이미 켜져 있습니다 — 브라우저만 엽니다: {url}")
         print("  (먼저 켠 창을 닫으면 도구가 꺼집니다)\n")
@@ -144,6 +153,11 @@ def main() -> None:
     settings.ensure_dirs()
     print(f"\n  데이터 폴더 : {settings.vault_dir}")
     print(f"  주소        : {url}")
+    if args.share:
+        import socket
+
+        print(f"  공유 주소   : http://{socket.gethostname()}:{args.port}  (팀원은 읽기만 — 이 PC 에서는 그대로 쓸 수 있습니다)")
+        print("               처음 켤 때 윈도우 방화벽이 물으면 [허용] 을 누르세요.")
     print("  종료        : Ctrl+C\n")
 
     if not args.no_browser:

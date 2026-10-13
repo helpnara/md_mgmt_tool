@@ -171,16 +171,24 @@ export default function App() {
   }, []);
 
   const loadMeta = useCallback(() => {
-    api.meta().then(setMeta).catch((err: Error) => setError(err.message));
-    // 작성자를 정하지 않으면 기록에 작성자가 비어 쌓인다. 한 번 알려 준다.
-    api.settings().then((settings) => setAuthor(settings.author)).catch(() => setAuthor(null));
+    api
+      .meta()
+      .then((loaded) => {
+        // 읽기 전용 공유 (191) — 화면이 서기 **전에** body 에 건다. 자식 화면의 effect 가 부모보다 먼저 돌기 때문이다.
+        document.body.classList.toggle("readonly", Boolean(loaded.readonly));
+        setMeta(loaded);
+        // 작성자를 정하지 않으면 기록에 작성자가 비어 쌓인다. 한 번 알려 준다. 바깥(읽기 전용)에는 설정이 닫혀 있으니 묻지 않는다.
+        if (loaded.readonly) setAuthor(null);
+        else {
+          api.settings().then((settings) => setAuthor(settings.author)).catch(() => setAuthor(null));
+          // 162 때 브라우저 안에 남은 쓰던 글을 데이터 폴더로 옮긴다 — 한 번, 조용히 (TODO 170). 바깥에서는 올릴 수 없다
+          void migrateBrowserDrafts();
+        }
+      })
+      .catch((err: Error) => setError(err.message));
   }, []);
 
   useEffect(loadMeta, [loadMeta]);
-  // 162 때 브라우저 안에 남은 쓰던 글을 데이터 폴더로 옮긴다 — 한 번, 조용히 (TODO 170)
-  useEffect(() => {
-    void migrateBrowserDrafts();
-  }, []);
 
   // 브라우저 탭 제목 (TODO 169) — 과제 · 접수를 여러 탭으로 열어도 구분되게. 과제 · 접수 화면은
   // 제목을 알고 나서 스스로 고친다(pageTitle).
@@ -236,9 +244,11 @@ export default function App() {
           <a href="#/skills" className={route.name === "skills" ? "active" : undefined}>
             팀원역량
           </a>
-          <a href="#/settings" className={route.name === "settings" ? "active" : undefined}>
-            설정
-          </a>
+          {!meta.readonly && (
+            <a href="#/settings" className={route.name === "settings" ? "active" : undefined}>
+              설정
+            </a>
+          )}
           <a href="#/help" className={route.name === "help" ? "active" : undefined}>
             도움말
           </a>
@@ -263,12 +273,25 @@ export default function App() {
             검색
           </button>
         </form>
-        {/* 길면 잘린다 — 마우스를 올리면 전체 경로가 보인다 (TODO 88). */}
-        <span className="vault-path" title={`데이터 위치: ${meta.vault}`}>
-          {meta.vault}
-        </span>
+        {/* 공유를 켠 주인에게 — 팀원에게 알려 줄 주소와 오늘 접속 수 (TODO 192) */}
+        {meta.share && (
+          <span className="share-chip" title="팀원은 이 주소로 읽기 전용으로 봅니다. 이 PC 에서는 그대로 쓸 수 있습니다.">
+            공유 중 <code>{meta.share.url}</code> · 오늘 {meta.share.visitors}명
+          </span>
+        )}
+        {/* 길면 잘린다 — 마우스를 올리면 전체 경로가 보인다 (TODO 88). 바깥에는 경로를 주지 않는다 (191). */}
+        {meta.vault && (
+          <span className="vault-path" title={`데이터 위치: ${meta.vault}`}>
+            {meta.vault}
+          </span>
+        )}
       </header>
-      {author === "" && !authorNoticeClosed && route.name !== "settings" && (
+      {meta.readonly && (
+        <div className="readonly-band" role="status">
+          <b>읽기 전용</b>으로 보고 있습니다 — 고치거나 더하려면 서버 PC 에서 여세요. 면담 기록 · 설정 · 삭제 보관함은 여기서 보이지 않습니다.
+        </div>
+      )}
+      {author === "" && !authorNoticeClosed && route.name !== "settings" && !meta.readonly && (
         <div className="author-notice">
           <span>
             <strong>작성자가 아직 정해지지 않았습니다.</strong> 지금 정해 두면 앞으로 쓰는 진행일지와
@@ -298,7 +321,11 @@ export default function App() {
         {route.name === "reports" && <ReportCandidates meta={meta} query={route.query} />}
         {route.name === "history" && <ReportHistory meta={meta} query={route.query} />}
         {route.name === "roadmap" && <Roadmap meta={meta} query={route.query} />}
-        {route.name === "settings" && <Settings meta={meta} onSaved={loadMeta} back={route.back} />}
+        {route.name === "settings" && !meta.readonly && <Settings meta={meta} onSaved={loadMeta} back={route.back} />}
+        {route.name === "settings" && meta.readonly && (
+          // 읽기 전용 공유 (191) — 주소로 들어와도 설정은 열리지 않는다. 설정 화면은 묻는 것마다 403 이라 아예 세우지 않는다.
+          <p className="hint readonly-note">설정은 서버 PC 에서만 엽니다. <a href="#/">홈으로</a></p>
+        )}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} back={route.back} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "home" && <Home meta={meta} onMetaChange={loadMeta} />}

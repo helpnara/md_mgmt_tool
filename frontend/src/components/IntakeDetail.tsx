@@ -195,10 +195,10 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
                 <button className="primary commit" onClick={() => setPromoting(true)}>
                   착수 · 과제로 승격
                 </button>
-                <button className="ghost" onClick={() => setEditingMeta((v) => !v)}>
+                <button data-write className="ghost" onClick={() => setEditingMeta((v) => !v)}>
                   {editingMeta ? "닫기" : "접수 정보 수정"}
                 </button>
-                <button
+                <button data-write
                   className="ghost"
                   onClick={() => run(() => api.updateIntake(intake.id, { picked: !intake.picked }))}
                 >
@@ -255,7 +255,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
               ) : (
                 <span className="muted">미평가</span>
               )}
-              <button className="ghost small" onClick={() => setPrechecking(true)}>
+              <button data-write className="ghost small" onClick={() => setPrechecking(true)}>
                 체크리스트
               </button>
             </dd>
@@ -291,7 +291,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
           <div className="decision-bar">
             <span className="muted">판정</span>
             {intake.status === "received" && (
-              <button className="ghost small" onClick={() => run(() => api.setIntakeStatus(intake.id, "reviewing"))}>
+              <button data-write className="ghost small" onClick={() => run(() => api.setIntakeStatus(intake.id, "reviewing"))}>
                 검토 시작
               </button>
             )}
@@ -391,7 +391,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
           </h2>
           <div className="card-head-actions">
             {open && (
-              <button
+              <button data-write
                 className={showVersions ? "ghost on" : "ghost"}
                 onClick={() => setShowVersions((v) => !v)}
                 title="문제 정의가 바뀌기 전의 요청 내용을 봅니다 — 고칠 때마다 한 벌씩 남습니다."
@@ -400,7 +400,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
               </button>
             )}
             {open && !editingBody && (
-              <button className="ghost" onClick={() => setEditingBody(true)}>
+              <button data-write className="ghost" onClick={() => setEditingBody(true)}>
                 수정
               </button>
             )}
@@ -1071,7 +1071,7 @@ function Logs({
                 </div>
                 {intake.in_pool && !auto && (
                   <div className="entry-actions">
-                    <button className="ghost" onClick={() => setEditing(log.name)}>
+                    <button data-write className="ghost" onClick={() => setEditing(log.name)}>
                       수정
                     </button>
                     <button
@@ -1314,7 +1314,7 @@ function PromoteDialog({
             <div className="partner-field">
               <div className="partner-head">
                 <span>유관부서</span>
-                <button
+                <button data-write
                   type="button"
                   className="ghost small"
                   onClick={() => setPartners((prev) => [...prev, { team: "", people: "" }])}

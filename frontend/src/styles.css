@@ -1967,3 +1967,17 @@ a.stage-flow-item[href]:hover { border-color: var(--accent); }
 .meeting-followup-row input[type="checkbox"] { width: 15px; height: 15px; flex: 0 0 auto; }
 .meeting-followup-row input:not([type="checkbox"]) { flex: 1 1 auto; }
 .meeting-followup-edit > button { justify-self: start; }
+
+/* ── 읽기 전용 공유 (TODO 191 · 192) ─────────────────────────────────────────
+   App 이 meta.readonly 면 body 에 readonly 를 건다. 쓰기 단추를 숨긴다 — 채운 단추(class 없음) · 갈래 단추(.commit .report) ·
+   삭제(.danger) · 화면이 data-write 를 붙인 흰 단추 · 첨부 · 면담 칸 · 작성자 안내. 다시 시도(.retry)는 남긴다. */
+body.readonly button:not([class]), body.readonly button.commit, body.readonly button.report, body.readonly button.ghost.danger,
+body.readonly [data-write], body.readonly .attach-button, body.readonly .meeting-panel, body.readonly .author-notice,
+body.readonly .decision-bar, body.readonly .intake-new { display: none !important; }
+.readonly-band { display: flex; align-items: center; gap: 10px; padding: 8px 20px; background: #fdf3e1; color: #6b4a16; font-size: 13px; border-bottom: 1px solid #efd9b0; }
+.readonly-band b { color: #8a5a0a; }
+.share-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; background: #e3f1e7; color: #1f5f3a; font-size: 12px; white-space: nowrap; }
+.share-chip code { font-size: 12px; }
+/* 떠난 사람의 줄 (TODO 194) — 이력은 남기되 흐리게, 표 맨 아래 */
+.skills-table tr.left-row td, .skills-table tr.left-row .linkish { color: var(--muted); }
+.skills-table tr.left-row .left-tag { margin-left: 6px; }

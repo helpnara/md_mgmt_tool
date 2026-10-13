@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends
+import hashlib
+import json
+
+from fastapi import APIRouter, Depends, Request, Response
 
 from ..config import (
     ACTIVITY_KINDS, CLASSIFICATIONS, CLASSIFIED_TYPE, COLLAPSED_STATUSES, INTAKE_STATUSES,
     STATUSES, get_settings,
 )
 from ..deps import get_db
+from .. import share
 from ..services import buildinfo
 from ..services import home as home_service
 from ..services import settings as settings_service
@@ -25,7 +29,25 @@ def health() -> dict:
 
 
 @router.get("/meta")
-def meta(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def meta(request: Request, response: Response, conn: sqlite3.Connection = Depends(get_db)):
+    """화면이 켤 때마다 받는 묶음(5KB). 내용이 같으면 **304** 로 답한다 — 여러 사람이 함께 볼 때 같은 5KB 를 되풀이하지 않게 (TODO 190)."""
+    body = _meta(conn)
+    # 읽기 전용 공유 (TODO 191 · 192) — 바깥에는 서버 폴더 경로를 주지 않고 readonly 를, 주인에게는 공유 주소와 오늘 접속 수를
+    if getattr(request.state, "readonly", False):
+        body["vault"] = ""
+        body["readonly"] = True
+        body["share"] = None
+    else:
+        body["readonly"] = False
+        body["share"] = {"url": share.share_url(request.url.port), **share.visitors_today()} if share.enabled() else None
+    tag = '"' + hashlib.sha1(json.dumps(body, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:20] + '"'
+    if request.headers.get("if-none-match") == tag:
+        return Response(status_code=304, headers={"ETag": tag})
+    response.headers["ETag"] = tag
+    return body
+
+
+def _meta(conn: sqlite3.Connection) -> dict:
     groups = [
         row["grp"]
         for row in conn.execute(

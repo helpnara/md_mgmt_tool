@@ -242,6 +242,8 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
   // 작성 중이던 글 (TODO 170) — 창으로 돌아올 때마다 다시 읽는다
   const drafts = useDrafts();
   useEffect(() => {
+    // 읽기 전용 공유(191)에는 설정이 닫혀 있다 — 백업 상태는 주인만 본다
+    if (document.body.classList.contains("readonly")) return;
     api.backupStatus().then(setBackup).catch(() => setBackup(null));
   }, []);
 

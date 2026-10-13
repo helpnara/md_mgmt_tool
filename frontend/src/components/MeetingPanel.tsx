@@ -143,7 +143,7 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
                     내용
                   </button>
                 )}
-                <button
+                <button data-write
                   className={editing === meeting.id ? "ghost small on" : "ghost small"}
                   onClick={() => { setEditing(editing === meeting.id ? null : meeting.id); setAdding(false); }}
                 >
@@ -298,7 +298,7 @@ function MeetingForm({
             </button>
           </div>
         ))}
-        <button type="button" className="ghost small" onClick={() => setFollowups((prev) => [...prev, { text: "", done: null }])}>
+        <button data-write type="button" className="ghost small" onClick={() => setFollowups((prev) => [...prev, { text: "", done: null }])}>
           + 줄 추가
         </button>
       </div>

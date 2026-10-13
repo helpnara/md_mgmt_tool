@@ -334,7 +334,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             ))}
           </ul>
         )}
-        <button
+        <button data-write
           type="button"
           className="ghost small"
           onClick={() => setPartners((prev) => [...prev, { team: "", people: "" }])}

@@ -238,7 +238,7 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
               {files.map((file, index) => (
                 <li key={`${file.name}-${index}`}>
                   {file.name}
-                  <button
+                  <button data-write
                     type="button"
                     className="ghost small"
                     onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}

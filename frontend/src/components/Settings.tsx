@@ -235,6 +235,18 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           )}
           {" "}새 배포본을 덮어쓴 뒤에도 이 이름이 그대로면 도구를 껐다 켜고 브라우저를 Ctrl+F5 로 새로고침하세요.
         </p>
+        {/* 읽기 전용 공유 (TODO 192) — 켜져 있으면 주소와 오늘 접속 수, 아니면 켜는 법 */}
+        <p className="hint share-line" data-testid="share-line">
+          {meta.share ? (
+            <>
+              <b>팀원에게 공유 중</b> — 주소 <code>{meta.share.url}</code> · 오늘 접속 {meta.share.visitors}명 · 요청 {meta.share.requests}건.
+              팀원은 읽기만 할 수 있고, 이 PC 의 브라우저는 그대로 씁니다. 접속 기록은 데이터 폴더의 <code>.logs/access-날짜.jsonl</code> 에
+              주소 · 시각 · 끝점만 남습니다.
+            </>
+          ) : (
+            <>팀원에게 읽기 전용으로 보여 주려면 <code>run.bat --share</code> 로 켜세요 (도움말 → "팀원에게 보여 주려면?").</>
+          )}
+        </p>
         <div className="settings-grid">
           <ErrorLogCard />
           <LinkFixCard />

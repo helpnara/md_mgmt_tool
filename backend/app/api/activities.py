@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from ..deps import get_db, RowId
@@ -49,10 +49,17 @@ def list_activities(
 
 @router.get("/summary")
 def summary(
+    request: Request,
     conn: sqlite3.Connection = Depends(get_db),
     year: str | None = Query(None, pattern=r"^(\d{4})?$"),
 ) -> dict:
-    return svc.summary(conn, year=year or None)
+    data = svc.summary(conn, year=year or None)
+    if getattr(request.state, "readonly", False):
+        # 읽기 전용 공유 (TODO 191) — 면담은 팀장만 본다(182). 사람 줄의 면담 칸을 비운다
+        for item in data["people"]:
+            item.update({"meetings": 0, "last_meeting": None, "meeting_days_since": None, "open_followups": 0,
+                         "next_meeting": None, "meeting_due": False})
+    return data
 
 
 @router.post("", status_code=201)

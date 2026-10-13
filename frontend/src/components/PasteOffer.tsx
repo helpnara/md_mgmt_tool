@@ -31,7 +31,7 @@ export default function PasteOffer({
   return (
     <div className="paste-offer" role="status">
       <span>엑셀 표를 <b>표로</b> 넣었습니다.</span>
-      <button
+      <button data-write
         type="button"
         className="ghost small"
         onClick={() => {

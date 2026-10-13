@@ -74,11 +74,12 @@ function equal(actual, wanted, message) {
 
 // ── 서버 띄우기 ──────────────────────────────────────────────────────────────
 /** 두 번째 서버가 필요할 때가 있다 — 빈 vault 의 첫 화면을 보려면 (TODO 84). */
-async function startServer(vault, port = PORT) {
+async function startServer(vault, port = PORT, extra = {}) {
+  // extra.host — 바깥에 여는 시험(읽기 전용 공유, 191)은 0.0.0.0 으로 띄운다. extra.env — MD_MGMT_SHARE 같은 것
   const server = spawn(
     join(REPO, ".venv/bin/python"),
-    ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", String(port)],
-    { cwd: REPO, env: { ...process.env, MD_MGMT_VAULT: vault }, stdio: "pipe" },
+    ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", String(port), ...(extra.host ? ["--host", extra.host] : [])],
+    { cwd: REPO, env: { ...process.env, MD_MGMT_VAULT: vault, ...(extra.env || {}) }, stdio: "pipe" },
   );
   const logs = [];
   server.stdout.on("data", (chunk) => logs.push(String(chunk)));
@@ -111,6 +112,15 @@ const api = {
   async patch(path, body) {
     const response = await fetch(BASE + path, {
       method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error(`${path} → ${response.status}`);
+    return response.json();
+  },
+  async put(path, body) {
+    const response = await fetch(BASE + path, {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -4240,6 +4250,71 @@ async function main() {
     await readable(active, "고른 보기");
     const add = page.getByRole("button", { name: "과제 추가" }).first();
     equal(await bgOf(add), "rgb(47, 111, 235)", "[과제 추가] 는 파랑 그대로");
+  });
+
+  console.log("\n[38] 명부에서 떠난 사람은 팀원역량 맨 아래에 흐리게, 면담 대상에서 빠진다 (TODO 194)");
+
+  await check("떠난 사람의 줄은 남고(딱지 · 맨 아래), 먼저 볼 사람 · 면담 상대에서는 빠진다 (194)", async () => {
+    const roster = (await api.get("/api/people")).people;
+    const gone = roster.find((p) => p.name !== "권경락") || roster[0];
+    await api.put("/api/people", { people: roster.map((p) => (p.name === gone.name ? { ...p, left_on: "2026-09-30", left_reason: "전배" } : p)) });
+    await go("#/skills");
+    await page.reload(); await page.waitForTimeout(900);
+    const rows = page.locator(".skills-table tbody tr");
+    const last = rows.last();
+    expect((await last.innerText()).includes(gone.name), `떠난 사람이 맨 아래: ${await last.innerText()}`);
+    expect(await last.evaluate((el) => el.classList.contains("left-row")), "흐린 줄");
+    equal(await last.locator(".left-tag").innerText(), "전배", "사유 딱지");
+    equal(await page.locator(".skills-quiet-chip", { hasText: gone.name }).count(), 0, "먼저 볼 사람에 없다");
+    await page.locator(".meeting-panel").getByRole("button", { name: "면담 추가" }).click();
+    const options = await page.locator(".meeting-form datalist option").evaluateAll((els) => els.map((el) => el.value));
+    expect(options.length > 0 && !options.includes(gone.name), `면담 상대 목록에 없다: ${options}`);
+    await api.put("/api/people", { people: roster });
+  });
+
+  console.log("\n[39] 읽기 전용 공유 — 바깥에서는 읽기만, 서버 PC 에서는 그대로 (TODO 191 · 192)");
+
+  await check("바깥 주소로 열면 쓰기 단추가 없고 서버가 쓰기를 막는다, 127.0.0.1 은 그대로 (191)", async () => {
+    const { networkInterfaces } = await import("node:os");
+    const lan = Object.values(networkInterfaces()).flat().find((n) => n && n.family === "IPv4" && !n.internal)?.address;
+    expect(lan, "바깥 주소(LAN IP)를 찾지 못했다");
+    const shared = await startServer(vault, PORT + 2, { host: "0.0.0.0", env: { MD_MGMT_SHARE: "1" } });
+    const outside = `http://${lan}:${PORT + 2}`, inside = `http://127.0.0.1:${PORT + 2}`;
+    try {
+      // 서버가 막는다 — 쓰기 53 갈래의 대표와 민감한 읽기
+      for (const [method, path] of [["POST", "/api/projects"], ["PATCH", `/api/projects/${seeded.projectA}`], ["DELETE", `/api/projects/${seeded.projectA}`],
+                                    ["PUT", "/api/settings"], ["POST", "/api/reindex"], ["GET", "/api/folders"], ["GET", "/api/backup"], ["GET", "/api/settings"], ["GET", "/api/drafts"]]) {
+        const r = await fetch(outside + path, { method, headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : "{}" });
+        equal(r.status, 403, `${method} ${path} 가 바깥에서 막히지 않았다`);
+      }
+      equal((await (await fetch(outside + "/api/meetings")).json()).items.length, 0, "면담은 빈 목록");
+      const metaOut = await (await fetch(outside + "/api/meta")).json();
+      expect(metaOut.readonly === true && metaOut.vault === "", "바깥의 meta: readonly · 경로 없음");
+      const metaIn = await (await fetch(inside + "/api/meta")).json();
+      expect(metaIn.readonly === false && metaIn.vault && metaIn.share && metaIn.share.url.startsWith("http://"), "안쪽의 meta: 그대로 + 공유 주소");
+      expect((await fetch(inside + "/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "안에서는 된다" }) })).status === 201, "127.0.0.1 은 쓴다");
+      // 화면 — 바깥에서
+      for (const [name, hash] of [["홈", "#/"], ["과제목록", "#/projects"], ["과제 상세", `#/projects/${seeded.projectA}`], ["접수", "#/intakes"], ["보고대상", "#/reports"], ["팀원역량", "#/skills"]]) {
+        await page.goto(`${outside}/${hash}`); await page.waitForTimeout(900);
+        equal(await page.locator(".readonly-band").count(), 1, `${name}: 읽기 전용 띠`);
+        equal(await page.locator('nav a[href="#/settings"]').count(), 0, `${name}: 설정 메뉴 없음`);
+        const visible = await page.evaluate(() => [...document.querySelectorAll("button:not([class]), button.commit, button.report, button.ghost.danger, [data-write], .attach-button, .meeting-panel")]
+          .filter((el) => el.getBoundingClientRect().width > 0).map((el) => el.innerText.trim().slice(0, 20)));
+        equal(visible.length, 0, `${name}: 쓰기 단추가 보인다 — ${JSON.stringify(visible)}`);
+        equal(await page.locator(".vault-path").count(), 0, `${name}: 폴더 경로 없음`);
+      }
+      equal(await page.locator("th", { hasText: "마지막 면담" }).count(), 0, "팀원역량에 면담 열 없음");
+      await page.goto(`${outside}/#/settings`); await page.waitForTimeout(900);
+      equal(await page.locator(".readonly-band").count(), 1, "설정 주소로 와도 띠");
+      // 안쪽(서버 PC)에서는 그대로 — 공유 칩이 보인다
+      await page.goto(`${inside}/#/projects`); await page.waitForTimeout(900);
+      equal(await page.locator(".readonly-band").count(), 0, "127.0.0.1 은 읽기 전용이 아니다");
+      equal(await page.locator(".share-chip").count(), 1, "주인에게 공유 칩");
+      equal(await page.getByRole("button", { name: "과제 추가" }).count(), 1, "주인은 쓰기 단추가 있다");
+    } finally {
+      shared.server.kill();
+      await page.goto(`${BASE}/#/`); await page.waitForTimeout(400);
+    }
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

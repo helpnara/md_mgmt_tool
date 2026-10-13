@@ -417,7 +417,7 @@ def _compare(conn: sqlite3.Connection) -> list[dict]:
     ][::-1]  # 화면에는 왼쪽이 과거
 
 
-def _stale(conn: sqlite3.Connection, limit: int = STALE_LIMIT) -> tuple[list[dict], int]:
+def _stale(candidates: list[dict], limit: int = STALE_LIMIT) -> tuple[list[dict], int]:
     """오래 방치된 과제와 **자르기 전 수**. 보고 대상과 겹쳐 보이지만 뜻이 다르다 —
     저쪽은 *이번 주에 할 일*, 이쪽은 *이미 새어 나간 것*.
 
@@ -426,7 +426,7 @@ def _stale(conn: sqlite3.Connection, limit: int = STALE_LIMIT) -> tuple[list[dic
     """
     items = [
         item
-        for item in reports_service.candidates(conn)
+        for item in candidates  # summary 가 한 번 센 것을 받는다 — 두 번 세지 않는다 (TODO 190)
         if not item["not_started"] and (item["days_since_report"] or 0) > 0
     ]
     return items[:limit], len(items)
@@ -475,14 +475,24 @@ def _owner_gaps(conn: sqlite3.Connection) -> tuple[list[dict], int]:
 
 def _plans(conn: sqlite3.Connection) -> tuple[list[dict], int]:
     """마지막 진행일지에 계획을 적어 둔 **진행 중인** 과제 (TODO 112). 최근 기록 순."""
-    from .entries import latest_plan
+    from .entries import PLAN_LOOKBACK, latest_plan_from_rows
 
     active = {key for key, _, candidate in STATUSES if candidate}
+    # 과제마다 최근 기록을 따로 묻지 않는다 (TODO 190) — 과제별 최근 N건을 창 함수 한 문장으로 모아 같은 규칙으로 고른다.
+    recent: dict[str, list[sqlite3.Row]] = {}
+    for row in conn.execute(
+        "SELECT project_id, id, date, title, body FROM ("
+        "  SELECT project_id, id, date, title, body,"
+        "         ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY date DESC, id DESC) AS rn FROM entry)"
+        " WHERE rn <= ? ORDER BY project_id, rn",
+        (PLAN_LOOKBACK,),
+    ):
+        recent.setdefault(row["project_id"], []).append(row)
     found = []
     for project in conn.execute("SELECT id, title, status FROM project ORDER BY updated_at DESC"):
         if project["status"] not in active:
             continue
-        plan = latest_plan(conn, project["id"])
+        plan = latest_plan_from_rows(recent.get(project["id"], []))
         if plan:
             found.append({
                 "project_id": project["id"],
@@ -522,7 +532,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
     # 배너(TODO 91)는 보고하는 날에만 뜨므로, 지난주에 쓰다 만 것은 다음 보고일까지
     # 아무 데도 보이지 않았다. [이번 주 할 일]이 그것을 계속 들고 있는다.
     drafts = reports_service.unfinished_drafts(conn)
-    stale, stale_total = _stale(conn)
+    stale, stale_total = _stale(candidates)
     plans, plans_total = _plans(conn)
     owner_gaps, owner_gaps_total = _owner_gaps(conn)
     return {

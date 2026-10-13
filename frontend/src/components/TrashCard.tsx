@@ -66,7 +66,7 @@ export default function TrashCard() {
                 {item.deleted_at ? formatDateTime(item.deleted_at) : "—"}
               </span>
               {item.restorable ? (
-                <button
+                <button data-write
                   className="ghost small"
                   disabled={busy !== null}
                   onClick={() => void restore(item)}

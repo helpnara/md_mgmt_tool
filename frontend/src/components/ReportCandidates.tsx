@@ -392,7 +392,7 @@ export default function ReportCandidates({ meta, query }: Props) {
               </td>
               <td>{cellCount(item.unreported_entries, "건")}</td>
               <td>
-                <button className="ghost small report" disabled={busy} onClick={() => makeDraft(item.id)}>
+                <button data-write className="ghost small report" disabled={busy} onClick={() => makeDraft(item.id)}>
                   보고 초안
                 </button>
               </td>

@@ -43,6 +43,10 @@ export interface Meta {
   /** 주간 보고 요일 (0=월 … 6=일) */
   report_weekday: number;
   vault: string;
+  /** 읽기 전용 공유로 보고 있는가 — 바깥에서 온 브라우저 (TODO 191). 서버가 쓰기를 막고, 화면은 쓰기 단추를 숨긴다 */
+  readonly?: boolean;
+  /** 공유를 켠 주인(서버 PC)에게만 — 팀원에게 알려 줄 주소와 오늘 접속 수 (TODO 192) */
+  share?: { url: string; visitors: number; requests: number } | null;
   report_cycle_days: number;
   /** 과제 분류 넷 — 성격 · 분류 · 수행 방식 · 비용구분 (TODO 136). 목록은 설정에서 고친다 */
   classifications: ClassificationInfo[];
@@ -840,6 +844,10 @@ export interface ActivityPerson {
   days_since: number | null;
   /** 그 해 기록이 없거나 오래 뜸한 사람 — 면담에서 먼저 꺼낼 줄 */
   quiet: boolean;
+  /** 명부에서 떠난 사람 (TODO 122 · 194) — 줄은 남고 면담 대상에서는 빠진다 */
+  left?: boolean;
+  left_on?: string | null;
+  left_reason?: string;
   /** 면담 (TODO 182) — 역량 이력과 따로 센다 */
   meetings: number;
   last_meeting: string | null;

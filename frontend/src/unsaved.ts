@@ -66,6 +66,11 @@ let loading: Promise<void> | null = null;
 
 export function refreshDrafts(): Promise<void> {
   if (loading) return loading;
+  // 읽기 전용 공유 (191) — 바깥에는 쓰다 만 글이 닫혀 있다. 묻지 않는다(403 이 콘솔에 쌓이지 않게).
+  if (document.body.classList.contains("readonly")) {
+    items = [];
+    return Promise.resolve();
+  }
   loading = fetch("/api/drafts")
     .then((response) => (response.ok ? response.json() : { items: [] }))
     .then((data: { items?: DraftItem[] }) => {
@@ -189,6 +194,7 @@ export function useDraftKeeper(key: string | null, content: unknown, isOriginal:
  * 진행일지는 `md-mgmt:draft:new-<과제>` · `md-mgmt:draft:<번호>` → `entry:…`.
  */
 export async function migrateBrowserDrafts(): Promise<void> {
+  if (document.body.classList.contains("readonly")) return; // 읽기 전용 공유 — 서버에 올릴 수 없다 (191)
   let keys: string[] = [];
   try {
     keys = Object.keys(localStorage).filter((key) => key.startsWith("md-mgmt:draft:"));

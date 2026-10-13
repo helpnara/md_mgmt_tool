@@ -150,19 +150,51 @@ def _partners(conn: sqlite3.Connection, project_id: str) -> list[dict]:
     return list(grouped.values())
 
 
-def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, stages: dict[str, int] | None = None) -> dict:
+class _Batch:
+    """목록을 그릴 때 **과제마다 묻지 않고** 한 번에 모아 둔 것 (TODO 190).
+
+    담당자 · 유관부서 · 태그 · 선행 과제 · 기록 수 — 과제 200건이면 1,000 문장이 5 문장이 된다.
+    한 건만 그릴 때(`_serialize(conn, row)`)는 쓰지 않고 그 과제만 묻는다.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.owners: dict[str, list[str]] = {}
+        for r in conn.execute("SELECT project_id, name FROM project_owner ORDER BY project_id, position, name"):
+            self.owners.setdefault(r["project_id"], []).append(r["name"])
+        self.partners: dict[str, dict[str, dict]] = {}
+        for r in conn.execute("SELECT project_id, team, person FROM project_partner ORDER BY project_id, position, team"):
+            entry = self.partners.setdefault(r["project_id"], {}).setdefault(r["team"], {"team": r["team"], "people": []})
+            if r["person"]:
+                entry["people"].append(r["person"])
+        self.tags: dict[str, list[str]] = {}
+        for r in conn.execute(
+            "SELECT pt.project_id, t.name FROM tag t JOIN project_tag pt ON pt.tag_id = t.id ORDER BY pt.project_id, t.name"
+        ):
+            self.tags.setdefault(r["project_id"], []).append(r["name"])
+        self.predecessors: dict[str, list[str]] = {}
+        for r in conn.execute("SELECT project_id, predecessor_id FROM project_predecessor ORDER BY project_id, predecessor_id"):
+            self.predecessors.setdefault(r["project_id"], []).append(r["predecessor_id"])
+        self.entry_counts: dict[str, int] = {
+            r["project_id"]: r["n"] for r in conn.execute("SELECT project_id, COUNT(*) AS n FROM entry GROUP BY project_id")
+        }
+
+
+def _serialize(
+    conn: sqlite3.Connection, row: sqlite3.Row, stages: dict[str, int] | None = None, batch: _Batch | None = None
+) -> dict:
     # 여러 과제를 한 번에 그릴 때는 단계를 미리 세어 넘긴다 (TODO 175)
     if stages is None:
         stages = svc.stage_map(conn)
+    pid = row["id"]
     return {
         "id": row["id"],
         "title": row["title"],
         "status": row["status"],
         "type": row["type"],
         "group": row["grp"],
-        "owners": _owners(conn, row["id"]),
+        "owners": batch.owners.get(pid, []) if batch else _owners(conn, pid),
         # 함께 일하는 팀과 그쪽 담당자 (TODO 92)
-        "partners": _partners(conn, row["id"]),
+        "partners": list(batch.partners.get(pid, {}).values()) if batch else _partners(conn, pid),
         "start_date": row["start_date"],
         "due_date": row["due_date"],
         "created_at": row["created_at"],
@@ -181,7 +213,7 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, stages: dict[str, int
         **{key: row[key] for key in CLASSIFICATION_KEYS},
         "intake_id": row["intake_id"],
         # 선행 과제들 (TODO 172)
-        "predecessors": svc._predecessors_of(conn, row["id"]),
+        "predecessors": batch.predecessors.get(pid, []) if batch else svc._predecessors_of(conn, pid),
         # 효과 금액을 세는 해 — 끝나는 해 (TODO 181). 목록(연도 거르기)에서만 온다.
         "effect_year": row["y_effect_year"] if "y_effect_year" in row.keys() else None,
         # 그 해의 상태 (TODO 184) — 목록(연도 거르기)에서만 온다. 2025~2026 과제를 2025 에서 보면 진행중.
@@ -191,9 +223,9 @@ def _serialize(conn: sqlite3.Connection, row: sqlite3.Row, stages: dict[str, int
         "year_status": row["y_status"] if "y_status" in row.keys() else None,
         # 다년도 과제의 단계 — 이어진 과제가 없으면 null (TODO 175)
         "stage": stages.get(row["id"]),
-        "tags": _tags(conn, row["id"]),
-        "entry_count": conn.execute(
-            "SELECT COUNT(*) AS n FROM entry WHERE project_id = ?", (row["id"],)
+        "tags": batch.tags.get(pid, []) if batch else _tags(conn, pid),
+        "entry_count": batch.entry_counts.get(pid, 0) if batch else conn.execute(
+            "SELECT COUNT(*) AS n FROM entry WHERE project_id = ?", (pid,)
         ).fetchone()["n"],
     }
 
@@ -348,7 +380,8 @@ def list_projects(
         f"SELECT p.* FROM {source} {clause} ORDER BY {clause_order}", [*source_params, *params, *order_params]
     ).fetchall()
     stages = svc.stage_map(conn)
-    return [_serialize(conn, row, stages) for row in rows]
+    batch = _Batch(conn)  # 줄마다 묻지 않는다 (TODO 190)
+    return [_serialize(conn, row, stages, batch) for row in rows]
 
 
 @router.post("", status_code=201)

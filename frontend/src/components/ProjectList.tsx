@@ -376,7 +376,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               ])
             }
           />
-          <button
+          <button data-write
             className="ghost"
             disabled={reindexing}
             onClick={async () => {

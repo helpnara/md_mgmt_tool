@@ -206,7 +206,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         </h2>
         <div className="form-actions" style={{ margin: 0 }}>
           {!frozen && body.includes("## 진행 내용") && (
-            <button className="ghost" onClick={clearProgressSection}>
+            <button data-write className="ghost" onClick={clearProgressSection}>
               진행 내용 지우기
             </button>
           )}
@@ -247,7 +247,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             평문 복사
           </button>
           {docPath && (
-            <button
+            <button data-write
               className={showVersions ? "ghost on" : "ghost"}
               onClick={() => setShowVersions((prev) => !prev)}
               title="이 보고 문서의 이전 내용으로 되돌립니다."
@@ -606,7 +606,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
               >
                 삭제
               </button>
-              <button className="ghost" disabled={busy || !dirty} onClick={() => void save()}>
+              <button data-write className="ghost" disabled={busy || !dirty} onClick={() => void save()}>
                 저장
               </button>
               <button

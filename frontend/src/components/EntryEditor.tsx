@@ -461,7 +461,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
         </span>
         <div className="form-actions">
           {docPath && (
-            <button
+            <button data-write
               type="button"
               className={showVersions ? "ghost on" : "ghost"}
               onClick={() => setShowVersions((prev) => !prev)}

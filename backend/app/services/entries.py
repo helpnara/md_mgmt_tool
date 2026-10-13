@@ -190,6 +190,10 @@ def plan_section(body: str | None) -> str:
     return "\n".join(out)
 
 
+# 최근 몇 건까지 거슬러 올라가 계획 절을 찾는가 — 상태 변경 기록(계획이 없다)을 건너뛸 여지
+PLAN_LOOKBACK = 3
+
+
 def latest_plan(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
     """가장 최근 진행일지의 계획 절. 없거나 비어 있으면 None.
 
@@ -197,9 +201,14 @@ def latest_plan(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | N
     """
     rows = conn.execute(
         "SELECT id, date, title, body FROM entry WHERE project_id = ?"
-        " ORDER BY date DESC, id DESC LIMIT 3",
-        (project_id,),
+        " ORDER BY date DESC, id DESC LIMIT ?",
+        (project_id, PLAN_LOOKBACK),
     ).fetchall()
+    return latest_plan_from_rows(rows)
+
+
+def latest_plan_from_rows(rows: list[sqlite3.Row]) -> dict[str, Any] | None:
+    """`latest_plan` 의 규칙을 **이미 모아 둔 줄**(최근 것부터)에 적용한다 — 홈이 과제마다 묻지 않고 한 번에 모아 쓴다 (TODO 190)."""
     for row in rows:
         if str(row["title"] or "").startswith("(상태)"):
             continue

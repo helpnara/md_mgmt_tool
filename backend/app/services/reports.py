@@ -391,6 +391,11 @@ def candidates(
     today = date_cls.today()
 
     stages = stage_map(conn)  # 과제명 뒤 단계 띠 (TODO 175)
+    # 과제마다 따로 묻지 않는다 (TODO 190) — 담당자 · 미보고 기록 · 마지막 확정 보고를 **각각 한 번**에 모아 둔다.
+    # 과제 200건이면 600 문장이 3 문장이 된다. 혼자 쓸 땐 안 보이던 비용이 열 명이 동시에 열면 수십 초였다.
+    owners_by = _owners_by_project(conn)
+    unreported_by = _unreported_dates_by_project(conn)
+    last_report_by = _last_report_by_project(conn)
     results = []
     for project in conn.execute("SELECT * FROM project ORDER BY id"):
         # 보고가 필요 없다고 정해 둔 과제. 상태와 무관하게 후보에서 뺀다.
@@ -405,12 +410,15 @@ def candidates(
                 continue
         elif type and project["type"] != type:
             continue
-        if owner is not None and not _has_owner(conn, project["id"], owner):
+        project_owners = owners_by.get(project["id"], [])
+        if owner is not None and not (
+            not project_owners if owner == "none" else owner in project_owners
+        ):
             continue
 
-        unreported = unreported_entries(conn, project["id"])
+        unreported = unreported_by.get(project["id"], [])
         last_reported = project["last_reported_at"]
-        last_report = last_report_info(conn, project["id"])
+        last_report = last_report_by.get(project["id"])
         days_since = _days_between(last_reported or project["start_date"] or project["created_at"], today)
         # 착수일이 아직 오지 않으면 경과일이 음수가 된다. 숫자를 그대로 내보내면
         # 화면에 `D+-27` 처럼 읽히지 않는 값이 뜨므로, 아직 시작 안 했다는 사실을
@@ -427,17 +435,14 @@ def candidates(
                 "group": project["grp"],
                 "start_date": project["start_date"],
                 "due_date": project["due_date"],
-                "owners": [row["name"] for row in conn.execute(
-                    "SELECT name FROM project_owner WHERE project_id = ? ORDER BY position, name",
-                    (project["id"],),
-                )],
+                "owners": project_owners,
                 "last_reported_at": last_reported,
                 # 날짜만으로는 어떤 수준의 보고였는지 알 수 없다. 보고처를 함께 준다.
                 "last_report_audience": last_report["audience"] if last_report else None,
                 "last_report_id": last_report["id"] if last_report else None,
                 "days_since_report": days_since,
                 "unreported_entries": len(unreported),
-                "latest_entry_date": unreported[-1]["date"] if unreported else None,
+                "latest_entry_date": unreported[-1] if unreported else None,
                 "never_reported": last_reported is None,
                 "not_started": not_started,
             }
@@ -447,16 +452,37 @@ def candidates(
     return results
 
 
-def _has_owner(conn: sqlite3.Connection, project_id: str, owner: str) -> bool:
-    if owner == "none":
-        row = conn.execute(
-            "SELECT 1 FROM project_owner WHERE project_id = ? LIMIT 1", (project_id,)
-        ).fetchone()
-        return row is None
-    row = conn.execute(
-        "SELECT 1 FROM project_owner WHERE project_id = ? AND name = ? LIMIT 1", (project_id, owner)
-    ).fetchone()
-    return row is not None
+def _owners_by_project(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """과제별 담당자 — 한 문장으로 전부 (TODO 190). 순서는 `project_owner.position`."""
+    found: dict[str, list[str]] = {}
+    for row in conn.execute("SELECT project_id, name FROM project_owner ORDER BY project_id, position, name"):
+        found.setdefault(row["project_id"], []).append(row["name"])
+    return found
+
+
+def _unreported_dates_by_project(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """과제별 **미보고 진행일지의 날짜**(오름차순) — `unreported_entries` 와 같은 조건을 한 문장으로 (TODO 190).
+    후보 목록이 쓰는 것은 수와 마지막 날짜뿐이라 날짜만 모은다."""
+    found: dict[str, list[str]] = {}
+    for row in conn.execute(
+        "SELECT e.project_id, e.date FROM entry e"
+        " WHERE e.id NOT IN (SELECT re.entry_id FROM report_entry re JOIN report r ON r.id = re.report_id"
+        "                    WHERE r.frozen_at IS NOT NULL)"
+        " ORDER BY e.project_id, e.date ASC, e.id ASC"
+    ):
+        found.setdefault(row["project_id"], []).append(row["date"])
+    return found
+
+
+def _last_report_by_project(conn: sqlite3.Connection) -> dict[str, sqlite3.Row]:
+    """과제별 마지막 **확정** 보고 — `last_report_info` 와 같은 순서(보고일 → 번호)를 창 함수 한 문장으로 (TODO 190)."""
+    rows = conn.execute(
+        "SELECT project_id, report_date, audience, title, id FROM ("
+        "  SELECT project_id, report_date, audience, title, id,"
+        "         ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY report_date DESC, id DESC) AS rn"
+        "    FROM report WHERE frozen_at IS NOT NULL) WHERE rn = 1"
+    ).fetchall()
+    return {row["project_id"]: row for row in rows}
 
 
 def _days_between(baseline: object, today: date_cls) -> int | None:

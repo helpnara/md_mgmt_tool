@@ -56,7 +56,7 @@ export default function VersionPanel({ path, onRestored }: { path: string; onRes
                 <div className="version-head">
                   <span className="version-when">{item.saved_at}</span>
                   <span className="muted">{formatBytes(item.size_bytes)}</span>
-                  <button
+                  <button data-write
                     className="ghost small"
                     onClick={async () => {
                       if (preview?.stamp === item.stamp) {
@@ -73,7 +73,7 @@ export default function VersionPanel({ path, onRestored }: { path: string; onRes
                   >
                     {preview?.stamp === item.stamp ? "닫기" : "내용 보기"}
                   </button>
-                  <button
+                  <button data-write
                     className="ghost small"
                     disabled={busy}
                     onClick={async () => {

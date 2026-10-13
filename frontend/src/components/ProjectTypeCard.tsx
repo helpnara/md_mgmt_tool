@@ -113,7 +113,7 @@ export default function ProjectTypeCard({ onSaved }: { onSaved: () => void }) {
                 ↓
               </button>
             </span>
-            <button
+            <button data-write
               className="ghost small danger"
               disabled={row.count > 0}
               title={
@@ -149,7 +149,7 @@ export default function ProjectTypeCard({ onSaved }: { onSaved: () => void }) {
 
       <div className="form-actions">
         {changed && (
-          <button className="ghost" disabled={busy} onClick={() => setRows(saved)}>
+          <button data-write className="ghost" disabled={busy} onClick={() => setRows(saved)}>
             되돌리기
           </button>
         )}

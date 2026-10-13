@@ -60,7 +60,7 @@ export default function ErrorLogCard() {
       <div className="card-head">
         <h2>최근 오류 ({items.length})</h2>
         <div className="form-actions" style={{ margin: 0 }}>
-          <button className="ghost small" onClick={load}>
+          <button data-write className="ghost small" onClick={load}>
             다시 읽기
           </button>
           {items.length > 0 && (
@@ -68,7 +68,7 @@ export default function ErrorLogCard() {
               <button className="ghost small" onClick={() => void copy()}>
                 복사
               </button>
-              <button
+              <button data-write
                 className="ghost small danger"
                 title="문제를 재현하기 전에 비워 두면 그 뒤의 것만 남습니다."
                 onClick={async () => {

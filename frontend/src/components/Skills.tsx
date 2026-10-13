@@ -3,7 +3,8 @@ import { api } from "../api";
 import { attempt } from "../notify";
 import type { Activity, ActivitySummary, Meta } from "../types";
 import { backTarget, useAddressBar } from "../nav";
-import { splitPeople } from "../people";
+import { leftLabel, splitPeople } from "../people";
+import { isReadonly } from "../readonly";
 import LoadError from "./LoadError";
 import ActivityForm from "./ActivityForm";
 import MeetingPanel from "./MeetingPanel";
@@ -30,6 +31,7 @@ function won(value: number): string {
 }
 
 export default function Skills({ meta, query }: { meta: Meta; query: string }) {
+  const readonly = isReadonly(); // 읽기 전용 공유 (191) — 면담 칸 · 면담 열을 뺀다
   const initial = useMemo(() => new URLSearchParams(query), [query]);
   const [year, setYear] = useState(initial.get("year") ?? THIS_YEAR);
   // 어디서 왔는지 (TODO 128). 조건이 아니라 돌아갈 곳이다.
@@ -108,11 +110,12 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   // 거기서 보여야 사용자가 존재를 알고 정리한다 (TODO 74).
   const quiet = summary.people.filter(
     // 역량이 뜸하거나 · **면담할 때가 지났거나**(TODO 182) — 까닭은 칩에 따로 적는다
-    (item) => (item.quiet || item.meeting_due) && splitPeople(item.name).length === 1,
+    (item) => (item.quiet || item.meeting_due) && !item.left && splitPeople(item.name).length === 1,
   );
   // 쉼표로 여러 명을 적었다가 한 덩이로 굳은 이름. 지금은 서버가 나눠 주지만,
   // 그 전에 명부로 들어간 이름은 사람별 표에 **없는 사람**으로 남는다 (TODO 74).
   const glued = summary.people.filter((item) => splitPeople(item.name).length > 1);
+  const peopleRows = [...summary.people].sort((a, b) => Number(Boolean(a.left)) - Number(Boolean(b.left)));
   const maxTrend = Math.max(
     1,
     ...summary.people.flatMap((item) => Object.values(item.trend)),
@@ -218,7 +221,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           <h2>면담에서 먼저 볼 사람</h2>
           <p className="hint">
             {year === ALL_YEARS ? "" : `${year}년에 `}역량 기록이 없거나 마지막 활동이 {summary.quiet_days}일을 넘긴 사람,{" "}
-            그리고 <b>면담할 때가 지난 사람</b>(정한 다음 면담일이 지났거나 마지막 면담에서 {summary.meeting_cycle_days}일)입니다.
+            {!readonly && <>그리고 <b>면담할 때가 지난 사람</b>(정한 다음 면담일이 지났거나 마지막 면담에서 {summary.meeting_cycle_days}일)입니다.</>}
+            {" "}명부에서 떠난 사람은 여기 서지 않고, 사람별 표 맨 아래에 흐리게 남습니다.
             비어 있다는 사실 자체가 이야깃거리입니다.
           </p>
           <div className="skills-quiet-row">
@@ -278,16 +282,16 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 <th>최근 추이</th>
                 <th>마지막 활동</th>
                 {/* 면담 (TODO 182) — 역량 이력과 따로 센다 */}
-                <th>마지막 면담</th>
-                <th title="면담에서 하기로 하고 아직 닫지 않은 것">하기로 한 것</th>
+                {!readonly && <th>마지막 면담</th>}
+                {!readonly && <th title="면담에서 하기로 하고 아직 닫지 않은 것">하기로 한 것</th>}
               </tr>
             </thead>
             <tbody>
-              {summary.people.map((item) => (
+              {peopleRows.map((item) => (
                 <tr
                   key={item.name}
-                  // 지금 보는 사람의 줄은 옅게 칠한다 — 표에서도 누구를 보는지 보이게 (TODO 183)
-                  className={[item.quiet ? "quiet-row" : "", person === item.name ? "picked-row" : ""].filter(Boolean).join(" ") || undefined}
+                  // 지금 보는 사람의 줄은 옅게 칠한다 — 표에서도 누구를 보는지 보이게 (TODO 183). 떠난 사람은 흐리게, 맨 아래 (194)
+                  className={[item.quiet ? "quiet-row" : "", person === item.name ? "picked-row" : "", item.left ? "left-row" : ""].filter(Boolean).join(" ") || undefined}
                 >
                   <td>
                     <button
@@ -298,6 +302,11 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                     >
                       {item.name}
                     </button>
+                    {item.left && (
+                      <span className="tag left-tag" title={item.left_on ? `${item.left_on} 부터` : undefined}>
+                        {leftLabel(meta, item.name) || "떠남"}
+                      </span>
+                    )}
                   </td>
                   <td className={item.count ? undefined : "zero"}>{cellCount(item.count)}</td>
                   {meta.activity_kinds.map((kindInfo) => (
@@ -339,13 +348,15 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                       <span className="due due-warn"> D+{item.days_since}</span>
                     )}
                   </td>
-                  <td className="muted one-line">
-                    {item.last_meeting ?? DASH}
-                    {item.meeting_due && item.meeting_days_since !== null && (
-                      <span className="due due-warn"> D+{item.meeting_days_since}</span>
-                    )}
-                  </td>
-                  <td className={item.open_followups ? "num" : "zero num"}>{cellCount(item.open_followups)}</td>
+                  {!readonly && (
+                    <td className="muted one-line">
+                      {item.last_meeting ?? DASH}
+                      {item.meeting_due && item.meeting_days_since !== null && (
+                        <span className="due due-warn"> D+{item.meeting_days_since}</span>
+                      )}
+                    </td>
+                  )}
+                  {!readonly && <td className={item.open_followups ? "num" : "zero num"}>{cellCount(item.open_followups)}</td>}
                 </tr>
               ))}
             </tbody>
@@ -399,14 +410,15 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         </div>
       )}
 
-      {/* ── 면담 (TODO 182) — 사람을 고르면 그 사람의 면담, 아니면 팀 전체의 하기로 한 것 ── */}
-      <MeetingPanel
+      {/* ── 면담 (TODO 182) — 사람을 고르면 그 사람의 면담, 아니면 팀 전체의 하기로 한 것. 읽기 전용 공유에선 통째로 없다 (191).
+            떠난 사람과는 새 면담을 잡지 않는다 (194) — 지난 면담은 그 사람을 고르면 그대로 보인다 ── */}
+      {!readonly && <MeetingPanel
         meta={meta}
         person={person}
-        people={summary.people.map((item) => item.name).filter((name) => splitPeople(name).length === 1)}
+        people={summary.people.filter((item) => !item.left).map((item) => item.name).filter((name) => splitPeople(name).length === 1)}
         onChanged={load}
         onPickPerson={setPerson}
-      />
+      />}
 
       {/* ── 기록 목록 ──────────────────────────────────────────────── */}
       <div className="card wide">
@@ -419,9 +431,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           <div className="filters">
             <select value={person} onChange={(event) => setPerson(event.target.value)}>
               <option value={ALL}>사람 전체</option>
-              {summary.people.map((item) => (
+              {peopleRows.map((item) => (
                 <option key={item.name} value={item.name}>
-                  {item.name}
+                  {item.name}{item.left ? ` · ${leftLabel(meta, item.name) || "떠남"}` : ""}
                 </option>
               ))}
             </select>
@@ -467,7 +479,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                     <span className="grow" />
                     {!shared && (
                       <>
-                        <button
+                        <button data-write
                           className={editingId === first.id ? "ghost small on" : "ghost small"}
                           onClick={() => {
                             setAdding(false);
@@ -502,7 +514,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                       {group.map((item) => (
                         <span key={item.id} className="activity-person-row">
                           <b>{item.person}</b>
-                          <button
+                          <button data-write
                             className={editingId === item.id ? "ghost small on" : "ghost small"}
                             onClick={() => {
                               setAdding(false);

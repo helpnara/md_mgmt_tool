@@ -326,8 +326,11 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
         if row["person"] not in names:
             names.append(row["person"])
 
+    # 떠난 사람 (TODO 122 · 194) — 줄은 남기되(이력은 사실) 면담 대상에는 세우지 않는다
+    left_by = {person["name"]: person for person in settings_service.left_people()}
     people = []
     for name in names:
+        left = left_by.get(name)
         clause = " AND SUBSTR(date, 1, 4) = ?" if year else ""
         params = [name, year] if year else [name]
         row = conn.execute(
@@ -376,8 +379,11 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
                 "trend": {y: trend.get(y, 0) for y in trend_years},
                 "last_date": last,
                 "days_since": days_since,
-                # 면담에서 가장 먼저 꺼낼 줄 — 그 해에 아무것도 없거나 오래 뜸한 사람
-                "quiet": row["n"] == 0 or (days_since is not None and days_since >= QUIET_DAYS),
+                # 면담에서 가장 먼저 꺼낼 줄 — 그 해에 아무것도 없거나 오래 뜸한 사람. 떠난 사람은 아니다 (194)
+                "quiet": not left and (row["n"] == 0 or (days_since is not None and days_since >= QUIET_DAYS)),
+                "left": bool(left),
+                "left_on": left["left_on"] if left else None,
+                "left_reason": (left.get("left_reason") or "") if left else "",
             }
         )
     # 면담 (TODO 182) — 역량 이력과 **따로 센다**. 사람 줄에 붙이기만 하고 "quiet"(역량이 뜸함)와 섞지 않는다.
@@ -388,6 +394,9 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
              "next_meeting": None, "meeting_due": False}
     for item in people:
         info = met.get(item["name"], blank)
+        if item["left"]:
+            # 떠난 사람과는 더 면담하지 않는다 — 지난 면담은 남기되 "때가 지났다" 로 세우지 않는다 (194)
+            info = {**info, "meeting_due": False, "next_meeting": None}
         # 한 번도 면담하지 않은 사람은 "때가 지났다" 로 세우지 않는다 — 기능을 처음 켠 날 팀 전원이 서면 쓸모가 없다.
         # 표의 "마지막 면담" 칸이 "기록 없음" 으로 알린다.
         item.update(info)

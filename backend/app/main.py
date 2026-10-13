@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -8,20 +9,22 @@ from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse, Response
+import anyio
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
 from .api import (activities, attachments, dashboard, drafts, entries, errors, export, folders, home, intakes,
                   linkfix, meetings, meta, people, projects, reports, roadmap, search, settings, trash,
                   versions)
+from . import readcache, share
 from .services import errorlog
 from .config import REPO_ROOT, get_settings
 from .vault.paths import safe_join
 from .vault.indexer import reindex_all
 
 FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
+THREAD_POOL_SIZE = 64
 
 
 @asynccontextmanager
@@ -36,6 +39,7 @@ async def lifespan(app: FastAPI):
         print("  (색인은 md 파일에서 다시 만들어지므로 작성한 내용은 그대로입니다)")
     # 외부 편집기로 바뀐 내용을 기동 시점에 반영한다.
     indexed, problems = reindex_all(conn)
+    readcache.bump()
     if problems:
         print(f"\n  [주의] 읽지 못한 파일 {len(problems)}건 — front matter를 확인하세요:")
         for item in problems[:10]:
@@ -44,6 +48,9 @@ async def lifespan(app: FastAPI):
 
     # 자동 백업은 프로그램이 켜져 있는 동안에만 돈다. 사내 PC 에 상주 서비스를 두는 것보다
     # 이 편이 단순하고, 이 도구는 쓸 때 켜 두는 물건이다.
+    # 동기 끝점은 스레드 풀에서 돈다. 기본 40 이면 열 명이 홈을 동시에 열 때 뒤의 가벼운 요청(메타 · 상세 · 검색)이
+    # 줄을 선다 (TODO 190 실측). 넉넉히 둔다 — SQLite 읽기는 서로 막지 않는다.
+    anyio.to_thread.current_default_thread_limiter().total_tokens = THREAD_POOL_SIZE
     backup_task = asyncio.create_task(_backup_loop())
     try:
         yield
@@ -96,6 +103,69 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_inflight: dict[tuple, asyncio.Event] = {}
+
+
+@app.middleware("http")
+async def shared_reads(request: Request, call_next):
+    """무거운 읽기의 답을 잠깐 나눠 쓴다 (TODO 190, `readcache.py`). 쓰기가 끝나면 판을 올려 전부 버린다."""
+    path = request.url.path
+    if request.method not in share.SAFE_METHODS:
+        response = await call_next(request)
+        if response.status_code < 400:
+            readcache.bump()
+        return response
+    if request.method != "GET" or not readcache.cacheable(path) or "if-none-match" in request.headers:
+        return await call_next(request)
+    key = (path, request.url.query, bool(share.is_remote(request)))
+    hit = readcache.get(key)
+    if hit is not None:
+        status, body, headers = hit
+        return Response(content=body, status_code=status, headers=headers)
+    # 같은 답을 동시에 계산하지 않는다 — 열 명이 같은 순간 홈을 열면 첫 사람이 계산하는 동안 아홉은 기다렸다가 그 답을 받는다.
+    # (답 나눠 쓰기만으로는 **같은 순간**에 온 요청이 모두 계산했다 — 10명 p95 가 그대로 3초였다.)
+    waiting = _inflight.get(key)
+    if waiting is not None:
+        await waiting.wait()
+        hit = readcache.get(key)
+        if hit is not None:
+            status, body, headers = hit
+            return Response(content=body, status_code=status, headers=headers)
+    done = asyncio.Event()
+    _inflight[key] = done
+    try:
+        ver = readcache.version()
+        response = await call_next(request)
+        if response.status_code != 200:
+            return response
+        chunks = [chunk async for chunk in response.body_iterator]
+        body = b"".join(chunks)
+        headers = {k: v for k, v in response.headers.items() if k.lower() in ("content-type", "etag")}
+        readcache.put(key, ver, response.status_code, body, headers)
+        return Response(content=body, status_code=response.status_code, headers=headers)
+    finally:
+        _inflight.pop(key, None)
+        done.set()
+
+
+@app.middleware("http")
+async def readonly_share(request: Request, call_next):
+    """읽기 전용 공유 (TODO 191). 바깥에서 온 요청은 읽기만 — 규칙은 `share.py`, 지키는 곳은 여기 하나."""
+    remote = share.is_remote(request)
+    request.state.readonly = remote
+    if not remote:
+        return await call_next(request)
+    path = request.url.path
+    if request.method not in share.SAFE_METHODS or share.blocked_path(path):
+        response = JSONResponse({"detail": share.READONLY_DETAIL}, status_code=403)
+    elif path in share.EMPTY_RESPONSES:
+        response = JSONResponse(share.EMPTY_RESPONSES[path])
+    else:
+        response = await call_next(request)
+    share.record_access(request.client.host if request.client else "?", request.method, path, response.status_code)
+    return response
+
 
 @app.middleware("http")
 async def record_failures(request: Request, call_next):
@@ -181,7 +251,23 @@ app.include_router(roadmap.router)
 app.include_router(meetings.router)
 
 if FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+    @app.get("/assets/{name}")
+    def asset(name: str, request: Request):
+        """화면 묶음(JS · CSS). 이름에 해시가 있어 **1년 캐시**해도 안전하고, 빌드가 `.gz` 를 함께 내므로 브라우저가 받으면
+        그것을 그대로 보낸다 — 574KB 가 184KB 로, 요청마다 압축하는 CPU 없이 (TODO 190). 100명이 같은 순간 첫 화면을 열 때의 값이다."""
+        try:
+            path = safe_join(FRONTEND_DIST / "assets", name)
+        except ValueError:
+            path = None
+        if path is None or not path.is_file():
+            raise StarletteHTTPException(status_code=404)
+        headers = {"Cache-Control": "public, max-age=31536000, immutable", "Vary": "Accept-Encoding"}
+        media_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        gz = path.with_name(path.name + ".gz")
+        if gz.is_file() and "gzip" in request.headers.get("accept-encoding", ""):
+            headers["Content-Encoding"] = "gzip"
+            return FileResponse(gz, media_type=media_type, headers=headers)
+        return FileResponse(path, media_type=media_type, headers=headers)
 
     @app.get("/{full_path:path}")
     def spa(full_path: str) -> FileResponse:

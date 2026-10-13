@@ -246,7 +246,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                       넘기기
                     </button>
                   )}
-                  <button
+                  <button data-write
                     className="ghost small danger"
                     onClick={() => setPeople((prev) => prev.filter((_, i) => i !== index))}
                   >
@@ -273,7 +273,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
               <li key={person.name}>
                 <span className="trash-label">{person.name}</span>
                 <span className="muted trash-when">→ {splitPeople(person.name).join(" · ")}</span>
-                <button
+                <button data-write
                   className="ghost small"
                   onClick={() => splitRow(people.indexOf(person))}
                 >
