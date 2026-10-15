@@ -21,7 +21,7 @@ from collections.abc import Iterator
 
 from typing import Annotated
 
-from fastapi import Path, Request
+from fastapi import HTTPException, Path, Request
 
 from .db import connect, open_index
 
@@ -37,6 +37,10 @@ _conn: sqlite3.Connection | None = None
 # 이 도구는 한 사람이 쓴다. 쓰기를 줄 세워도 잃는 것이 없고, 이 두 가지가 함께 사라진다.
 # 읽기는 그대로 동시에 흐른다 (WAL 이라 서로를 막지 않는다).
 _write_lock = threading.Lock()
+# 쓰기 차례를 기다리는 최대 시간(초) (TODO 206 ㉚). 네트워크 드라이브 vault 가 멎어 쓰기 하나가 영원히 잠그면
+# 뒤의 쓰기들이 스레드 풀(64)을 다 채워 읽기까지 멈췄다. 기다리다 지나면 503 으로 돌려보낸다.
+WRITE_LOCK_TIMEOUT = 30.0
+WRITE_BUSY_DETAIL = "다른 저장이 끝나기를 기다리다 시간이 지났습니다. 잠시 뒤 다시 시도하세요."
 
 # 읽기만 하는 메서드. 나머지는 모두 쓰기로 본다.
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -62,8 +66,8 @@ def get_db(request: Request) -> Iterator[sqlite3.Connection]:
         raise RuntimeError("DB가 초기화되지 않았습니다.")
 
     writing = request.method not in _READ_METHODS
-    if writing:
-        _write_lock.acquire()
+    if writing and not _write_lock.acquire(timeout=WRITE_LOCK_TIMEOUT):
+        raise HTTPException(status_code=503, detail=WRITE_BUSY_DETAIL)  # TODO 206 ㉚
     try:
         conn = connect()
         try:

@@ -985,23 +985,70 @@ def promote(conn: sqlite3.Connection, intake_id: str, data: dict[str, Any]) -> s
         "body": mapped["body"],
     })
 
-    source_assets = directory / "assets"
-    project_dir = projects_service.project_dir(conn, project_id)
-    if source_assets.exists() and any(p.is_file() for p in source_assets.rglob("*")):
-        shutil.copytree(source_assets, project_dir / "assets", dirs_exist_ok=True)
-        index_project(conn, project_dir)
+    # TODO 201 ㉑ — 과제는 이미 만들어져(커밋됨) 있다. 아래 첨부 복사 · request.md 저장이 실패하면
+    # 과제만 남고 접수는 풀에 그대로여서, 다시 승격하면 과제가 둘이 됐다. 실패하면 만든 과제를
+    # 보관함으로 되돌리고(번호는 다시 쓰지 않는다) 사정을 한글로 알린다 — 접수는 풀에 남아 다시 시도하면 된다.
+    try:
+        source_assets = directory / "assets"
+        project_dir = projects_service.project_dir(conn, project_id)
+        if source_assets.exists() and any(p.is_file() for p in source_assets.rglob("*")):
+            shutil.copytree(source_assets, project_dir / "assets", dirs_exist_ok=True)
+            index_project(conn, project_dir)
 
-    request = directory / REQUEST_FILE
-    meta = md.merge_meta(doc.meta, {
-        "status": "started", "project_id": project_id, "decided_on": today(),
-        "decision_note": (str(data.get("decision_note") or "").strip() or None),
-    })
-    meta["updated_at"] = now_iso()
-    md.save(request, md.MarkdownDoc(_ordered(meta), doc.body))
+        request = directory / REQUEST_FILE
+        meta = md.merge_meta(doc.meta, {
+            "status": "started", "project_id": project_id, "decided_on": today(),
+            "decision_note": (str(data.get("decision_note") or "").strip() or None),
+        })
+        meta["updated_at"] = now_iso()
+        md.save(request, md.MarkdownDoc(_ordered(meta), doc.body))
+    except Exception as exc:
+        raise _undo_promotion(conn, directory, project_id, exc) from exc
     _log_status_change(directory, row["status"], "started", f"\n\n과제 {project_id} 로 승격했다.\n")
     index_intake(conn, directory)
     conn.commit()
     return project_id
+
+
+class PromotionError(RuntimeError):
+    """승격이 과제를 만든 뒤에 실패했다 (TODO 201 ㉑). 메시지가 지금 상태와 다음 할 일을 말한다."""
+
+
+def _undo_promotion(conn: sqlite3.Connection, directory: Path, project_id: str, cause: Exception) -> Exception:
+    """과제를 만든 뒤 실패했을 때 — 만든 과제를 보관함으로, 안 되면 접수가 그 과제를 가리키게 (TODO 201 ㉑).
+
+    어느 쪽이든 **다시 승격해도 과제가 둘이 되지 않는다.** 되돌린 뒤 돌려주는 예외는 호출한 쪽이 그대로 raise 한다.
+    """
+    from . import projects as projects_service
+
+    reason = str(cause).splitlines()[0] if str(cause) else type(cause).__name__
+    try:
+        conn.rollback()
+        projects_service.archive_project(conn, project_id)
+        return PromotionError(
+            f"승격 중 첨부 복사 · 접수 문서 저장에 실패해 만든 과제 {project_id} 를 삭제 보관함으로 되돌렸습니다. "
+            f"접수는 풀에 그대로 있으니 원인을 없앤 뒤 다시 승격하세요. (원인: {reason})"
+        )
+    except Exception:
+        pass
+    # 보관함으로도 못 옮겼다 — 접수가 과제를 가리키게 해 두면 재승격이 막힌다(닫힌 접수).
+    try:
+        request = directory / REQUEST_FILE
+        doc = md.load(request)
+        meta = md.merge_meta(doc.meta, {"status": "started", "project_id": project_id, "decided_on": today()})
+        meta["updated_at"] = now_iso()
+        md.save(request, md.MarkdownDoc(_ordered(meta), doc.body))
+        index_intake(conn, directory)
+        conn.commit()
+        return PromotionError(
+            f"과제 {project_id} 는 만들었지만 첨부 복사에 실패했습니다. 접수는 이 과제로 이어 두었으니 "
+            f"첨부는 과제 화면에서 다시 올리세요. (원인: {reason})"
+        )
+    except Exception:
+        return PromotionError(
+            f"과제 {project_id} 는 만들었지만 그 뒤 저장에 실패했고 되돌리지도 못했습니다. "
+            f"과제 목록에서 {project_id} 를 확인한 뒤 접수를 정리하세요. (원인: {reason})"
+        )
 
 
 # ── 과제 → 접수로 되돌리기 (TODO 171) ───────────────────────────────────────
@@ -1049,15 +1096,32 @@ def demote_plan(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
 
 
 def demote(conn: sqlite3.Connection, project_id: str) -> str:
-    """과제를 접수로 되돌린다. 새 접수 번호를 돌려준다."""
+    """과제를 접수로 되돌린다. 새 접수 번호를 돌려준다.
+
+    TODO 201 ④ — **실패할 수 있는 일(과제 폴더를 보관함으로 옮기기)을 먼저** 한다. 예전에는 접수를 먼저 만들고
+    이동을 맨 끝에 했는데, 이동이 잠김으로 423 이 난 뒤 다시 누르면 같은 접수가 둘 생겼다. 이동에서 멈추면
+    아무것도 바뀐 것이 없고, 이동이 됐으면 보관함의 폴더에서 접수를 만든다.
+    """
     from . import projects as projects_service
 
     plan = demote_plan(conn, project_id)
     if not plan["eligible"]:
         raise ValueError(plan["reason"])
+    settings = get_settings()
     source = projects_service.project_dir(conn, project_id)
     doc = md.load(source / "index.md")
     meta = doc.meta
+
+    # 과제는 보관함으로 — 번호는 다시 쓰지 않는다. 옮긴 폴더를 찾기 위해 전후의 보관함 목록을 견준다.
+    settings.trash_dir.mkdir(parents=True, exist_ok=True)
+    before = {path.name for path in settings.trash_dir.iterdir()}
+    projects_service.archive_project(conn, project_id)
+    moved_to = [
+        path for path in settings.trash_dir.iterdir()
+        if path.name not in before and path.is_dir() and path.name.startswith(source.name)
+    ]
+    source = max(moved_to, key=lambda path: path.name) if moved_to else source
+
     intake_id = create_intake(conn, {
         "title": str(meta.get("title") or plan["title"]),
         **{key: meta.get(key) for key in CLASSIFICATION_KEYS},
@@ -1107,8 +1171,6 @@ def demote(conn: sqlite3.Connection, project_id: str) -> str:
         f"직접 만든 과제 **{project_id} {plan['title']}** 을(를) 풀로 되돌렸다. 개요는 요청 내용으로, "
         f"진행일지 {moved}건은 검토 기록으로(태그 `{TAG_FROM_PROJECT}`), 첨부는 복사했다. 과제는 삭제 보관함에 있다.\n",
     )
-    # 과제는 보관함으로 — 번호는 다시 쓰지 않는다
-    projects_service.archive_project(conn, project_id)
     index_intake(conn, directory)
     conn.commit()
     return intake_id
@@ -1159,7 +1221,19 @@ def index_intake(conn: sqlite3.Connection, directory: Path, problems: list | Non
     # 사전점검 (TODO 155) — 풀의 열·정렬에 쓰는 세 수. 점수는 다 매겼을 때만(아니면 NULL)
     from . import precheck as precheck_service
 
-    check = precheck_service.summarize(doc.meta.get("precheck"))
+    # TODO 199 ⑪ — `score: 십` · `group` 누락 같은 손 편집 값 하나로 재색인 전체가 500 이 나고 기동이 안 됐다.
+    # 읽지 못하면 그 접수만 알리고(IndexProblem) 사전점검 없이 색인한다.
+    try:
+        check = precheck_service.summarize(doc.meta.get("precheck"))
+    except Exception as exc:
+        check = precheck_service.empty_summary()
+        problems.append(IndexProblem(
+            rel_request,
+            f"{request.name} 의 사전점검(precheck) 값을 읽지 못해 사전점검 없이 색인했습니다: "
+            f"{str(exc).splitlines()[0] if str(exc) else type(exc).__name__}",
+        ))
+    for reason in check.get("problems") or []:
+        problems.append(IndexProblem(rel_request, f"{request.name} 의 사전점검(precheck) 값이 이상합니다 — {reason}"))
     conn.execute(
         """
         INSERT INTO intake(id, dir_name, title, status, leader, leader_team,

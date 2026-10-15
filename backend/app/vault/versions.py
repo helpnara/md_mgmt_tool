@@ -30,6 +30,12 @@ DEFAULT_KEEP_DAYS = 365
 # 폴더가 무한정 늘지 않게 한다. 넘으면 오래된 것부터 버린다.
 MAX_PER_DOCUMENT = 200
 
+# 보관에 실패한 문서 — 경로 → 사유 (TODO 206 ㉕). 실패는 삼키되(저장이 멈추면 본말이 뒤바뀐다) **흔적은 남긴다**:
+# 긴 경로(윈도우 260자) 같은 이유로 그 문서만 버전이 영영 안 남는데 어디에도 표시가 없었다.
+# 문서마다 한 번만, 많아야 KEEP_FAILURE_LIMIT 건. 설정 → 점검(/api/settings · /api/health)이 보인다.
+KEEP_FAILURE_LIMIT = 50
+KEEP_FAILURES: dict[str, str] = {}
+
 
 def _vault_relative(path: Path) -> str | None:
     """vault 안의 문서면 상대경로를, 밖이면 None."""
@@ -86,8 +92,27 @@ def keep(path: Path, new_text: str | None = None) -> None:
         target = _free_name(bucket)
         target.write_text(current, encoding="utf-8")
         _prune(bucket)
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        _note_failure(path, exc)
+
+
+def _note_failure(path: Path, exc: Exception) -> None:
+    """보관 실패를 한 번 적어 둔다 (TODO 206 ㉕). 여기서도 예외는 내지 않는다."""
+    try:
+        key = _vault_relative(path) or str(path)
+    except Exception:
+        key = str(path)
+    if key in KEEP_FAILURES or len(KEEP_FAILURES) >= KEEP_FAILURE_LIMIT:
+        return
+    reason = getattr(exc, "strerror", None) or str(exc) or type(exc).__name__
+    if isinstance(exc, OSError) and (exc.errno == 36 or "too long" in str(exc).lower() or getattr(exc, "winerror", None) == 206):
+        reason = f"경로가 너무 깁니다 (윈도우 260자 제한) — 데이터 폴더를 더 짧은 경로로 옮기면 해결됩니다. {reason}"
+    KEEP_FAILURES[key] = f"{type(exc).__name__}: {reason}"[:300]
+
+
+def keep_failures() -> list[dict[str, str]]:
+    """이전 버전을 남기지 못한 문서 목록 — 설정 → 점검에 보일 모양."""
+    return [{"path": path, "reason": reason} for path, reason in KEEP_FAILURES.items()]
 
 
 def _free_name(bucket: Path) -> Path:

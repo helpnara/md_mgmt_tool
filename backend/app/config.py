@@ -175,9 +175,22 @@ class Settings:
         return self.index_dir / "index.sqlite3"
 
     def ensure_dirs(self) -> None:
+        """데이터 폴더들을 만든다. 못 만들면 **어느 경로가 왜** 안 되는지 한글로 말하는 OSError (TODO 206 ㉝).
+
+        `--vault E:\\…` 의 USB 가 빠져 있거나 네트워크 드라이브가 끊겼을 때 영어 traceback 만 났다.
+        errno · filename 은 그대로 두어 부르는 쪽이 종류를 가릴 수 있다.
+        """
         for path in (self.vault_dir, self.projects_dir, self.people_dir, self.intakes_dir,
                      self.trash_dir, self.index_dir, self.logs_dir):
-            path.mkdir(parents=True, exist_ok=True)
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise OSError(
+                    exc.errno,
+                    f"데이터 폴더를 만들거나 쓸 수 없습니다: {path} — 드라이브(USB · 네트워크)가 연결되어 있는지, "
+                    f"폴더에 쓸 권한이 있는지 확인하세요. ({exc.strerror or type(exc).__name__})",
+                    str(path),
+                ) from exc
 
 
 @lru_cache(maxsize=1)

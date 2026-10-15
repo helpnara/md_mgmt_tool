@@ -1,6 +1,7 @@
 """과제 접수 풀 (TODO 136). 설계는 docs/TODO.md 136 에 있다."""
 from __future__ import annotations
 
+import errno
 import sqlite3
 from typing import Any
 
@@ -119,10 +120,34 @@ def _errors(call):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except FileInUseError as exc:
         raise HTTPException(status_code=423, detail=str(exc)) from exc
+    except svc.PromotionError as exc:
+        # 승격이 과제를 만든 뒤 실패해 되돌린 경우 (TODO 201 ㉑) — 사정과 다음 할 일을 그대로 전한다
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # TODO 200 ⑩ — 예전에는 모든 OSError 가 507 + 영문 errno 였다. 507 은 "저장 공간 부족" 이라 안내도 틀렸다.
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"파일이 폴더에 없습니다 — 탐색기에서 옮기거나 지웠을 수 있습니다. [다시 읽기] 뒤 다시 시도하세요. "
+                   f"({_basename(exc)})",
+        ) from exc
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=423,
+            detail=f"다른 프로그램이 파일을 쓰고 있습니다. 그 파일을 연 프로그램(엑셀 · 뷰어 등)을 닫고 다시 시도하세요. "
+                   f"({_basename(exc)})",
+        ) from exc
     except OSError as exc:
-        raise HTTPException(status_code=507, detail=str(exc)) from exc
+        if exc.errno == errno.ENOSPC:
+            raise HTTPException(status_code=507, detail="저장 공간이 부족해 저장하지 못했습니다. 디스크를 비운 뒤 다시 시도하세요.") from exc
+        raise  # 나머지는 공통 처리기(main.py)가 맡는다
+
+
+def _basename(exc: OSError) -> str:
+    """오류에 든 경로에서 파일 이름만 — 서버 폴더 전체 경로는 화면에 보일 이유가 없다."""
+    name = str(exc.filename or exc.filename2 or "").replace("\\", "/").rsplit("/", 1)[-1]
+    return name or type(exc).__name__
 
 
 SORTS = {

@@ -11,6 +11,10 @@
 * 면담 기록은 **빈 목록** — 있는지조차 보이지 않게 (182: 팀장 본인만). 팀원역량 요약의 면담 칸도 비운다.
 * 바깥에서 온 요청은 주소 · 시각 · 끝점 · 결과만 하루 파일로 남긴다(`.logs/access-<날짜>.jsonl`). 누가 무엇을 봤는지의 내용은 적지 않는다.
   설정 → 점검이 "오늘 N명" 을 보인다.
+* **주인 PC 는 자기 주소 어느 것으로 열어도 주인이다** (TODO 206 ㉖). 127.0.0.1 · ::1 · localhost 뿐 아니라 서버의
+  자기 인터페이스 IP(PC 이름으로 안내한 공유 주소 `http://PC이름:8000` 을 서버 PC 에서 열면 LAN IP 로 들어온다)도
+  LOCAL 로 본다. 그 전에는 주인이 안내된 공유 주소로 열면 403 이었고 "쓰려면 127.0.0.1" 규칙이 필요했다.
+* `/openapi.json` · `/docs` · `/redoc` 도 바깥에는 403 (TODO 206 ㉘) — 끝점 전체와 스키마 필드명(`backup_dir` · `employee_id`)이 보인다.
 """
 from __future__ import annotations
 
@@ -27,10 +31,59 @@ from .config import get_settings
 
 LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
 
+# 서버 자신의 주소들 (TODO 206 ㉖). 처음 물을 때 한 번 구해 둔다 — None 이면 아직 안 구함. 시험이 바꿔 끼운다.
+_own_addresses: frozenset[str] | None = None
+
+
+def _strip_scope(address: str) -> str:
+    """`fe80::1%eth0` → `fe80::1`, `::ffff:192.168.0.10` → `192.168.0.10`."""
+    address = address.split("%", 1)[0]
+    if address.lower().startswith("::ffff:") and address.count(".") == 3:
+        address = address[7:]
+    return address
+
+
+def _detect_own_addresses() -> frozenset[str]:
+    """이 PC 의 IPv4 · IPv6 주소들. 어느 한 길이 막혀도(오프라인 · 이름 풀이 실패) 나머지로 간다."""
+    found: set[str] = set()
+    try:
+        host = socket.gethostname()
+        found.add(host.lower())
+        for info in socket.getaddrinfo(host, None):
+            found.add(_strip_scope(str(info[4][0])))
+    except (OSError, UnicodeError):
+        pass
+    # UDP 는 보내지 않아도 connect 로 "어느 주소로 나가는가" 를 알 수 있다 — 주 LAN IP 를 얻는 흔한 방법
+    for family, target in ((socket.AF_INET, ("10.255.255.255", 1)), (socket.AF_INET6, ("2001:db8::1", 1))):
+        try:
+            with socket.socket(family, socket.SOCK_DGRAM) as probe:
+                probe.connect(target)
+                found.add(_strip_scope(str(probe.getsockname()[0])))
+        except (OSError, UnicodeError):
+            pass
+    return frozenset(address for address in found if address)
+
+
+def own_addresses() -> frozenset[str]:
+    global _own_addresses
+    if _own_addresses is None:
+        _own_addresses = _detect_own_addresses()
+    return _own_addresses
+
+
+def is_local_host(host: str | None) -> bool:
+    """서버 PC 안에서 온 주소인가 — 루프백이거나 서버 자신의 인터페이스 주소 (TODO 206 ㉖)."""
+    if not host:
+        return False
+    address = _strip_scope(host)
+    return host in LOCAL_HOSTS or address in LOCAL_HOSTS or address.lower() in own_addresses()
+
 # 읽기(GET)여도 바깥에는 열지 않는 끝점 — 앞부분이 맞으면 막는다
 BLOCKED_PREFIXES = (
     "/api/folders", "/api/backup", "/api/settings", "/api/errors", "/api/trash",
     "/api/versions", "/api/drafts", "/api/linkfix", "/api/health", "/api/people",
+    # API 문서 — 끝점 전체 · 스키마 필드명이 보인다 (TODO 206 ㉘)
+    "/openapi.json", "/docs", "/redoc",
 )
 # 빈 결과로 답하는 끝점 — 화면이 오류 대신 "없음" 을 보이게
 EMPTY_RESPONSES: dict[str, dict[str, Any]] = {
@@ -49,7 +102,7 @@ def is_remote(request: Request) -> bool:
     if not enabled():
         return False
     client = request.client
-    return client is None or client.host not in LOCAL_HOSTS
+    return client is None or not is_local_host(client.host)
 
 
 def blocked_path(path: str) -> bool:

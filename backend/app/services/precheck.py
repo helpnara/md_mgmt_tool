@@ -156,31 +156,84 @@ def _key(group: str, item: str) -> str:
     return f"{group}␟{item}"
 
 
+def _number(value: Any) -> int | None:
+    """점수 칸의 값을 정수로. 숫자가 아니면 None (TODO 199 ⑪ — `십` 같은 손 편집 값으로 터지지 않게)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value.strip())
+    return None
+
+
+def empty_summary(current: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """사전점검을 아직 안 했거나 읽지 못했을 때의 모양 — 화면 · 색인이 같은 열쇠를 기대한다."""
+    return summarize(None, current)
+
+
 def summarize(stored: Any, current: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """접수 문서의 스냅샷을 화면이 쓸 모양으로. 점수는 **적힌 값**으로만 낸다."""
+    """접수 문서의 스냅샷을 화면이 쓸 모양으로. 점수는 **적힌 값**으로만 낸다.
+
+    TODO 199 ⑪ — 파일은 사람이 고칠 수 있다. `score: 십` · `group` 누락 · 목록이 아닌 items 같은 값은
+    예외를 내지 않고 `problems` 에 한 줄씩 적는다(색인이 IndexProblem 으로 알린다). 이상한 값이 있으면
+    점수는 내지 않는다 — 틀린 점수를 보이는 것보다 비워 두는 편이 낫다.
+    """
     current = current if current is not None else definition()
+    problems: list[str] = []
+    if stored is not None and not isinstance(stored, dict):
+        problems.append(f"precheck 가 표(items · on) 모양이 아닙니다: {str(stored)[:30]!r}")
     snapshot = stored if isinstance(stored, dict) else {}
-    answers = [a for a in snapshot.get("items") or [] if isinstance(a, dict) and a.get("choice")]
-    total_items = int(snapshot.get("total_items") or len(current))
-    raw = sum(int(a.get("score") or 0) for a in answers)
-    maximum = sum(int(a.get("max") or 0) for a in answers)
+    raw_items = snapshot.get("items")
+    if raw_items is not None and not isinstance(raw_items, list):
+        problems.append("items 가 목록이 아닙니다.")
+        raw_items = []
+    answers: list[dict[str, Any]] = []
+    for position, answer in enumerate(raw_items or [], start=1):
+        if not isinstance(answer, dict):
+            problems.append(f"{position}번째 항목이 표 모양이 아닙니다.")
+            continue
+        choice = answer.get("choice")
+        if choice is None or choice == "":
+            continue  # 아직 안 매긴 항목
+        group, item = answer.get("group"), answer.get("item")
+        if not isinstance(group, str) or not group.strip():
+            problems.append(f"{position}번째 항목에 group(분류) 이 없습니다.")
+        if not isinstance(item, str) or not item.strip():
+            problems.append(f"{position}번째 항목에 item(항목 이름) 이 없습니다.")
+        score, maximum = _number(answer.get("score")), _number(answer.get("max"))
+        if answer.get("score") is not None and score is None:
+            problems.append(f"{position}번째 항목의 score 가 숫자가 아닙니다: {str(answer.get('score'))[:20]!r}")
+        if answer.get("max") is not None and maximum is None:
+            problems.append(f"{position}번째 항목의 max 가 숫자가 아닙니다: {str(answer.get('max'))[:20]!r}")
+        answers.append({
+            **answer,
+            "group": str(group or ""), "item": str(item or ""), "choice": str(choice),
+            "score": score or 0, "max": maximum or 0,
+        })
+    total_items = _number(snapshot.get("total_items")) or len(current)
+    raw = sum(a["score"] for a in answers)
+    maximum = sum(a["max"] for a in answers)
     complete = bool(answers) and len(answers) >= total_items
-    score = round(raw * 100 / maximum) if complete and maximum else None
+    score = round(raw * 100 / maximum) if complete and maximum and not problems else None
 
     # 지금 항목과 같은 기준인가 — 항목·단계·점수 가운데 하나라도 다르면 알린다
-    now = {_key(i["group"], i["item"]): {c[0]: c[1] for c in i["choices"]} for i in current}
+    now = {
+        _key(str(i.get("group") or ""), str(i.get("item") or "")): {c[0]: c[1] for c in i.get("choices") or []}
+        for i in current
+    }
     stale = bool(answers) and (
         len(now) != total_items
-        or any(now.get(_key(a["group"], a["item"]), {}).get(a["choice"]) != a.get("score") for a in answers)
+        or any(now.get(_key(a["group"], a["item"]), {}).get(a["choice"]) != a["score"] for a in answers)
     )
     groups: dict[str, dict[str, int]] = {}
     for item in current:
-        entry = groups.setdefault(item["group"], {"score": 0, "max": 0, "rated": 0, "count": 0})
+        entry = groups.setdefault(str(item.get("group") or ""), {"score": 0, "max": 0, "rated": 0, "count": 0})
         entry["count"] += 1
-        entry["max"] += max(c[1] for c in item["choices"])
+        entry["max"] += max((c[1] for c in item.get("choices") or []), default=0)
     for answer in answers:
         entry = groups.setdefault(answer["group"], {"score": 0, "max": 0, "rated": 0, "count": 0})
-        entry["score"] += int(answer.get("score") or 0)
+        entry["score"] += answer["score"]
         entry["rated"] += 1
     return {
         "on": snapshot.get("on"),
@@ -193,6 +246,8 @@ def summarize(stored: Any, current: list[dict[str, Any]] | None = None) -> dict[
         "band": band(score),
         "stale": stale,
         "groups": [{"group": name, **values} for name, values in groups.items()],
+        # 손으로 고친 파일의 이상한 값 (TODO 199 ⑪) — 비어 있으면 정상
+        "problems": problems,
     }
 
 

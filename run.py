@@ -79,12 +79,14 @@ def build_frontend_if_needed() -> None:
         )
 
 
-def already_running(host: str, port: int) -> str | None:
-    """그 주소를 누가 쓰고 있나 (TODO 163). None — 비어 있음, "self" — 이 도구, "other" — 다른 프로그램.
+def already_running(host: str, port: int) -> tuple[str | None, dict | None]:
+    """그 주소를 누가 쓰고 있나 (TODO 163). (None, None) — 비어 있음, ("self", 메타) — 이 도구, ("other", None) — 다른 프로그램.
 
     두 번 켜면 두 번째가 영어 오류(address already in use)를 내고 닫혔는데, 그 전에 **같은 데이터
     폴더로 시작 작업(색인·백업 확인)을 한 번 더** 돌았다. 켜기 전에 물어본다. 회사 PC 의 프록시
     설정이 127.0.0.1 요청을 가로채지 않도록 프록시를 끄고 묻는다.
+
+    메타를 함께 돌려준다 (TODO 206 ㉗) — 먼저 켠 창이 공유 모드인지(`share`)를 두 번 묻지 않고 알 수 있게.
     """
     import json
     import socket
@@ -93,14 +95,16 @@ def already_running(host: str, port: int) -> str | None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.settimeout(0.5)
         if probe.connect_ex((host, port)) != 0:
-            return None
+            return None, None
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(f"http://{host}:{port}/api/meta", timeout=3) as response:
             data = json.load(response)
-        return "self" if isinstance(data, dict) and "statuses" in data else "other"
+        if isinstance(data, dict) and "statuses" in data:
+            return "self", data
+        return "other", None
     except Exception:
-        return "other"
+        return "other", None
 
 
 def main() -> None:
@@ -130,7 +134,12 @@ def main() -> None:
     # (윈도우에서는 0.0.0.0 으로 접속이 되지 않아 늘 "안 켜져 있다" 로 읽혔다, TODO 192)
     local = "127.0.0.1" if args.host in ("0.0.0.0", "") else args.host
     url = f"http://{local}:{args.port}"
-    running = already_running(local, args.port)
+    running, running_meta = already_running(local, args.port)
+    if running == "self" and args.share and not (running_meta or {}).get("share"):
+        # TODO 206 ㉗ — 평소 창(127.0.0.1 전용)이 켜진 채 --share 로 또 켜면 "이미 켜져 있습니다" 로 끝나,
+        # 공유가 안 켜졌는데 켜진 줄 알았다. 먼저 켠 창이 공유 모드가 아니면 그렇다고 말하고 멈춘다.
+        print("\n  [오류] 이미 켜져 있지만 공유 모드가 아닙니다 — 먼저 켠 창을 닫고 run.bat --share 로 다시 켜세요.\n")
+        sys.exit(1)
     if running == "self":
         print(f"\n  이미 켜져 있습니다 — 브라우저만 엽니다: {url}")
         print("  (먼저 켠 창을 닫으면 도구가 꺼집니다)\n")
@@ -150,7 +159,15 @@ def main() -> None:
     from app.config import get_settings
 
     settings = get_settings()
-    settings.ensure_dirs()
+    try:
+        settings.ensure_dirs()
+    except OSError as exc:
+        # TODO 206 ㉝ — `--vault E:\…` 의 USB 가 빠져 있으면 영어 traceback 만 났다. 어느 경로인지 한글로.
+        # config.ensure_dirs 가 경로와 까닭을 한글로 적어 보낸다. 없으면 여기서 경로만이라도.
+        fail(
+            f"{exc.strerror or f'데이터 폴더를 만들거나 쓸 수 없습니다: {exc.filename or settings.vault_dir}'}\n"
+            "       다른 폴더를 쓰려면:  run.bat --vault <폴더>"
+        )
     print(f"\n  데이터 폴더 : {settings.vault_dir}")
     print(f"  주소        : {url}")
     if args.share:

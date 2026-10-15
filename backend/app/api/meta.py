@@ -24,8 +24,15 @@ router = APIRouter(prefix="/api", tags=["meta"])
 
 @router.get("/health")
 def health() -> dict:
+    from ..vault import versions
+
     settings = get_settings()
-    return {"status": "ok", "vault": str(settings.vault_dir)}
+    return {
+        "status": "ok",
+        "vault": str(settings.vault_dir),
+        # 이전 버전을 남기지 못한 문서 (TODO 206 ㉕) — 긴 경로(윈도우 260자) 등. 저장은 됐지만 보관본이 없다.
+        "version_keep_failures": versions.keep_failures(),
+    }
 
 
 @router.get("/meta")
@@ -37,6 +44,12 @@ def meta(request: Request, response: Response, conn: sqlite3.Connection = Depend
         body["vault"] = ""
         body["readonly"] = True
         body["share"] = None
+        # TODO 206 ⑫ — 명부(/api/people)는 막았는데 메타의 떠난 사람 목록이 사번 · 계정을 그대로 들고 있었다.
+        # 바깥에는 화면의 "떠남" 딱지에 필요한 것(이름 · 사유 · 날짜)만.
+        body["people_left"] = [
+            {"name": person.get("name"), "left_reason": person.get("left_reason"), "left_on": person.get("left_on")}
+            for person in body.get("people_left") or []
+        ]
     else:
         body["readonly"] = False
         body["share"] = {"url": share.share_url(request.url.port), **share.visitors_today()} if share.enabled() else None

@@ -47,8 +47,15 @@ class SettingsUpdate(BaseModel):
 
 @router.get("")
 def read_settings() -> dict:
-    # 설정 파일에서 읽지 못해 기본값을 쓰는 열쇠 — 설정 화면이 한 줄로 알린다 (TODO 163)
-    return {**svc.load(), "unreadable": svc.unreadable_keys()}
+    from ..vault import versions
+
+    return {
+        **svc.load(),
+        # 설정 파일에서 읽지 못해 기본값을 쓰는 열쇠 — 설정 화면이 한 줄로 알린다 (TODO 163)
+        "unreadable": svc.unreadable_keys(),
+        # 이전 버전을 남기지 못한 문서 (TODO 206 ㉕) — 긴 경로 등. 점검 자리가 보일 재료, 저장 자체는 됐다.
+        "version_keep_failures": versions.keep_failures(),
+    }
 
 
 @router.put("")

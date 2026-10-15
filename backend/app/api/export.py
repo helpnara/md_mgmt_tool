@@ -4,9 +4,10 @@ import re
 import sqlite3
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
+from .. import share
 from ..deps import get_db
 from ..services import export as svc
 
@@ -31,6 +32,7 @@ def backup_everything(conn: sqlite3.Connection = Depends(get_db)) -> Response:
 
 @router.get("/projects/{project_id}/export")
 def export_project(
+    request: Request,
     project_id: str,
     format: str = Query("zip", pattern="^(md|zip|html|backup)$"),
     assets: str = Query("zip", pattern="^(zip|inline|link)$"),
@@ -42,8 +44,11 @@ def export_project(
     - md   : 마크다운 한 파일 (assets=inline이면 이미지를 파일 안에 심는다)
     - zip  : 병합 마크다운 + 참조된 첨부 (압축을 풀면 링크가 그대로 살아 있다)
     - html : 이미지까지 담긴 단일 HTML
-    - backup: 과제 폴더 원본 구조 그대로
+    - backup: 과제 폴더 원본 구조 그대로 — **읽기 전용 공유의 바깥에는 열지 않는다** (TODO 206 ㉙, 결정 ④):
+      화면에 없는 수기 파일까지 통째로 나간다. md · zip · html 내보내기는 바깥에서도 된다.
     """
+    if format == "backup" and share.is_remote(request):
+        raise HTTPException(status_code=403, detail=share.READONLY_DETAIL)
     try:
         if format == "zip":
             filename, content = svc.export_zip(conn, project_id, include_reports_full)

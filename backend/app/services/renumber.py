@@ -92,6 +92,38 @@ def _free_id(
             return candidate, True
 
 
+def folder_matches_id(dir_name: str, project_id: str) -> bool:
+    """폴더 이름이 그 번호로 시작하는가 (`2026-X-002-B-과제` ↔ `2026-X-002`).
+
+    번호 변경이 폴더 이동에서 멈추면 index.md 의 id 는 새 번호인데 폴더는 옛 번호로 남는다 (TODO 201 ③).
+    제목 변경의 `-2` 꼬리 같은 것은 번호 뒤의 일이라 여기서는 따지지 않는다.
+    """
+    return dir_name == project_id or dir_name.startswith(project_id + "-")
+
+
+def _finish_refs(conn: sqlite3.Connection, id_map: dict[str, str], folder_map: dict[str, str]) -> int:
+    """바뀐 것까지의 참조를 바로 고친다 (TODO 201 ③).
+
+    선행 과제 · 접수의 과제 링크(`rewrite_project_refs`)와 보관함 기록의 되돌아갈 경로(`rewrite_origins`).
+    중간에 멈추더라도 **이미 바뀐 번호를 가리키던 참조**는 옛 번호로 남지 않는다.
+    """
+    from . import projects as projects_service
+    from . import trash as trash_service
+
+    rewritten = trash_service.rewrite_origins(folder_map)
+    projects_service.rewrite_project_refs(conn, {old: new for old, new in id_map.items() if old != new})
+    return rewritten
+
+
+def _reindex_quietly(conn: sqlite3.Connection) -> None:
+    """실패 뒤 색인을 파일과 맞춘다. 색인마저 안 되면 원래 오류를 가리지 않고 되돌린다 (TODO 201 ③)."""
+    try:
+        reindex_all(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+
 def plan(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
     """무엇이 어떻게 바뀌는지 미리 보여 준다. 파일은 건드리지 않는다."""
     code = settings_service.validate_project_code(code)
@@ -120,7 +152,24 @@ def plan(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
         year, current_code, seq = parsed
         new_id = f"{year}-{code}-{seq}" if code else f"{year}-{seq}"
         if new_id == row["id"]:
-            items.append({"id": row["id"], "title": row["title"], "new_id": None, "skip": "이미 맞습니다."})
+            # TODO 201 ③ — 번호는 맞는데 **폴더 이름이 옛 번호**면(지난 변경이 폴더 이동에서 멈춘 것)
+            # 폴더만 옮기는 변경으로 센다. 그래야 다시 실행했을 때 끝까지 간다.
+            if folder_matches_id(row["dir_name"], row["id"]):
+                items.append({"id": row["id"], "title": row["title"], "new_id": None, "skip": "이미 맞습니다."})
+                continue
+            assigned.add(new_id)
+            items.append(
+                {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "new_id": new_id,
+                    "dir_name": row["dir_name"],
+                    "new_dir_name": paths.project_dir_name(new_id, row["title"]),
+                    "renumbered": False,
+                    "folder_only": True,
+                    "skip": None,
+                }
+            )
             continue
 
         new_id, moved = _free_id(new_id, year, code, seq, taken - {row["id"]}, assigned)
@@ -134,6 +183,7 @@ def plan(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
                 "new_dir_name": paths.project_dir_name(new_id, row["title"]),
                 # 일련번호까지 바뀐 건은 눈에 띄어야 한다. 보고에 이미 적힌 번호일 수 있다.
                 "renumbered": moved,
+                "folder_only": False,
                 "skip": None,
             }
         )
@@ -168,36 +218,49 @@ def apply(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
     한 과제마다 (1) index.md 의 id (2) 폴더 이름 순으로 고친다. 중간에 파일이 열려 있어
     실패하면 **거기서 멈추고** 무엇까지 바뀌었는지 알려 준다. 되돌리는 것보다
     어디까지 됐는지 아는 편이 낫다 — 다시 실행하면 남은 것만 이어서 바뀐다.
+
+    TODO 201 ③ — 멈추기 전에, 그때까지 바뀐 번호를 가리키던 참조(선행 과제 · 접수 링크 · 보관함
+    경로)를 먼저 고친다. 예전에는 참조 고치기가 맨 끝에만 있어, 중간에 멈추면 다시 실행해도
+    이미 바뀐 과제는 건너뛰어 참조가 영영 옛 번호로 남았다.
     """
     settings = get_settings()
     preview = plan(conn, code)
 
     done: list[dict[str, str]] = []
+    id_map: dict[str, str] = {}
+    folder_map: dict[str, str] = {}
     for item in preview["changes"]:
         directory = paths.safe_join(settings.projects_dir, item["dir_name"])
         index_md = directory / "index.md"
         if not index_md.exists():
             continue
 
-        doc = md.load(index_md)
-        doc.meta["id"] = item["new_id"]
-        md.save(index_md, doc)
+        try:
+            doc = md.load(index_md)
+            if str(doc.meta.get("id") or "") != item["new_id"]:
+                doc.meta["id"] = item["new_id"]
+                md.save(index_md, doc)
+            # id 는 파일에 적혔다 — 여기서 멈추더라도 이 번호를 가리키던 참조는 고쳐야 한다.
+            id_map[item["id"]] = item["new_id"]
 
-        target = paths.safe_join(settings.projects_dir, item["new_dir_name"])
-        if target != directory:
-            if target.exists():
-                target = paths.unique_path(settings.projects_dir, item["new_dir_name"], "")
-            try:
+            target = paths.safe_join(settings.projects_dir, item["new_dir_name"])
+            if target != directory:
+                if target.exists():
+                    target = paths.unique_path(settings.projects_dir, item["new_dir_name"], "")
                 paths.move(directory, target)
-            except paths.FileInUseError:
-                # id 는 이미 고쳤다. 색인을 다시 만들어 파일과 맞춘 뒤 사정을 알린다.
-                reindex_all(conn)
-                conn.commit()
-                raise
-            # 보관본도 함께 옮긴다 — 경로가 열쇠라 폴더 이름만 바뀌어도 미아가 된다.
-            versions.move_folder(
-                f"projects/{item['dir_name']}", f"projects/{target.name}"
-            )
+                # 보관본도 함께 옮긴다 — 경로가 열쇠라 폴더 이름만 바뀌어도 미아가 된다.
+                versions.move_folder(
+                    f"projects/{item['dir_name']}", f"projects/{target.name}"
+                )
+            folder_map[item["dir_name"]] = target.name
+        except Exception:
+            # 여기까지 바뀐 것의 참조를 고치고, 색인을 파일과 맞춘 뒤 사정을 알린다.
+            # 다시 실행하면 plan 이 "폴더 이름 ≠ 번호" 인 과제를 남은 변경으로 잡아 이어서 간다.
+            try:
+                _finish_refs(conn, id_map, folder_map)
+            finally:
+                _reindex_quietly(conn)
+            raise
         done.append({"id": item["id"], "new_id": item["new_id"], "title": item["title"]})
 
     # 보관함에 있는 과제도 함께 맞춘다 (TODO 60).
@@ -205,7 +268,6 @@ def apply(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
     # 두 가지를 고친다 — 보관된 폴더 안 index.md 의 id, 그리고 되돌아갈 자리를 적어 둔
     # 보관함 기록의 경로. 하나만 고치면 되돌린 뒤에 둘이 어긋난다.
     trashed_done = []
-    folder_map: dict[str, str] = {}
     for item in preview.get("trashed", []):
         folder = settings.trash_dir / item["folder"]
         index_md = folder / "index.md"
@@ -220,22 +282,13 @@ def apply(conn: sqlite3.Connection, code: str) -> dict[str, Any]:
         folder_map[paths.project_dir_name(item["id"], item["title"])] = paths.project_dir_name(
             item["new_id"], item["title"]
         )
+        id_map[item["id"]] = item["new_id"]
         trashed_done.append({"id": item["id"], "new_id": item["new_id"], "title": item["title"]})
 
     # 되돌아갈 자리도 새 번호로. 살아 있는 과제의 폴더 이름 변경도 함께 반영한다 —
     # 보관함에는 그 과제의 진행일지·첨부가 들어 있을 수 있다.
-    for item in preview["changes"]:
-        folder_map[item["dir_name"]] = item["new_dir_name"]
-    from . import trash as trash_service
-
-    rewritten = trash_service.rewrite_origins(folder_map)
-
     # 다른 파일이 적어 둔 옛 번호(후속 과제의 선행 · 접수의 과제 링크)도 새 번호로 (TODO 172)
-    from . import projects as projects_service
-
-    projects_service.rewrite_project_refs(
-        conn, {item["id"]: item["new_id"] for item in [*done, *trashed_done]}
-    )
+    rewritten = _finish_refs(conn, id_map, folder_map)
 
     # 파일이 원본이다. 전부 옮긴 뒤 색인을 통째로 다시 만든다.
     reindex_all(conn)
@@ -285,7 +338,22 @@ def year_plan(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
 
     wanted_year = str(projects_service.project_year(start))
     if wanted_year == year:
-        return {"id": row["id"], "new_id": None, "reason": "이미 맞습니다."}
+        if folder_matches_id(row["dir_name"], row["id"]):
+            return {"id": row["id"], "new_id": None, "reason": "이미 맞습니다."}
+        # TODO 201 ③ — 번호는 맞는데 폴더가 옛 번호(지난 옮기기가 폴더 이동에서 멈춤) → 폴더만 옮긴다
+        return {
+            "id": row["id"],
+            "title": row["title"],
+            "new_id": row["id"],
+            "dir_name": row["dir_name"],
+            "new_dir_name": paths.project_dir_name(row["id"], row["title"]),
+            "start_date": start,
+            "from_year": year,
+            "to_year": wanted_year,
+            "renumbered": False,
+            "folder_only": True,
+            "reason": None,
+        }
 
     # 옮겨 갈 해의 **다음 번호**를 받는다 — 처음부터 그 해에 만들었더라면 받았을 번호다.
     # 일련번호를 그대로 들고 가면 2025년에 015 하나만 덩그러니 서는 일이 생긴다.
@@ -335,35 +403,34 @@ def year_apply(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
     if not index_md.exists():
         raise FileNotFoundError(f"과제 문서를 찾지 못했습니다: {preview['dir_name']}")
 
-    doc = md.load(index_md)
-    doc.meta["id"] = preview["new_id"]
-    md.save(index_md, doc)
-
     new_dir_name = preview["new_dir_name"]
-    target = paths.safe_join(settings.projects_dir, new_dir_name)
-    if target != directory:
-        if target.exists():
-            target = paths.unique_path(settings.projects_dir, new_dir_name, "")
-            new_dir_name = target.name
-        try:
+    try:
+        doc = md.load(index_md)
+        if str(doc.meta.get("id") or "") != preview["new_id"]:
+            doc.meta["id"] = preview["new_id"]
+            md.save(index_md, doc)
+
+        target = paths.safe_join(settings.projects_dir, new_dir_name)
+        if target != directory:
+            if target.exists():
+                target = paths.unique_path(settings.projects_dir, new_dir_name, "")
+                new_dir_name = target.name
             paths.move(directory, target)
-        except paths.FileInUseError:
-            # id 는 이미 고쳤다. 색인을 파일과 맞춰 둔 뒤 사정을 알린다 (일괄 변경과 같다).
-            reindex_all(conn)
-            conn.commit()
-            raise
-        # 이전 버전 보관본은 경로를 열쇠로 쓴다 — 함께 옮기지 않으면 미아가 된다.
-        versions.move_folder(
-            f"projects/{preview['dir_name']}", f"projects/{new_dir_name}"
-        )
+            # 이전 버전 보관본은 경로를 열쇠로 쓴다 — 함께 옮기지 않으면 미아가 된다.
+            versions.move_folder(
+                f"projects/{preview['dir_name']}", f"projects/{new_dir_name}"
+            )
+    except Exception:
+        # TODO 201 ③ — id 는 이미 고쳤을 수 있다. 그 번호를 가리키던 참조부터 고치고 색인을 파일과 맞춘다
+        # (일괄 변경과 같다). 다시 누르면 year_plan 이 "폴더 이름 ≠ 번호" 를 잡아 폴더만 옮긴다.
+        try:
+            _finish_refs(conn, {project_id: preview["new_id"]}, {})
+        finally:
+            _reindex_quietly(conn)
+        raise
 
-    from . import trash as trash_service
-
-    trash_service.rewrite_origins({preview["dir_name"]: new_dir_name})
-    # 후속 과제의 선행 · 접수의 과제 링크도 새 번호로 (TODO 172)
-    from . import projects as projects_service
-
-    projects_service.rewrite_project_refs(conn, {project_id: preview["new_id"]})
+    # 보관함 기록의 되돌아갈 경로 · 후속 과제의 선행 · 접수의 과제 링크도 새 번호로 (TODO 172)
+    _finish_refs(conn, {project_id: preview["new_id"]}, {preview["dir_name"]: new_dir_name})
 
     reindex_all(conn)
     conn.commit()
