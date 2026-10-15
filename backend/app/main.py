@@ -284,16 +284,77 @@ async def record_validation_error(request: Request, exc: RequestValidationError)
     )
     # 받은 값(`input`)을 그대로 돌려주면 NaN · 무한대 같은 값은 JSON 으로 못 적어 **500 이 났다**
     # (TODO 167). 화면에 필요한 것은 어느 칸이 왜 틀렸는가뿐이다.
+    # 문구는 한글로, 칸 이름을 붙여서 (TODO 205 ㉞) — 예전에는 pydantic 의 영어 문장이 그대로 나갔다.
+    # `detail` 은 지금처럼 목록(loc · msg · type), 그 한글 문장을 이어 붙인 한 줄은 `message` 에 싣는다.
+    items = [
+        {"loc": [str(part) for part in error.get("loc", ())], "msg": validation_message(error),
+         "type": str(error.get("type", ""))}
+        for error in exc.errors()
+    ]
     return JSONResponse(
         status_code=422,
-        content={
-            "detail": [
-                {"loc": [str(part) for part in error.get("loc", ())], "msg": str(error.get("msg", "")),
-                 "type": str(error.get("type", ""))}
-                for error in exc.errors()
-            ]
-        },
+        content={"detail": items, "message": " · ".join(dict.fromkeys(item["msg"] for item in items))},
     )
+
+
+# 422 의 형별 한글 문구 (TODO 205 ㉞). 모르는 형은 마지막 줄.
+_VALIDATION_TEXT = {
+    "missing": "꼭 필요한 칸입니다",
+    "float_parsing": "숫자로 적어 주세요",
+    "float_type": "숫자로 적어 주세요",
+    "finite_number": "숫자로 적어 주세요 — 무한대 · NaN 은 받지 않습니다",
+    "int_parsing": "정수로 적어 주세요",
+    "int_type": "정수로 적어 주세요",
+    "int_from_float": "소수 없이 정수로 적어 주세요",
+    "int_parsing_size": "숫자가 너무 큽니다",
+    "list_type": "목록으로 보내야 합니다",
+    "tuple_type": "목록으로 보내야 합니다",
+    "set_type": "목록으로 보내야 합니다",
+    "string_type": "글자로 적어 주세요",
+    "string_unicode": "글자로 적어 주세요",
+    "string_too_long": "너무 깁니다",
+    "string_too_short": "너무 짧습니다",
+    "string_pattern_mismatch": "형식이 맞지 않습니다",
+    "bool_type": "예/아니오(true/false)로 보내야 합니다",
+    "bool_parsing": "예/아니오(true/false)로 보내야 합니다",
+    "dict_type": "묶음(객체)으로 보내야 합니다",
+    "model_type": "묶음(객체)으로 보내야 합니다",
+    "model_attributes_type": "묶음(객체)으로 보내야 합니다",
+    "json_invalid": "보낸 내용을 JSON 으로 읽지 못했습니다",
+    "json_type": "보낸 내용을 JSON 으로 읽지 못했습니다",
+    "greater_than": "값이 너무 작습니다",
+    "greater_than_equal": "값이 너무 작습니다",
+    "less_than": "값이 너무 큽니다",
+    "less_than_equal": "값이 너무 큽니다",
+    "literal_error": "고를 수 있는 값이 아닙니다",
+    "enum": "고를 수 있는 값이 아닙니다",
+    "union_tag_invalid": "형식이 맞지 않습니다",
+    "too_long": "항목이 너무 많습니다",
+    "too_short": "항목이 너무 적습니다",
+    "extra_forbidden": "받지 않는 칸입니다",
+}
+_LOC_HEADS = {"body": "보낸 내용", "query": "주소의 조건", "path": "주소", "header": "머리글", "cookie": "쿠키"}
+
+
+def validation_message(error: dict) -> str:
+    """pydantic 오류 하나 → `기대효과: 숫자로 적어 주세요` (TODO 205 ㉞)."""
+    from .schemas import field_label
+
+    kind = str(error.get("type", ""))
+    text = _VALIDATION_TEXT.get(kind, "값을 받지 못했습니다")
+    ctx = error.get("ctx") or {}
+    bound = next((ctx[key] for key in ("ge", "gt", "le", "lt", "max_length", "min_length") if key in ctx), None)
+    if bound is not None and kind in ("greater_than", "greater_than_equal", "less_than", "less_than_equal",
+                                      "string_too_long", "string_too_short", "too_long", "too_short"):
+        text = f"{text} (기준: {bound})"
+    loc = [str(part) for part in error.get("loc", ())]
+    # 맨 앞(body · query …)과 목록 번호 · 형 이름(`list[str]`)은 떼고, 남은 마지막 칸 이름을 한글로
+    names = [part for part in loc[1:] if not part.isdigit() and "[" not in part]
+    if names:
+        where = field_label(names[-1])
+    else:
+        where = _LOC_HEADS.get(loc[0], loc[0]) if loc else "보낸 내용"
+    return f"{where}: {text}"
 
 
 app.include_router(meta.router)

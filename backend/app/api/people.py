@@ -57,21 +57,27 @@ def list_people(conn: sqlite3.Connection = Depends(get_db)) -> dict:
     return svc.overview(conn)
 
 
+# 설정 파일을 쓰는 끝점은 쓰기 잠금 안에서 (TODO 202 ㉓) — `get_db` 가 쓰기 요청의 차례를 세운다.
+# 잠금 밖이면 명부 저장과 기록 추가(명부에 이름을 더한다)가 겹칠 때 한쪽이 사라졌다.
+
 @router.put("")
-def replace_people(payload: PeopleUpdate) -> dict:
+def replace_people(payload: PeopleUpdate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     # 화면이 안 보내는 칸(account, TODO 126)은 지금 값을 물려준다.
     kept = {person["name"]: person.get("account", "") for person in settings_service.people()}
     rows = []
     for person in payload.people:
         row = person.model_dump()
         if row.get("account") is None:
-            row["account"] = kept.get(row["name"], "")
+            row["account"] = kept.get(row["name"].strip(), "")
         rows.append(row)
-    return {"people": settings_service.save({"people": rows})["people"]}
+    try:
+        return {"people": settings_service.save({"people": rows})["people"]}
+    except ValueError as exc:  # 틀린 떠난 날 · 겹친 이름 (TODO 205)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("", status_code=201)
-def add_person(payload: AddPerson) -> dict:
+def add_person(payload: AddPerson, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """화면에서 "명부에 없는 이름입니다 — 추가할까요?" 에 예를 눌렀을 때."""
     try:
         return {"people": settings_service.add_person(payload.name)}

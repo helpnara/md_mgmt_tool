@@ -386,12 +386,16 @@ def list_projects(
 
 @router.post("", status_code=201)
 def create_project(payload: ProjectCreate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    # 같은 이름의 과제가 이미 있으면 막지 않고 알린다 (TODO 205 ㉞) — 해마다 같은 이름으로 도는 과제가 있다.
+    same = svc.same_title_ids(conn, payload.title)
     try:
         project_id = svc.create_project(conn, payload.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = conn.execute("SELECT * FROM project WHERE id = ?", (project_id,)).fetchone()
-    return _serialize(conn, row)
+    data = _serialize(conn, row)
+    data["warnings"] = [f"같은 이름의 과제가 이미 있습니다: {', '.join(same)}"] if same else []
+    return data
 
 
 @router.get("/next-id")

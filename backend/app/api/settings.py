@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 
 from ..deps import get_db
 from ..services import renumber as renumber_svc
@@ -43,6 +43,8 @@ class SettingsUpdate(BaseModel):
     # 팀원 면담 (TODO 182) — 구분(한 줄에 하나 또는 목록, 비우면 기본) · 주기(일)
     meeting_kinds: list[str] | str | None = None
     meeting_cycle_days: int | None = None
+    # 백업에 첨부를 넣지 않는다 (TODO 202) — 참/거짓만
+    backup_skip_assets: StrictBool | None = None
 
 
 @router.get("")
@@ -59,7 +61,8 @@ def read_settings() -> dict:
 
 
 @router.put("")
-def update_settings(payload: SettingsUpdate) -> dict:
+def update_settings(payload: SettingsUpdate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """설정 저장은 쓰기 잠금 안에서 (TODO 202 ㉓) — 기록 추가가 명부에 이름을 더하는 것과 겹치면 한쪽이 사라졌다."""
     changes = payload.model_dump(exclude_unset=True)
     if "project_code" in changes:
         try:

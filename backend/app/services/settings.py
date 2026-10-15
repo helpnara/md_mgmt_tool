@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
+from .. import schemas as rules
 from ..config import get_settings
 
 FILENAME = "settings.json"
@@ -63,6 +65,9 @@ DEFAULTS: dict[str, Any] = {
     "meeting_kinds": None,
     # 마지막 면담에서 이 날수가 지나면 "면담에서 먼저 볼 사람" 에 세운다 (TODO 182)
     "meeting_cycle_days": 90,
+    # 백업에 첨부(assets)를 넣지 않는다 (TODO 202 · 197) — 첨부가 GB 단위면 백업이 조용히 실패했다.
+    # 끄면(False, 기본) 지금처럼 전부 넣는다. 백업 서비스가 읽는다.
+    "backup_skip_assets": False,
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
 _TEXT_KEYS = ("author", "report_template", "project_code",
@@ -143,10 +148,19 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
     for key in DEFAULTS:
         if key not in updates or updates[key] is None:
             continue
-        if key in _TEXT_KEYS:
+        if key == "author":
+            current[key] = rules.clean_author(updates[key])  # 줄바꿈 · 40자 (TODO 205)
+        elif key in _TEXT_KEYS:
             current[key] = str(updates[key]).strip()
         elif key == "people":
+            # 화면 · API 로 들어온 명부는 엄격히 — 틀린 떠난 날 · 겹친 이름은 400 (TODO 205 ㉞).
+            # 읽을 때(손으로 고친 파일)는 지금처럼 너그럽게 거른다(normalize_people).
+            check_people(updates[key])
             current[key] = normalize_people(updates[key])
+        elif key == "backup_skip_assets":
+            if not isinstance(updates[key], bool):
+                raise ValueError("백업에서 첨부 빼기는 예/아니오(true/false)로 보내야 합니다.")
+            current[key] = updates[key]
         elif key == "report_weekday":
             current[key] = validate_report_weekday(updates[key])
         elif key == "backup_dir":
@@ -175,7 +189,7 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
         elif key == "precheck_thresholds":
             from . import precheck
 
-            current[key] = precheck.validate_thresholds(updates[key])
+            current[key] = precheck.validate_thresholds(check_thresholds(updates[key]))
         elif key == "entry_templates":
             # 빈 서식은 저장하지 않는다 — 비우면 "기본 서식으로 되돌린다"는 뜻이다.
             current[key] = {
@@ -183,10 +197,67 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             }
         else:
             current[key] = updates[key]
-    path = _path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_atomic(_path(), json.dumps(current, ensure_ascii=False, indent=2) + "\n")
     return current
+
+
+def write_atomic(path, text: str) -> None:
+    """임시 파일에 다 쓴 뒤 `os.replace` 로 바꿔 끼운다 (TODO 202 ㉓).
+
+    통째로 `write_text` 하다 도중에 꺼지면 **반쯤 쓴 settings.json** 이 남아, 다음 실행에서 명부 · 백업 폴더 ·
+    서식이 전부 기본값이 됐다. replace 는 같은 폴더 안에서 한 번에 일어난다 — 옛 파일이든 새 파일이든 온전한 것만 남는다.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with open(temp, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, path)
+    except BaseException:
+        try:
+            temp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def check_thresholds(value: Any) -> list[float]:
+    """사전점검 기준 — 숫자 둘, 0~100, [착수 권장 ≥ 보완 필요] (TODO 205 ㉞). 파이썬 내부 문구 대신 한글로."""
+    shape = "사전점검 기준은 [착수 권장, 보완 필요] 두 숫자여야 합니다 (예: 80, 60)."
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError(shape)
+    numbers: list[float] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (int, float)) or item != item or item in (float("inf"), float("-inf")):
+            raise ValueError(shape)
+        if not 0 <= item <= 100:
+            raise ValueError(f"사전점검 기준은 0부터 100 사이여야 합니다 (받은 값: {item}).")
+        numbers.append(item)
+    if numbers[0] < numbers[1]:
+        raise ValueError(f"착수 권장 기준({numbers[0]})이 보완 필요 기준({numbers[1]})보다 낮을 수 없습니다.")
+    return numbers
+
+
+def check_people(value: Any) -> None:
+    """화면 · API 로 보낸 명부의 검사 (TODO 205 ㉞). 빈 이름 줄은 지금처럼 버린다(새 줄을 비워 둔 것)."""
+    if not isinstance(value, list):
+        raise ValueError("명부는 목록으로 보내야 합니다.")
+    seen: set[str] = set()
+    for raw in value:
+        item = raw if isinstance(raw, dict) else {"name": raw}
+        name = rules.clean_text(item.get("name"))
+        if not name:
+            continue
+        if name in seen:
+            raise ValueError(f"명부에 같은 이름이 둘 있습니다: {name}")
+        seen.add(name)
+        try:
+            rules.strict_day(item.get("left_on"), "left_on")
+        except ValueError as exc:
+            # 예전에는 `left_on: "x"` 가 **조용히 지워졌다** — 떠난 사람이 지금 있는 사람으로 돌아갔다
+            raise ValueError(f"{name}: {exc}") from exc
 
 
 # ── 팀원 면담 (TODO 182) ────────────────────
@@ -592,6 +663,7 @@ def validate_project_types(items: Any) -> list[dict[str, str]]:
     """
     if not isinstance(items, list):
         raise ValueError("과제 속성 목록의 형태가 올바르지 않습니다.")
+    # 빈 목록은 **정한 값**이다 — 속성을 아예 안 쓰는 팀(TODO 100, 사용자 결정). 205 에서 막자는 안이 나왔으나 그 결정을 따른다.
     if len(items) > MAX_TYPES:
         raise ValueError(f"과제 속성은 {MAX_TYPES}개까지 둘 수 있습니다.")
 
@@ -613,6 +685,9 @@ def validate_project_types(items: Any) -> list[dict[str, str]]:
         key = str(item.get("key") or "").strip()
         if not key:
             key = _type_key(label, keys)
+        # 열쇠는 과제 파일 · 주소에 그대로 들어간다 — 경로 기호 · 공백은 받지 않는다 (TODO 205 ㉞)
+        if any(mark in key for mark in ("/", "\\", "..")) or any(ch.isspace() for ch in key):
+            raise ValueError(f"속성 열쇠에는 / \\ .. 와 공백을 쓸 수 없습니다: {key}")
         if key in keys:
             raise ValueError(f"같은 열쇠의 속성이 둘 있습니다: {key}")
         keys.add(key)

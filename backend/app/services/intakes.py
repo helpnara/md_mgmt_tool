@@ -42,6 +42,7 @@ from ..config import (
     INTAKE_STATUS_LABELS,
     get_settings,
 )
+from .. import schemas as rules
 from ..vault import markdown as md
 from ..vault import versions
 from ..vault import paths
@@ -186,15 +187,15 @@ def _text(value: object, limit: int = 200) -> str | None:
     return text[:limit] or None
 
 
-def _day(value: object) -> str | None:
-    text = str(value or "").strip()
-    return paths.validate_date(text, text) if text else None
+def _day(value: object, field: str = "date") -> str | None:
+    """날짜 칸 — 과제와 같은 규칙 `schemas.strict_day` (TODO 205). 비우면 None."""
+    return rules.strict_day(value, field)
 
 
 def _effect(value: object) -> float | None:
-    from .projects import normalize_effect
+    from .projects import normalize_effect_field
 
-    return normalize_effect(value)
+    return normalize_effect_field(value, "effect_request")
 
 
 def _priority(value: object) -> str | None:
@@ -207,14 +208,8 @@ def _priority(value: object) -> str | None:
 
 
 def _tags(value: object) -> list[str]:
-    if not value:
-        return []
-    items = value.split(",") if isinstance(value, str) else [str(v) for v in value]
-    out: list[str] = []
-    for item in (" ".join(str(i).split()) for i in items):
-        if item and item not in out:
-            out.append(item)
-    return out
+    """태그 — 과제 · 진행일지 · 담당자와 같은 쉼표 규칙 (TODO 205)."""
+    return rules.split_list(value)
 
 
 def _clean_fields(data: dict[str, Any]) -> dict[str, Any]:
@@ -235,7 +230,7 @@ def _clean_fields(data: dict[str, Any]) -> dict[str, Any]:
             out[key] = normalize_label(data.get(key))
     for key in ("start_date", "due_date", "received_on"):
         if key in data:
-            out[key] = _day(data.get(key))
+            out[key] = _day(data.get(key), key)
     if "effect_request" in data:
         out["effect_request"] = _effect(data.get("effect_request"))
     if "priority" in data:
@@ -253,6 +248,7 @@ def create_intake(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     settings = get_settings()
     settings.ensure_dirs()
     fields = _clean_fields({"title": data.get("title"), **data})
+    rules.check_period(fields.get("start_date"), fields.get("due_date"), "start_date", "due_date")  # TODO 205 ㉞
     received_on = fields.get("received_on") or today()
     intake_id = next_intake_id(intake_year(received_on))
     directory = paths.safe_join(settings.intakes_dir, paths.project_dir_name(intake_id, fields["title"]))
@@ -299,11 +295,21 @@ def update_intake(conn: sqlite3.Connection, intake_id: str, updates: dict[str, A
     body = updates.pop("body", None)
     changes = _clean_fields(updates)
     meta = md.merge_meta(doc.meta, changes)
+    # 기간 — 보낸 쪽과 파일에 있던 쪽을 합쳐서 (TODO 205 ㉞). 손으로 고친 틀린 값은 따지지 않는다.
+    rules.check_period(_day_quietly(meta.get("start_date")), _day_quietly(meta.get("due_date")),
+                       "start_date", "due_date")
     meta["updated_at"] = now_iso()
     md.save(request, md.MarkdownDoc(_ordered(meta), body if body is not None else doc.body))
     directory = _rename_to_title(directory, intake_id, str(meta.get("title") or row["title"]))
     index_intake(conn, directory)
     conn.commit()
+
+
+def _day_quietly(value: object) -> str | None:
+    try:
+        return rules.strict_day(value, "date")
+    except ValueError:
+        return None
 
 
 def _rename_to_title(directory: Path, intake_id: str, title: str) -> Path:
@@ -317,6 +323,8 @@ def _rename_to_title(directory: Path, intake_id: str, title: str) -> Path:
         target = paths.unique_path(root, expected, "")
     paths.move(directory, target)
     versions.follow(directory, target)  # 이전 버전도 따라온다 (TODO 142)
+    # 보관함 기록의 되돌아갈 자리도 새 폴더로 (TODO 203) — 지운 검토 기록 · 첨부가 옛 폴더를 되살리지 않게
+    trash_service.rewrite_origins({directory.name: target.name})
     return target
 
 
@@ -631,7 +639,7 @@ def create_log(conn: sqlite3.Connection, intake_id: str, data: dict[str, Any]) -
     directory = intake_dir(conn, intake_id)
     logs_dir = directory / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    day = paths.validate_date(data.get("date"))
+    day = rules.strict_day(data.get("date"), "date", default=today())  # TODO 205
     title = _text(data.get("title")) or "검토 기록"
     target = paths.unique_path(logs_dir, entry_stem(day, title), ".md")
     stamp = now_iso()
@@ -662,7 +670,7 @@ def update_log(conn: sqlite3.Connection, intake_id: str, name: str, data: dict[s
     doc = md.load(path)
     changes: dict[str, Any] = {}
     if data.get("date"):
-        changes["date"] = paths.validate_date(data["date"])
+        changes["date"] = rules.strict_day(data["date"], "date")  # TODO 205
     if data.get("title") is not None:
         changes["title"] = _text(data["title"]) or "검토 기록"
     if data.get("tags") is not None:

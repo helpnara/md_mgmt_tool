@@ -7,6 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+
+from .attachments import file_response
 from pydantic import BaseModel, Field
 
 from ..config import CLASSIFICATION_KEYS, INTAKE_POOL_STATUSES, INTAKE_STATUS_KEYS
@@ -390,7 +392,8 @@ def serve_file(dir_name: str, rel_path: str, conn: sqlite3.Connection = Depends(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not target.is_file():
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
-    return FileResponse(target)
+    # html · svg 는 내려받기로 — 같은 주소에서 스크립트가 돌지 않게 (TODO 204, 첨부와 같은 규칙)
+    return file_response(target)
 
 
 # 목록 칸에 쓰는 분류 열쇠 — 화면과 서버가 같은 이름을 쓴다

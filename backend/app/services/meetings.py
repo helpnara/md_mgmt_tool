@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .. import schemas as rules
 from ..config import get_settings
 from ..vault import markdown as md
 from ..vault import paths
@@ -55,7 +56,7 @@ def _followups(value: object) -> list[dict[str, Any]]:
             text, done_raw = _clean(item), None
         if not text:
             continue
-        done = paths.validate_date(done_raw) if done_raw else None
+        done = rules.strict_day(done_raw, "date")  # TODO 205
         out.append({"text": text, "done": done})
     if len(out) > FOLLOWUP_MAX:
         raise ValueError(f"하기로 한 것은 {FOLLOWUP_MAX}줄까지입니다.")
@@ -66,17 +67,19 @@ def _validate(data: dict[str, Any]) -> dict[str, Any]:
     people = split_people(data.get("person"))
     if len(people) != 1:
         raise ValueError("누구와의 면담인지 한 사람을 골라 주세요.")
+    # 이름에 경로 기호를 받지 않는다 (TODO 205 ㉞) — `../x` 가 `people/x/` 폴더로 들어가고 이름은 `../x` 로 남았다
+    person = rules.plain_name(people[0], "person")
     kind = _clean(data.get("kind"))
-    next_raw = _clean(data.get("next_date"))
-    meeting_date = paths.validate_date(data.get("date"))
-    next_date = paths.validate_date(next_raw) if next_raw else None
+    # 날짜 — 엄격히, 비우면 오늘 · 다음 면담은 비울 수 있다 (TODO 205)
+    meeting_date = rules.strict_day(data.get("date"), "date", default=date_cls.today().isoformat())
+    next_date = rules.strict_day(data.get("next_date"), "next_date")
     if next_date and next_date <= meeting_date:
         raise ValueError("다음 면담은 이 면담 뒤여야 합니다.")
     summary = _clean(data.get("summary"))
     if not summary:
         raise ValueError("한 줄 요약을 입력하세요 — 목록에서 무엇을 이야기했는지 보이는 줄입니다.")
     return {
-        "person": people[0],
+        "person": person,
         "date": meeting_date,
         "kind": kind,
         "summary": summary,

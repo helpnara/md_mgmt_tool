@@ -116,9 +116,12 @@ def _describe(conn: sqlite3.Connection, key: str) -> dict[str, Any]:
                    where=f"{row['project_id']} {row['ptitle']}" if row else "",
                    link=f"#/projects/{row['project_id']}?report={ident}" if row else None, missing=row is None)
     elif kind == "intake":
-        row = conn.execute("SELECT title FROM intake WHERE id = ?", (ident,)).fetchone()
-        out.update(label="접수 요청 내용", where=f"{ident} {row['title']}" if row else ident,
-                   link=f"#/intakes/{ident}?draft=body", missing=row is None)
+        # 검토 기록의 임시 보관은 `intake:<접수번호>--log-<기록 이름|new>` (TODO 211 ③) — 요청 내용과 나눠 읽는다
+        intake_id, _, log_name = ident.partition("--log-")
+        row = conn.execute("SELECT title FROM intake WHERE id = ?", (intake_id,)).fetchone()
+        out.update(label="검토 기록" if log_name else "접수 요청 내용",
+                   where=f"{intake_id} {row['title']}" if row else intake_id,
+                   link=f"#/intakes/{intake_id}" + ("" if log_name else "?draft=body"), missing=row is None)
     return out
 
 

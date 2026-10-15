@@ -87,8 +87,16 @@ def test_handover_refuses_empty_or_same_names(client):
     assert client.post("/api/people/handover", json={"old": "홍길동", "new": "홍길동"}).status_code == 400
 
 
-def test_bad_left_on_is_treated_as_still_here(client):
-    """손으로 고친 settings.json 대비 — 날짜가 아니면 비운 것으로 본다."""
-    client.put("/api/people", json={"people": [{"name": "홍길동", "left_on": "작년"}]})
+def test_bad_left_on_is_treated_as_still_here(client, vault_dir):
+    """손으로 고친 settings.json 대비 — 날짜가 아니면 비운 것으로 본다.
+
+    화면 · API 로 보낸 틀린 날짜는 이제 400 이다 (TODO 205 — 예전에는 조용히 지워졌다). 너그러운 것은 **읽기**뿐.
+    """
+    import json
+
+    assert client.put("/api/people", json={"people": [{"name": "홍길동", "left_on": "작년"}]}).status_code == 400
+    (vault_dir / "settings.json").write_text(
+        json.dumps({"people": [{"name": "홍길동", "left_on": "작년"}]}, ensure_ascii=False), encoding="utf-8"
+    )
     assert client.get("/api/people").json()["people"][0]["left_on"] == ""
     assert client.get("/api/meta").json()["people_left"] == []

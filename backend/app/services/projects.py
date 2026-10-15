@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterable, Any
 
 from ..config import CLASSIFICATION_KEYS, DEFAULT_STATUS, STATUS_KEYS, get_settings
+from .. import schemas as rules
 from ..vault import markdown as md
 from ..vault import versions
 from ..vault import paths
@@ -117,15 +118,13 @@ def normalize_effect(value: object) -> float | None:
     보여 준다면 파일에도 두 자리만 있어야 한다. 그러지 않으면 API 로 넣은 `1.234` 가
     화면에는 `1.23` 으로 보이면서 파일에는 그대로 남아 둘이 어긋난다.
     """
-    if value is None or value == "":
-        return None
-    try:
-        number = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"효과 금액은 숫자여야 합니다: {value!r}") from exc
-    if number < 0:
-        raise ValueError("효과 금액은 0보다 작을 수 없습니다.")
-    return round(number, EFFECT_DECIMALS)
+    return normalize_effect_field(value, "effect")
+
+
+def normalize_effect_field(value: object, field: str) -> float | None:
+    """칸 이름을 문구에 싣는 쪽 (TODO 205) — NaN · 무한대 · 음수 · 지나친 값은 `schemas.finite_number` 가 거절한다."""
+    number = rules.finite_number(value, field)
+    return None if number is None else round(number, EFFECT_DECIMALS)
 
 
 def normalize_label(value: object) -> str | None:
@@ -139,17 +138,23 @@ def normalize_label(value: object) -> str | None:
 
 
 def normalize_owners(value: object) -> list[str]:
-    """담당자는 한 명일 수도, 여러 명일 수도 있다. 쉼표로 적어도 받아 준다."""
-    if not value:
+    """담당자는 한 명일 수도, 여러 명일 수도 있다. 쉼표로 적어도 받아 준다.
+
+    태그와 **같은 규칙**이다 — `schemas.split_list` (TODO 205).
+    """
+    return rules.split_list(value)
+
+
+def same_title_ids(conn: sqlite3.Connection, title: str, exclude: str | None = None) -> list[str]:
+    """이름이 같은 과제의 번호들 (TODO 205 ㉞) — 막지는 않고 알린다. 대소문자 · 앞뒤 공백은 같은 것으로 본다."""
+    wanted = " ".join(str(title or "").split()).casefold()
+    if not wanted:
         return []
-    items = [value] if isinstance(value, str) else [str(item) for item in value]
-    # 한 칸에 "권경락, 홍길동" 처럼 적어 보내도 나눠 받는다.
-    raw = [part for item in items for part in item.split(",")]
-    seen: list[str] = []
-    for name in (item.strip() for item in raw):
-        if name and name not in seen:
-            seen.append(name)
-    return seen
+    return [
+        row["id"]
+        for row in conn.execute("SELECT id, title FROM project ORDER BY id")
+        if row["id"] != exclude and " ".join(str(row["title"] or "").split()).casefold() == wanted
+    ]
 
 
 def normalize_partners(value: object) -> list[dict]:
@@ -269,9 +274,7 @@ def project_dir(conn: sqlite3.Connection, project_id: str) -> Path:
 def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     settings = get_settings()
     settings.ensure_dirs()
-    title = (data.get("title") or "").strip()
-    if not title:
-        raise ValueError("과제명을 입력하세요.")
+    title = rules.require_title(data.get("title"))
 
     status = data.get("status") or DEFAULT_STATUS
     if status not in STATUS_KEYS:
@@ -283,6 +286,10 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     # 선행 과제 (TODO 172) — 폴더를 만들기 전에 본다(거절하면 빈 폴더가 남지 않게).
     # 새 과제는 아직 번호가 없으므로 고리가 생길 수 없다. 있는 과제인지만 본다.
     predecessors = check_predecessors(conn, None, data.get("predecessors"))
+    # 날짜 · 기간 (TODO 205 ⑯) — 틀린 날짜는 400. 예전에는 받아 두고 **파일에 원문을 적어** 재색인마다 경고였다.
+    start_date = rules.strict_day(data.get("start_date"), "start_date")
+    due_date = rules.strict_day(data.get("due_date"), "due_date")
+    rules.check_period(start_date, due_date, "start_date", "due_date")
 
     # TODO 201 — **모든 검증을 폴더 만들기 앞에.** 효과 금액 · 완료일 · 담당자 · 유관부서 … 가 400 으로
     # 거절돼도 `projects/2026-031-…/{logs,assets,reports}` 가 이미 만들어져 남고 번호가 소모됐다
@@ -294,18 +301,18 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "status": status,
         "type": project_type,
         "group": data.get("group") or None,
-        "tags": data.get("tags") or [],
+        "tags": rules.split_list(data.get("tags")),  # 담당자와 같은 쉼표 규칙 (TODO 205)
         "owners": normalize_owners(data.get("owners") or data.get("owner")),
         # 유관부서와 그 담당자. 팀 하나에 사람 여럿, 팀도 여럿일 수 있다 (TODO 92).
         "partners": normalize_partners(data.get("partners")),
-        "start_date": data.get("start_date") or None,
-        "due_date": data.get("due_date") or None,
+        "start_date": start_date,
+        "due_date": due_date,
         # 완료 상태로 등록하면 완료일이 곧 등록일이다 — 지난 과제를 뒤늦게 넣을 때는
         # 폼에서 손으로 고친다 (TODO 104).
         "completed_at": normalize_day(data.get("completed_at"))
         or (date_today() if status == DONE_STATUS else None),
-        "effect_expected": normalize_effect(data.get("effect_expected")),
-        "effect_verified": normalize_effect(data.get("effect_verified")),
+        "effect_expected": normalize_effect_field(data.get("effect_expected"), "effect_expected"),
+        "effect_verified": normalize_effect_field(data.get("effect_verified"), "effect_verified"),
         # 과제 분류 넷 (TODO 136). 주로 스마트과제에서 쓴다 — 다른 과제는 비어 있어도 된다.
         **{key: normalize_label(data.get(key)) for key in CLASSIFICATION_KEYS},
         # 접수에서 승격된 과제면 그 접수 번호 (TODO 136)
@@ -324,7 +331,7 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     }
 
     # 번호의 연도는 **등록한 날이 아니라 착수년도**다 (TODO 95). 여기부터는 거절할 것이 없다.
-    project_id = next_project_id(project_year(data.get("start_date")))
+    project_id = next_project_id(project_year(start_date))
     meta["id"] = project_id
     dir_name = paths.project_dir_name(project_id, title)
     directory = paths.safe_join(settings.projects_dir, dir_name)
@@ -356,12 +363,12 @@ def date_today() -> str:
     return datetime.now().date().isoformat()
 
 
-def normalize_day(value: object) -> str | None:
-    """`YYYY-MM-DD` 만 받는다. 비우면 None — "모른다" 를 "0000-00-00" 으로 적지 않는다."""
-    text = str(value or "").strip()
-    if not text:
-        return None
-    return paths.validate_date(text, text)
+def normalize_day(value: object, field: str = "completed_at") -> str | None:
+    """`YYYY-MM-DD` 만 받는다. 비우면 None — "모른다" 를 "0000-00-00" 으로 적지 않는다.
+
+    규칙은 `schemas.strict_day` 한 곳 (TODO 205) — 시작일 · 마감일 · 접수의 날짜도 같은 것을 부른다.
+    """
+    return rules.strict_day(value, field)
 
 
 # 상태 변경 기록에 붙는 태그. 화면이 이 태그로 알아보고 흐리게 세운다.
@@ -635,9 +642,18 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         raise ValueError(f"알 수 없는 속성: {updates['type']}")
 
     body = updates.pop("body", None)
+    # 제목 — 생성과 같은 규칙 (TODO 205 ⑱). `""` 이면 목록에 폴더명이, `"   "` 이면 폴더가 `untitled` 가 됐다.
+    if "title" in updates:
+        updates["title"] = rules.require_title(updates["title"])
+    # 날짜 — 생성과 같은 규칙 (TODO 205 ⑯). `""` · null 은 비운다.
+    for field in ("start_date", "due_date"):
+        if field in updates:
+            updates[field] = rules.strict_day(updates[field], field)
     for field in ("effect_expected", "effect_verified"):
         if field in updates:
-            updates[field] = normalize_effect(updates[field])
+            updates[field] = normalize_effect_field(updates[field], field)
+    if "tags" in updates:
+        updates["tags"] = rules.split_list(updates["tags"])
     if "no_report" in updates:
         updates["no_report"] = bool(updates["no_report"])
     if "no_effect" in updates:
@@ -656,6 +672,12 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
     if "completed_at" in updates:
         updates["completed_at"] = normalize_day(updates["completed_at"])
     changes = {k: v for k, v in updates.items() if k in META_ORDER or k == "group"}
+    # 기간 — 보낸 쪽과 파일에 있던 쪽을 합쳐서 본다 (TODO 205 ㉞). 파일의 값이 틀린 손 편집이면 따지지 않는다.
+    rules.check_period(
+        _day_or_none(changes["start_date"] if "start_date" in changes else doc.meta.get("start_date")),
+        _day_or_none(changes["due_date"] if "due_date" in changes else doc.meta.get("due_date")),
+        "start_date", "due_date",
+    )
     # 예전 문서의 owner(단수) 키가 남아 있으면 owners로 옮겨 적는다.
     if "owners" in changes and "owner" in doc.meta:
         doc.meta.pop("owner")
@@ -695,10 +717,21 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
                 conn.commit()
                 raise
             versions.follow(directory, target)  # 이전 버전도 따라온다 (TODO 142)
+            # 보관함 기록의 되돌아갈 자리도 새 폴더로 (TODO 203) — 아니면 지운 진행일지를 되돌릴 때 옛 폴더를 되살렸다.
+            # 번호 변경(renumber)과 같은 길이다.
+            trash_service.rewrite_origins({directory.name: target.name})
             directory = target
 
     index_project(conn, directory)
     conn.commit()
+
+
+def _day_or_none(value: object) -> str | None:
+    """기간 비교용 — 날짜로 읽히는 값만. 손으로 고친 파일의 틀린 값으로 저장 전체를 막지 않는다."""
+    try:
+        return rules.strict_day(value, "date")
+    except ValueError:
+        return None
 
 
 def clone_draft(conn: sqlite3.Connection, source_id: str) -> dict[str, Any]:

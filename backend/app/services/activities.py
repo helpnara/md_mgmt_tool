@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .. import schemas as rules
 from ..config import ACTIVITY_KIND_KEYS, DEFAULT_ACTIVITY_KIND, get_settings
 from ..vault import markdown as md
 from ..vault import versions
@@ -78,15 +79,8 @@ def person_dir(name: str) -> Path:
 
 def normalize_number(value: object, label: str) -> float | None:
     """시간·비용. **비우는 것이 정상이다** — 옵션으로 두기로 했다."""
-    if value is None or value == "":
-        return None
-    try:
-        number = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{label}은(는) 숫자여야 합니다: {value!r}") from exc
-    if number < 0:
-        raise ValueError(f"{label}은(는) 0보다 작을 수 없습니다.")
-    return number
+    # 규칙은 `schemas.finite_number` 한 곳 (TODO 205) — NaN · 무한대도 거절한다
+    return rules.finite_number(value, label, maximum=None)
 
 
 def _clean(value: object) -> str | None:
@@ -99,16 +93,16 @@ def _validate(data: dict[str, Any]) -> dict[str, Any]:
     people = split_people(data.get("person"))
     if len(people) != 1:
         raise ValueError("누구의 기록인지 골라 주세요.")
-    person = people[0]
+    person = rules.plain_name(people[0], "person")  # 경로 기호는 받지 않는다 (TODO 205 ㉞)
     title = str(data.get("title") or "").strip()
     if not title:
         raise ValueError("제목을 입력하세요.")
     kind = data.get("kind") or DEFAULT_ACTIVITY_KIND
     if kind not in ACTIVITY_KIND_KEYS:
         raise ValueError(f"알 수 없는 구분: {kind}")
-    start = paths.validate_date(data.get("date"))
-    end_raw = str(data.get("end_date") or "").strip()
-    end = paths.validate_date(end_raw) if end_raw else None
+    # 날짜 — 엄격히, 시작은 비우면 오늘 · 끝은 비울 수 있다 (TODO 205)
+    start = rules.strict_day(data.get("date"), "date", default=date_cls.today().isoformat())
+    end = rules.strict_day(data.get("end_date"), "end_date")
     if end:
         if end < start:
             raise ValueError("종료일이 시작일보다 빠릅니다.")
@@ -127,7 +121,7 @@ def _validate(data: dict[str, Any]) -> dict[str, Any]:
         "cost": normalize_number(data.get("cost"), "비용"),
         "takeaway": _clean(data.get("takeaway")),
         "link": _clean(data.get("link")),
-        "tags": [tag for tag in (str(t).strip() for t in (data.get("tags") or [])) if tag],
+        "tags": rules.split_list(data.get("tags")),  # 담당자와 같은 쉼표 규칙 (TODO 205)
     }
 
 

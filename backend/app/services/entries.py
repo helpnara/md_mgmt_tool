@@ -1,6 +1,7 @@
 """진행일지 생성·수정·삭제."""
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import date as date_cls
 from datetime import datetime
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import get_settings
+from .. import schemas as rules
 from ..vault import markdown as md
 from ..vault import versions
 from ..vault import paths
@@ -17,6 +19,11 @@ from . import settings as settings_service
 from .projects import now_iso, project_dir
 
 META_ORDER = ["date", "title", "author", "tags", "attachments", "created_at", "updated_at"]
+
+# 제목을 비웠을 때의 이름 — 생성 · 수정이 같다 (TODO 205 ⑰)
+DEFAULT_TITLE = "진행 기록"
+
+_DATE_HEAD = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}-?")
 
 
 def _entry_row(conn: sqlite3.Connection, entry_id: int) -> sqlite3.Row:
@@ -38,8 +45,9 @@ def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]
     logs_dir = directory / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    entry_date = paths.validate_date(data.get("date"))
-    title = (data.get("title") or "").strip() or "진행 기록"
+    # 날짜는 엄격히, 비우면 오늘 (TODO 205) — `20260101` · `2026-W01` 같은 값이 파일명에 들어가지 않게
+    entry_date = rules.strict_day(data.get("date"), "date", default=date_cls.today().isoformat())
+    title = rules.clean_text(data.get("title")) or DEFAULT_TITLE
     # 파일명 전체를 슬러그로 만들어 경로 구분자가 섞일 여지를 없앤다.
     stem = entry_stem(entry_date, title)
     target = paths.unique_path(logs_dir, stem, ".md")
@@ -53,7 +61,7 @@ def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]
         "date": entry_date,
         "title": title,
         "author": author or None,
-        "tags": data.get("tags") or [],
+        "tags": rules.split_list(data.get("tags")),  # 담당자와 같은 쉼표 규칙 (TODO 205)
         "attachments": [],
         "created_at": stamp,
         "updated_at": stamp,
@@ -87,8 +95,14 @@ def update_entry(conn: sqlite3.Connection, entry_id: int, updates: dict[str, Any
     md.ensure_unchanged(path, row["file_mtime"])
     doc = md.load(path)
     body = updates.pop("body", None)
-    if updates.get("date"):
-        updates["date"] = paths.validate_date(updates["date"])
+    if "date" in updates:
+        # 비우면 지금 날짜를 그대로 둔다 — 진행일지는 날짜 없이 있을 수 없다 (TODO 205)
+        updates["date"] = rules.strict_day(updates["date"], "date", default=str(doc.meta.get("date") or row["date"]))
+    if "title" in updates:
+        # 비우거나 공백뿐이면 생성 때와 같은 이름 (TODO 205 ⑰)
+        updates["title"] = rules.clean_text(updates["title"]) or DEFAULT_TITLE
+    if "tags" in updates:
+        updates["tags"] = rules.split_list(updates["tags"])
     meta = md.merge_meta(doc.meta, {k: v for k, v in updates.items() if k in META_ORDER})
     meta["updated_at"] = now_iso()
     md.save(path, md.MarkdownDoc(meta, body if body is not None else doc.body))
@@ -113,7 +127,12 @@ def _rename_to_match_meta(
     conn: sqlite3.Connection, row: sqlite3.Row, path: Path, meta: dict[str, Any], directory: Path
 ) -> Path:
     entry_date = str(meta.get("date") or row["date"])
-    title = str(meta.get("title") or row["title"])
+    # **파일에 적힌 제목이 원본이다** (TODO 205 ⑰). 예전에는 제목이 비면 색인의 제목을 썼는데, 색인은 제목 없는
+    # 파일에 **파일명**(날짜 포함)을 제목으로 적어 둔다 — 그래서 고칠 때마다 `2026-05-01-2026-05-01-…` 로 자랐다.
+    title = rules.clean_text(meta.get("title"))
+    if not title:
+        # 제목 없는 손 파일 — 파일명에서 날짜 머리를 뗀 나머지를 그대로 쓴다(날짜만 바뀌었을 때)
+        title = _DATE_HEAD.sub("", path.stem) or DEFAULT_TITLE
     stem = entry_stem(entry_date, title)
     if path.stem == stem:
         return path
