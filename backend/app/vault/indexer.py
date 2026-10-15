@@ -745,6 +745,17 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
     for project_dir in sorted(settings.projects_dir.iterdir()):
         if not project_dir.is_dir() or project_dir.name.startswith("."):
             continue
+        if not (project_dir / "index.md").exists():
+            # TODO 203 — index.md 가 없는 폴더는 목록에 안 보인다. 예전엔 말없이 넘어가서, 옛 폴더로 되살아난 기록 ·
+            # 거절된 과제가 남긴 빈 폴더가 "어디에도 없는" 채로 쌓였다. 알린다.
+            has_files = any(path.is_file() for path in project_dir.rglob("*"))
+            problems.append(IndexProblem(
+                f"projects/{project_dir.name}",
+                "index.md 가 없는 과제 폴더라 목록에 보이지 않습니다 — "
+                + ("안의 파일을 맞는 과제 폴더로 옮기거나, 과제 폴더가 아니면 데이터 폴더 밖으로 옮겨 주세요."
+                   if has_files else "비어 있는 폴더이니 지워도 됩니다."),
+            ))
+            continue
         try:
             project_id = index_project(conn, project_dir, problems)
         except (sqlite3.Error, ValueError, KeyError, TypeError, OSError) as exc:

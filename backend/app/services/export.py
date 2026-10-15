@@ -12,6 +12,7 @@ import re
 import sqlite3
 import zipfile
 from pathlib import Path
+from typing import BinaryIO
 
 from ..config import STATUS_LABELS
 from . import settings as settings_service
@@ -204,24 +205,73 @@ def backup_zip(conn: sqlite3.Connection, project_id: str) -> tuple[str, bytes]:
     return f"{directory.name}-백업.zip", buffer.getvalue()
 
 
-def backup_all(conn: sqlite3.Connection) -> tuple[str, bytes]:
-    """vault 전체를 한 번에 내려받는다. 색인·임시 파일은 빼고 원본만 담는다."""
+# 백업에 넣지 않는 것 (TODO 202 ㉜) — 저장 도중의 임시 파일(`markdown.save` 의 `.tmp`, 업로드 · 백업의 `.part`).
+# 반쯤 쓴 파일이 백업에 섞이면 되살릴 때 원본과 구별이 안 된다.
+TEMP_SUFFIXES = (".tmp", ".part")
+# 첨부 제외 백업 (TODO 197 ③ · 202) 에서 건너뛰는 폴더 이름 — 과제 · 보고 · 접수의 첨부가 모두 `assets/` 아래에 있다.
+ASSETS_DIR = "assets"
+
+
+def backup_all_filename(assets: bool = True) -> str:
     from datetime import datetime
 
+    return f"과제이력-전체백업-{datetime.now():%Y%m%d}{'' if assets else '-첨부제외'}.zip"
+
+
+def _vault_files(vault: Path, assets: bool) -> list[tuple[Path, str]]:
+    """백업에 담을 파일 (경로, zip 안 이름). 색인 · 휴지통 · 임시 파일은 뺀다.
+
+    `assets=False` 이면 **첨부(`assets/` 폴더)를 통째로 뺀다** (TODO 197 ③) — 문서(.md) · 설정 · 이전 버전 ·
+    기록은 남긴다. 문서만 있으면 이력은 되살릴 수 있고, 첨부는 GB 단위로 커지기 때문이다.
+    썸네일 캐시는 `.index` 안이라 어느 쪽이든 빠진다.
+
+    훑는 중에 폴더가 사라지거나 이름이 바뀌어도 멈추지 않는다 (TODO 202 ㉜) — `os.walk` 는 못 읽는 폴더를 건너뛴다.
+    """
+    import os
+
+    found: list[tuple[Path, str]] = []
+    for root, dirnames, filenames in os.walk(vault):
+        here = Path(root)
+        rel_root = here.relative_to(vault)
+        if rel_root == Path("."):
+            # 색인(.index)과 휴지통(.trash)은 다시 만들 수 있거나 버린 것이라 뺀다.
+            dirnames[:] = [name for name in dirnames if name not in {".index", ".trash"}]
+        if not assets:
+            dirnames[:] = [name for name in dirnames if name != ASSETS_DIR]
+        dirnames.sort()
+        for name in sorted(filenames):
+            if name.endswith(TEMP_SUFFIXES):
+                continue
+            found.append((here / name, (rel_root / name).as_posix()))
+    return found
+
+
+def write_backup_all(destination: Path | BinaryIO, assets: bool = True) -> int:
+    """vault 전체 zip 을 **디스크로 흘려 쓴다** (TODO 202 ⑬) — 메모리에 통째로 올리지 않는다.
+
+    첨부가 GB 면 예전 방식(BytesIO)은 MemoryError 로 자동 백업이 한 번도 성공하지 못했다.
+    `destination` 은 임시 경로(`.part`)여야 한다 — 다 쓴 뒤 이름을 바꾸는 것은 부르는 쪽 몫이다.
+    담은 파일 수를 돌려준다.
+    """
     from ..config import get_settings
 
-    settings = get_settings()
+    vault = get_settings().vault_dir
+    count = 0
+    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path, name in _vault_files(vault, assets):
+            try:
+                archive.write(path, name)
+            except FileNotFoundError:
+                continue  # 훑은 뒤 사라진 파일 (저장 도중의 이름 바꾸기 등) — 건너뛴다 (TODO 202 ㉜)
+            count += 1
+    return count
+
+
+def backup_all(conn: sqlite3.Connection, assets: bool = True) -> tuple[str, bytes]:
+    """vault 전체를 바이트로 — 작은 vault · 시험용. 화면 내려받기와 자동 백업은 `write_backup_all` 로 디스크에 쓴다."""
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(settings.vault_dir.rglob("*")):
-            if not path.is_file():
-                continue
-            rel = path.relative_to(settings.vault_dir)
-            # 색인(.index)과 휴지통(.trash)은 다시 만들 수 있거나 버린 것이라 뺀다.
-            if rel.parts and rel.parts[0] in {".index", ".trash"}:
-                continue
-            archive.write(path, rel.as_posix())
-    return f"과제이력-전체백업-{datetime.now():%Y%m%d}.zip", buffer.getvalue()
+    write_backup_all(buffer, assets)
+    return backup_all_filename(assets), buffer.getvalue()
 
 
 HTML_TEMPLATE = """<!doctype html>

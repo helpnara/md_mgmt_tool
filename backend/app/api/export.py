@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
+import tempfile
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
 
 from .. import share
 from ..deps import get_db
@@ -14,20 +18,44 @@ from ..services import export as svc
 router = APIRouter(prefix="/api", tags=["export"])
 
 
-def _attachment(content: bytes | str, filename: str, media_type: str) -> Response:
+def _disposition(filename: str) -> str:
     # 한글 파일명은 RFC 5987 형식으로 보내되, 그것을 모르는 도구(curl -OJ 등)를 위해
     # ASCII 대체 이름도 함께 넣는다.
     ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip("-") or "export"
-    disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+
+
+def _attachment(content: bytes | str, filename: str, media_type: str) -> Response:
     body = content.encode("utf-8") if isinstance(content, str) else content
-    return Response(content=body, media_type=media_type, headers={"Content-Disposition": disposition})
+    return Response(content=body, media_type=media_type, headers={"Content-Disposition": _disposition(filename)})
 
 
 @router.get("/backup")
-def backup_everything(conn: sqlite3.Connection = Depends(get_db)) -> Response:
-    """vault 전체 백업. 설정 화면에서 내려받는다."""
-    filename, content = svc.backup_all(conn)
-    return _attachment(content, filename, "application/zip")
+def backup_everything(
+    assets: str = Query("all", pattern="^(all|none)$"),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Response:
+    """vault 전체 백업. 설정 화면에서 내려받는다.
+
+    zip 을 **임시 파일에 흘려 쓴 뒤** 그 파일을 내려보내고, 다 보내면 지운다 (TODO 202 ⑬) — 첨부가 GB 여도
+    메모리에 통째로 올리지 않는다. `assets=none` 이면 첨부(`assets/`)를 뺀 문서만 (TODO 197 ③).
+    """
+    with_assets = assets != "none"
+    fd, tmp_name = tempfile.mkstemp(prefix="과제이력-백업-", suffix=".zip.part")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            svc.write_backup_all(handle, assets=with_assets)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    filename = svc.backup_all_filename(with_assets)
+    return FileResponse(
+        tmp_path,
+        media_type="application/zip",
+        headers={"Content-Disposition": _disposition(filename)},
+        background=BackgroundTask(tmp_path.unlink, missing_ok=True),
+    )
 
 
 @router.get("/projects/{project_id}/export")

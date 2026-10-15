@@ -23,15 +23,20 @@ router = APIRouter(prefix="/api", tags=["meta"])
 
 
 @router.get("/health")
-def health() -> dict:
+def health(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    from ..services import attachments as attachments_service
     from ..vault import versions
 
     settings = get_settings()
+    total_bytes, count = attachments_service.total_usage(conn)
     return {
         "status": "ok",
         "vault": str(settings.vault_dir),
         # 이전 버전을 남기지 못한 문서 (TODO 206 ㉕) — 긴 경로(윈도우 260자) 등. 저장은 됐지만 보관본이 없다.
         "version_keep_failures": versions.keep_failures(),
+        # 전체 첨부 용량 · 개수 (TODO 204 · 197 ③) — 과제 첨부 + 접수 첨부. 설정 → 점검에 한 줄.
+        "attachments_total_bytes": total_bytes,
+        "attachments_count": count,
     }
 
 

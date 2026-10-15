@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -101,8 +103,8 @@ def list_items() -> list[dict[str, Any]]:
     recorded = {item.get("trash_name"): item for item in _read_manifest()}
     items = []
     for path in sorted(trash.iterdir(), key=lambda p: p.name, reverse=True):
-        if path.name == MANIFEST:
-            continue
+        if path.name == MANIFEST or (path.name.startswith(".manifest-") and path.name.endswith(".tmp")):
+            continue  # 기록 파일과 그것을 다시 쓰다 남은 조각 (TODO 202)
         info = recorded.get(path.name)
         items.append(
             {
@@ -171,7 +173,7 @@ def restore(conn: sqlite3.Connection, trash_name: str) -> dict[str, Any]:
 
     _refuse_duplicate_number(conn, source, info)
 
-    target = settings.vault_dir / info["origin"]
+    target = settings.vault_dir / _current_origin(conn, info)
     if target.exists():
         # 같은 자리에 새 항목이 생겼을 수 있다. 덮어쓰지 않고 옆에 놓는다.
         target = paths.unique_path(target.parent, f"{target.stem}-복구", target.suffix)
@@ -193,6 +195,56 @@ def restore(conn: sqlite3.Connection, trash_name: str) -> dict[str, Any]:
         "kind": info.get("kind"),
         "label": info.get("label"),
     }
+
+
+def _current_origin(conn: sqlite3.Connection, info: dict[str, Any]) -> str:
+    """되돌릴 자리 — 과제 · 접수 **안의** 항목은 그 과제 · 접수의 **지금** 폴더로 (TODO 203).
+
+    보관함 기록의 `origin` 은 지울 때의 폴더 이름이다. 그 뒤 제목을 바꾸면 폴더 이름이 달라져, 예전에는
+    옛 폴더를 되살려 거기 넣었다 — 200 "복구됨" 인데 화면 어디에도 안 보이고 유령 폴더가 생겼다.
+    번호(폴더 이름의 앞부분 · 기록의 project_id)로 지금 폴더를 찾는다. 과제 · 접수가 이미 없으면 예전대로 기록의 자리.
+    """
+    origin = str(info["origin"])
+    parts = origin.split("/")
+    if len(parts) < 3 or parts[0] not in ("projects", "intakes"):
+        return origin  # 과제 · 접수 폴더 자체, 또는 사람 기록 등 — 기록대로
+    current = _current_folder(conn, parts[0], parts[1], info.get("project_id"))
+    if current and current != parts[1]:
+        parts[1] = current
+    return "/".join(parts)
+
+
+def _current_folder(conn: sqlite3.Connection, root: str, folder: str, project_id: Any) -> str | None:
+    """`projects/<folder>` · `intakes/<folder>` 의 지금 이름. 못 찾으면 None."""
+    settings = get_settings()
+    if root == "projects":
+        from ..vault.indexer import project_id_from_dir_name as id_of
+
+        table, base = "project", settings.projects_dir
+        # 폴더 이름의 번호가 먼저다 — 번호 변경은 origin 을 고치지만 project_id 칸은 그대로라 옛 번호일 수 있다.
+        candidates = [id_of(folder)] + ([str(project_id)] if project_id else [])
+    else:
+        from .intakes import intake_id_from_dir_name as id_of
+
+        table, base = "intake", settings.intakes_dir
+        candidates = [id_of(folder)]
+    if (base / folder).is_dir():
+        # 옛 폴더가 아직 있다 — 그 폴더가 그 번호의 지금 폴더이면 그대로 (예전 동작)
+        row = conn.execute(f"SELECT dir_name FROM {table} WHERE dir_name = ?", (folder,)).fetchone()
+        if row is not None:
+            return folder
+    for number in dict.fromkeys(candidates):
+        row = conn.execute(f"SELECT dir_name FROM {table} WHERE id = ?", (number,)).fetchone()
+        if row is not None:
+            return str(row["dir_name"])
+    # 색인에 없으면 폴더를 훑는다 — 색인이 뒤처졌을 때
+    try:
+        for child in sorted(base.iterdir()):
+            if child.is_dir() and not child.name.startswith(".") and id_of(child.name) == candidates[0]:
+                return child.name
+    except OSError:
+        pass
+    return None
 
 
 def _refuse_duplicate_number(conn: sqlite3.Connection, source: Path, info: dict[str, Any]) -> None:
@@ -226,23 +278,52 @@ def _refuse_duplicate_number(conn: sqlite3.Connection, source: Path, info: dict[
     )
 
 
-def rewrite_origins(mapping: dict[str, str]) -> int:
+def rewrite_origins(mapping: dict[str, str] | str, new_name: str | None = None) -> int:
     """보관함 기록의 원래 경로를 바꾼다.
 
     과제 번호를 일괄로 바꾸면 폴더 이름이 달라지는데, 보관함 기록에는 **옛 경로**가
     남아 있다. 그대로 두면 되돌렸을 때 옛 번호로 살아나, 목록에 두 형태가 섞인다
-    (TODO 60 — 2026-09-04 사용자가 "함께 바꾼다" 로 결정).
+    (TODO 60 — 2026-09-04 사용자가 "함께 바꾼다" 로 결정). 과제 · 접수의 **제목 변경**도
+    폴더 이름을 바꾸므로 같은 길을 쓴다 (TODO 203).
 
-    `mapping` 은 {옛 폴더명: 새 폴더명}. 바꾼 줄 수를 돌려준다.
+    두 가지로 부른다.
+      · `rewrite_origins({옛 폴더명: 새 폴더명, …})` — `projects/` 와 `intakes/` 둘 다에서 가운데 토막을 바꾼다
+        (과제 번호 `2026-…` 와 접수 번호 `R2026-…` 는 겹치지 않는다).
+      · `rewrite_origins("projects/옛 폴더", "projects/새 폴더")` — 접두어 하나. 열쇠에 `/` 가 있으면
+        그 자리(`projects/…` · `intakes/…`)에서만 바꾼다.
+    바꾼 줄 수를 돌려준다.
     """
+    if isinstance(mapping, str):
+        if new_name is None:
+            raise TypeError("rewrite_origins(old, new) — 새 이름이 필요합니다.")
+        mapping = {mapping: new_name}
+    rules = _rules(mapping)
     path = _manifest_path()
-    if not path.exists() or not mapping:
+    if not path.exists() or not rules:
         return 0
     with _lock:
-        return _rewrite_locked(path, mapping)
+        return _rewrite_locked(path, rules)
 
 
-def _rewrite_locked(path: Path, mapping: dict[str, str]) -> int:
+ROOTS = ("projects", "intakes")
+
+
+def _rules(mapping: dict[str, str]) -> dict[tuple[str, str], str]:
+    """{(root, 옛 폴더): 새 폴더}. `projects/x` 꼴은 그 root 만, 폴더 이름만이면 두 root 다."""
+    rules: dict[tuple[str, str], str] = {}
+    for old, new in mapping.items():
+        old_parts = str(old).strip("/").split("/")
+        new_parts = str(new).strip("/").split("/")
+        if len(old_parts) >= 2 and old_parts[0] in ROOTS:
+            if old_parts[1] and new_parts[-1]:
+                rules[(old_parts[0], old_parts[1])] = new_parts[-1]
+        elif len(old_parts) == 1 and old_parts[0] and new_parts[-1]:
+            for root in ROOTS:
+                rules[(root, old_parts[0])] = new_parts[-1]
+    return {key: value for key, value in rules.items() if key[1] != value}
+
+
+def _rewrite_locked(path: Path, rules: dict[tuple[str, str], str]) -> int:
     changed = 0
     lines = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -258,14 +339,28 @@ def _rewrite_locked(path: Path, mapping: dict[str, str]) -> int:
             lines.append(line)
             continue
         origin = item.get("origin") or ""
-        parts = origin.split("/")
-        # projects/<과제폴더>/… 형태에서 가운데만 바꾼다.
-        if len(parts) >= 2 and parts[0] == "projects" and parts[1] in mapping:
-            parts[1] = mapping[parts[1]]
+        parts = str(origin).split("/")
+        # projects/<과제폴더>/… · intakes/<접수폴더>/… 형태에서 가운데만 바꾼다.
+        if len(parts) >= 2 and (parts[0], parts[1]) in rules:
+            parts[1] = rules[(parts[0], parts[1])]
             item["origin"] = "/".join(parts)
             changed += 1
         lines.append(json.dumps(item, ensure_ascii=False))
 
     if changed:
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _write_atomic(path, "\n".join(lines) + "\n")
     return changed
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """임시 파일에 다 쓴 뒤 바꿔 끼운다 (TODO 202 ㉔) — 쓰다 멈춰도 보관함 기록 전체를 잃지 않는다."""
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".manifest-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise

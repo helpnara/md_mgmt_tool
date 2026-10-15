@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import mimetypes
+import re
 import sqlite3
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -18,6 +21,16 @@ router = APIRouter(tags=["attachments"])
 def _serialize(row: dict, dir_name: str, doc_dir: str = svc.ENTRY_DOC_DIR) -> dict:
     url = f"/files/{quote(dir_name)}/{quote(row['rel_path'])}"
     image = svc.is_image(row["mime"])
+    thumb = False
+    if image and row["mime"] != "image/svg+xml":
+        # 그림으로 열리는 것에만 썸네일 주소를 준다 (TODO 204 ⑭) — 확장자만 .png 인 파일은 그림이 아니라
+        # 파일로 보인다(화면은 is_image 가 거짓이면 파일 아이콘). svg 는 썸네일 없이 원본을 그림으로 보인다.
+        try:
+            path = paths.safe_join(get_settings().projects_dir / dir_name, row["rel_path"])
+        except ValueError:
+            path = None
+        thumb = path is not None and svc.readable_image(path, row.get("sha256"))
+        image = thumb
     return {
         "id": row["id"],
         "entry_id": row["entry_id"],
@@ -28,7 +41,7 @@ def _serialize(row: dict, dir_name: str, doc_dir: str = svc.ENTRY_DOC_DIR) -> di
         "size_bytes": row["size_bytes"],
         "is_image": image,
         "url": url,
-        "thumb_url": f"/api/attachments/{row['id']}/thumb" if image else None,
+        "thumb_url": f"/api/attachments/{row['id']}/thumb" if thumb else None,
         "preview_url": f"/api/attachments/{row['id']}/preview" if svc.is_spreadsheet(row["mime"]) else None,
         # 링크는 이 첨부를 넣을 문서 위치 기준으로 만든다 (외부 뷰어 호환).
         "markdown": svc.markdown_link(row["rel_path"], row["orig_name"], doc_dir, image),
@@ -142,8 +155,27 @@ def get_thumbnail(attachment_id: RowId, conn: sqlite3.Connection = Depends(get_d
         return FileResponse(svc.thumbnail(conn, attachment_id), media_type="image/jpeg")
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="첨부를 찾을 수 없습니다.") from exc
+    except svc.UnreadableImage as exc:
+        # 열 수 없는 그림 — 500 이 아니라 415 (TODO 204 ⑭)
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_id}/attachments/cleanup")
+def cleanup_orphan_attachments(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """본문에서 쓰지 않는 첨부를 보관함으로 (TODO 204 · 197 ③ — [정리]).
+
+    `{"moved": 옮긴 수, "names": [원래 이름, …]}`. 보고 자료는 고아로 치지 않아 옮기지 않는다.
+    """
+    _dir_name(conn, project_id)  # 없는 과제면 404
+    try:
+        names = svc.cleanup_orphans(conn, project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
+    return {"moved": len(names), "names": names}
 
 
 @router.delete("/api/attachments/{attachment_id}", status_code=204)
@@ -170,4 +202,26 @@ def serve_project_file(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not target.is_file():
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
-    return FileResponse(target)
+    return file_response(target)
+
+
+# 같은 주소(origin)에서 열리면 스크립트가 돌 수 있는 종류 (TODO 204 ㉒). `page.html` · `evil.svg` 를 올리면
+# 이 도구의 주소에서 그대로 열려 저장형 스크립트가 실행됐다 — 공유 모드면 열람자에게도.
+ACTIVE_SUFFIXES = {".html", ".htm", ".xhtml", ".svg", ".svgz", ".xml", ".xht", ".shtml", ".mht", ".mhtml"}
+ACTIVE_TYPES = ("text/html", "image/svg+xml", "application/xhtml+xml", "text/xml", "application/xml")
+
+
+def file_response(target: Path) -> FileResponse:
+    """첨부 원본을 보낸다. 스크립트가 돌 수 있는 종류는 **내려받기로만** — 화면 안에서 열지 않는다 (TODO 204 ㉒).
+
+    `Content-Disposition: attachment` 로 브라우저가 열지 않고 저장하게 하고, 그래도 열릴 때를 대비해
+    `Content-Security-Policy: sandbox` 로 스크립트를 막는다. `<img src>` 로 넣은 svg 는 그대로 그려진다
+    (그림 태그 안의 svg 는 스크립트가 돌지 않는다).
+    """
+    media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    headers = {"X-Content-Type-Options": "nosniff"}
+    if target.suffix.lower() in ACTIVE_SUFFIXES or media_type.split(";")[0].strip().lower() in ACTIVE_TYPES:
+        ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "-", target.name).strip("-") or "file"
+        headers["Content-Disposition"] = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(target.name)}"
+        headers["Content-Security-Policy"] = "sandbox"
+    return FileResponse(target, media_type=media_type, headers=headers)

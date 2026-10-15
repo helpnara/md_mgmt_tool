@@ -106,12 +106,16 @@ def save_attachment(
     tmp_path, sha256, size = _stream_to_temp(source, bucket)
 
     clean_name = safe_filename(filename)
-    # 같은 과제에 내용도 이름도 같은 파일이 이미 있으면 다시 저장하지 않는다.
+    # 같은 문서에 내용도 이름도 같은 파일이 이미 있으면 다시 저장하지 않는다.
     # 내용만 같고 이름이 다르면 별개 파일로 둔다 — 빈 파일이나 같은 템플릿에서
     # 파생된 서로 다른 자료가 한 파일로 합쳐지면 이름과 확장자가 어긋난다.
+    # **같은 문서(진행일지 · 보고 · 과제 개요)일 때만** 합친다 (TODO 204 ⑮) — 예전에는 과제 단위로 봐서,
+    # 다른 진행일지에 같은 파일을 올리면 201 `deduplicated` 인데 그 일지의 첨부 목록은 0건이었다.
+    # 첨부 한 줄은 파일 하나(과제 · 경로가 열쇠)라, 다른 문서에 붙인 것은 그 문서의 폴더에 따로 둔다.
     existing = conn.execute(
-        "SELECT * FROM attachment WHERE project_id = ? AND sha256 = ? AND orig_name = ?",
-        (project_id, sha256, clean_name),
+        "SELECT * FROM attachment WHERE project_id = ? AND sha256 = ? AND orig_name = ?"
+        " AND entry_id IS ? AND report_id IS ?",
+        (project_id, sha256, clean_name, entry_id, report_id),
     ).fetchone()
     if existing and (directory / existing["rel_path"]).exists():
         tmp_path.unlink(missing_ok=True)
@@ -272,6 +276,43 @@ def spreadsheet_preview_path(path: Path, orig_name: str) -> dict:
     }
 
 
+class UnreadableImage(Exception):
+    """이미지라고 올라왔지만 열 수 없는 파일 — 확장자만 .png · 0바이트 · 깨진 그림 (TODO 204 ⑭)."""
+
+
+UNREADABLE_IMAGE_DETAIL = "그림으로 열 수 없는 파일이라 미리보기를 만들 수 없습니다 — 원본을 내려받아 확인하세요."
+
+# 그림으로 열리는지 — 파일 내용(sha256)마다 한 번만 본다. 목록을 열 때마다 파일 머리를 다시 읽지 않게.
+_readable_cache: dict[str, bool] = {}
+
+
+def readable_image(path: Path, sha256: str | None) -> bool:
+    """썸네일을 만들 수 있는 그림인가 (TODO 204 ⑭).
+
+    확장자만 .png 인 파일이 올라가면 목록을 열 때마다 `/thumb` 가 500 을 내고 오류 기록이 쌓였다.
+    목록이 **열 수 있는 그림에만 thumb_url 을 준다** — 화면은 그 밖의 것을 파일 아이콘으로 보인다.
+    """
+    key = sha256 or ""
+    if key and key in _readable_cache:
+        return _readable_cache[key]
+    if key and (get_settings().index_dir / "thumbs" / f"{key}.jpg").exists():
+        _readable_cache[key] = True
+        return True
+    from PIL import Image
+
+    try:
+        with Image.open(path) as image:
+            image.size  # 머리만 읽는다 — 본문이 깨진 그림은 썸네일 때 415 로 걸린다
+        readable = True
+    except FileNotFoundError:
+        return False  # 파일이 없어진 것은 기억하지 않는다 — 되돌리면 다시 보인다
+    except Exception:  # UnidentifiedImageError(OSError) · 0바이트 · 이상한 머리
+        readable = False
+    if key:
+        _readable_cache[key] = readable
+    return readable
+
+
 def thumbnail(conn: sqlite3.Connection, attachment_id: int) -> Path:
     """썸네일은 vault/.index/thumbs 아래 캐시한다 (과제 폴더를 어지럽히지 않는다)."""
     row, path = attachment_file(conn, attachment_id)
@@ -286,10 +327,24 @@ def thumbnail(conn: sqlite3.Connection, attachment_id: int) -> Path:
 
     from PIL import Image
 
-    with Image.open(path) as image:
-        image = image.convert("RGB")
-        image.thumbnail((THUMB_MAX, THUMB_MAX))
-        image.save(cached, "JPEG", quality=82)
+    # 임시 파일에 다 만든 뒤 바꿔 끼운다 (TODO 204 ⑭) — 쓰다 멈춘 jpg 가 캐시로 영영 돌아오지 않게.
+    fd, tmp_name = tempfile.mkstemp(dir=str(cache_dir), suffix=".tmp")
+    os.close(fd)
+    try:
+        try:
+            with Image.open(path) as image:
+                image = image.convert("RGB")
+                image.thumbnail((THUMB_MAX, THUMB_MAX))
+                image.save(tmp_name, "JPEG", quality=82)
+        except FileNotFoundError:
+            raise
+        except Exception as exc:  # 열 수 없는 그림 — 500 이 아니라 415 (UnidentifiedImageError · OSError · 깨진 데이터)
+            if row["sha256"]:
+                _readable_cache[row["sha256"]] = False
+            raise UnreadableImage(UNREADABLE_IMAGE_DETAIL) from exc
+        os.replace(tmp_name, cached)
+    finally:
+        Path(tmp_name).unlink(missing_ok=True)
     return cached
 
 
@@ -352,7 +407,52 @@ def list_attachments(conn: sqlite3.Connection, project_id: str) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM attachment WHERE project_id = ? ORDER BY rel_path", (project_id,)
     ).fetchall()
-    return [dict(row) | {"orphan": row["rel_path"] not in referenced} for row in rows]
+    # 보고에 붙인 자료(그때 그 엑셀)는 본문에 링크가 없어도 고아가 아니다 (TODO 204) — 그 보고의 자료 목록에
+    # 있고, 확정된 보고는 자료를 빼지 못한다. [정리] 가 그것을 보관함으로 보내면 안 된다.
+    return [
+        dict(row) | {"orphan": row["report_id"] is None and row["rel_path"] not in referenced}
+        for row in rows
+    ]
+
+
+def cleanup_orphans(conn: sqlite3.Connection, project_id: str) -> list[str]:
+    """본문에서 쓰지 않는 첨부(고아)를 보관함으로 옮긴다 (TODO 204 · 197 ③ — 고아 첨부 [정리]).
+
+    지우는 길은 하나씩 지울 때와 같다(`delete_attachment`) — 보관함 기록이 남아 하나씩 되돌릴 수 있다.
+    옮긴 것의 원래 이름 목록을 돌려준다. 없는 과제면 KeyError.
+    """
+    project_dir(conn, project_id)  # 없는 과제면 KeyError
+    names: list[str] = []
+    for item in list_attachments(conn, project_id):
+        if not item["orphan"]:
+            continue
+        delete_attachment(conn, item["id"])
+        names.append(item["orig_name"])
+    return names
+
+
+def total_usage(conn: sqlite3.Connection) -> tuple[int, int]:
+    """전체 첨부의 (용량 바이트, 개수) — 과제 첨부(색인) + 접수 첨부(폴더) (TODO 204 · 197 ③)."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS total FROM attachment"
+    ).fetchone()
+    count, total = int(row["n"] or 0), int(row["total"] or 0)
+    intakes = get_settings().intakes_dir
+    try:
+        folders = [child / "assets" for child in intakes.iterdir() if child.is_dir()]
+    except OSError:
+        folders = []
+    for folder in folders:
+        for root, _, filenames in os.walk(folder):
+            for name in filenames:
+                if name.endswith((".part", ".tmp")):
+                    continue
+                try:
+                    total += os.stat(os.path.join(root, name)).st_size
+                except OSError:
+                    continue
+                count += 1
+    return total, count
 
 
 def delete_attachment(conn: sqlite3.Connection, attachment_id: int) -> None:

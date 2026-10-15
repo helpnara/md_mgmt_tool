@@ -15,7 +15,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -27,6 +29,12 @@ STAMP = "%Y%m%d-%H%M"
 STATE_FILE = "backup-state.json"
 # 화면에 세우는 줄 수. 나머지는 접어 둔다 (TODO 119).
 RECENT_LIMIT = 5
+# 쓰는 중인 백업의 꼬리표 (TODO 202 ⑤). 다 쓴 뒤에만 `.zip` 으로 이름을 바꾼다 — 디스크가 차거나
+# 네트워크가 끊겨 중간에 멈추면 잘린 zip 이 `.zip` 이름으로 남아, `due()` 가 24시간 다시 안 하고
+# 회전이 멀쩡한 옛 백업을 밀어냈다.
+PART_SUFFIX = ".part"
+# 수동 백업(설정 화면)과 자동 백업이 겹치지 않게 (TODO 202).
+_run_lock = threading.Lock()
 
 
 class Keep(NamedTuple):
@@ -87,19 +95,34 @@ def _read_state() -> dict[str, Any]:
 
 
 def _write_state(data: dict[str, Any]) -> None:
+    path = _state_path()
+    tmp = path.with_name(path.name + ".tmp")
     try:
         get_settings().logs_dir.mkdir(parents=True, exist_ok=True)
-        _state_path().write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)  # TODO 202 — 쓰다 멈춰도 지난 기록은 남는다
     except OSError:
-        pass
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _fail(reason: str, message: str) -> None:
+    _write_state({"at": datetime.now().isoformat(timespec="seconds"), "ok": False,
+                  "reason": reason, "error": message})
 
 
 def _files(directory: Path) -> list[Path]:
-    """이 도구가 만든 백업만. 폴더에 다른 파일이 있어도 건드리지 않는다."""
+    """이 도구가 만든 백업만. 폴더에 다른 파일이 있어도 건드리지 않는다.
+
+    **다 쓴 `.zip` 만** 센다 — 쓰는 중이거나 쓰다 멈춘 `.zip.part` 는 백업이 아니다 (TODO 202 ⑤).
+    """
     if not directory.is_dir():
         return []
     return sorted(
-        (item for item in directory.glob(f"{PREFIX}*.zip") if item.is_file()),
+        (item for item in directory.glob(f"{PREFIX}*.zip")
+         if item.is_file() and item.name.endswith(".zip")),
         key=lambda item: item.name,
     )
 
@@ -176,9 +199,24 @@ def keep_set(files: list[Path], keep: Keep) -> set[Path]:
     return keeping
 
 
+def _skip_assets() -> bool:
+    """설정의 「첨부 제외 백업」 (TODO 197 ③). 켜면 자동 · 수동 백업이 `assets/` 를 뺀다."""
+    from . import settings as settings_service
+
+    try:
+        return bool(settings_service.load().get("backup_skip_assets", False))
+    except Exception:  # 설정을 못 읽어도 백업은 한다 — 통째로가 안전한 쪽이다
+        return False
+
+
 def run(conn: sqlite3.Connection, reason: str = "manual") -> dict[str, Any]:
     """지금 한 벌 내보낸다."""
-    from .export import backup_all
+    with _run_lock:
+        return _run_locked(reason)
+
+
+def _run_locked(reason: str) -> dict[str, Any]:
+    from .export import write_backup_all
 
     directory, keep, _ = _settings_values()
     if not directory:
@@ -186,23 +224,41 @@ def run(conn: sqlite3.Connection, reason: str = "manual") -> dict[str, Any]:
     target_dir = Path(directory)
     if not target_dir.is_dir():
         message = f"백업 폴더를 찾을 수 없습니다: {directory}"
-        _write_state({"at": datetime.now().isoformat(timespec="seconds"), "ok": False,
-                      "reason": reason, "error": message})
+        _fail(reason, message)
         raise BackupError(message)
 
-    _, content = backup_all(conn)
+    # 지난번에 쓰다 멈춘 조각은 치운다 — 잠금 안이라 지금 쓰는 것은 없다 (TODO 202 ⑤)
+    for stale in target_dir.glob(f"{PREFIX}*.zip{PART_SUFFIX}"):
+        try:
+            stale.unlink()
+        except OSError:
+            pass
+
+    skip_assets = _skip_assets()
     target = target_dir / f"{PREFIX}{datetime.now().strftime(STAMP)}.zip"
     counter = 2
     while target.exists():
         target = target_dir / f"{PREFIX}{datetime.now().strftime(STAMP)}-{counter}.zip"
         counter += 1
+    part = target.with_name(target.name + PART_SUFFIX)
+
+    # `.part` 에 흘려 쓰고(메모리에 올리지 않는다 — TODO 202 ⑬) 다 쓴 뒤에만 `.zip` 으로 바꾼다 (⑤).
+    # 어떤 예외든(MemoryError 포함) 조각을 지우고 실패를 기록한다 — 설정 화면이 그것을 보여 준다.
     try:
-        target.write_bytes(content)
-    except OSError as exc:
-        message = f"백업을 쓰지 못했습니다: {exc}"
-        _write_state({"at": datetime.now().isoformat(timespec="seconds"), "ok": False,
-                      "reason": reason, "error": message})
+        write_backup_all(part, assets=not skip_assets)
+        os.replace(part, target)
+    except Exception as exc:
+        _discard(part)
+        if isinstance(exc, OSError):
+            message = f"백업을 쓰지 못했습니다: {exc}"
+        else:
+            message = f"백업을 만들지 못했습니다 ({type(exc).__name__}): {exc}".rstrip(": ")
+        _fail(reason, message)
         raise BackupError(message) from exc
+    except BaseException:
+        _discard(part)
+        raise
+    size = target.stat().st_size
 
     # 층을 나눠 남기고 나머지를 버린다 (TODO 119).
     files = _files(target_dir)
@@ -211,9 +267,19 @@ def run(conn: sqlite3.Connection, reason: str = "manual") -> dict[str, Any]:
         if stale not in keeping:
             stale.unlink(missing_ok=True)
 
-    _write_state({"at": datetime.now().isoformat(timespec="seconds"), "ok": True,
-                  "reason": reason, "file": target.name, "bytes": len(content)})
-    return {"file": target.name, "bytes": len(content), "directory": str(target_dir)}
+    state: dict[str, Any] = {"at": datetime.now().isoformat(timespec="seconds"), "ok": True,
+                             "reason": reason, "file": target.name, "bytes": size}
+    if skip_assets:
+        state["skip_assets"] = True
+    _write_state(state)
+    return {"file": target.name, "bytes": size, "directory": str(target_dir), "skip_assets": skip_assets}
+
+
+def _discard(part: Path) -> None:
+    try:
+        part.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def due(now: datetime | None = None) -> bool:
@@ -243,7 +309,11 @@ def maybe_run(conn: sqlite3.Connection) -> dict[str, Any] | None:
         if not due():
             return None
         return run(conn, reason="auto")
-    except (BackupError, OSError):
+    except BackupError:
+        return None  # run 이 이미 실패를 기록했다
+    except Exception as exc:
+        # 어떤 예외든 설정 화면에 남긴다 (TODO 202 ⑬) — 예전에는 루프가 조용히 삼켜 실패 기록조차 없었다.
+        _fail("auto", f"백업을 만들지 못했습니다 ({type(exc).__name__}): {exc}".rstrip(": "))
         return None
 
 
@@ -287,6 +357,8 @@ def status() -> dict[str, Any]:
         "keep_weekly": keep.weekly,
         "keep_monthly": keep.monthly,
         "every_hours": every_hours,
+        # 첨부 제외 백업 (TODO 197 ③)
+        "skip_assets": _skip_assets(),
         "count": len(files),
         "total_bytes": total_bytes,
         # 되돌릴 수 있는 범위 — 개수보다 이 날짜가 백업의 뜻이다.
