@@ -52,8 +52,23 @@ class _TolerantHandler(frontmatter.YAMLHandler):
         return yaml.load(fm, Loader=_TolerantLoader)  # noqa: S506 — SafeLoader 를 이어받았다
 
 
+# 메모장이 UTF-8 로 저장하면 파일 맨 앞에 붙는 바이트 순서 표식 (TODO 198).
+BOM = "\ufeff"
+
+
+def strip_bom(text: str) -> str:
+    """맨 앞의 BOM 을 뗀다 (TODO 198). `frontmatter` 는 `\ufeff---` 를 front matter 로 보지 않아,
+    BOM 하나로 과제의 머리 정보가 통째로 본문 글자가 됐다."""
+    return text[1:] if text.startswith(BOM) else text
+
+
+def has_front_matter(text: str) -> bool:
+    """파일 글자가 front matter 로 시작하는가 (BOM 은 무시)."""
+    return strip_bom(text).startswith("---")
+
+
 def loads(text: str) -> MarkdownDoc:
-    post = frontmatter.loads(text, handler=_TolerantHandler())
+    post = frontmatter.loads(strip_bom(text), handler=_TolerantHandler())
     metadata = post.metadata if isinstance(post.metadata, dict) else {}
     return MarkdownDoc(dict(metadata), post.content)
 
@@ -76,6 +91,21 @@ def save(path: Path, doc: MarkdownDoc) -> None:
     이 함수 하나로 모이므로, 여기에 걸어 두면 진행일지·개요·보고가 모두 지켜진다.
     """
     from . import versions
+    from .paths import FileInUseError
+
+    # TODO 198 — 머리 정보를 못 읽은 문서를 그대로 저장하면 파일의 front matter 전체가 본문 글자로
+    # 밀려난다(BOM 붙은 index.md 에서 실제로 일어났다). 비어 있는 meta 로 front matter 가 있는
+    # 파일을 덮어쓰려 하면 거부한다 — 파일이 진실의 원천이라 지우는 쪽이 아니라 쓰는 쪽을 막는다.
+    if not doc.meta and path.is_file():
+        try:
+            current = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            current = ""
+        if has_front_matter(current):
+            raise ValueError(
+                f"{path.name} 의 머리 정보(front matter)를 읽지 못해 저장하지 않았습니다 — "
+                "파일 맨 앞의 BOM 또는 `---` 를 확인한 뒤 [다시 읽기]를 눌러 주세요."
+            )
 
     text = dumps(doc)
     try:
@@ -91,7 +121,15 @@ def save(path: Path, doc: MarkdownDoc) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp_name, path)
+        try:
+            os.replace(tmp_name, path)
+        except PermissionError as exc:
+            # TODO 200 — 윈도우에서 다른 프로그램(엑셀 · 뷰어 · 편집기)이 md 를 잡고 있으면 덮어쓰기가
+            # 거부된다. 500 이 아니라 "무엇을 닫아야 하는지" 로 — 옮기기(paths.move)와 같은 안내다.
+            raise FileInUseError(
+                f"'{path.name}' 을(를) 다른 프로그램이 사용 중이라 저장할 수 없습니다. "
+                "파일을 연 프로그램(엑셀·뷰어·편집기 등)을 닫고 다시 시도하세요."
+            ) from exc
     except BaseException:
         Path(tmp_name).unlink(missing_ok=True)
         raise

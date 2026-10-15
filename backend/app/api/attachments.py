@@ -62,8 +62,11 @@ def upload_to_entry(
             entry_id=entry_id,
             content_type=file.content_type,
         )
+    except (FileNotFoundError, PermissionError):
+        # 폴더가 밖에서 지워졌거나 잠겨 있다 — main.py 의 공통 처리(409 · 423)로 넘긴다 (TODO 200)
+        raise
     except OSError as exc:
-        raise HTTPException(status_code=507, detail=str(exc)) from exc
+        raise HTTPException(status_code=507, detail=f"파일을 저장하지 못했습니다 (저장 공간 · 경로를 확인하세요): {exc}") from exc
     return _serialize(saved, _dir_name(conn, entry["project_id"]))
 
 
@@ -99,8 +102,11 @@ def upload_to_project(
             doc_dir=svc.PROJECT_DOC_DIR,
             content_type=file.content_type,
         )
+    except (FileNotFoundError, PermissionError):
+        # 폴더가 밖에서 지워졌거나 잠겨 있다 — main.py 의 공통 처리(409 · 423)로 넘긴다 (TODO 200)
+        raise
     except OSError as exc:
-        raise HTTPException(status_code=507, detail=str(exc)) from exc
+        raise HTTPException(status_code=507, detail=f"파일을 저장하지 못했습니다 (저장 공간 · 경로를 확인하세요): {exc}") from exc
     return _serialize(saved, dir_name, svc.PROJECT_DOC_DIR)
 
 

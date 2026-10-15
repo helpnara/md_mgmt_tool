@@ -34,6 +34,7 @@ def entry_path(conn: sqlite3.Connection, entry_id: int) -> tuple[sqlite3.Row, Pa
 
 def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]) -> int:
     directory = project_dir(conn, project_id)
+    require_project_folder(directory)
     logs_dir = directory / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -69,6 +70,13 @@ def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]
     return int(row["id"])
 
 
+def require_project_folder(directory: Path) -> None:
+    """과제 폴더가 아직 그 자리에 있는가 (TODO 200). 탐색기에서 옮기거나 지운 뒤 [다시 읽기] 전이면 색인에는
+    있는데 폴더는 없다 — 그대로 진행하면 `logs/` 를 만들며 **유령 폴더**를 되살리고 색인은 500 이었다."""
+    if not (directory / "index.md").is_file():
+        raise FileNotFoundError(str(directory / "index.md"))
+
+
 def entry_stem(entry_date: str, title: str) -> str:
     """파일명은 '날짜-제목' 규칙을 따른다."""
     return paths.slugify(f"{entry_date}-{title}")
@@ -87,7 +95,14 @@ def update_entry(conn: sqlite3.Connection, entry_id: int, updates: dict[str, Any
 
     # 제목이나 날짜가 바뀌면 파일명도 따라간다 (탐색기에서 찾기 쉽게).
     directory = project_dir(conn, row["project_id"])
-    new_path = _rename_to_match_meta(conn, row, path, meta, directory)
+    try:
+        new_path = _rename_to_match_meta(conn, row, path, meta, directory)
+    except (paths.FileInUseError, OSError):
+        # TODO 200 — 파일은 저장됐는데 이름 바꾸기만 실패. 색인의 file_mtime 을 맞춰 두고 알린다 —
+        # 아니면 다음 저장이 "도구 밖에서 수정됨" 409 로 영영 막힌다.
+        index_project(conn, directory)
+        conn.commit()
+        raise
 
     index_project(conn, directory)
     conn.commit()

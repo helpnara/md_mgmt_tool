@@ -119,6 +119,9 @@ def create_draft(
     audience: str | None = None,
 ) -> int:
     directory = project_dir(conn, project_id)
+    from .entries import require_project_folder
+
+    require_project_folder(directory)  # 지워진 과제 폴더를 되살리지 않는다 (TODO 200)
     report_date = paths.validate_date(report_date, default_report_date())
     # 같은 날짜에 중간·완료 보고를 각각 남길 수 있어야 한다.
     # 첫 건은 reports/2026-09-08/, 다음부터 -2, -3 … 을 붙인다.
@@ -266,7 +269,14 @@ def update_report(conn: sqlite3.Connection, report_id: int, updates: dict[str, A
 
     directory = project_dir(conn, row["project_id"])
     if new_date is not None and new_date != row["report_date"]:
-        path = _move_report_folder(conn, row["id"], directory, path, new_date)
+        try:
+            path = _move_report_folder(conn, row["id"], directory, path, new_date)
+        except (paths.FileInUseError, OSError):
+            # TODO 200 — report.md 는 저장됐는데 폴더 이동만 실패. 색인의 file_mtime 을 지금 파일에 맞춰 두어야
+            # 다음 저장이 409 로 막히지 않는다 (과제 제목 변경과 같은 틈 — services/projects.update_project).
+            index_project(conn, directory)
+            conn.commit()
+            raise
     index_project(conn, directory)
     conn.commit()
 

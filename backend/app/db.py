@@ -29,16 +29,33 @@ def open_index(db_path: Path | None = None) -> tuple[sqlite3.Connection, bool]:
     사용자를 막아 세우는 대신 버리고 다시 만드는 편이 낫다.
     """
     path = db_path or get_settings().db_path
+    conn: sqlite3.Connection | None = None
     try:
         conn = connect(path)
         return conn, init_schema(conn)
     except sqlite3.DatabaseError:
         # 파일이 손상됐거나 SQLite가 읽지 못하는 상태 — 지우고 다시 만든다.
+        # TODO 199 — 실패한 커넥션을 **먼저 닫는다.** 윈도우는 열려 있는 sqlite 파일을 지우지 못해
+        # (PermissionError) "복구" 경로 자체가 기동 크래시였다.
+        if conn is not None:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
         for suffix in ("", "-wal", "-shm"):
             Path(str(path) + suffix).unlink(missing_ok=True)
         conn = connect(path)
         init_schema(conn)
         return conn, True
+
+
+def reset_index(conn: sqlite3.Connection) -> None:
+    """색인을 비우고 빈 구조로 다시 만든다 (TODO 199) — 기동 재색인이 실패했을 때의 1회 재시도용.
+
+    `init_schema` 가 버전이 바뀌었을 때 하는 일과 같다. 원본은 md 파일이므로 잃을 것이 없다.
+    """
+    _drop_everything(conn)
+    init_schema(conn)
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:

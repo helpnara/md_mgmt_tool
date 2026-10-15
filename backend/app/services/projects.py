@@ -284,17 +284,12 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     # 새 과제는 아직 번호가 없으므로 고리가 생길 수 없다. 있는 과제인지만 본다.
     predecessors = check_predecessors(conn, None, data.get("predecessors"))
 
-    # 번호의 연도는 **등록한 날이 아니라 착수년도**다 (TODO 95).
-    project_id = next_project_id(project_year(data.get("start_date")))
-    dir_name = paths.project_dir_name(project_id, title)
-    directory = paths.safe_join(settings.projects_dir, dir_name)
-    (directory / "logs").mkdir(parents=True, exist_ok=True)
-    (directory / "assets").mkdir(parents=True, exist_ok=True)
-    (directory / "reports").mkdir(parents=True, exist_ok=True)
-
+    # TODO 201 — **모든 검증을 폴더 만들기 앞에.** 효과 금액 · 완료일 · 담당자 · 유관부서 … 가 400 으로
+    # 거절돼도 `projects/2026-031-…/{logs,assets,reports}` 가 이미 만들어져 남고 번호가 소모됐다
+    # (번호는 다시 쓰지 않는다 — 146). 머리 정보를 먼저 다 만들고, 번호와 폴더는 그 다음이다.
     stamp = now_iso()
     meta = {
-        "id": project_id,
+        "id": None,  # 번호는 검증이 다 끝난 뒤 붙인다 (아래)
         "title": title,
         "status": status,
         "type": project_type,
@@ -327,6 +322,15 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "created_at": stamp,
         "updated_at": stamp,
     }
+
+    # 번호의 연도는 **등록한 날이 아니라 착수년도**다 (TODO 95). 여기부터는 거절할 것이 없다.
+    project_id = next_project_id(project_year(data.get("start_date")))
+    meta["id"] = project_id
+    dir_name = paths.project_dir_name(project_id, title)
+    directory = paths.safe_join(settings.projects_dir, dir_name)
+    (directory / "logs").mkdir(parents=True, exist_ok=True)
+    (directory / "assets").mkdir(parents=True, exist_ok=True)
+    (directory / "reports").mkdir(parents=True, exist_ok=True)
     md.save(directory / "index.md", md.MarkdownDoc(meta, data.get("body") or INDEX_TEMPLATE))
     index_project(conn, directory)
     conn.commit()
@@ -404,7 +408,7 @@ def log_system_line(directory: Path, title: str, body: str) -> None:
             "updated_at": stamp,
         }
         md.save(target, md.MarkdownDoc(meta, body))
-    except OSError:
+    except (OSError, paths.FileInUseError):  # 잠긴 파일(TODO 200)도 본 작업을 막지 않는다
         pass
 
 
@@ -681,7 +685,15 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
             target = paths.safe_join(get_settings().projects_dir, expected)
             if target.exists():  # 남아 있던 폴더와 겹치면 뒤에 번호를 붙인다
                 target = paths.unique_path(get_settings().projects_dir, expected, "")
-            paths.move(directory, target)
+            try:
+                paths.move(directory, target)
+            except (paths.FileInUseError, OSError):
+                # TODO 200 — index.md 는 이미 저장됐는데 폴더 이동만 실패했다(엑셀이 잡고 있음 등). 그대로
+                # 올리면 색인의 file_mtime 이 옛값이라 다음 저장이 "도구 밖에서 수정됨" 409 — [다시 읽기] 를
+                # 눌러도 영영 409 였다. 저장된 파일을 색인에 반영해 두고 나서 알린다. 폴더 이름은 다음 저장 때 다시 맞춘다.
+                index_project(conn, directory)
+                conn.commit()
+                raise
             versions.follow(directory, target)  # 이전 버전도 따라온다 (TODO 142)
             directory = target
 

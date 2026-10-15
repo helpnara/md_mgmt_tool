@@ -20,7 +20,9 @@ from .api import (activities, attachments, dashboard, drafts, entries, errors, e
 from . import readcache, share
 from .services import errorlog
 from .config import REPO_ROOT, get_settings
-from .vault.paths import safe_join
+from .db import reset_index
+from .vault.markdown import ExternalChangeError
+from .vault.paths import FileInUseError, safe_join
 from .vault.indexer import reindex_all
 
 FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
@@ -38,7 +40,7 @@ async def lifespan(app: FastAPI):
         print("\n  프로그램이 새 버전으로 바뀌어 검색 색인을 다시 만듭니다.")
         print("  (색인은 md 파일에서 다시 만들어지므로 작성한 내용은 그대로입니다)")
     # 외부 편집기로 바뀐 내용을 기동 시점에 반영한다.
-    indexed, problems = reindex_all(conn)
+    indexed, problems = _startup_reindex(conn)
     readcache.bump()
     if problems:
         print(f"\n  [주의] 읽지 못한 파일 {len(problems)}건 — front matter를 확인하세요:")
@@ -57,6 +59,31 @@ async def lifespan(app: FastAPI):
     finally:
         backup_task.cancel()
         deps.teardown()
+
+
+def _startup_reindex(conn):
+    """기동 재색인 (TODO 199). **어떤 예외도 프로그램을 안 켜지게 두지 않는다** — 한 번은 색인을 버리고 다시.
+
+    전에는 손으로 고친 `id:` 하나(IntegrityError) 로 `.index` 를 지우기 전까지 켜지지 않았고, 어떤 파일 때문인지도
+    안 보였다. 색인은 md 파일에서 다시 만드는 파생물이라 버려도 잃는 것이 없다. 두 번째도 실패하면 어느 예외인지
+    적고 멈춘다 — 그때는 진짜 고장이다.
+    """
+    try:
+        return reindex_all(conn)
+    except Exception as first:  # noqa: BLE001 — 무엇이든 한 번은 다시 해 본다
+        print(f"\n  [주의] 색인을 읽다가 멈췄습니다 ({type(first).__name__}: {str(first).splitlines()[0] if str(first) else ''})")
+        print("  색인을 버리고 md 파일에서 다시 만듭니다 — 작성한 내용은 그대로입니다.")
+        try:
+            conn.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        reset_index(conn)
+        try:
+            return reindex_all(conn)
+        except Exception as second:
+            print(f"\n  [오류] 색인을 다시 만들지 못했습니다 — {type(second).__name__}: {second}")
+            print("  위 메시지에 적힌 파일을 고치거나 옮긴 뒤 다시 켜 주세요. (vault 의 .index 폴더를 지워도 됩니다)")
+            raise
 
 
 # 백업할 때가 됐는지 들여다보는 주기. 주기 자체(기본 24시간)는 설정에서 정한다.
@@ -112,10 +139,12 @@ async def shared_reads(request: Request, call_next):
     """무거운 읽기의 답을 잠깐 나눠 쓴다 (TODO 190, `readcache.py`). 쓰기가 끝나면 판을 올려 전부 버린다."""
     path = request.url.path
     if request.method not in share.SAFE_METHODS:
-        response = await call_next(request)
-        if response.status_code < 400:
+        # TODO 200 — 실패로 끝난 쓰기도 판을 올린다. 423(파일 잠김) 으로 끝났어도 파일은 이미 바뀌었을 수
+        # 있어(저장 뒤 옮기기 실패), 성공일 때만 비우면 목록이 5초 동안 옛값을 보였다.
+        try:
+            return await call_next(request)
+        finally:
             readcache.bump()
-        return response
     if request.method != "GET" or not readcache.cacheable(path) or "if-none-match" in request.headers:
         return await call_next(request)
     key = (path, request.url.query, bool(share.is_remote(request)))
@@ -200,6 +229,48 @@ async def record_http_error(request: Request, exc: StarletteHTTPException):
             detail=str(exc.detail),
         )
     return await http_exception_handler(request, exc)
+
+
+# ── 파일 잠김 · 바깥 수정 · 파일 없음 — 한 곳에서 (TODO 200) ────────────────────────────────
+# 라우터마다 try/except 를 되풀이하다 빠뜨린 자리(진행일지 제목 변경 · md.save 의 PermissionError ·
+# 탐색기에서 지운 폴더)가 전부 500 이었다. 라우터가 먼저 잡으면 그대로, 못 잡은 것은 여기서 받는다.
+# 처리기가 상태 코드로 바꾸므로 record_failures 미들웨어에는 500 으로 안 보인다 — 여기서 사유를 남긴다.
+
+FILE_MISSING_DETAIL = "파일이 폴더에 없습니다 — 탐색기에서 옮기거나 지웠다면 [다시 읽기]로 맞춰 주세요."
+FILE_IN_USE_DETAIL = (
+    "다른 프로그램이 파일을 쓰고 있습니다 — 파일을 연 프로그램(엑셀·뷰어·편집기 등)을 닫고 다시 시도하세요."
+)
+
+
+def _file_error_response(request: Request, status: int, detail: str, exc: Exception) -> JSONResponse:
+    errorlog.record(
+        action=f"{request.method} {request.url.path}", status=status, error=type(exc).__name__, detail=detail
+    )
+    return JSONResponse(status_code=status, content={"detail": detail})
+
+
+@app.exception_handler(FileInUseError)
+async def file_in_use(request: Request, exc: FileInUseError):
+    return _file_error_response(request, 423, str(exc) or FILE_IN_USE_DETAIL, exc)
+
+
+@app.exception_handler(ExternalChangeError)
+async def external_change(request: Request, exc: ExternalChangeError):
+    return _file_error_response(request, 409, str(exc), exc)
+
+
+@app.exception_handler(PermissionError)
+async def permission_denied(request: Request, exc: PermissionError):
+    # 서비스가 한글로 적어 보낸 PermissionError(확정된 보고 …)는 그 말을 그대로, OS 가 낸 것은 잠김 안내로.
+    text = str(exc)
+    detail = text if any("가" <= ch <= "힣" for ch in text) else FILE_IN_USE_DETAIL
+    return _file_error_response(request, 423, detail, exc)
+
+
+@app.exception_handler(FileNotFoundError)
+async def file_not_found(request: Request, exc: FileNotFoundError):
+    # 색인에는 있는데 폴더에 없다 — 탐색기에서 옮기거나 지운 뒤 아직 [다시 읽기] 전이다.
+    return _file_error_response(request, 409, FILE_MISSING_DETAIL, exc)
 
 
 @app.exception_handler(RequestValidationError)

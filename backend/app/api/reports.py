@@ -148,7 +148,8 @@ def update_report(
     except InvalidDateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileInUseError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        # 파일 잠김은 어디서나 423 (TODO 200) — 과제 · 진행일지 · 삭제와 같은 코드
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
     return _serialize(conn, svc.report_row(conn, report_id))
 
 

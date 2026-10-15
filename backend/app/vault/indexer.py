@@ -249,6 +249,15 @@ def project_id_from_dir_name(dir_name: str) -> str:
     return dir_name
 
 
+def _starts_with_bom(path: Path) -> bool:
+    """파일 맨 앞 세 바이트가 UTF-8 BOM 인가 (TODO 198)."""
+    try:
+        with path.open("rb") as handle:
+            return handle.read(3) == b"\xef\xbb\xbf"
+    except OSError:
+        return False
+
+
 def refresh_problems(prefix: str, found: list[IndexProblem]) -> None:
     """폴더 하나를 다시 읽었을 때 그 폴더의 문제만 바꿔 끼운다 (TODO 164) — 도구에서 날짜를 고쳐
     저장하면 경고가 바로 사라지고, [다시 읽기] 를 기다리지 않는다."""
@@ -272,8 +281,34 @@ def index_project(
     if doc is None:
         # 개요 문서를 못 읽으면 이 과제는 이번 회차에 건드리지 않는다.
         return project_id_from_dir_name(project_dir.name)
-    project_id = _as_str(doc.meta.get("id")) or project_id_from_dir_name(project_dir.name)
     rel_index = index_md.relative_to(project_dir.parent.parent).as_posix()
+    # TODO 198 — 머리 정보(front matter)가 없거나 못 읽은 index.md 는 **빈 과제로 색인하지 않는다.**
+    # 전에는 제목 = 폴더명 · 담당 · 날짜 · 효과가 모두 빈 과제로 조용히 올라가, 상태 하나만 바꿔도
+    # 저장이 원래 front matter 를 본문 글자로 밀어냈다. 알리고, 직전에 색인한 내용은 그대로 둔다.
+    if not doc.meta:
+        problems.append(IndexProblem(
+            rel_index,
+            "index.md 의 머리 정보(front matter)를 읽지 못해 이번 색인에서 건너뜁니다 — "
+            "파일 맨 앞의 BOM 또는 `---` 를 확인하세요",
+        ))
+        return project_id_from_dir_name(project_dir.name)
+    if _starts_with_bom(index_md):
+        # 읽기는 했다(markdown.loads 가 BOM 을 뗀다). 다만 다른 도구는 못 읽을 수 있으니 알려 둔다 —
+        # 이 도구로 한 번 저장하면 BOM 없이 다시 쓰여 사라진다.
+        problems.append(IndexProblem(
+            rel_index,
+            "index.md 맨 앞에 BOM(바이트 순서 표식)이 있습니다 — 이번에는 읽었지만 다른 프로그램은 머리 정보를 "
+            "못 읽을 수 있습니다. 메모장 대신 UTF-8(BOM 없음)로 저장하거나, 이 도구에서 한 번 저장하면 사라집니다",
+        ))
+    project_id = _as_str(doc.meta.get("id")) or project_id_from_dir_name(project_dir.name)
+    if project_id != project_id_from_dir_name(project_dir.name):
+        # TODO 199 — 손으로 고친 `id:`. 색인은 파일의 번호를 따르되(파일이 진실), 폴더 이름과 어긋난 사실은 알린다 —
+        # 조용히 넘기면 탐색기의 폴더와 화면의 번호가 서로 다른 채로 남는다.
+        problems.append(IndexProblem(
+            rel_index,
+            f"index.md 의 번호(id: {project_id})가 폴더 이름({project_dir.name})과 다릅니다 — 파일의 id 를 되돌리거나 "
+            "폴더 이름을 번호에 맞춰 주세요(설정 → 과제 번호 체계)",
+        ))
     # owners(복수)가 우선이고, 예전 문서의 owner(단수)도 그대로 읽는다.
     owners = _as_list(doc.meta.get("owners")) or _as_list(doc.meta.get("owner"))
     # 예전에 상태로 쓰이던 '기획보고' 같은 값은 상태+속성으로 나눠 읽는다.
@@ -284,6 +319,11 @@ def index_project(
     if project_type not in settings_service.type_keys():
         project_type = None
     updated_at = _as_str(doc.meta.get("updated_at"))
+
+    # TODO 199 — index.md 의 `id:` 를 손으로 고치면 같은 폴더의 옛 줄이 남아 `dir_name UNIQUE` 에 걸려
+    # 재색인이 500, 재시작은 IntegrityError 로 안 켜졌다. 같은 폴더를 가리키는 다른 번호의 줄을 먼저 비운다
+    # (딸린 진행일지 · 보고 · 첨부 줄은 CASCADE 로 따라 지워지고 아래에서 새 번호로 다시 색인된다).
+    conn.execute("DELETE FROM project WHERE dir_name = ? AND id <> ?", (project_dir.name, project_id))
 
     conn.execute(
         """
@@ -705,7 +745,16 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
     for project_dir in sorted(settings.projects_dir.iterdir()):
         if not project_dir.is_dir() or project_dir.name.startswith("."):
             continue
-        project_id = index_project(conn, project_dir, problems)
+        try:
+            project_id = index_project(conn, project_dir, problems)
+        except (sqlite3.Error, ValueError, KeyError, TypeError, OSError) as exc:
+            # TODO 199 — 폴더 하나의 사고(손으로 고친 값 · 잠긴 파일 · 색인 충돌)가 재색인 전체를 500 으로,
+            # 기동을 크래시로 끝내지 않는다. 그 폴더만 알리고 다음 폴더로 간다. 색인에 있던 줄은 그대로 둔다.
+            problems.append(IndexProblem(
+                f"projects/{project_dir.name}",
+                f"이 폴더를 색인하지 못해 건너뜁니다 — {type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else ''}".rstrip(" :—"),
+            ))
+            project_id = project_id_from_dir_name(project_dir.name)
         if project_id:
             # 같은 번호의 폴더가 둘이면 색인에는 하나만 남는다 — 조용히 버리지 않고 알린다 (TODO 146)
             if project_id in seen:

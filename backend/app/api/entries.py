@@ -96,6 +96,9 @@ def update_entry(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except InvalidDateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileInUseError as exc:
+        # 제목 · 날짜 변경의 파일 이름 바꾸기가 잠겨 실패 — 500 이 아니라 423 (TODO 200)
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
     row = conn.execute("SELECT * FROM entry WHERE id = ?", (entry_id,)).fetchone()
     return _serialize(conn, row)
 
