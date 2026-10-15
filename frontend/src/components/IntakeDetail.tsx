@@ -3,7 +3,18 @@ import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 import { backTarget, projectLink, setPageTitle } from "../nav";
 import LoadError from "./LoadError";
-import { dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useUnsaved } from "../unsaved";
+import { notifyError } from "../notify";
+import {
+  type EditLedger,
+  discardQuestion,
+  dropDraft,
+  hasDraft,
+  loadDraft,
+  useDrafts,
+  useDraftKeeper,
+  useEditLedger,
+  useUnsaved,
+} from "../unsaved";
 import PasteOfferBar from "./PasteOffer";
 import PrecheckDialog, { BandChip } from "./PrecheckDialog";
 import { type PasteOffer, handleEditorPaste } from "../table";
@@ -436,10 +447,11 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
         </p>
       </div>
 
-      <Attachments intake={intake} onChanged={load} onError={setError} />
+      {/* 첨부 · 기록 삭제의 실패는 그 자리에서 보이게 알림으로 — 머리 카드 아래 한 줄은 동작 자리에서 안 보였다 (TODO 209 ③) */}
+      <Attachments intake={intake} onChanged={load} onError={notifyError} />
       </div>
       <div className="detail-right">
-        <Logs intake={intake} base={base} onChanged={load} onError={setError} onEditingChange={setEditingLog} />
+        <Logs intake={intake} base={base} onChanged={load} onError={notifyError} onEditingChange={setEditingLog} />
       </div>
       </div>
 
@@ -669,6 +681,7 @@ function AttachPanel({
   onError,
   only,
   emptyText,
+  ledger,
 }: {
   intake: Detail;
   kind: "markdown" | "markdown_log";
@@ -680,6 +693,11 @@ function AttachPanel({
   /** 보일 첨부만 고른다 — 검토 기록은 **그 기록의 첨부만** (TODO 150). 없으면 전부 */
   only?: (item: IntakeAttachment) => boolean;
   emptyText?: string;
+  /**
+   * 편집기 안의 첨부 판이면 그 편집의 장부 (TODO 213 ③) — [삭제] 는 "지울 예정" 으로만, 실제 삭제는 [저장] 때.
+   * 없으면(첨부 카드) 지금처럼 바로 지운다.
+   */
+  ledger?: EditLedger<string>;
 }) {
   const items = only ? intake.attachments.filter(only) : intake.attachments;
   const [busy, setBusy] = useState(0);
@@ -731,8 +749,12 @@ function AttachPanel({
           attachments={asAttachments(items, kind)}
           onInsert={onInsert ? (item) => onInsert(item.markdown) : undefined}
           onPreview={setPreviewing}
+          pending={ledger ? (item) => ledger.isDoomed(item.rel_path) : undefined}
+          onRestore={ledger ? (item) => ledger.toggleDoomed(item.rel_path) : undefined}
           onDelete={
-            editable
+            editable && ledger
+              ? (item) => ledger.toggleDoomed(item.rel_path)
+              : editable
               ? async (item) => {
                   const used = intake.body.includes(item.rel_path.split("/").pop() ?? "");
                   const warn = used ? "\n\n이 첨부는 요청 본문에서 쓰이는 중입니다. 지우면 그 자리가 깨집니다." : "";
@@ -748,9 +770,22 @@ function AttachPanel({
           }
         />
       )}
+      {ledger && ledger.doomed.length > 0 && (
+        <p className="hint pending-note">지울 예정인 첨부 {ledger.doomed.length}건은 [저장] 할 때 삭제 보관함으로 옮깁니다.</p>
+      )}
       {previewing && <XlsxPreview attachment={previewing} onClose={() => setPreviewing(null)} />}
     </div>
   );
+}
+
+/**
+ * 검토 기록의 임시 보관 열쇠 (TODO 211 ③). 서버가 받는 열쇠 모양은 `intake:<글자 · 숫자 · _ · ->` 라(drafts.py),
+ * 접수 번호 뒤에 `--log-<기록 이름>` 을 붙인다. 기록 이름의 `.md` · 점 · 공백은 `_` 로 바꾸고 80자 안으로 자른다.
+ */
+function logDraftKey(intakeId: string, name?: string): string {
+  const prefix = `${intakeId}--log-`;
+  const stem = (name ?? "new").replace(/\.md$/, "").replace(/[^0-9A-Za-z가-힣_-]/g, "_");
+  return `intake:${prefix}${stem.slice(0, Math.max(1, 80 - prefix.length))}`;
 }
 
 function MarkdownArea({
@@ -761,7 +796,7 @@ function MarkdownArea({
   onUploaded,
   onError,
   placeholder,
-  onSave,
+  ledger,
 }: {
   field: ReturnType<typeof useMarkdownField>;
   intake: Detail;
@@ -770,14 +805,14 @@ function MarkdownArea({
   onUploaded: () => void;
   onError: (message: string) => void;
   placeholder: string;
-  /** Ctrl+S — 다른 편집기와 같게 (TODO 162) */
-  onSave: () => void;
+  /** 이 편집의 장부 (TODO 213 ⑦) — 올린 첨부를 적어 두어 버리면 지운다. Ctrl+S 는 편집기 루트가 받는다(211 ⑥). */
+  ledger: EditLedger<string>;
 }) {
   const [preview, togglePreview] = usePreview();
   const [pasteOffer, setPasteOffer] = useState<PasteOffer | null>(null);
   const closeOffer = useCallback(() => setPasteOffer(null), []);
-  // 이번 편집에서 올린 첨부 — 본문에서 링크를 지웠어도 목록에는 남겨 다시 넣을 수 있게 (TODO 150)
-  const [uploadedNow, setUploadedNow] = useState<string[]>([]);
+  // 이번 편집에서 올린 첨부(장부) — 본문에서 링크를 지웠어도 목록에는 남겨 다시 넣을 수 있게 (TODO 150)
+  const uploadedNow = ledger.uploaded;
 
   // 올린 파일은 링크를 커서 자리에 넣는다 — 진행일지 편집기와 같다.
   async function handleFiles(files: File[]) {
@@ -785,7 +820,7 @@ function MarkdownArea({
     try {
       const saved = await uploadFiles(intake.id, files);
       for (const item of saved) field.insert(item[linkKind]);
-      setUploadedNow((prev) => [...prev, ...saved.map((item) => item.rel_path)]);
+      for (const item of saved) ledger.addUploaded(item.rel_path);
       onUploaded();
     } catch (err) {
       onError((err as Error).message);
@@ -806,12 +841,6 @@ function MarkdownArea({
           ref={field.ref}
           value={field.value}
           onChange={(event) => field.setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-              event.preventDefault();
-              onSave();
-            }
-          }}
           onPaste={(event) =>
             handleEditorPaste(event, {
               onInsert: field.insert,
@@ -841,6 +870,7 @@ function MarkdownArea({
         onInsert={field.insert}
         onChanged={onUploaded}
         onError={onError}
+        ledger={ledger}
         // 검토 기록은 그날 한 번의 인터뷰다 — 접수의 첨부 전부가 아니라 **이 기록의 첨부만** (TODO 150).
         // 요청 내용은 접수 전체를 다루므로 전부.
         only={
@@ -892,7 +922,9 @@ function BodyEditor({
   const [error, setError] = useState<string | null>(null);
   const base = `/intake-files/${encodeURIComponent(intake.dir_name)}`;
   const dirty = field.value !== original;
-  useUnsaved(draftKey, dirty);
+  // 편집 한 번의 장부 (TODO 213 ⑦) — 올린 첨부 · 지우기로 한 첨부(접수 폴더 기준 경로)
+  const ledger = useEditLedger<string>();
+  useUnsaved(draftKey, dirty || !ledger.empty);
   useDraftKeeper(draftKey, field.value, field.value === original);
 
   async function save() {
@@ -901,6 +933,8 @@ function BodyEditor({
     setError(null);
     try {
       await api.updateIntake(intake.id, { body: field.value });
+      // 지우기로 한 첨부는 저장할 때 지운다 (TODO 213 ③)
+      await ledger.commit((path) => api.deleteIntakeAttachment(intake.id, path));
       dropDraft(draftKey);
       onSaved();
     } catch (err) {
@@ -910,8 +944,34 @@ function BodyEditor({
     }
   }
 
+  /** [취소] — 진행일지 [닫기] 와 같은 규칙: 사실대로 묻고, 버리면 이번에 올린 첨부를 지운다 (TODO 213 ⑦) */
+  async function discard() {
+    if (
+      (dirty || !ledger.empty) &&
+      !window.confirm(
+        discardQuestion({ what: "요청 내용을", uploaded: ledger.uploaded.length, doomed: ledger.doomedExisting.length }),
+      )
+    )
+      return;
+    const had = ledger.uploaded.length > 0;
+    setBusy(true);
+    await ledger.rollback((path) => api.deleteIntakeAttachment(intake.id, path));
+    dropDraft(draftKey);
+    onCancel();
+    if (had) onUploaded(); // 지운 첨부가 목록에서 빠지게 다시 읽는다
+  }
+
   return (
-    <div className="body-editor">
+    <div
+      className="body-editor"
+      onKeyDown={(event) => {
+        // Ctrl+S 는 편집기 어디서나 — 본문 칸에서만 먹던 것을 루트로 (TODO 211 ⑥)
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+          event.preventDefault();
+          void save();
+        }
+      }}
+    >
       <MarkdownArea
         field={field}
         intake={intake}
@@ -919,7 +979,7 @@ function BodyEditor({
         linkKind="markdown"
         onUploaded={onUploaded}
         onError={setError}
-        onSave={() => void save()}
+        ledger={ledger}
         placeholder="과제정의서의 내용을 옮겨 적습니다. 이미지는 Ctrl+V 로, 엑셀 표는 그대로 붙여넣으면 표가 됩니다."
       />
       {restored && (
@@ -939,15 +999,7 @@ function BodyEditor({
       )}
       {error && <p className="error">{error}</p>}
       <div className="form-actions">
-        <button
-          className="ghost"
-          onClick={() => {
-            if (dirty && !window.confirm("저장하지 않은 요청 내용을 버릴까요?")) return;
-            dropDraft(draftKey);
-            onCancel();
-          }}
-          disabled={busy}
-        >
+        <button className="ghost" onClick={() => void discard()} disabled={busy}>
           취소
         </button>
         <button disabled={busy} onClick={() => void save()}>
@@ -1019,6 +1071,12 @@ function Logs({
         <h2>검토 기록 ({intake.log_count}건)</h2>
         {intake.in_pool && !adding && (
           <div className="timeline-actions">
+            {/* 쓰다 만 새 검토 기록이 남아 있다 — [기록 추가] 를 누르면 되살아난다 (TODO 211 ③) */}
+            {hasDraft(logDraftKey(intake.id)) && (
+              <span className="draft-waiting" title="저장하지 않고 남은 기록이 있습니다 — [기록 추가] 를 누르면 되살아납니다">
+                작성 중이던 기록 있음
+              </span>
+            )}
             <button onClick={() => setAdding(true)}>기록 추가</button>
           </div>
         )}
@@ -1072,6 +1130,11 @@ function Logs({
                 </div>
                 {intake.in_pool && !auto && (
                   <div className="entry-actions">
+                    {hasDraft(logDraftKey(intake.id, log.name)) && (
+                      <span className="draft-waiting" title="저장하지 않은 고친 내용이 남아 있습니다 — [수정] 을 누르면 되살아납니다">
+                        작성 중
+                      </span>
+                    )}
                     <button data-write className="ghost" onClick={() => setEditing(log.name)}>
                       수정
                     </button>
@@ -1137,7 +1200,35 @@ function LogEditor({
   // 떠날 때 묻는다 (TODO 162)
   const dirty =
     field.value !== (log?.body ?? "") || title !== (log?.title ?? "") || date !== (log?.date ?? todayIso());
-  useUnsaved(`intake-log:${intake.id}:${log?.name ?? "new"}`, dirty);
+  // 편집 한 번의 장부 (TODO 213 ⑦)
+  const ledger = useEditLedger<string>();
+  useUnsaved(`intake-log:${intake.id}:${log?.name ?? "new"}`, dirty || !ledger.empty);
+  // 임시 보관 (TODO 211 ③) — 요청 내용 · 진행일지와 같은 안전망. 인터뷰 기록을 길게 쓰다 창이 죽어도 돌아온다
+  const draftKey = logDraftKey(intake.id, log?.name);
+  const [restored, setRestored] = useState(false);
+  useDraftKeeper(draftKey, { date, title, body: field.value }, !dirty);
+  useEffect(() => {
+    let alive = true;
+    const original = { date: log?.date ?? todayIso(), title: log?.title ?? "", body: log?.body ?? "" };
+    void loadDraft<{ date?: string; title?: string; body?: string }>(
+      draftKey,
+      (kept) =>
+        typeof kept !== "object" ||
+        kept === null ||
+        (kept.body === original.body && kept.title === original.title && kept.date === original.date),
+    ).then((kept) => {
+      if (!alive || !kept || typeof kept.body !== "string") return;
+      setDate(kept.date || original.date);
+      setTitle(kept.title ?? "");
+      field.setValue(kept.body);
+      setRestored(true);
+    });
+    return () => {
+      alive = false;
+    };
+    // 편집기를 열 때 한 번
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function save() {
     if (busy) return;
@@ -1146,6 +1237,9 @@ function LogEditor({
     try {
       if (log) await api.updateIntakeLog(intake.id, log.name, { date, title, body: field.value, mtime: log.mtime });
       else await api.createIntakeLog(intake.id, { date, title, body: field.value });
+      // 지우기로 한 첨부는 저장할 때 지운다 (TODO 213 ③)
+      await ledger.commit((path) => api.deleteIntakeAttachment(intake.id, path));
+      dropDraft(draftKey);
       onSaved();
     } catch (err) {
       setError((err as Error).message);
@@ -1154,8 +1248,34 @@ function LogEditor({
     }
   }
 
+  /** [취소] — 사실대로 묻고, 버리면 이번에 올린 첨부를 지운다 (TODO 213 ⑦) */
+  async function discard() {
+    if (
+      (dirty || !ledger.empty) &&
+      !window.confirm(
+        discardQuestion({ what: "기록을", uploaded: ledger.uploaded.length, doomed: ledger.doomedExisting.length }),
+      )
+    )
+      return;
+    const had = ledger.uploaded.length > 0;
+    setBusy(true);
+    await ledger.rollback((path) => api.deleteIntakeAttachment(intake.id, path));
+    dropDraft(draftKey);
+    onCancel();
+    if (had) onUploaded();
+  }
+
   return (
-    <div className="log-editor">
+    <div
+      className="log-editor"
+      onKeyDown={(event) => {
+        // Ctrl+S 는 편집기 어디서나 — 날짜 · 제목 칸에서도 (TODO 211 ⑥)
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+          event.preventDefault();
+          void save();
+        }
+      }}
+    >
       <div className="form-row">
         <label>
           날짜
@@ -1173,19 +1293,29 @@ function LogEditor({
         linkKind="markdown_log"
         onUploaded={onUploaded}
         onError={setError}
-        onSave={() => void save()}
+        ledger={ledger}
         placeholder="누구와 무엇을 이야기했고, 문제 정의가 어떻게 바뀌었는지 적습니다."
       />
+      {restored && (
+        <p className="hint restored">
+          저장하지 않은 작성 중 내용을 복구했습니다.{" "}
+          <button
+            className="ghost small"
+            onClick={() => {
+              dropDraft(draftKey);
+              setDate(log?.date ?? todayIso());
+              setTitle(log?.title ?? "");
+              field.setValue(log?.body ?? "");
+              setRestored(false);
+            }}
+          >
+            복구한 내용 버리기
+          </button>
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
       <div className="form-actions">
-        <button
-          className="ghost"
-          onClick={() => {
-            if (dirty && !window.confirm("저장하지 않은 기록을 버릴까요?")) return;
-            onCancel();
-          }}
-          disabled={busy}
-        >
+        <button className="ghost" onClick={() => void discard()} disabled={busy}>
           취소
         </button>
         <button disabled={busy} onClick={() => void save()}>

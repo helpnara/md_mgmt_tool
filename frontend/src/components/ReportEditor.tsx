@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
-import { dropDraft, loadDraft, useDraftKeeper, useUnsaved } from "../unsaved";
+import { clockNow, discardQuestion, dropDraft, loadDraft, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
 import { filesBase, renderMarkdown } from "../markdown";
 import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import { COPY_FAILED } from "../clipboard";
@@ -40,9 +40,14 @@ interface Props {
   onDeleted: () => void;
   /** 이 문서의 vault 기준 경로. 있으면 [이전 버전]을 열 수 있다 (TODO 37-1). */
   docPath?: string;
+  /**
+   * 바깥(과제 상세의 보고 목록)이 이 편집기를 닫기 전에 물어볼 길 (TODO 211 ④ · 213 ⑥) — 다른 보고를 누르거나
+   * 새 초안을 만들 때. 받은 함수는 [닫기] 와 같이 묻고(버리면 이번에 올린 첨부를 지우고) 닫아도 되는지 돌려준다.
+   */
+  registerCloseGuard?: (guard: (() => Promise<boolean>) | null) => void;
 }
 
-export default function ReportEditor({ report, dirName, audiences, onChanged, onClose, onDeleted, docPath }: Props) {
+export default function ReportEditor({ report, dirName, audiences, onChanged, onClose, onDeleted, docPath, registerCloseGuard }: Props) {
   const [showVersions, setShowVersions] = useState(false);
   const [body, setBody] = useState(report.body ?? "");
   const [audience, setAudience] = useState(report.audience ?? "");
@@ -60,6 +65,10 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   // AI 에게 넘길 글. 곧바로 복사하지 않고 **먼저 보여 준다** (TODO 71).
   const [showPrompt, setShowPrompt] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // 편집 한 번의 장부 (TODO 213 ⑥) — 이번에 올린 보고 자료 · 지우기로 한 보고 자료(첨부 번호)
+  const ledger = useEditLedger<number>();
+  // 이 편집에서 마지막으로 저장한 때 — 버릴 때 "마지막 저장 이후" 로 묻는다
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,13 +94,31 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   }, [report.id]);
 
   useEffect(refresh, [refresh]);
-  useEffect(() => setBody(report.body ?? ""), [report.id, report.body]);
+  // 서버 본문으로 맞추기 (TODO 211 ⑤) — 전에는 저장 뒤 다시 읽은 본문이 오면 무조건 덮어써,
+  // Ctrl+S 직후 계속 친 글자가 왕복 사이에 조용히 사라졌다. 이제는 **다른 보고로 바뀌었거나, 고친 것이 없을 때**만 맞춘다.
+  // [이전 버전] 으로 되돌린 때는 되돌린 글이 보여야 하므로 forceSync 로 덮어쓴다.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const bodyRef = useRef(body);
+  bodyRef.current = body;
+  const forceSync = useRef(false);
+  const shownId = useRef(report.id);
+  useEffect(() => {
+    const switched = shownId.current !== report.id;
+    shownId.current = report.id;
+    if (switched || forceSync.current || !dirtyRef.current) {
+      forceSync.current = false;
+      setBody(report.body ?? "");
+      if (switched) setDirty(false);
+    }
+  }, [report.id, report.body]);
   // 쓰던 보고 — 떠날 때 묻고, 임시 보관한다 (TODO 162). 확정된 보고는 본문을 고칠 수 없으니 빼고.
   const draftKey = `report:${report.id}`;
   const [restored, setRestored] = useState(false);
   // 지시사항 칸은 **확정된 보고에만** 있다 — 떠남 경고를 `!frozen` 에 묶어 두니 절대 안 떴다 (TODO 207).
   // 읽기 전용 공유에서는 고칠 칸이 없으니 묻지 않는다 (208).
-  useUnsaved(draftKey, !readonly && (frozen ? feedbackDirty : dirty));
+  // 올린 · 지우기로 한 보고 자료가 있어도 묻는다 — 떠날 때는 지우지 않는다(임시 보관이 그 첨부를 가리킨다, TODO 213)
+  useUnsaved(draftKey, !readonly && (frozen ? feedbackDirty : dirty || !ledger.empty));
   useDraftKeeper(editable ? draftKey : null, body, body === (report.body ?? ""));
   useEffect(() => {
     if (!editable) return;
@@ -141,15 +168,74 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   }, [report.id, report.feedback]);
 
   async function save(): Promise<void> {
+    // 보낸 글을 잡아 둔다 — 왕복 사이에 더 쳤으면 "저장 안 됨" 이 그대로 남아야 한다 (TODO 211 ⑤)
+    const sent = bodyRef.current;
     // 보고일은 초안일 때만 보낸다. 바뀌면 서버가 문서 폴더도 함께 옮긴다.
     await api.updateReport(report.id, {
-      body,
+      body: sent,
       audience,
       ...(frozen ? {} : { report_date: reportDate }),
     });
-    setDirty(false);
+    if (bodyRef.current === sent) setDirty(false);
+    // 지우기로 한 보고 자료는 저장할 때 지운다. 이번에 올린 것은 이제 저장된 것이다 (TODO 213 ③)
+    await ledger.commit((id) => api.deleteAttachment(id));
+    setLastSavedAt(clockNow());
+    refresh();
     onChanged();
   }
+
+  // [저장] 이 요청 중이면 다시 누르지 못한다 — 두 번 누르면 PATCH 두 번 (TODO 209 ④)
+  const saving = useRef(false);
+  async function runSave(): Promise<void> {
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    try {
+      await save();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }
+
+  /**
+   * 닫아도 되나 — [닫기] · 다른 보고 열기 · 새 초안 (TODO 211 ④ · 213 ⑥). 진행일지 편집기와 같은 규칙:
+   * 고친 것이나 이 편집에서 먼저 서버에 쓴 것(첨부)이 있으면 사실대로 묻고, 버리면 이번에 올린 첨부를 지운다.
+   * 지우기로 한 첨부는 그대로 둔다. 메뉴 이동으로 떠날 때는 묻기만 하고 지우지 않는다(임시 보관이 남는다).
+   */
+  async function confirmClose(): Promise<boolean> {
+    if (readonly) return true;
+    if (frozen) {
+      if (feedbackDirty && !window.confirm(discardQuestion({ what: "지시사항을" }))) return false;
+      if (feedbackDirty) dropDraft(draftKey);
+      return true;
+    }
+    if (!dirty && ledger.empty) return true;
+    if (
+      !window.confirm(
+        discardQuestion({
+          what: "보고를",
+          savedAt: lastSavedAt,
+          uploaded: ledger.uploaded.length,
+          doomed: ledger.doomedExisting.length,
+        }),
+      )
+    )
+      return false;
+    for (const upload of uploads) if (!upload.error) upload.abort();
+    await ledger.rollback((id) => api.deleteAttachment(id));
+    dropDraft(draftKey);
+    return true;
+  }
+  const confirmCloseRef = useRef(confirmClose);
+  confirmCloseRef.current = confirmClose;
+  useEffect(() => {
+    if (!registerCloseGuard) return;
+    registerCloseGuard(() => confirmCloseRef.current());
+    return () => registerCloseGuard(null);
+  }, [registerCloseGuard]);
 
   /** 초안에 딸려 온 "진행 내용"만 지우고 보고서 뼈대는 남긴다. */
   function clearProgressSection() {
@@ -184,7 +270,9 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         { key, name: file.name, loaded: 0, total: file.size, startedAt: Date.now(), abort: handle.abort },
       ]);
       try {
-        await handle.promise;
+        const saved = await handle.promise;
+        // 이번 편집에서 올린 것 — 버리면 지운다(같은 파일을 돌려받은 것은 남의 것이라 빼고) (TODO 213 ⑥)
+        if (!saved.deduplicated) ledger.addUploaded(saved.id);
         setUploads((prev) => prev.filter((item) => item.key !== key));
         refresh();
       } catch (err) {
@@ -215,7 +303,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
           event.preventDefault();
-          if (editable) void save().catch((err: Error) => setError(err.message)); // 읽기 전용이면 아무 일도 (208)
+          if (editable) void runSave(); // 읽기 전용이면 아무 일도 (208)
         }
       }}
       onDragOver={editable ? (event) => event.preventDefault() : undefined}
@@ -289,7 +377,13 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
               이전 버전
             </button>
           )}
-          <button className="ghost" onClick={onClose}>
+          <button
+            className="ghost"
+            onClick={async () => {
+              // 고친 것이 있으면 묻는다 — 진행일지와 같은 규칙 (TODO 211 ④ · 213 ⑥)
+              if (await confirmClose()) onClose();
+            }}
+          >
             닫기
           </button>
         </div>
@@ -378,7 +472,16 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         </span>
       </div>
 
-      {docPath && showVersions && <VersionPanel path={docPath} onRestored={onChanged} />}
+      {docPath && showVersions && (
+        <VersionPanel
+          path={docPath}
+          onRestored={() => {
+            // 되돌린 글이 보여야 한다 — 고치던 중이어도 덮어쓴다 (211 ⑤ 의 예외)
+            forceSync.current = true;
+            onChanged();
+          }}
+        />
+      )}
 
       {showDiff && <ReportDiff reportId={report.id} />}
 
@@ -599,32 +702,34 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         </div>
         {/* 확정된 보고의 첨부는 지우지 않는다 — 그 문서는 "그때 무엇을 보고했는가" 다
             (본문·삭제를 막는 것과 같은 이유, TODO 103-F). 확정을 풀면 지울 수 있다. */}
+        {/* 편집기 안의 [삭제] 는 "지울 예정" 으로만 — [저장] 할 때 지우고, 버리면 아무 일도 없다 (TODO 213 ③ ⑥) */}
         <AttachmentList
           attachments={attachments}
           onPreview={(attachment) => setPreviewing(attachment)}
           onInsert={editable ? (attachment) => insertAtCursor(attachment.markdown) : undefined}
+          pending={editable ? (attachment) => ledger.isDoomed(attachment.id) : undefined}
+          onRestore={editable ? (attachment) => ledger.toggleDoomed(attachment.id) : undefined}
           onDelete={
             !editable
               ? undefined
-              : async (attachment) => {
-                  // 본문에서 쓰이는 중이면 그 사실을 말해 준다 (TODO 129). 막지는 않는다 —
-                  // 보관함으로 가므로 되돌릴 수 있고, 막으면 급할 때 못 쓴다.
+              : (attachment) => {
+                  // 본문에서 쓰이는 중이면 그 사실을 말해 준다 (TODO 129). 막지는 않는다 — 급할 때 못 쓴다.
                   const stored = attachment.rel_path.split("/").pop() ?? "";
                   const used = stored !== "" && body.includes(stored);
-                  const warn = used
-                    ? "\n\n이 첨부는 **본문에서 쓰이는 중**입니다. 지우면 그 자리가 깨집니다."
-                    : "";
-                  if (!window.confirm(`${attachment.orig_name} 을(를) 삭제 보관함으로 옮길까요?${warn}`))
+                  if (
+                    used &&
+                    !window.confirm(
+                      `${attachment.orig_name} 은(는) 본문에서 쓰이는 중입니다. 지우면 그 자리가 깨집니다.\n\n[저장] 할 때 지우도록 표시할까요?`,
+                    )
+                  )
                     return;
-                  try {
-                    await api.deleteAttachment(attachment.id);
-                    refresh();
-                  } catch (err) {
-                    setError((err as Error).message);
-                  }
+                  ledger.toggleDoomed(attachment.id);
                 }
           }
         />
+        {editable && ledger.doomed.length > 0 && (
+          <p className="hint pending-note">지울 예정인 보고 자료 {ledger.doomed.length}건은 [저장] 할 때 삭제 보관함으로 옮깁니다.</p>
+        )}
       </div>
 
       {restored && dirty && (
@@ -649,7 +754,9 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       {/* 읽기 전용 공유에는 저장 · 확정 · 확정 해제가 없다 — 눌러 봐야 403 이다 (TODO 208) */}
       {!readonly && (
       <div className="editor-footer">
-        <span className="muted save-state">{dirty ? "저장 안 됨" : ""}</span>
+        <span className="muted save-state">
+          {dirty || !ledger.empty ? "저장 안 됨" : lastSavedAt ? `${lastSavedAt} 저장됨` : ""}
+        </span>
         <div className="form-actions">
           {frozen ? (
             <button
@@ -687,8 +794,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
               >
                 삭제
               </button>
-              <button data-write className="ghost" disabled={busy || !dirty} onClick={() => void save()}>
-                저장
+              <button data-write className="ghost" disabled={busy || (!dirty && ledger.empty)} onClick={() => void runSave()}>
+                {busy ? "저장 중…" : "저장"}
               </button>
               <button
                 className="commit"
@@ -697,7 +804,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                   if (!window.confirm("보고를 확정하면 이 문서는 읽기 전용이 되고, 미보고 분량이 초기화됩니다.")) return;
                   setBusy(true);
                   try {
-                    if (dirty) await save();
+                    if (dirty || !ledger.empty) await save();
                     await api.freezeReport(report.id);
                     onChanged();
                   } catch (err) {

@@ -1,10 +1,10 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../api";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, errorText, OFFLINE_MESSAGE } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
-import { backTarget, intakeBackLink, listLink, projectLink, screenLink, setPageTitle } from "../nav";
+import { BACK_PARAM, backTarget, currentLocation, intakeBackLink, listLink, projectLink, queryOf, screenLink, setPageTitle } from "../nav";
 import { attempt, notifyError } from "../notify";
 import { isReadonly } from "../readonly";
-import { dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useUnsaved } from "../unsaved";
+import { discardQuestion, dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
 import type { DemotePlan, Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -15,6 +15,7 @@ import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import VersionPanel from "./VersionPanel";
 import ExportMenu from "./ExportMenu";
+import LoadError from "./LoadError";
 import ReportEditor from "./ReportEditor";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import ProjectForm from "./ProjectForm";
@@ -132,6 +133,8 @@ export default function ProjectDetail({
   const [savingOverview, setSavingOverview] = useState(false);
   // 저장하지 않고 남았던 글을 되살렸다 (TODO 162)
   const [overviewRestored, setOverviewRestored] = useState(false);
+  // 개요 편집 한 번의 장부 (TODO 213 ⑤) — 편집 중에 올린 첨부. [취소] 로 버리면 지운다(삭제 보관함으로)
+  const overviewLedger = useEditLedger<number>();
   // 개요 편집기 — 붙여넣기·첨부 링크를 커서 자리에 끼우려고 잡아 둔다 (TODO 137)
   const overviewAreaRef = useRef<HTMLTextAreaElement>(null);
   const [pasteOffer, setPasteOffer] = useState<PasteOffer | null>(null);
@@ -156,12 +159,27 @@ export default function ProjectDetail({
     { items: [], total_bytes: 0, orphan_count: 0 },
   );
   const [showFiles, setShowFiles] = useState(false);
+  // 본문에서 쓰지 않는 파일 [정리] (TODO 204 · 197) — 요청 중 · 끝난 뒤 한 줄
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanNote, setCleanNote] = useState<string | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [openReport, setOpenReport] = useState<number | null>(openReportId ?? null);
   // 보고 초안을 만들 때 쓸 날짜. 기본값은 다음 보고 예정일(주간 기준 화요일)이고
   // 그대로 두면 지금까지와 같지만, 여기서 바꿔 만들 수 있다.
   const [draftDate, setDraftDate] = useState("");
   const [reportError, setReportError] = useState<string | null>(null);
+  // [보고 초안 만들기] 요청 중 — 두 번 누르면 초안이 둘 생겼다 (TODO 209 ④)
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  // 열린 보고 편집기에 "닫아도 되나" 를 묻는 길 — 다른 보고를 누르거나 새 초안을 만들 때 (TODO 211 ④ · 213 ⑥)
+  const reportGuard = useRef<(() => Promise<boolean>) | null>(null);
+  const registerReportGuard = useCallback((guard: (() => Promise<boolean>) | null) => {
+    reportGuard.current = guard;
+  }, []);
+  const switchReport = useCallback(async (next: number | null): Promise<boolean> => {
+    if (reportGuard.current && !(await reportGuard.current())) return false;
+    setOpenReport(next);
+    return true;
+  }, []);
   // 기록이 쌓이면 전부 펼쳐져 스크롤이 길어진다. 최근 것만 펼쳐 둔다.
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [expandAll, setExpandAll] = useState(false);
@@ -189,6 +207,17 @@ export default function ProjectDetail({
 
   useEffect(load, [load]);
   useEffect(() => setOpenReport(openReportId ?? null), [openReportId]);
+  // 보고를 열고 닫고 바꾸면 주소의 `?report=` 도 맞춘다 (TODO 210 ⑥) — 전에는 닫아도 남아 F5 하면 닫은 보고가 다시 열렸다.
+  // replaceState 라 history 가 쌓이지 않고 hashchange 도 나지 않는다. 온 곳(back) · 다른 조건은 그대로 둔다.
+  useEffect(() => {
+    const extra: Record<string, string> = {};
+    queryOf(currentLocation()).forEach((value, key) => {
+      if (key !== BACK_PARAM && key !== "report") extra[key] = value;
+    });
+    if (openReport !== null) extra.report = String(openReport);
+    const next = projectLink(projectId, extra);
+    if (decodeURIComponent(window.location.hash) !== decodeURIComponent(next)) window.history.replaceState(null, "", next);
+  }, [openReport, projectId]);
   // 브라우저 탭 제목 (TODO 169)
   useEffect(() => {
     if (project) setPageTitle(`${project.id} ${project.title}`);
@@ -198,7 +227,8 @@ export default function ProjectDetail({
   const overviewKey = `overview:${projectId}`;
   const overviewOriginal = project?.body ?? "";
   const overviewDirty = editingOverview && overviewDraft !== overviewOriginal;
-  useUnsaved(overviewKey, overviewDirty);
+  // 편집 중에 올린 첨부가 있어도 묻는다. 떠날 때는 지우지 않는다 — 임시 보관이 그 첨부를 가리킨다 (TODO 213 의 남는 것)
+  useUnsaved(overviewKey, overviewDirty || (editingOverview && !overviewLedger.empty));
   useDraftKeeper(editingOverview ? overviewKey : null, overviewDraft, overviewDraft === overviewOriginal);
   // 남은 임시 보관 — [기록 추가] 옆 · 카드의 "작성 중" 표시가 본다. 다른 창에서 쓴 것도 창으로 돌아오면 다시 읽는다 (TODO 170)
   useDrafts();
@@ -236,6 +266,8 @@ export default function ProjectDetail({
     const saved = await attempt(() => api.updateProject(project.id, { body: overviewDraft }));
     setSavingOverview(false);
     if (!saved) return; // 실패 — 편집기를 열어 둔 채 알림만 (쓰던 글은 그대로 남는다)
+    // 편집 중에 올린 첨부는 이제 저장된 개요의 것이다 (TODO 213)
+    void overviewLedger.commit((id) => api.deleteAttachment(id));
     dropDraft(overviewKey);
     setOverviewRestored(false);
     setEditingOverview(false);
@@ -288,6 +320,8 @@ export default function ProjectDetail({
             () => undefined,
           ).promise;
           links.push(saved.markdown);
+          // 편집 중에 올린 것만 장부에 — [취소] 하면 지운다. 같은 파일을 돌려받은 것(deduplicated)은 남의 것이라 빼고 (TODO 213 ⑤)
+          if (editingOverview && !saved.deduplicated) overviewLedger.addUploaded(saved.id);
         }
         if (editingOverview) {
           // 편집 중이면 **편집기의 커서 자리**에 끼운다. 예전에는 서버의 개요 끝에 붙여 저장했는데,
@@ -304,6 +338,8 @@ export default function ProjectDetail({
         setUploading(null);
       }
     },
+    // overviewLedger 의 함수는 ref 를 본다 — 렌더마다 새 객체여도 같은 장부다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [project, load, editingOverview],
   );
 
@@ -536,10 +572,11 @@ export default function ProjectDetail({
                   setCloneDraft(null);
                   return;
                 }
+                // 실패는 알림으로 — 불러오기 오류(error)에 넣으면 화면 전체가 "과제를 불러오지 못했습니다" 가 됐다 (TODO 209 ①)
                 try {
                   setCloneDraft(await api.cloneDraft(project.id));
                 } catch (err) {
-                  setError((err as Error).message);
+                  notifyError((err as Error).message);
                 }
               }}
             >
@@ -558,7 +595,7 @@ export default function ProjectDetail({
                   try {
                     setDemotePlan(await api.toIntakePlan(project.id));
                   } catch (err) {
-                    setError((err as Error).message);
+                    notifyError((err as Error).message); // 동작 실패는 알림 (TODO 209 ①)
                   }
                 }}
               >
@@ -745,7 +782,7 @@ export default function ProjectDetail({
                       setConfirmingArchive(false);
                       load();
                     } catch (err) {
-                      setError((err as Error).message);
+                      notifyError((err as Error).message); // 동작 실패는 알림 (TODO 209 ①)
                     }
                   }}
                 >
@@ -759,7 +796,7 @@ export default function ProjectDetail({
                     await api.archiveProject(project.id);
                     window.location.hash = backTarget(back).href;
                   } catch (err) {
-                    setError((err as Error).message);
+                    notifyError((err as Error).message); // 동작 실패는 알림 (TODO 209 ①)
                   }
                 }}
               >
@@ -789,7 +826,14 @@ export default function ProjectDetail({
             <ul>
               {project.open_feedback!.map((item) => (
                 <li key={item.id}>
-                  <a href={projectLink(project.id, { report: item.id })}>
+                  <a
+                    href={projectLink(project.id, { report: item.id })}
+                    onClick={(event) => {
+                      // 같은 주소면 hashchange 가 안 나 열리지 않는다 — 여기서 연다(편집 중이면 먼저 묻는다) (TODO 210 ⑥)
+                      event.preventDefault();
+                      void switchReport(item.id);
+                    }}
+                  >
                     {formatDate(item.report_date)}
                     {item.audience && ` · ${item.audience}`}
                   </a>
@@ -948,8 +992,14 @@ export default function ProjectDetail({
               className="ghost"
               onClick={() => {
                 if (editingOverview) {
-                  // [취소] — 쓴 것이 있으면 버릴지 묻는다 (TODO 162)
-                  if (overviewDirty && !window.confirm("저장하지 않은 개요를 버릴까요?")) return;
+                  // [취소] — 쓴 것이나 편집 중에 올린 첨부가 있으면 사실대로 묻고, 버리면 그 첨부도 지운다 (TODO 162 · 213 ⑤)
+                  const uploaded = overviewLedger.uploaded.length;
+                  if (
+                    (overviewDirty || uploaded > 0) &&
+                    !window.confirm(discardQuestion({ what: "개요를", uploaded }))
+                  )
+                    return;
+                  if (uploaded > 0) void overviewLedger.rollback((id) => api.deleteAttachment(id)).then(load);
                   dropDraft(overviewKey);
                   setOverviewRestored(false);
                   setEditingOverview(false);
@@ -968,6 +1018,7 @@ export default function ProjectDetail({
             path={`projects/${project.dir_name}/index.md`}
             onRestored={() => {
               setEditingOverview(false);
+              overviewLedger.clear(); // 되돌린 개요가 그 첨부를 쓰는지 알 수 없어 지우지 않는다
               load();
             }}
           />
@@ -1035,10 +1086,7 @@ export default function ProjectDetail({
             </div>
           </>
         ) : (
-          <div
-            className="markdown"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(project.body ?? "", base) }}
-          />
+          <MarkdownBody text={project.body ?? ""} base={base} />
         )}
       </div>
 
@@ -1060,19 +1108,25 @@ export default function ProjectDetail({
             />
             <button
               className="report"
-              disabled={!draftDate}
+              disabled={!draftDate || creatingDraft}
               onClick={async () => {
+                if (creatingDraft) return;
+                // 열린 보고를 고치던 중이면 먼저 묻는다 (TODO 211 ④)
+                if (reportGuard.current && !(await reportGuard.current())) return;
                 setReportError(null);
+                setCreatingDraft(true);
                 try {
                   const draft = await api.createDraft(project.id, draftDate);
                   setOpenReport(draft.id);
                   load();
                 } catch (err) {
                   setReportError((err as Error).message);
+                } finally {
+                  setCreatingDraft(false);
                 }
               }}
             >
-              보고 초안 만들기
+              {creatingDraft ? "만드는 중…" : "보고 초안 만들기"}
             </button>
           </div>
         </div>
@@ -1083,7 +1137,12 @@ export default function ProjectDetail({
           <ul className="report-list">
             {reports.map((report) => (
               <li key={report.id} className={report.frozen ? "frozen" : "draft"}>
-                <button className="report-open" onClick={() => setOpenReport(report.id === openReport ? null : report.id)}>
+                {/* 다른 보고로 바꾸거나 닫을 때도 [닫기] 와 같이 묻는다 (TODO 211 ④) */}
+                <button
+                  className="report-open"
+                  aria-expanded={report.id === openReport}
+                  onClick={() => void switchReport(report.id === openReport ? null : report.id)}
+                >
                   <span className="report-date">{report.report_date}</span>
                   {/* 초안의 본문 · 확정 보고의 지시사항 — 둘 다 같은 열쇠에 남는다 (TODO 207) */}
                   {hasDraft(`report:${report.id}`) && <span className="draft-waiting">작성 중</span>}
@@ -1142,6 +1201,7 @@ export default function ProjectDetail({
           }`}
           onChanged={load}
           onClose={() => setOpenReport(null)}
+          registerCloseGuard={registerReportGuard}
           onDeleted={() => {
             setOpenReport(null);
             // 주소에 지운 보고가 남아 있으면 새로고침했을 때 없는 문서를 열려 한다.
@@ -1158,6 +1218,35 @@ export default function ProjectDetail({
             첨부 자료 {files.items.length}건 · {formatBytes(files.total_bytes)}
             {files.orphan_count > 0 && (
               <span className="orphan-tag">본문에서 쓰지 않는 파일 {files.orphan_count}건</span>
+            )}
+            {files.orphan_count > 0 && (
+              <button
+                data-write
+                className="ghost small orphan-cleanup"
+                disabled={cleaning}
+                title="본문 어디에서도 쓰지 않는 첨부를 삭제 보관함으로 옮깁니다. 보고 자료는 옮기지 않습니다."
+                onClick={async () => {
+                  if (!window.confirm(`본문에서 쓰지 않는 파일 ${files.orphan_count}건을 삭제 보관함으로 옮길까요?`)) return;
+                  setCleaning(true);
+                  try {
+                    const result = await cleanupOrphans(project.id);
+                    setCleanNote(`${result.moved}건을 보관함으로 옮겼습니다`);
+                    window.setTimeout(() => setCleanNote(null), 6000);
+                    load();
+                  } catch (err) {
+                    notifyError((err as Error).message);
+                  } finally {
+                    setCleaning(false);
+                  }
+                }}
+              >
+                {cleaning ? "정리 중…" : "정리"}
+              </button>
+            )}
+            {cleanNote && (
+              <span className="hint clean-note" role="status">
+                {cleanNote}
+              </span>
             )}
           </h2>
           <button className="ghost" onClick={() => setShowFiles((value) => !value)}>
@@ -1222,10 +1311,12 @@ export default function ProjectDetail({
           dirName={project.dir_name}
           initial={{ body: entrySeed ?? project.entry_template ?? "" }}
           onCancel={() => {
+            // 편집기가 임시 기록 · 이번에 올린 첨부를 지운 **뒤에** 불린다 — 다시 읽어 수행 이력에서 빠지게 (TODO 213 ①)
             setCreatingEntry(false);
             setEntrySeed(null);
             setDraftEntryId(null);
             load();
+            onMetaChange();
           }}
           onSaved={(entry, options) => {
             if (options.close) {
@@ -1269,6 +1360,15 @@ export default function ProjectDetail({
     </section>
   );
 
+  function toggleEntry(id: number) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function renderEntry(entry: Entry, index: number) {
     return (
         editingEntryId === entry.id ? (
@@ -1302,23 +1402,27 @@ export default function ProjectDetail({
                 highlightEntryId === entry.id ? " highlight" : ""
               }${entry.tags.includes("상태변경") ? " status-change" : ""}`}
             >
-              <div
-                className="entry-head"
-                onClick={() =>
-                  setExpandedIds((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(entry.id)) next.delete(entry.id);
-                    else next.add(entry.id);
-                    return next;
-                  })
-                }
-              >
+              <div className="entry-head" onClick={() => toggleEntry(entry.id)}>
                 <div>
                   <span className="entry-date">
                     {entry.date}
                     {entry.author && <span className="entry-author">{entry.author}</span>}
                   </span>
-                  <h3>{entry.title}</h3>
+                  {/* 접고 펴기를 키보드로도 — 제목이 단추다 (TODO 212). 머리 아무 데나 눌러도 되는 것은 그대로 */}
+                  <h3>
+                    <button
+                      type="button"
+                      className="entry-fold"
+                      aria-expanded={isOpen(entry, index)}
+                      aria-controls={`entry-body-${entry.id}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleEntry(entry.id);
+                      }}
+                    >
+                      {entry.title}
+                    </button>
+                  </h3>
                   {/* 보고 여부는 기록 자체에 붙인다 (TODO 35).
                       선만으로는 "8/25 보고 뒤에 8/20 자로 쓴 기록"을 표현할 수 없다 —
                       날짜순으로는 선 아래에 놓이는데 실제로는 미보고이기 때문이다. */}
@@ -1367,10 +1471,9 @@ export default function ProjectDetail({
                 </div>
               </div>
               {isOpen(entry, index) && (
-                <div
-                  className="markdown"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.body ?? "", entryBase) }}
-                />
+                <div id={`entry-body-${entry.id}`}>
+                  <MarkdownBody text={entry.body ?? ""} base={entryBase} />
+                </div>
               )}
               {isOpen(entry, index) && (filesByEntry.get(entry.id) ?? []).length > 0 && (
                 <div className="entry-files">
@@ -1398,6 +1501,7 @@ function ReportEditorLoader({
   onClose,
   onDeleted,
   docPath,
+  registerCloseGuard,
 }: {
   reportId: number;
   dirName?: string;
@@ -1406,18 +1510,36 @@ function ReportEditorLoader({
   onClose: () => void;
   onDeleted: () => void;
   docPath?: string;
+  registerCloseGuard?: (guard: (() => Promise<boolean>) | null) => void;
 }) {
   const [report, setReport] = useState<Report | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const shown = useRef(false);
 
+  // 못 읽으면 말한다 (TODO 209 ②) — 전에는 삼켜서 보고를 눌러도 아무 일도 안 일어났다.
+  // 처음 열 때는 그 자리에 사유와 [다시 시도], 열린 뒤 다시 읽다 실패하면 알림만(편집 중인 글은 그대로).
   const reload = useCallback(() => {
-    api.getReport(reportId).then(setReport).catch(() => undefined);
+    setError(null);
+    api
+      .getReport(reportId)
+      .then((row) => {
+        shown.current = true;
+        setReport(row);
+      })
+      .catch((err: Error) => {
+        if (shown.current) notifyError(err.message);
+        else setError(err.message);
+      });
   }, [reportId]);
 
   useEffect(reload, [reload]);
 
-  if (!report) return null;
+  if (!report) return error ? <LoadError message={`보고를 열지 못했습니다 — ${error}`} onRetry={reload} /> : null;
   return (
     <ReportEditor
+      // 보고마다 새로 세운다 — 앞 보고의 장부 · 저장 표시가 다음 보고로 새지 않게 (TODO 213)
+      key={report.id}
+      registerCloseGuard={registerCloseGuard}
       report={report}
       dirName={dirName}
       audiences={audiences}
@@ -1431,6 +1553,30 @@ function ReportEditorLoader({
     />
   );
 }
+
+/**
+ * 본문에서 쓰지 않는 첨부를 보관함으로 (TODO 204 · 197). api.ts 에 아직 없어 같은 규칙(오류 문구 · 연결 실패)으로 여기서 부른다.
+ * 404 — 없는 과제, 423 — 다른 프로그램이 파일을 쓰는 중. 보고 자료는 서버가 옮기지 않는다.
+ */
+async function cleanupOrphans(projectId: string): Promise<{ moved: number; names: string[] }> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/attachments/cleanup`, { method: "POST" });
+  } catch {
+    throw new Error(OFFLINE_MESSAGE);
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(errorText(response.status, body));
+  }
+  return (await response.json()) as { moved: number; names: string[] };
+}
+
+/** 마크다운 본문 — 변환은 글이 바뀔 때만 (TODO 212). 개요를 치거나 이 과제에서 찾을 때 기록 100건을 매번 다시 바꾸지 않게. */
+const MarkdownBody = memo(function MarkdownBody({ text, base }: { text: string; base?: string }) {
+  const html = useMemo(() => renderMarkdown(text, base), [text, base]);
+  return <div className="markdown" dangerouslySetInnerHTML={{ __html: html }} />;
+});
 
 /** 단계 칸 머리의 연도 — 그 단계 과제들의 시작 ~ 끝 연도 (TODO 176) */
 function stageYears(items: { start_date?: string | null; end_date?: string | null; missing?: boolean }[]): string {

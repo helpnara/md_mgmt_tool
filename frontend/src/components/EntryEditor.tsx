@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { attempt } from "../notify";
-import { dropDraft, loadDraft, useDraftKeeper, useUnsaved } from "../unsaved";
+import { attempt, notifyError } from "../notify";
+import { clockNow, discardQuestion, dropDraft, loadDraft, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
 import { filesBase, renderMarkdown } from "../markdown";
 import VersionPanel from "./VersionPanel";
 import type { Entry } from "../types";
@@ -66,9 +66,22 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
     () => localStorage.getItem(AUTOSAVE_PREF_KEY) === "on",
   );
   const [dirty, setDirty] = useState(false);
-  // 떠날 때 묻는다 (TODO 162) — 임시 보관은 이 편집기가 처음부터 해 왔다
-  useUnsaved(`entry:${initial?.id ?? `new-${projectId}`}`, dirty);
-  const [savedAt, setSavedAt] = useState<string | null>(null);
+  // 편집 한 번의 장부 (TODO 213) — 이번에 올린 첨부 · 지우기로 한 첨부(첨부 번호)
+  const ledger = useEditLedger<number>();
+  // 첨부를 올리느라 먼저 만든 새 기록 — [저장](또는 켜 둔 자동 저장)이 한 번 돌기 전까지는 **임시**다.
+  // [닫기] → 버리기면 이 기록도 지운다(삭제 보관함으로). ref 는 비동기 저장 · 버리기가 최신 값을 보게.
+  const [provisionalId, setProvisionalId] = useState<number | null>(null);
+  const provisionalRef = useRef<number | null>(null);
+  const setProvisional = (id: number | null) => {
+    provisionalRef.current = id;
+    setProvisionalId(id);
+  };
+  // 떠날 때 묻는다 (TODO 162) — 임시 보관은 이 편집기가 처음부터 해 왔다.
+  // 장부가 비어 있지 않아도 묻는다. 다만 떠날 때는 **지우지 않는다** — 임시 보관이 남아 다시 이어 쓰므로(TODO 213 의 남는 것).
+  useUnsaved(`entry:${initial?.id ?? `new-${projectId}`}`, dirty || !ledger.empty || provisionalId !== null);
+  // 이 편집에서 마지막으로 저장한 때 — 버릴 때 "마지막 (자동) 저장 이후" 로 묻는다 (TODO 213 ④)
+  const [lastSave, setLastSave] = useState<{ at: string; auto: boolean } | null>(null);
+  const [discarding, setDiscarding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
@@ -126,8 +139,12 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
   // 자동 저장으로 새 기록이 생긴 뒤에는 그 번호로 남긴다 — 다시 열 때 새 기록으로 한 번 더 생기지 않게
   useDraftKeeper(draftKey(projectId, entryId), { date, title, body, tags }, !dirty);
 
+  /**
+   * 저장. `origin` — "user"([저장] · Ctrl+S) · "auto"(켜 둔 자동 저장) · "attach"(첨부를 올리려고 기록 번호가 필요할 때).
+   * "attach" 로 새 기록이 생기면 그 기록은 임시다 — 장부를 확정하지 않는다 (TODO 213 ①).
+   */
   const save = useCallback(
-    async (options: { close: boolean }): Promise<Entry> => {
+    async (options: { close: boolean }, origin: "user" | "auto" | "attach" = "user"): Promise<Entry> => {
       const current = stateRef.current;
       const payload = {
         date: current.date,
@@ -138,26 +155,39 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           .map((tag) => tag.trim())
           .filter(Boolean),
       };
+      const created = !current.entryId;
       const entry = current.entryId
         ? await api.updateEntry(current.entryId, payload)
         : await api.createEntry(projectId, payload);
+      stateRef.current = { ...stateRef.current, entryId: entry.id };
       setEntryId(entry.id);
+      if (origin === "attach") {
+        if (created) setProvisional(entry.id);
+      } else {
+        // 사용자가 저장했다 — 임시 기록은 이제 진짜 기록이고, 이번에 올린 첨부도 저장된 것이다.
+        // 지우기로 한 첨부는 **지금** 지운다 (TODO 213 ③).
+        setProvisional(null);
+        await ledger.commit((id) => api.deleteAttachment(id));
+        setLastSave({ at: clockNow(), auto: origin === "auto" });
+      }
       setDirty(false);
       setRestored(false);
-      setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }));
       dropDraft(draftKey(projectId, initial?.id ?? null));
       dropDraft(draftKey(projectId, entry.id));
       onSaved(entry, options);
+      if (origin !== "attach" && entry.id) refreshAttachments(entry.id);
       return entry;
     },
-    [projectId, initial?.id, onSaved],
+    // ledger 의 함수는 ref 를 보므로 렌더마다 바뀌어도 같다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectId, initial?.id, onSaved, refreshAttachments],
   );
 
   // 자동 저장: 입력이 멈추고 10초 뒤에 저장한다.
   useEffect(() => {
     if (!autosave || !dirty) return;
     const timer = window.setTimeout(() => {
-      save({ close: false }).catch((err: Error) => setError(err.message));
+      save({ close: false }, "auto").catch((err: Error) => setError(err.message));
     }, AUTOSAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [autosave, dirty, date, title, body, tags, save]);
@@ -193,11 +223,53 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
     markDirty();
   }
 
-  /** 첨부는 진행일지에 붙으므로, 아직 저장 전이면 먼저 기록을 만든다. */
+  /**
+   * 첨부는 진행일지에 붙으므로, 아직 저장 전이면 먼저 기록을 만든다.
+   * 그 기록은 [저장] 전까지 임시다 — [닫기] 로 버리면 지운다 (TODO 213 ①).
+   */
   async function ensureEntryId(): Promise<number> {
     if (stateRef.current.entryId) return stateRef.current.entryId;
-    const entry = await save({ close: false });
+    const entry = await save({ close: false }, "attach");
     return entry.id;
+  }
+
+  /**
+   * [닫기] — "닫으면 아무것도 바뀌지 않는다" (TODO 213). 쓴 것이 있거나 이 편집에서 서버에 먼저 쓴 것이 있으면
+   * 사실대로 묻고, 버리기로 하면 이번에 올린 첨부와 임시 기록을 지운다(삭제 보관함으로). 지우기로 한 첨부는 그대로 둔다.
+   */
+  async function discard() {
+    const provisional = provisionalRef.current;
+    const ask = dirty || !ledger.empty || provisional !== null;
+    if (
+      ask &&
+      !window.confirm(
+        discardQuestion({
+          what: "기록을",
+          savedAt: lastSave?.at,
+          auto: lastSave?.auto,
+          createdEntry: provisional !== null,
+          uploaded: ledger.uploaded.length,
+          doomed: ledger.doomedExisting.length,
+        }),
+      )
+    )
+      return;
+    setDiscarding(true);
+    // 올리는 중인 것은 멈춘다 — 다 올라온 뒤에 남지 않게
+    for (const upload of uploads) if (!upload.error) upload.abort();
+    await ledger.rollback((id) => api.deleteAttachment(id));
+    if (provisional !== null) {
+      try {
+        await api.deleteEntry(provisional);
+      } catch (err) {
+        notifyError(`먼저 만든 기록을 지우지 못했습니다 — ${(err as Error).message}`);
+      }
+      setProvisional(null);
+    }
+    dropDraft(draftKey(projectId, entryId));
+    dropDraft(draftKey(projectId, initial?.id ?? null));
+    setDiscarding(false);
+    onCancel();
   }
 
   async function handleFiles(files: File[]) {
@@ -240,6 +312,8 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
 
       try {
         const saved = await handle.promise;
+        // 이번 편집에서 올린 것 — 버리면 지운다. 같은 파일이 이미 있어 그것을 돌려받았으면(deduplicated) 남의 것이라 적지 않는다
+        if (!saved.deduplicated) ledger.addUploaded(saved.id);
         setBody((prev) => prev.replace(placeholder, saved.markdown));
         setUploads((prev) => prev.filter((item) => item.key !== key));
         refreshAttachments(targetId);
@@ -263,7 +337,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
         // 문서 편집기 습관대로 Ctrl+S 로 저장한다 (브라우저 저장 창은 막는다).
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
           event.preventDefault();
-          void save({ close: false }).catch((err: Error) => setError(err.message));
+          if (!busy && !discarding) void save({ close: false }).catch((err: Error) => setError(err.message));
         }
       }}
       onDragOver={(event) => event.preventDefault()}
@@ -416,18 +490,25 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
             />
           </div>
         </div>
+        {/* 편집기 안의 [삭제] 는 "지울 예정" 으로만 — 실제 삭제는 [저장] 때, 버리면 아무 일도 없다 (TODO 213 ③) */}
         <AttachmentList
           attachments={attachments}
           onInsert={(attachment) => insertAtCursor(`\n${attachment.markdown}\n`)}
-          onDelete={async (attachment) => {
-            if (!window.confirm(`${attachment.orig_name} 을(를) 삭제 보관함으로 옮길까요?`)) return;
-            if (!(await attempt(() => api.deleteAttachment(attachment.id)))) return;
-            if (entryId) refreshAttachments(entryId);
-          }}
+          pending={(attachment) => ledger.isDoomed(attachment.id)}
+          onDelete={(attachment) => ledger.toggleDoomed(attachment.id)}
+          onRestore={(attachment) => ledger.toggleDoomed(attachment.id)}
         />
+        {ledger.doomed.length > 0 && (
+          <p className="hint pending-note">지울 예정인 첨부 {ledger.doomed.length}건은 [저장] 할 때 삭제 보관함으로 옮깁니다.</p>
+        )}
       </div>
 
       {restored && <p className="hint restored">저장하지 않은 작성 중 내용을 복구했습니다.</p>}
+      {provisionalId !== null && (
+        <p className="hint provisional-note">
+          첨부를 올리려고 기록을 먼저 만들었습니다 — [저장] 하지 않고 닫으면 이 기록과 이번에 올린 첨부를 지웁니다.
+        </p>
+      )}
       {error && (
         <p className="form-error">
           {error}
@@ -457,7 +538,11 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           자동 저장 (입력이 멈추면 10초 뒤)
         </label>
         <span className="muted save-state">
-          {dirty ? "저장 안 됨" : savedAt ? `${savedAt} 저장됨` : ""}
+          {dirty || !ledger.empty || provisionalId !== null
+            ? "저장 안 됨"
+            : lastSave
+              ? `${lastSave.at} ${lastSave.auto ? "자동 저장됨" : "저장됨"}`
+              : ""}
         </span>
         <div className="form-actions">
           {docPath && (
@@ -473,22 +558,18 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           <button
             type="button"
             className="ghost"
-            onClick={() => {
-              // 쓴 것이 있으면 버릴지 묻는다 — 다른 편집기와 같게 (TODO 170)
-              if (dirty && !window.confirm("저장하지 않은 기록을 버릴까요?")) return;
-              dropDraft(draftKey(projectId, entryId));
-              onCancel();
-            }}
+            disabled={discarding}
+            onClick={() => void discard()}
           >
-            닫기
+            {discarding ? "지우는 중…" : "닫기"}
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || discarding}
             onClick={async () => {
               setBusy(true);
               try {
-                await save({ close: true });
+                await save({ close: true }, "user");
               } catch (err) {
                 setError((err as Error).message);
               } finally {

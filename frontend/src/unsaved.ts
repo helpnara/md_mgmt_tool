@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { notifyError } from "./notify";
 
 /**
  * 저장하지 않은 편집 (TODO 162).
@@ -238,4 +239,111 @@ export async function migrateBrowserDrafts(): Promise<void> {
 export function useFormUnsaved(key: string, current: unknown, busy: boolean): void {
   const [initial] = useState(() => JSON.stringify(current));
   useUnsaved(key, !busy && JSON.stringify(current) !== initial);
+}
+
+// ── 편집 한 번의 장부 (TODO 213) ──────────────────────────────────────────
+// 편집기 안의 몇몇 동작(첨부 · 붙여넣은 그림 · 첨부 삭제)은 [저장] 을 기다리지 않고 바로 서버에 쓴다. [닫기] → 버리기가
+// 그것을 모르면 "버렸는데 남는다"(사용자 제보). 편집기가 열린 동안 바로 쓴 것을 여기에 적어 두고 —
+//   · 이번에 올린 첨부(uploaded) — 버리면 지운다(삭제 보관함으로)
+//   · 지우기로 한 첨부(doomed)   — [저장] 할 때 지운다. 버리면 아무 일도 없다
+// 메뉴 이동 · 창 닫기로 떠날 때(useUnsaved 의 "떠날까요?")는 지우지 않는다 — 임시 보관(draft)이 남아 다시 이어 쓰므로,
+// 그 글이 가리키는 첨부도 남아야 한다(TODO 213 의 남는 것).
+
+export interface EditLedger<K> {
+  uploaded: K[];
+  doomed: K[];
+  /** 지우기로 한 것 중 이번에 올린 것이 아닌 것 — 버리면 "그대로 남는" 것 */
+  doomedExisting: K[];
+  /** 장부가 비었나 — 비어 있지 않으면 쓴 글이 그대로여도 [닫기] 가 묻는다 */
+  empty: boolean;
+  addUploaded: (key: K) => void;
+  /** [삭제] ↔ [되살리기] */
+  toggleDoomed: (key: K) => void;
+  isDoomed: (key: K) => boolean;
+  /** [저장] 뒤 — 지우기로 한 것을 지우고 장부를 비운다. 이번에 올린 것은 이제 저장된 것이다. */
+  commit: (remove: (key: K) => Promise<unknown>) => Promise<void>;
+  /** 버리기 — 이번에 올린 것을 지우고 장부를 비운다. 지우기로 한 것은 그대로 둔다. */
+  rollback: (remove: (key: K) => Promise<unknown>) => Promise<void>;
+  /** 아무것도 지우지 않고 비운다 — [이전 버전] 으로 되돌려 편집기가 닫힐 때처럼 */
+  clear: () => void;
+}
+
+export function useEditLedger<K extends string | number>(): EditLedger<K> {
+  const [state, setState] = useState<{ uploaded: K[]; doomed: K[] }>({ uploaded: [], doomed: [] });
+  // 비동기 저장 · 자동 저장 타이머가 최신 장부를 보게 — 값은 ref 에, 화면은 state 로
+  const ref = useRef(state);
+  const update = (next: { uploaded: K[]; doomed: K[] }) => {
+    ref.current = next;
+    setState(next);
+  };
+  const removeAll = async (keys: K[], remove: (key: K) => Promise<unknown>) => {
+    const failed: string[] = [];
+    for (const key of keys) {
+      try {
+        await remove(key);
+      } catch (err) {
+        // 이미 없으면(404) 지운 것과 같다
+        const message = (err as Error)?.message ?? "";
+        if (!message.includes("찾을 수 없")) failed.push(message);
+      }
+    }
+    if (failed.length > 0) notifyError(`첨부 ${failed.length}건을 지우지 못했습니다 — ${failed[0]}`);
+  };
+  return {
+    uploaded: state.uploaded,
+    doomed: state.doomed,
+    doomedExisting: state.doomed.filter((key) => !state.uploaded.includes(key)),
+    empty: state.uploaded.length === 0 && state.doomed.length === 0,
+    addUploaded: (key) => {
+      if (!ref.current.uploaded.includes(key)) update({ ...ref.current, uploaded: [...ref.current.uploaded, key] });
+    },
+    toggleDoomed: (key) => {
+      const doomed = ref.current.doomed.includes(key)
+        ? ref.current.doomed.filter((item) => item !== key)
+        : [...ref.current.doomed, key];
+      update({ ...ref.current, doomed });
+    },
+    isDoomed: (key) => state.doomed.includes(key),
+    commit: async (remove) => {
+      const doomed = ref.current.doomed;
+      update({ uploaded: [], doomed: [] });
+      await removeAll(doomed, remove);
+    },
+    rollback: async (remove) => {
+      const uploaded = ref.current.uploaded;
+      update({ uploaded: [], doomed: [] });
+      await removeAll(uploaded, remove);
+    },
+    clear: () => update({ uploaded: [], doomed: [] }),
+  };
+}
+
+/**
+ * [닫기] · [취소] 가 묻는 말 — 편집기마다 같은 말로, **사실대로** (TODO 213 ⑤).
+ * `what` 은 "기록을" · "개요를" 처럼 조사까지. 이 편집에서 저장한 적이 있으면 "마지막 (자동) 저장 이후" 로 묻는다 —
+ * 그 앞의 것은 이미 저장돼 버려지지 않는다.
+ */
+export function discardQuestion(options: {
+  what: string;
+  savedAt?: string | null;
+  auto?: boolean;
+  createdEntry?: boolean;
+  uploaded?: number;
+  doomed?: number;
+}): string {
+  const { what, savedAt, auto, createdEntry, uploaded = 0, doomed = 0 } = options;
+  const lines = [
+    savedAt ? `마지막 ${auto ? "자동 저장" : "저장"}(${savedAt}) 이후 고친 것을 버릴까요?` : `저장하지 않은 ${what} 버릴까요?`,
+  ];
+  if (createdEntry && uploaded > 0)
+    lines.push(`첨부를 올리느라 먼저 만든 기록과 이번에 올린 첨부 ${uploaded}건도 함께 지웁니다(삭제 보관함으로).`);
+  else if (createdEntry) lines.push("첨부를 올리느라 먼저 만든 기록도 함께 지웁니다(삭제 보관함으로).");
+  else if (uploaded > 0) lines.push(`이번에 올린 첨부 ${uploaded}건도 함께 지웁니다(삭제 보관함으로).`);
+  if (doomed > 0) lines.push(`지울 예정이던 첨부 ${doomed}건은 지우지 않고 그대로 둡니다.`);
+  return lines.join("\n");
+}
+
+/** 지금 시각 "10:42" — 저장 표시 · 묻는 말에 쓴다 */
+export function clockNow(): string {
+  return new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 }
