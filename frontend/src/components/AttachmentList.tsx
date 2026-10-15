@@ -32,8 +32,9 @@ export default function AttachmentList({ attachments, onInsert, onDelete, onPrev
             </span>
           </div>
           <div className="attachment-actions">
+            {/* GET 미리보기라 읽기 전용 공유에서도 보인다 — data-write 를 붙이지 않는다 (TODO 208) */}
             {onPreview && attachment.preview_url && (
-              <button data-write className="ghost small" onClick={() => onPreview(attachment)}>
+              <button className="ghost small" onClick={() => onPreview(attachment)}>
                 내용 보기
               </button>
             )}

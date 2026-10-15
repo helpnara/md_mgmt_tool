@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import { isReadonly } from "../readonly";
 import LoadError from "./LoadError";
 import { attempt } from "../notify";
 import { uploadAttachment } from "../upload";
@@ -358,8 +359,9 @@ export default function IntakePool({ meta, query }: Props) {
                 {data.items.map((item) => (
                   <tr key={item.id} className={item.stale ? "stale-row" : undefined} data-intake={item.id}>
                     <td className="pick-col">
-                      {item.in_pool ? (
-                        <button
+                      {/* ★ 토글은 쓰기 — 읽기 전용 공유에서는 표시만 남긴다 (TODO 208) */}
+                      {item.in_pool && !isReadonly() ? (
+                        <button data-write
                           className={`star ${item.picked ? "on" : ""}`}
                           onClick={() => togglePicked(item)}
                           title={item.picked ? "착수 후보에서 빼기" : "착수 후보로 표시"}

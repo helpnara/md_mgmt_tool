@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Dashboard as DashboardData, OpenDraft } from "../types";
 import { projectLink } from "../nav";
+import { todayIso } from "../util";
 
 const OPEN_KEY = "md-mgmt:dashboard";
 /** 리마인더를 닫은 날. 같은 날 다시 띄우지 않는다. */
@@ -103,8 +104,7 @@ interface Props {
  */
 /** 오늘 날짜 (YYYY-MM-DD). 리마인더를 "오늘 하루만" 닫아 두는 데 쓴다. */
 function today(): string {
-  const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return todayIso(); // util 과 한 가지 셈 (TODO 207)
 }
 
 export default function Dashboard({ refreshKey, filters, onFilter }: Props) {

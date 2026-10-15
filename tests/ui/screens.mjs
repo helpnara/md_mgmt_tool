@@ -16,6 +16,7 @@
  * 준비물: playwright (전역 설치면 된다), 그리고 이 저장소의 .venv
  */
 import { createRequire } from "node:module";
+import { connect as connectRelay, createServer as createRelay } from "node:net";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -97,6 +98,34 @@ async function startServer(vault, port = PORT, extra = {}) {
   console.error("서버가 뜨지 않았습니다:\n" + logs.join(""));
   server.kill();
   process.exit(2);
+}
+
+/**
+ * 팀원 PC 흉내 — 읽기 전용 공유 시험용 (TODO 191 · 206 ㉖ · 208).
+ *
+ * 서버는 **자기 인터페이스 주소(LAN IP)에서 온 요청도 주인**으로 본다(206 ㉖: 주인이 안내된 공유 주소로 열어도 쓸 수 있게).
+ * 그래서 같은 PC 의 브라우저는 어떤 주소로 열어도 "바깥" 이 될 수 없다. 여기서는 LAN 주소에서 받아 **127.0.0.2 를 보낸 쪽
+ * 주소로** 서버에 넘기는 중계를 둔다 — 127.0.0.2 는 루프백이라 어디서나 통하지만 서버 자신의 주소 목록(127.0.0.1 · LAN IP ·
+ * PC 이름)에는 없다. 브라우저는 LAN 주소(`http://192.…`)로 열므로 팀원 PC 와 같은 **비보안 컨텍스트**(clipboard API 없음)다.
+ */
+function teammateRelay(listenHost, listenPort, targetPort) {
+  const sockets = new Set();
+  const relay = createRelay((inbound) => {
+    const outbound = connectRelay({ host: "127.0.0.1", port: targetPort, localAddress: "127.0.0.2" });
+    sockets.add(inbound); sockets.add(outbound);
+    inbound.pipe(outbound).pipe(inbound);
+    const drop = () => { inbound.destroy(); outbound.destroy(); sockets.delete(inbound); sockets.delete(outbound); };
+    inbound.on("error", drop); outbound.on("error", drop); inbound.on("close", drop); outbound.on("close", drop);
+  });
+  return new Promise((resolve, reject) => {
+    relay.on("error", reject);
+    relay.listen(listenPort, listenHost, () =>
+      resolve({
+        url: `http://${listenHost}:${listenPort}`,
+        close: () => new Promise((done) => { for (const socket of sockets) socket.destroy(); relay.close(() => done()); }),
+      }),
+    );
+  });
 }
 
 const api = {
@@ -4279,7 +4308,9 @@ async function main() {
     const lan = Object.values(networkInterfaces()).flat().find((n) => n && n.family === "IPv4" && !n.internal)?.address;
     expect(lan, "바깥 주소(LAN IP)를 찾지 못했다");
     const shared = await startServer(vault, PORT + 2, { host: "0.0.0.0", env: { MD_MGMT_SHARE: "1" } });
-    const outside = `http://${lan}:${PORT + 2}`, inside = `http://127.0.0.1:${PORT + 2}`;
+    // 바깥 = 팀원 PC 흉내(중계, 보낸 쪽 127.0.0.2). LAN IP 로 곧장 가면 서버가 주인으로 본다 (206 ㉖)
+    const relay = await teammateRelay(lan, PORT + 4, PORT + 2);
+    const outside = relay.url, inside = `http://127.0.0.1:${PORT + 2}`;
     try {
       // 서버가 막는다 — 쓰기 53 갈래의 대표와 민감한 읽기
       for (const [method, path] of [["POST", "/api/projects"], ["PATCH", `/api/projects/${seeded.projectA}`], ["DELETE", `/api/projects/${seeded.projectA}`],
@@ -4312,10 +4343,145 @@ async function main() {
       equal(await page.locator(".share-chip").count(), 1, "주인에게 공유 칩");
       equal(await page.getByRole("button", { name: "과제 추가" }).count(), 1, "주인은 쓰기 단추가 있다");
     } finally {
+      await relay.close();
       shared.server.kill();
       await page.goto(`${BASE}/#/`); await page.waitForTimeout(400);
     }
   });
+
+  console.log("\n[40] 과제를 바꿔도 편집 상태가 안 샌다 · 읽기 전용 공유의 보고 편집기 · 복사 · 숨길 것과 보일 것 (TODO 207 · 208)");
+
+  // 접수 없이 만든 스마트과제 — [접수로 되돌리기] 가 서는 과제. 초안 보고 하나와 엑셀 첨부를 단다.
+  const shareMeta = await api.get("/api/meta");
+  const shareProject = await api.post("/api/projects", {
+    title: "공유 확인 과제", type: shareMeta.classified_type, body: "## 과제 개요\n\n공유 화면 확인용\n",
+  });
+  const shareDraft = await api.post(`/api/projects/${shareProject.id}/reports/draft`, { report_date: dayFromToday(5), audience: "팀 주간회의" });
+  {
+    const { execFileSync } = await import("node:child_process");
+    const sheet = join(tmpdir(), `md-mgmt-ui-${Date.now()}.xlsx`);
+    execFileSync(join(REPO, ".venv/bin/python"), ["-c",
+      "import sys, openpyxl; wb = openpyxl.Workbook(); ws = wb.active; ws.append(['항목', '값']); ws.append(['강도', 12]); wb.save(sys.argv[1])", sheet]);
+    const form = new FormData();
+    form.append("file", new Blob([await readFile(sheet)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "효과 산출.xlsx");
+    const uploaded = await fetch(`${BASE}/api/reports/${shareDraft.id}/attachments`, { method: "POST", body: form });
+    expect(uploaded.status === 201, `엑셀 업로드 ${uploaded.status}`);
+    await rm(sheet, { force: true });
+  }
+
+  await check("개요 [수정] 을 연 채 다른 과제로 가면 편집 상태가 따라오지 않는다 (207 key)", async () => {
+    await go(`#/projects/${shareProject.id}`);
+    const card = () => page.locator(".card").filter({ hasText: "과제 개요" });
+    await card().getByRole("button", { name: "수정" }).click();
+    await page.waitForTimeout(600);
+    equal(await card().locator("textarea").count(), 1, "A 에서는 편집기가 열렸다");
+    // 링크를 누른 것과 같은 길(hashchange)로 B 에 간다 — 아무것도 안 쳤으니 "떠날까요?" 도 안 뜬다
+    await go(`#/projects/${seeded.projectA}`);
+    await page.waitForTimeout(800);
+    equal(await card().locator("textarea").count(), 0, "B 의 개요에 A 의 편집기가 남아 있다");
+    equal(await card().getByRole("button", { name: "수정" }).count(), 1, "B 는 [수정] 상태(취소가 아니다)");
+    equal(await page.locator(".save-state", { hasText: "저장 안 됨" }).count(), 0, "B 에 저장 안 됨 표시가 없다");
+  });
+
+  await check("읽기 전용 공유 — 초안 보고는 스냅숏이고, 복사 · [내용 보기] · [체크리스트] 는 남고, 쓰기는 숨는다 (208)", async () => {
+    const { networkInterfaces } = await import("node:os");
+    const lan = Object.values(networkInterfaces()).flat().find((n) => n && n.family === "IPv4" && !n.internal)?.address;
+    expect(lan, "바깥 주소(LAN IP)를 찾지 못했다");
+    // 풀의 ★ 를 보려면 접수가 있어야 한다. 하나는 후보로 표시해 둔다.
+    const sharedIntake = await api.post("/api/intakes", { title: "공유 확인 접수", received_on: dayFromToday(-2) });
+    await api.patch(`/api/intakes/${encodeURIComponent(sharedIntake.id)}`, { picked: true });
+    const judged = ((await api.get("/api/intakes")).items ?? []).find((item) => !item.in_pool && item.status !== "started");
+    const shared = await startServer(vault, PORT + 3, { host: "0.0.0.0", env: { MD_MGMT_SHARE: "1" } });
+    // 바깥 = 팀원 PC 흉내(중계, 보낸 쪽 127.0.0.2) — LAN 주소로 열어 비보안 컨텍스트(clipboard API 없음)까지 같다
+    const relay = await teammateRelay(lan, PORT + 5, PORT + 3);
+    const outside = relay.url;
+    const visibleIn = (root, selector) => page.locator(root).locator(selector).evaluateAll((els) => els.filter((el) => el.getBoundingClientRect().width > 0).length);
+    const visibleButton = (root, name) => page.locator(root).getByRole("button", { name, exact: true }).evaluateAll((els) => els.filter((el) => el.getBoundingClientRect().width > 0).length);
+    try {
+      // ── 초안 보고를 연 과제 상세 ──
+      await page.goto(`${outside}/#/projects/${shareProject.id}?report=${shareDraft.id}`); await page.waitForTimeout(1500);
+      equal(await page.locator(".readonly-band").count(), 1, "읽기 전용 띠");
+      equal(await page.locator(".report-editor").count(), 1, "보고 편집기가 열린다");
+      equal(await page.locator(".report-editor textarea").count(), 0, "초안인데 본문 textarea 가 있다");
+      equal(await page.locator(".report-editor .markdown.snapshot").count(), 1, "본문은 스냅숏으로");
+      equal(await page.locator('.report-editor input[list="audience-options"]').count(), 0, "피보고자 입력 칸이 있다");
+      for (const name of ["확정 해제", "피보고자만 저장", "지시사항 저장", "답변함", "저장", "보고 확정", "삭제", "진행 내용 지우기", "📎 파일 첨부"]) {
+        equal(await visibleButton(".report-editor", name), 0, `[${name}] 가 읽기 전용에서 보인다`);
+      }
+      equal(await visibleButton(".report-editor", "엑셀 셀로 복사"), 1, "[엑셀 셀로 복사] 는 남는다");
+      equal(await visibleButton(".report-editor", "평문 복사"), 1, "[평문 복사] 는 남는다");
+      equal(await visibleButton(".report-editor .attachments", "내용 보기"), 1, "첨부 엑셀 [내용 보기] 가 보여야 한다");
+      equal(await visibleIn("body", ".draft-controls"), 0, "초안 날짜 칸 · [보고 초안 만들기] 가 남아 있다");
+      equal(await visibleButton("main", "접수로 되돌리기"), 0, "[접수로 되돌리기] 가 보인다");
+      // Ctrl+S — 아무 일도 없어야 한다 (403 toast 가 아니라). 요청이 나갔으면 pageErrors 에 403 이 쌓인다.
+      const errorsBefore = pageErrors.length;
+      await page.locator(".report-editor .markdown.snapshot").click();
+      await page.keyboard.press("Control+s");
+      await page.waitForTimeout(500);
+      equal(await page.locator(".toast, .form-error").count(), 0, "Ctrl+S 에 오류 표시가 떴다");
+      equal(pageErrors.length, errorsBefore, `Ctrl+S 가 요청을 보냈다: ${JSON.stringify(pageErrors.slice(errorsBefore))}`);
+      // 복사 — 비보안 컨텍스트(LAN 주소)라 clipboard API 가 없다. 영어 TypeError 가 아니라 복사되거나 한국어 안내여야 한다.
+      await page.locator(".report-editor").getByRole("button", { name: "엑셀 셀로 복사", exact: true }).click();
+      await page.waitForTimeout(400);
+      const copyNote = (await page.locator(".report-editor .notice, .report-editor .form-error").allInnerTexts()).join(" ");
+      expect(copyNote.includes("복사했습니다") || copyNote.includes("복사하지 못했습니다"), `복사 결과 문구: ${JSON.stringify(copyNote)}`);
+      expect(!/TypeError|undefined|Cannot read/i.test(copyNote), `영어 오류가 그대로 보인다: ${copyNote}`);
+      // AI 프롬프트 — 저장을 시도하지 않고 열리며, 설정 링크는 글자다
+      await page.locator(".report-editor").getByRole("button", { name: "AI 요약 프롬프트", exact: true }).click();
+      await page.waitForTimeout(1000);
+      equal(await page.locator(".ai-prompt").count(), 1, "AI 프롬프트 판");
+      equal(await page.locator('.ai-prompt a[href="#/settings"]').count(), 0, "AI 프롬프트의 설정 링크");
+      // [내용 보기] — GET 미리보기라 열린다
+      await page.locator(".report-editor .attachments").getByRole("button", { name: "내용 보기", exact: true }).click();
+      await page.waitForTimeout(1000);
+      equal(await page.locator(".modal-backdrop").count(), 1, "엑셀 미리보기 창");
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
+      // ── 확정된 보고 — 지시사항 칸도 글자로 ──
+      const frozenReport = (await api.get(`/api/projects/${seeded.projectA}/reports`)).find((item) => item.frozen);
+      await page.goto(`${outside}/#/projects/${seeded.projectA}?report=${frozenReport.id}`); await page.waitForTimeout(1500);
+      equal(await page.locator(".report-editor").count(), 1, "확정 보고 편집기");
+      equal(await page.locator(".report-editor textarea").count(), 0, "확정 보고에 지시사항 textarea 가 있다");
+      equal(await visibleButton(".report-editor", "확정 해제"), 0, "[확정 해제] 가 보인다");
+      // ── 표 복사 단추 (과제 목록) ──
+      await page.goto(`${outside}/#/projects`); await page.waitForTimeout(1000);
+      await page.locator(".copy-table").first().click();
+      await page.waitForTimeout(400);
+      const copyLabel = (await page.locator(".copy-table").first().innerText()).trim();
+      expect(copyLabel.includes("복사됨") || copyLabel.includes("복사하지 못했습니다"), `표 복사 단추 글자: ${copyLabel}`);
+      // ── 팀원역량 · 보고대상 · 접수 풀 · 접수 상세 ──
+      await page.goto(`${outside}/#/skills`); await page.waitForTimeout(1000);
+      equal(await page.locator('main a[href="#/settings"]').count(), 0, "팀원역량의 설정 링크");
+      await page.goto(`${outside}/#/reports`); await page.waitForTimeout(1000);
+      equal(await page.locator(".candidates th", { hasText: "담기" }).count(), 0, "[담기] 열");
+      equal(await page.locator('.candidates input[type="checkbox"][aria-label$="담기"]').count(), 0, "[담기] 체크");
+      equal(await page.getByRole("button", { name: "묶음 비우기" }).count(), 0, "[묶음 비우기]");
+      await page.goto(`${outside}/#/intakes`); await page.waitForTimeout(1000);
+      equal(await page.locator(".intake-table button.star").count(), 0, "풀의 ★ 토글이 있다");
+      expect((await page.locator(".intake-table span.star.on").count()) >= 1, "후보 표시 ★ 는 남는다");
+      await page.goto(`${outside}/#/intakes/${encodeURIComponent(sharedIntake.id)}`); await page.waitForTimeout(1000);
+      equal(await visibleButton("main", "체크리스트"), 1, "[체크리스트] 는 보여야 한다");
+      await page.getByRole("button", { name: "체크리스트", exact: true }).click();
+      await page.waitForTimeout(400);
+      equal(await page.locator(".precheck-dialog").count(), 1, "체크리스트 창");
+      expect((await page.locator(".precheck-dialog").innerText()).includes("읽기 전용 공유라"), "읽기 전용 안내");
+      equal(await visibleButton(".precheck-dialog", "저장"), 0, "체크리스트 [저장] 이 보인다");
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
+      equal(await page.locator(".precheck-dialog").count(), 0, "Esc 로 닫힌다");
+      if (judged) {
+        await page.goto(`${outside}/#/intakes/${encodeURIComponent(judged.id)}`); await page.waitForTimeout(1000);
+        equal(await visibleButton("main", "재검토 (풀로 되돌리기)"), 0, "[재검토] 가 보인다");
+      }
+    } finally {
+      await relay.close();
+      shared.server.kill();
+      await page.goto(`${BASE}/#/`); await page.waitForTimeout(400);
+      await fetch(`${BASE}/api/intakes/${encodeURIComponent(sharedIntake.id)}/archive`, { method: "POST" }).catch(() => undefined);
+    }
+  });
+
+  await fetch(`${BASE}/api/projects/${shareProject.id}/archive`, { method: "POST" });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {

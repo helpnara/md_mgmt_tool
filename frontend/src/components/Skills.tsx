@@ -31,7 +31,7 @@ function won(value: number): string {
 }
 
 export default function Skills({ meta, query }: { meta: Meta; query: string }) {
-  const readonly = isReadonly(); // 읽기 전용 공유 (191) — 면담 칸 · 면담 열을 뺀다
+  const readonly = isReadonly(); // 읽기 전용 공유 (191) — 면담 칸 · 면담 열을 뺀다. 설정 링크는 글자로 (208)
   const initial = useMemo(() => new URLSearchParams(query), [query]);
   const [year, setYear] = useState(initial.get("year") ?? THIS_YEAR);
   // 어디서 왔는지 (TODO 128). 조건이 아니라 돌아갈 곳이다.
@@ -255,7 +255,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             알려 주지 않는 화면이다 (TODO 84). 이름이 먼저라는 것을 적어 준다. */}
         {summary.people.length === 0 && (
           <p className="empty">
-            아직 이름이 없습니다. <a href="#/settings">설정 → 담당자 명부</a> 에 팀원을 넣어 두면
+            아직 이름이 없습니다. {readonly ? <b>설정 → 담당자 명부</b> : <a href="#/settings">설정 → 담당자 명부</a>} 에 팀원을 넣어 두면
             기록이 없는 사람도 이 표에 서고, 그 빈칸이 곧 면담에서 꺼낼 이야깃거리가 됩니다.
             {" "}명부 없이 <b>[기록 추가]</b> 로 바로 시작해도 됩니다.
           </p>
@@ -263,7 +263,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         {glued.length > 0 && (
           <p className="hint warn-text">
             <b>{glued.map((item) => item.name).join(", ")}</b> 처럼 한 칸에 여러 이름이 든 줄이 있습니다.
-            실제로는 없는 사람이므로 <a href="#/settings">설정 → 담당자 명부</a> 에서{" "}
+            실제로는 없는 사람이므로 {readonly ? <b>설정 → 담당자 명부</b> : <a href="#/settings">설정 → 담당자 명부</a>} 에서{" "}
             <b>[사람별로 나누기]</b> 를 누르고 <b>[명부 저장]</b> 하시면 사라집니다.
           </p>
         )}

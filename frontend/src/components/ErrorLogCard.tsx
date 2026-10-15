@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
 import { copyAsPlainText } from "../plaintext";
+import { COPY_FAILED } from "../clipboard";
 import type { ErrorEntry } from "../types";
 import { formatDateTime } from "../util";
 
@@ -46,13 +47,13 @@ export default function ErrorLogCard() {
   }
 
   async function copy() {
-    try {
-      await copyAsPlainText(asText());
-      setNotice("복사했습니다. 그대로 붙여 넣어 물어보시면 됩니다.");
-      window.setTimeout(() => setNotice(null), 4000);
-    } catch (err) {
-      setError((err as Error).message);
+    // 비보안 컨텍스트에서도 영어 TypeError 가 아니라 한국어 안내 (TODO 208)
+    if (!(await copyAsPlainText(asText()))) {
+      setError(COPY_FAILED);
+      return;
     }
+    setNotice("복사했습니다. 그대로 붙여 넣어 물어보시면 됩니다.");
+    window.setTimeout(() => setNotice(null), 4000);
   }
 
   return (

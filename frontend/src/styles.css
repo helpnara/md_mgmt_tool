@@ -1407,6 +1407,11 @@ h2 .copy-table, h1 .copy-table { margin-left: 10px; vertical-align: middle; }
 .feedback-state.done { color: var(--muted-strong); }
 .feedback-text { width: 100%; min-height: 64px; font: inherit; font-size: 13px; resize: vertical; }
 .feedback-actions { margin-top: 6px; justify-content: flex-start; }
+/* 읽기 전용 공유 (TODO 208) — 지시사항은 칸 대신 글로, 피보고자도 글로 */
+p.feedback-text.snapshot-text { min-height: 0; margin: 0; white-space: pre-wrap; }
+.report-meta .audience-text { display: block; padding: 6px 0; font-size: 14px; }
+/* 복사 실패 — 비보안 컨텍스트에서 폴백도 안 될 때 "선택해서 Ctrl+C" 안내가 단추 글자가 된다 (TODO 208) */
+.copy-table.fail { border-color: var(--warn); color: var(--warn); white-space: normal; text-align: left; }
 
 /* 과제 위쪽의 "답하지 않은 지시" 띠 — 번호 연도 안내(.year-fix)와 같은 무게 */
 .feedback-band {

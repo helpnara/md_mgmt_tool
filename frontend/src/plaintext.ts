@@ -1,3 +1,5 @@
+import { copyRich, copyText } from "./clipboard";
+
 /**
  * 마크다운을 엑셀 셀에 붙여넣기 좋은 평문으로 바꾼다.
  * 보고서는 셀 한 칸에 여러 줄로 넣으므로 줄바꿈을 살리는 것이 핵심이다.
@@ -62,25 +64,16 @@ function escapeHtml(text: string): string {
 /**
  * 엑셀 "한 칸"에 줄바꿈을 유지한 채 붙여넣기.
  * 엑셀은 클립보드의 HTML 플레이버를 우선 인식하므로 표 한 칸으로 감싸 보낸다.
+ * 비보안 컨텍스트(공유 주소)에서는 평문 폴백으로 넣는다 — 실패하면 false (TODO 208).
  */
-export async function copyAsExcelCell(text: string): Promise<void> {
+export function copyAsExcelCell(text: string): Promise<boolean> {
   const html = `<table><tr><td>${escapeHtml(text).replace(/\n/g, "<br>")}</td></tr></table>`;
   // RFC4180 규칙: 전체를 큰따옴표로 감싸면 내부 줄바꿈도 한 셀로 들어간다.
   const plain = `"${text.replace(/"/g, '""')}"`;
-
-  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        "text/html": new Blob([html], { type: "text/html" }),
-        "text/plain": new Blob([plain], { type: "text/plain" }),
-      }),
-    ]);
-    return;
-  }
-  await navigator.clipboard.writeText(plain);
+  return copyRich(html, plain);
 }
 
-/** 메모장·메일 등 어디에나 붙여넣을 수 있는 그대로의 평문 복사. */
-export async function copyAsPlainText(text: string): Promise<void> {
-  await navigator.clipboard.writeText(text);
+/** 메모장·메일 등 어디에나 붙여넣을 수 있는 그대로의 평문 복사. 실패하면 false (TODO 208). */
+export function copyAsPlainText(text: string): Promise<boolean> {
+  return copyText(text);
 }

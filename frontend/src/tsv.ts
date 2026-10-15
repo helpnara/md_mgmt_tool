@@ -7,15 +7,18 @@
  *
  * 셀 안의 탭·줄바꿈은 공백으로 눌러 한 줄로 만든다. 표 복사의 목적은 "한 줄에 한 과제" 다.
  */
+import { copyText } from "./clipboard";
+
 export function toTsv(headers: string[], rows: (string | number | null | undefined)[][]): string {
   const cell = (value: string | number | null | undefined) =>
     String(value ?? "").replace(/[\t\r\n]+/g, " ").trim();
   return [headers, ...rows].map((row) => row.map(cell).join("\t")).join("\n") + "\n";
 }
 
-export async function copyTsv(
+/** 표를 클립보드에 넣는다. 비보안 컨텍스트(공유 주소)에서도 폴백으로 된다 — 실패하면 false (TODO 208). */
+export function copyTsv(
   headers: string[],
   rows: (string | number | null | undefined)[][],
-): Promise<void> {
-  await navigator.clipboard.writeText(toTsv(headers, rows));
+): Promise<boolean> {
+  return copyText(toTsv(headers, rows));
 }

@@ -3,6 +3,7 @@ import { api } from "../api";
 import { filesBase, renderMarkdown } from "../markdown";
 import { backTarget, intakeBackLink, listLink, projectLink, screenLink, setPageTitle } from "../nav";
 import { attempt, notifyError } from "../notify";
+import { isReadonly } from "../readonly";
 import { dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useUnsaved } from "../unsaved";
 import type { DemotePlan, Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
@@ -546,7 +547,7 @@ export default function ProjectDetail({
             </button>
             {/* 접수를 거치지 않고 만든 스마트과제를 풀로 (TODO 171) — 무엇이 어디로 가는지 판에서 먼저 보인다 */}
             {(project.intakes ?? []).length === 0 && project.type === meta.classified_type && (
-              <button
+              <button data-write // 쓰기 — 읽기 전용 공유에서는 숨긴다 (TODO 208)
                 className={demotePlan ? "ghost on" : "ghost"}
                 title="이 과제를 접수로 되돌려 풀에서 검토 · 사전점검 · 판정을 받게 합니다"
                 onClick={async () => {
@@ -980,10 +981,10 @@ export default function ProjectDetail({
                 value={overviewDraft}
                 onChange={(event) => setOverviewDraft(event.target.value)}
                 onKeyDown={(event) => {
-                  // 다른 편집기와 같이 Ctrl+S 로 저장 (TODO 162)
+                  // 다른 편집기와 같이 Ctrl+S 로 저장 (TODO 162). 읽기 전용 공유에서는 403 toast 대신 아무 일도 (208)
                   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
                     event.preventDefault();
-                    void saveOverview();
+                    if (!isReadonly()) void saveOverview();
                   }
                 }}
                 onPaste={(event) =>
@@ -1049,7 +1050,8 @@ export default function ProjectDetail({
               <span className="muted"> · 마지막 보고 {formatDate(project.last_reported_at)}</span>
             )}
           </h2>
-          <div className="draft-controls">
+          {/* 초안 만들기는 쓰기 — 읽기 전용 공유에서는 날짜 칸만 덩그러니 남지 않게 묶음째 숨긴다 (TODO 208) */}
+          <div className="draft-controls" data-write>
             <input
               type="date"
               value={draftDate}
@@ -1083,7 +1085,8 @@ export default function ProjectDetail({
               <li key={report.id} className={report.frozen ? "frozen" : "draft"}>
                 <button className="report-open" onClick={() => setOpenReport(report.id === openReport ? null : report.id)}>
                   <span className="report-date">{report.report_date}</span>
-                  {!report.frozen && hasDraft(`report:${report.id}`) && <span className="draft-waiting">작성 중</span>}
+                  {/* 초안의 본문 · 확정 보고의 지시사항 — 둘 다 같은 열쇠에 남는다 (TODO 207) */}
+                  {hasDraft(`report:${report.id}`) && <span className="draft-waiting">작성 중</span>}
                   {report.audience ? (
                     <span className="report-audience" title={report.audience}>{report.audience}</span>
                   ) : (

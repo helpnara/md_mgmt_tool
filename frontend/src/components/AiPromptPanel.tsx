@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { copyAsPlainText } from "../plaintext";
+import { COPY_FAILED } from "../clipboard";
+import { isReadonly } from "../readonly";
 
 /**
  * AI 에게 넘길 글을 **먼저 보여 주고** 복사하게 한다 (TODO 71).
@@ -24,13 +26,14 @@ export default function AiPromptPanel({ reportId }: { reportId: number }) {
 
   async function copy() {
     if (!text) return;
-    try {
-      await copyAsPlainText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 3000);
-    } catch {
-      setError("복사하지 못했습니다. 아래 글을 직접 선택해 복사하세요.");
+    // 공유 주소(비보안 컨텍스트)에서는 폴백으로 넣고, 그래도 안 되면 한국어로 안내한다 (TODO 208)
+    if (!(await copyAsPlainText(text))) {
+      setError(COPY_FAILED);
+      return;
     }
+    setError(null);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 3000);
   }
 
   return (
@@ -51,7 +54,9 @@ export default function AiPromptPanel({ reportId }: { reportId: number }) {
         <textarea className="ai-prompt-box" value={text ?? ""} readOnly spellCheck={false} />
       )}
       <p className="hint">
-        앞뒤에 붙는 글은 <a href="#/settings">설정 → AI 요약 프롬프트</a>에서 바꿉니다.
+        {/* 읽기 전용 공유에서 설정 주소는 막다른 안내 페이지다 — 글자로만 (TODO 208) */}
+        앞뒤에 붙는 글은 {isReadonly() ? <b>설정 → AI 요약 프롬프트</b> : <a href="#/settings">설정 → AI 요약 프롬프트</a>}에서
+        바꿉니다{isReadonly() && " (서버 PC 에서)"}.
       </p>
     </div>
   );

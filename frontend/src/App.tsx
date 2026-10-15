@@ -307,7 +307,9 @@ export default function App() {
         {/* 화면 하나가 그리다 멈춰도 메뉴는 살아 있게 (TODO 166) */}
         <ErrorBoundary resetKey={screenKey}>
         {route.name === "project" && (
+          // 과제가 바뀌면 부품을 새로 세운다 — 열어 둔 편집 상태가 다른 과제로 새지 않게 (TODO 207, 접수 상세와 같이)
           <ProjectDetail
+            key={route.id}
             projectId={route.id}
             meta={meta}
             onMetaChange={loadMeta}

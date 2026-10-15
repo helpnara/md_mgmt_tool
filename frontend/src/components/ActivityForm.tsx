@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { Activity, Meta } from "../types";
 import { splitPeople } from "../people";
 import { useFormUnsaved } from "../unsaved";
+import { todayIso } from "../util";
 
 /**
  * 역량 이력 한 건을 쓰는 자리 (TODO 72 · 74).
@@ -27,7 +28,7 @@ export default function ActivityForm({
   onSaved: (message: string) => void;
 }) {
   const editing = activity !== null;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso(); // 이 PC 의 오늘 — UTC 로 하면 오전 9시 전엔 어제다 (TODO 207)
   const [person, setPerson] = useState(activity?.person ?? "");
   const [date, setDate] = useState(activity?.date ?? today);
   const [endDate, setEndDate] = useState(activity?.end_date ?? "");

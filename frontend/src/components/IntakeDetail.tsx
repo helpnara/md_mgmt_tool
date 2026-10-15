@@ -224,7 +224,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
               </>
             ) : (
               intake.status !== "started" && (
-                <button
+                <button data-write // 쓰기 — 읽기 전용 공유에서는 숨긴다 (TODO 208)
                   className="ghost"
                   onClick={() => {
                     if (window.confirm("풀로 되돌려 다시 검토할까요? 지난 판정은 검토 기록에 남습니다."))
@@ -255,7 +255,8 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
               ) : (
                 <span className="muted">미평가</span>
               )}
-              <button data-write className="ghost small" onClick={() => setPrechecking(true)}>
+              {/* 읽기 전용 공유에서도 보인다 — 점수의 근거를 보는 창이고, 창 자체가 읽기 전용으로 열린다 (TODO 208) */}
+              <button className="ghost small" onClick={() => setPrechecking(true)}>
                 체크리스트
               </button>
             </dd>

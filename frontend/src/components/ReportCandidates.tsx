@@ -6,6 +6,7 @@ import TotalRow from "./TotalRow";
 import { backTarget, projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
+import { isReadonly } from "../readonly";
 import StatusBadge from "./StatusBadge";
 import CopyTableButton from "./CopyTableButton";
 import StageBand from "./StageBand";
@@ -30,6 +31,8 @@ interface Props {
 }
 
 export default function ReportCandidates({ meta, query }: Props) {
+  // 읽기 전용 공유 (TODO 208) — [담기] · [묶음 비우기] 는 이 브라우저 안의 일이라 뺀다
+  const readonly = isReadonly();
   const initial = new URLSearchParams(query);
   // 어디서 왔는지 (TODO 128). 거르는 조건이 아니라 **돌아갈 곳**이라 서버로 보내지 않고,
   // 조건을 바꿔도 주소에 남아 있어야 한다.
@@ -273,7 +276,8 @@ export default function ReportCandidates({ meta, query }: Props) {
       <div className="card picked">
         <div className="card-head">
           <h2>이번 주 보고 묶음 ({picked.length})</h2>
-          {picks.length > 0 && (
+          {/* 묶음은 이 브라우저의 localStorage 뿐이다 — 읽기 전용 공유에서 담아 봐야 팀장 PC 에는 없다. 헷갈리지 않게 뺀다 (TODO 208) */}
+          {picks.length > 0 && !readonly && (
             <button
               className="ghost"
               onClick={() => {
@@ -309,7 +313,7 @@ export default function ReportCandidates({ meta, query }: Props) {
       <table className="grid">
         <thead>
           <tr>
-            <th className="pick-col">담기</th>
+            {!readonly && <th className="pick-col">담기</th>}
             <SortHeader sortKey="title" current={sortState} onSort={onSort}>과제</SortHeader>
             <SortHeader sortKey="status" current={sortState} onSort={onSort}>상태</SortHeader>
             <SortHeader sortKey="last_reported_at" current={sortState} onSort={onSort}>
@@ -328,14 +332,16 @@ export default function ReportCandidates({ meta, query }: Props) {
         <tbody>
           {items.map((item) => (
             <tr key={item.id} className={picks.includes(item.id) ? "picked-row" : undefined}>
-              <td className="pick-col">
-                <input
-                  type="checkbox"
-                  checked={picks.includes(item.id)}
-                  onChange={() => togglePick(item.id)}
-                  aria-label={`${item.title} 담기`}
-                />
-              </td>
+              {!readonly && (
+                <td className="pick-col">
+                  <input
+                    type="checkbox"
+                    checked={picks.includes(item.id)}
+                    onChange={() => togglePick(item.id)}
+                    aria-label={`${item.title} 담기`}
+                  />
+                </td>
+              )}
               <td>
                 <a className="plain-link" href={projectLink(item.id)}>
                   <span className="project-id">{item.id}</span>
@@ -400,7 +406,7 @@ export default function ReportCandidates({ meta, query }: Props) {
           ))}
           {items.length === 0 && (
             <tr>
-              <td colSpan={8} className="empty">
+              <td colSpan={readonly ? 7 : 8} className="empty">
                 보고 후보가 없습니다.
               </td>
             </tr>
@@ -410,7 +416,7 @@ export default function ReportCandidates({ meta, query }: Props) {
         {items.length > 0 && (
           <TotalRow
             label={`합계 (${items.length}건)`}
-            span={2}
+            span={readonly ? 1 : 2}
             cells={[null, null, null, null, cellCount(sumBy(items, (item) => item.unreported_entries), "건"), ""]}
           />
         )}

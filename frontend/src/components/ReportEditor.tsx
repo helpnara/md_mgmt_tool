@@ -4,6 +4,8 @@ import { attempt } from "../notify";
 import { dropDraft, loadDraft, useDraftKeeper, useUnsaved } from "../unsaved";
 import { filesBase, renderMarkdown } from "../markdown";
 import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
+import { COPY_FAILED } from "../clipboard";
+import { isReadonly } from "../readonly";
 import type { Report } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
@@ -73,6 +75,10 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
 
   const base = filesBase(dirName, report.doc_dir);
   const frozen = report.frozen;
+  // 읽기 전용 공유 (TODO 208) — 초안이라도 확정본처럼 **스냅숏**으로 보인다. 고치는 칸 · 저장 · 확정 해제 · 지시사항이 없고
+  // Ctrl+S 도 아무 일도 하지 않는다. 복사 단추는 남는다 — 공유의 쓸모가 그것이다.
+  const readonly = isReadonly();
+  const editable = !frozen && !readonly;
 
   const refresh = useCallback(() => {
     api.listReportAttachments(report.id).then(setAttachments).catch(() => undefined);
@@ -83,10 +89,12 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   // 쓰던 보고 — 떠날 때 묻고, 임시 보관한다 (TODO 162). 확정된 보고는 본문을 고칠 수 없으니 빼고.
   const draftKey = `report:${report.id}`;
   const [restored, setRestored] = useState(false);
-  useUnsaved(draftKey, !frozen && (dirty || feedbackDirty));
-  useDraftKeeper(frozen ? null : draftKey, body, body === (report.body ?? ""));
+  // 지시사항 칸은 **확정된 보고에만** 있다 — 떠남 경고를 `!frozen` 에 묶어 두니 절대 안 떴다 (TODO 207).
+  // 읽기 전용 공유에서는 고칠 칸이 없으니 묻지 않는다 (208).
+  useUnsaved(draftKey, !readonly && (frozen ? feedbackDirty : dirty));
+  useDraftKeeper(editable ? draftKey : null, body, body === (report.body ?? ""));
   useEffect(() => {
-    if (frozen) return;
+    if (!editable) return;
     let alive = true;
     const original = report.body ?? "";
     void loadDraft<string>(draftKey, (content) => content === original).then((kept) => {
@@ -99,6 +107,30 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       alive = false;
     };
     // 문서를 바꿔 열 때만 — 저장해서 본문이 바뀐 것은 되살릴 일이 아니다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.id]);
+  // 지시사항도 임시 보관한다 (TODO 207) — 회의 직후 받은 지시를 적다 다른 보고를 눌러도 남는다.
+  // 서버가 받는 열쇠 모양은 `report:<번호>` 뿐이고, 확정된 보고에서는 본문 보관이 꺼져 있어 그 열쇠가 비어 있다.
+  // 본문(글 하나)과 섞이지 않게 `{ feedback }` 묶음으로 둔다 — 확정을 풀어 본문 보관이 되살아나도 글이 아니면 무시한다.
+  const [feedbackRestored, setFeedbackRestored] = useState(false);
+  const feedbackOriginal = report.feedback ?? "";
+  useDraftKeeper(frozen && !readonly ? draftKey : null, { feedback }, feedback === feedbackOriginal);
+  useEffect(() => {
+    if (!frozen || readonly) return;
+    let alive = true;
+    const original = report.feedback ?? "";
+    void loadDraft<{ feedback?: unknown }>(
+      draftKey,
+      (content) => typeof content !== "object" || content === null || content.feedback === original,
+    ).then((kept) => {
+      if (!alive || !kept || typeof kept.feedback !== "string") return;
+      setFeedback(kept.feedback);
+      setFeedbackDirty(true);
+      setFeedbackRestored(true);
+    });
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.id]);
   useEffect(() => setAudience(report.audience ?? ""), [report.id, report.audience]);
@@ -165,29 +197,30 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
 
   async function copy(kind: "excel" | "plain") {
     const text = toPlainText(body);
-    try {
-      if (kind === "excel") await copyAsExcelCell(text);
-      else await copyAsPlainText(text);
-      setNotice(kind === "excel" ? "엑셀 한 칸에 붙여넣을 수 있게 복사했습니다." : "평문으로 복사했습니다.");
-      window.setTimeout(() => setNotice(null), 4000);
-    } catch (err) {
-      setError((err as Error).message);
+    // 공유 주소(비보안 컨텍스트)에서는 clipboard API 가 없다 — 폴백으로 넣고, 안 되면 한국어로 안내 (TODO 208)
+    const ok = kind === "excel" ? await copyAsExcelCell(text) : await copyAsPlainText(text);
+    if (!ok) {
+      setError(COPY_FAILED);
+      return;
     }
+    setError(null);
+    setNotice(kind === "excel" ? "엑셀 한 칸에 붙여넣을 수 있게 복사했습니다." : "평문으로 복사했습니다.");
+    window.setTimeout(() => setNotice(null), 4000);
   }
 
   return (
     <div
       ref={rootRef}
-      className={`report-editor card${frozen ? " frozen" : ""}`}
+      className={`report-editor card${frozen ? " frozen" : ""}${readonly ? " readonly-snapshot" : ""}`}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
           event.preventDefault();
-          if (!frozen) void save().catch((err: Error) => setError(err.message));
+          if (editable) void save().catch((err: Error) => setError(err.message)); // 읽기 전용이면 아무 일도 (208)
         }
       }}
-      onDragOver={frozen ? undefined : (event) => event.preventDefault()}
+      onDragOver={editable ? (event) => event.preventDefault() : undefined}
       onDrop={
-        frozen
+        !editable
           ? undefined
           : (event) => {
               event.preventDefault();
@@ -203,9 +236,10 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
           ) : (
             <span className="draft-tag">작성 중</span>
           )}
+          {readonly && !frozen && <span className="frozen-tag">읽기 전용 공유 — 서버 PC 에서 고칩니다</span>}
         </h2>
         <div className="form-actions" style={{ margin: 0 }}>
-          {!frozen && body.includes("## 진행 내용") && (
+          {editable && body.includes("## 진행 내용") && (
             <button data-write className="ghost" onClick={clearProgressSection}>
               진행 내용 지우기
             </button>
@@ -227,7 +261,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                 setShowPrompt(false);
                 return;
               }
-              if (dirty && !frozen) {
+              if (dirty && editable) {
                 try {
                   await save();
                 } catch (err) {
@@ -267,7 +301,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
           <input
             type="date"
             value={reportDate}
-            disabled={frozen}
+            disabled={!editable}
             title={frozen ? "확정된 보고의 날짜는 바꿀 수 없습니다. 확정을 풀면 고칠 수 있습니다." : undefined}
             onChange={(event) => {
               setReportDate(event.target.value);
@@ -277,22 +311,29 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         </label>
         <label>
           피보고자 · 회의체
-          <input
-            list="audience-options"
-            value={audience}
-            onChange={(event) => {
-              setAudience(event.target.value);
-              setDirty(true);
-            }}
-            placeholder="예: 팀장, 주간회의체"
-          />
-          <datalist id="audience-options">
-            {audiences.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
+          {readonly ? (
+            // 읽기 전용 공유 — 고칠 수 없는 칸은 글자로 (TODO 208)
+            <span className="audience-text">{audience || "—"}</span>
+          ) : (
+            <>
+              <input
+                list="audience-options"
+                value={audience}
+                onChange={(event) => {
+                  setAudience(event.target.value);
+                  setDirty(true);
+                }}
+                placeholder="예: 팀장, 주간회의체"
+              />
+              <datalist id="audience-options">
+                {audiences.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            </>
+          )}
         </label>
-        {frozen && (
+        {frozen && !readonly && (
           <button
             className="ghost small"
             disabled={audience === (report.audience ?? "")}
@@ -307,7 +348,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         )}
         {/* 자동완성 목록은 칸을 눌러야 뜨고 브라우저마다 모양이 달라, 있는 줄 모르고
             매번 손으로 치게 된다. 쓰던 것을 눌러서 넣게 한다 (진행일지 태그와 같은 방식). */}
-        {!frozen && audiences.length > 0 && (
+        {editable && audiences.length > 0 && (
           <div className="tag-suggest audience-suggest">
             <span className="muted">쓰던 피보고자</span>
             {audiences
@@ -343,11 +384,30 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
 
       {showPrompt && <AiPromptPanel reportId={report.id} />}
 
-      {frozen ? (
+      {frozen || readonly ? (
         <>
           <div className="markdown snapshot" dangerouslySetInnerHTML={{ __html: renderMarkdown(body, base) }} />
           {/* 보고 결과 · 지시사항 (TODO 107). 본문은 굳었지만 "그 자리에서 무슨 말을 들었는가"는
-              보고가 끝난 뒤에야 적을 수 있다. 다음 초안이 이 칸을 맨 위에 물고 나온다. */}
+              보고가 끝난 뒤에야 적을 수 있다. 다음 초안이 이 칸을 맨 위에 물고 나온다.
+              읽기 전용 공유에서는 적힌 것만 보인다 — 칸도 단추도 없다 (TODO 208). */}
+          {frozen && readonly && (
+            <section className="feedback-box" data-testid="report-feedback">
+              <div className="feedback-head">
+                <b>보고 결과 · 지시사항</b>
+                {report.feedback?.trim() ? (
+                  report.feedback_done ? (
+                    <span className="feedback-state done">답변함 · {report.feedback_done}</span>
+                  ) : (
+                    <span className="feedback-state open">답하지 않음</span>
+                  )
+                ) : (
+                  <span className="hint">적힌 지시사항이 없습니다.</span>
+                )}
+              </div>
+              {report.feedback?.trim() && <p className="feedback-text snapshot-text">{report.feedback}</p>}
+            </section>
+          )}
+          {frozen && !readonly && (
           <section className="feedback-box" data-testid="report-feedback">
             <div className="feedback-head">
               <b>보고 결과 · 지시사항</b>
@@ -390,6 +450,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                   try {
                     await api.updateReport(report.id, { feedback });
                     setFeedbackDirty(false);
+                    dropDraft(draftKey); // 저장했으니 임시 보관은 지운다 (207)
+                    setFeedbackRestored(false);
                     onChanged();
                   } catch (err) {
                     setError((err as Error).message);
@@ -421,7 +483,24 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                 </button>
               )}
             </div>
+            {feedbackRestored && feedbackDirty && (
+              <p className="hint restored">
+                저장하지 않은 지시사항을 복구했습니다.{" "}
+                <button
+                  className="ghost small"
+                  onClick={() => {
+                    dropDraft(draftKey);
+                    setFeedback(report.feedback ?? "");
+                    setFeedbackDirty(false);
+                    setFeedbackRestored(false);
+                  }}
+                >
+                  복구한 내용 버리기
+                </button>
+              </p>
+            )}
           </section>
+          )}
         </>
       ) : (
         <>
@@ -499,7 +578,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       <div className="attachment-panel">
         <div className="card-head">
           <h3>보고 자료 ({attachments.length})</h3>
-          {!frozen && (
+          {editable && (
             <div className="attach-actions">
               <span className="hint">엑셀·이미지를 끌어다 놓아도 됩니다.</span>
               <button className="attach-button" onClick={() => fileInputRef.current?.click()}>
@@ -523,9 +602,9 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         <AttachmentList
           attachments={attachments}
           onPreview={(attachment) => setPreviewing(attachment)}
-          onInsert={frozen ? undefined : (attachment) => insertAtCursor(attachment.markdown)}
+          onInsert={editable ? (attachment) => insertAtCursor(attachment.markdown) : undefined}
           onDelete={
-            frozen
+            !editable
               ? undefined
               : async (attachment) => {
                   // 본문에서 쓰이는 중이면 그 사실을 말해 준다 (TODO 129). 막지는 않는다 —
@@ -567,6 +646,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       {notice && <p className="hint notice">{notice}</p>}
       {error && <p className="form-error">{error}</p>}
 
+      {/* 읽기 전용 공유에는 저장 · 확정 · 확정 해제가 없다 — 눌러 봐야 403 이다 (TODO 208) */}
+      {!readonly && (
       <div className="editor-footer">
         <span className="muted save-state">{dirty ? "저장 안 됨" : ""}</span>
         <div className="form-actions">
@@ -632,6 +713,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
           )}
         </div>
       </div>
+      )}
 
       {previewing && <XlsxPreview attachment={previewing} onClose={() => setPreviewing(null)} />}
     </div>

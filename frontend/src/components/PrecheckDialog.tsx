@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { isReadonly } from "../readonly";
 import type { IntakeDetail, Meta, PrecheckBand } from "../types";
 import { useUnsaved } from "../unsaved";
 
@@ -38,7 +39,9 @@ export default function PrecheckDialog({
   onClose: () => void;
   onSaved: (next: IntakeDetail) => void;
 }) {
-  const readOnly = !intake.in_pool;
+  // 판정이 난 접수는 그때의 점수로 굳는다. 읽기 전용 공유(208)에서도 같은 모양 — 보기만 한다.
+  const shared = isReadonly();
+  const readOnly = !intake.in_pool || shared;
   const items = meta.precheck.items;
   const initial = useMemo(() => {
     const out: Record<string, { choice: string | null; note: string }> = {};
@@ -133,7 +136,11 @@ export default function PrecheckDialog({
             기준으로 바뀝니다.
           </p>
         )}
-        {readOnly && <p className="hint">판정이 난 접수라 볼 수만 있습니다 — 그때의 점수로 굳어 있습니다.</p>}
+        {readOnly && (
+          <p className="hint">
+            {shared ? "읽기 전용 공유라 볼 수만 있습니다 — 점수는 서버 PC 에서 매깁니다." : "판정이 난 접수라 볼 수만 있습니다 — 그때의 점수로 굳어 있습니다."}
+          </p>
+        )}
 
         {groups.map((group) => (
           <section key={group.group} className="precheck-group">

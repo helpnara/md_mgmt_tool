@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { ClassificationKey, Intake, Meta } from "../types";
 import { useFormUnsaved } from "../unsaved";
+import { todayIso } from "../util";
 
 /**
  * 접수의 칸 (TODO 136) — 등록할 때와 고칠 때 같은 폼이다.
@@ -27,7 +28,7 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
     title: initial?.title ?? "",
     leader: initial?.leader ?? "",
     leader_team: initial?.leader_team ?? "",
-    received_on: initial?.received_on ?? new Date().toISOString().slice(0, 10),
+    received_on: initial?.received_on ?? todayIso(), // 이 PC 의 오늘 — UTC 로 하면 오전 9시 전엔 어제다 (TODO 207)
     start_date: initial?.start_date ?? "",
     due_date: initial?.due_date ?? "",
     effect_request: initial?.effect_request?.toString() ?? "",
