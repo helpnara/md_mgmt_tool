@@ -658,10 +658,11 @@ async function main() {
   });
 
   await check("여러 날에 걸친 교육은 기간으로 보인다", async () => {
-    const twoDaysLater = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+    // 역량 기록은 지나간 일만 (TODO 214 D5) — 그저께부터 오늘까지
+    const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
     await api.post("/api/activities", {
       person: "권경락", kind: "education", title: "사흘짜리 교육",
-      date: todayStr, end_date: twoDaysLater,
+      date: twoDaysAgo, end_date: todayStr,
     });
     await go("#/skills");
     const row = page.locator(".activity-list > li").filter({ hasText: "사흘짜리 교육" }).first();
@@ -1807,9 +1808,13 @@ async function main() {
 
   await check("표시한 칸이 화면 밖이면 가로로 밀어 준다", async () => {
     // 12월 것을 붉게 칠해 놓아도 그 열이 오른쪽 밖이면 여전히 찾아야 한다.
-    await frozenReport(seeded.projectA, "2026-12-08");
+    // 확정은 보고일이 1주 넘게 남으면 안 된다 (TODO 214 D5) — 가장 가까운 **지난** 12월 8일을 쓴다(오늘에서 1년 안)
+    const now = new Date();
+    const decYear = now.getMonth() === 11 && now.getDate() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    const decDay = `${decYear}-12-08`;
+    await frozenReport(seeded.projectA, decDay);
     await page.setViewportSize({ width: 1000, height: 800 });
-    await go("#/history?from=2026-12-08&to=2026-12-08");
+    await go(`#/history?from=${decDay}&to=${decDay}`);
     await openGrid();
     await page.waitForTimeout(400);
     const seen = await page.evaluate(() => {
@@ -4508,6 +4513,9 @@ async function main() {
   await fetch(`${BASE}/api/projects/${shareProject.id}/archive`, { method: "POST" });
 
   console.log("\n[41] 닫으면 아무것도 바뀌지 않는다 — 편집기 안에서 먼저 서버에 쓴 것 · 보고 편집기 [닫기] (TODO 213 · 211 · 210 ⑥)");
+  // 앞 묶음에서 걸어 둔 "다음 확인 창 하나" 가 쓰이지 않고 남으면 이 묶음의 확인 창을 엉뚱하게 받는다 — 전역 handler(accept)로 되돌린다
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
 
   {
     const f1Project = await api.post("/api/projects", { title: "닫기 확인 과제", body: "## 과제 개요\n\n닫기 확인용\n" });
@@ -4705,6 +4713,9 @@ async function main() {
   }
 
   console.log("\n[42] 목록 · 폼 — 홈 연도 주소 · 제목 링크 · 취소 확인 · 설정 카드 떠남 경고 · 검색 오류 회복 (TODO 209 ~ 212)");
+  // 앞 묶음에서 걸어 둔 "다음 확인 창 하나" 가 쓰이지 않고 남으면 이 묶음의 확인 창을 엉뚱하게 받는다 — 전역 handler(accept)로 되돌린다
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
 
   await check("홈의 기준 연도가 주소에 남아, 목록에 갔다 [← 홈] 으로 오면 그대로다 (210 ④)", async () => {
     await go("#/");
@@ -4843,6 +4854,9 @@ async function main() {
   });
 
   console.log("\n[44] 사람 · 면담 · 설정 입력 — 저장 전에 화면이 먼저 (TODO 214 · 216)");
+  // 앞 묶음에서 걸어 둔 "다음 확인 창 하나" 가 쓰이지 않고 남으면 이 묶음의 확인 창을 엉뚱하게 받는다 — 전역 handler(accept)로 되돌린다
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
 
   // 이 PC 의 날짜 (YYYY-MM-DD) — 화면의 "오늘" 과 같은 기준
   const localDay = (offsetDays = 0) => {
@@ -5029,6 +5043,9 @@ async function main() {
   });
 
   console.log("\n[43] 과제 · 기록 · 접수 입력 — 화면이 먼저 막고 묻는다 (TODO 214 · 215)");
+  // 앞 묶음에서 걸어 둔 "다음 확인 창 하나" 가 쓰이지 않고 남으면 이 묶음의 확인 창을 엉뚱하게 받는다 — 전역 handler(accept)로 되돌린다
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
 
   await check("새 과제 폼 — 시작 > 마감 · 미래 완료일이면 [만들기] 가 꺼지고, 효과 비대상이면 금액 칸이 잠긴다 (214 D1 · D2)", async () => {
     await go("#/projects");
