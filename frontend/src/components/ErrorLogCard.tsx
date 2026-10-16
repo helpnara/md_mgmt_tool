@@ -3,7 +3,7 @@ import { api } from "../api";
 import { attempt } from "../notify";
 import { copyAsPlainText } from "../plaintext";
 import { COPY_FAILED } from "../clipboard";
-import type { ErrorEntry } from "../types";
+import type { ErrorEntry, ErrorListing, InputRejection } from "../types";
 import { formatDateTime } from "../util";
 
 /**
@@ -21,13 +21,21 @@ export default function ErrorLogCard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  // 입력 확인으로 돌려보낸 것 (TODO 216) — 고장이 아니라 따로 센다. 자주 나면 화면이 미리 막지 못한 자리다
+  const [inputs, setInputs] = useState<InputRejection[]>([]);
+  const [inputCount, setInputCount] = useState(0);
+  const [showInputs, setShowInputs] = useState(false);
 
   const load = useCallback(() => {
     api
       .errors()
-      .then((data) => {
-        setItems(data.items);
+      .then((raw) => {
+        const data = raw as ErrorListing;
+        setItems(Array.isArray(data.items) ? data.items : []);
         setKeepMonths(data.keep_months);
+        const list = Array.isArray(data.inputs) ? data.inputs : [];
+        setInputs(list);
+        setInputCount(typeof data.input_count === "number" ? data.input_count : list.length);
       })
       .catch((err: Error) => setError(err.message));
   }, []);
@@ -118,6 +126,30 @@ export default function ErrorLogCard() {
         <button className="ghost small" onClick={() => setOpen((prev) => !prev)}>
           {open ? "접기" : `나머지 ${items.length - 5}건 더 보기`}
         </button>
+      )}
+      {inputCount > 0 && (
+        <div className="input-rejections" data-testid="input-rejections">
+          <p className="hint">
+            입력 확인으로 돌려보낸 것 <b>{inputCount}건</b>{" "}
+            <button className="linkish" onClick={() => setShowInputs((prev) => !prev)} aria-expanded={showInputs}>
+              {showInputs ? "접기" : "보기"}
+            </button>
+          </p>
+          {showInputs && (
+            <>
+              <p className="hint">화면이 미리 막지 못한 자리입니다 — 같은 것이 자주 나오면 알려 주세요.</p>
+              <ol className="input-rejection-list">
+                {inputs.map((item, index) => (
+                  <li key={`${item.at}-${index}`}>
+                    <span className="muted">{formatDateTime(item.at)}</span>
+                    <code>{item.action}</code>
+                    <span>{item.detail || "-"}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

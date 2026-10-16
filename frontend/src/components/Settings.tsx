@@ -19,6 +19,9 @@ import LinkFixCard from "./LinkFixCard";
 import VersionsCard from "./VersionsCard";
 import BackupCard from "./BackupCard";
 import LoadError from "./LoadError";
+import EffectConfirmCard from "./EffectConfirmCard";
+import { enterToSave } from "./enterSave";
+import { LIMITS, hasControlChars, lengthState } from "../inputRules";
 
 /**
  * 도구 설정.
@@ -65,7 +68,17 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
   }, []);
   const keepFailures = Array.isArray(health?.version_keep_failures) ? health.version_keep_failures : [];
 
+  // 작성자 — 한 줄 · 40자 (TODO 214 F13 · U6). 서버가 같은 규칙으로 다듬는다
+  const authorLength = lengthState(author.trim(), LIMITS.name);
+  const authorProblem = hasControlChars(author)
+    ? "작성자는 한 줄로 적어 주세요."
+    : authorLength.over
+      ? `작성자는 ${LIMITS.name}자까지입니다.`
+      : null;
+  const canSaveAuthor = !busy && !authorProblem && author.trim() !== (savedAuthor ?? "");
+
   async function save() {
+    if (!canSaveAuthor) return;
     setBusy(true);
     setError(null);
     try {
@@ -116,7 +129,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           <span className="hint">누가 쓰는가 · 과제를 무엇으로 가르는가</span>
         </h2>
         <div className="settings-grid">
-          <div className="card">
+          <div className="card author-card" onKeyDown={enterToSave(() => void save(), canSaveAuthor)}>
             <h2>작성자</h2>
             <p className="hint">
               진행일지와 보고 문서에 <strong>누가 작성했는지</strong>를 함께 남깁니다. 여기서 정한 이름이 쓰입니다.
@@ -131,7 +144,15 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
                   value={author}
                   onChange={(event) => setAuthor(event.target.value)}
                   placeholder="예: 권경락"
+                  aria-invalid={authorProblem ? true : undefined}
                 />
+                {authorProblem ? (
+                  <span className="field-error">{authorProblem}</span>
+                ) : (
+                  <span className="hint length-count">
+                    한 줄 · {LIMITS.name}자까지 ({authorLength.left}자 남음)
+                  </span>
+                )}
                 <datalist id="owner-options">
                   {meta.owners.map((name) => (
                     <option key={name} value={name} />
@@ -148,7 +169,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
             {notice && <p className="hint notice">{notice}</p>}
             {error && <p className="form-error">{error}</p>}
             <div className="form-actions">
-              <button disabled={busy || author.trim() === (savedAuthor ?? "")} onClick={() => void save()}>
+              <button disabled={!canSaveAuthor} onClick={() => void save()}>
                 {busy ? "저장 중…" : "저장"}
               </button>
             </div>
@@ -159,6 +180,8 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           <MeetingSettingsCard meta={meta} onSaved={onSaved} />
           <ProjectTypeCard onSaved={onSaved} />
           <ProjectCodeCard onSaved={onSaved} />
+          {/* 효과 금액 단위 확인 기준 (TODO 214 D4) — 과제 번호 곁에 */}
+          <EffectConfirmCard meta={meta} onSaved={onSaved} />
         </div>
       </div>
 

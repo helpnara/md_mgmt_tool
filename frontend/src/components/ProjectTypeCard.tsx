@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { ProjectTypeRow } from "../types";
 import { typeClass } from "./StatusBadge";
 import { useEditedUnsaved } from "../util";
+import { enterToSave } from "./enterSave";
 
 /**
  * 과제 속성 더하고 빼고 고치기 (TODO 100).
@@ -76,7 +77,8 @@ export default function ProjectTypeCard({ onSaved }: { onSaved: () => void }) {
   }
 
   return (
-    <div className="card">
+    // 이름 칸에서 Enter = [저장] (TODO 214 U9)
+    <div className="card" onKeyDown={enterToSave(() => void save(), !busy && changed)}>
       <h2>과제 속성</h2>
       <p className="hint">
         과제를 만들 때 고르는 <b>성격</b>입니다. 팀에서 쓰는 말로 더하고 빼고 고칠 수 있습니다.

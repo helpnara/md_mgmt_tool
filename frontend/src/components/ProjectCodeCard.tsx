@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { RenumberPlan } from "../types";
+import { PROJECT_CODE_RULE, projectCodeProblem } from "../inputRules";
+import { enterToSave } from "./enterSave";
 
 /**
  * 과제 번호의 팀·부문 코드.
@@ -31,9 +33,14 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
   }, []);
 
   const year = new Date().getFullYear();
-  const preview = code.trim() ? `${year}-${code.trim()}-001` : `${year}-001`;
+  // 팀 코드는 한글 · 영문 · 숫자만 (TODO 214 D16) — `팀-2` 는 번호 나누기가 깨지고 `&` 는 임시 보관이 늘 실패했다.
+  // 틀린 코드로 된 번호는 미리보기에도 세우지 않는다
+  const problem = projectCodeProblem(code);
+  const preview = problem ? null : code.trim() ? `${year}-${code.trim()}-001` : `${year}-001`;
+  const canSave = !busy && !problem && code.trim() !== saved;
 
   async function save() {
+    if (problem) return;
     setBusy(true);
     setError(null);
     try {
@@ -52,6 +59,7 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
 
   /** 파일을 건드리지 않고 무엇이 어떻게 바뀌는지만 먼저 보여 준다. */
   async function loadPlan() {
+    if (problem) return;
     setBusy(true);
     setError(null);
     try {
@@ -84,7 +92,7 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
   }
 
   return (
-    <div className="card">
+    <div className="card project-code-card" onKeyDown={enterToSave(() => void save(), canSave)}>
       <h2>과제 번호 체계</h2>
       <p className="hint">
         비워 두면 지금처럼 <code>{year}-001</code> 입니다. 팀·부문 코드를 넣으면{" "}
@@ -102,19 +110,25 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
             value={code}
             onChange={(event) => setCode(event.target.value)}
             placeholder="예: 소재 (비워 두어도 됩니다)"
+            aria-invalid={problem ? true : undefined}
           />
+          {problem ? (
+            <span className="field-error project-code-error">{problem}</span>
+          ) : (
+            <span className="hint">{PROJECT_CODE_RULE}</span>
+          )}
         </label>
         <p className="hint effect-hint">
-          다음에 만들 과제 번호 → <code>{preview}</code>
+          다음에 만들 과제 번호 → {preview ? <code>{preview}</code> : <span className="muted">코드를 고치면 보입니다</span>}
         </p>
       </div>
       {notice && <p className="hint notice">{notice}</p>}
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions">
-        <button disabled={busy || code.trim() === saved} onClick={() => void save()}>
+        <button disabled={!canSave} onClick={() => void save()}>
           {busy ? "저장 중…" : "저장"}
         </button>
-        <button className="ghost" disabled={busy} onClick={() => void loadPlan()}>
+        <button className="ghost" disabled={busy || Boolean(problem)} onClick={() => void loadPlan()}>
           기존 과제 번호도 맞추기…
         </button>
       </div>

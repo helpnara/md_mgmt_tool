@@ -4,6 +4,11 @@ import type { Activity, Meta } from "../types";
 import { splitPeople } from "../people";
 import { useFormUnsaved } from "../unsaved";
 import { confirmDiscard, dateOrderProblem, isPlainEnter, todayIso } from "../util";
+import { DATE_MIN, confirmPeople, dateProblem as dayProblem, daySpan, numberProblem, personNameProblem, warningList } from "../inputRules";
+import { departedNames, freshRoster } from "./roster";
+
+/** 비용 상한 (TODO 214 F14) — 서버와 같은 1조 원 */
+const COST_MAX = 1e12;
 
 /**
  * 역량 이력 한 건을 쓰는 자리 (TODO 72 · 74).
@@ -54,12 +59,30 @@ export default function ActivityForm({
   };
   // 날짜 화면 검사 (TODO 212) — 언제는 필수 · 종료일이 앞서면 안 된다(서버 422)
   const missingDate = !date;
-  const dateProblem = dateOrderProblem(date, endDate, "시작일", "종료일");
+  // 역량 기록은 지나간 이력이다 — 미래 날짜는 막는다 (TODO 214 D5). 2000~2100 년 밖도
+  const futureText = "역량 기록은 지난 일만 적습니다 — 오늘 뒤의 날짜는 저장할 수 없습니다.";
+  const startProblem = dayProblem(date, "날짜") ?? (date > today ? futureText : null);
+  const dateProblem =
+    dayProblem(endDate, "종료일") ?? (endDate > today ? futureText : null) ?? dateOrderProblem(date, endDate, "시작일", "종료일");
+
+  // 시간 · 비용 (TODO 214 F14 · U4) — `<form>` 밖이라 min · step 이 막지 못한다. 시간은 하루 24시간 × 날수까지
+  const span = daySpan(date, endDate);
+  const hoursProblem =
+    numberProblem(hours, { min: 0, optional: true }) ??
+    (hours.trim() && Number(hours) > 24 * span ? `시간은 ${span}일 × 24시간 = ${24 * span}시간까지입니다.` : null);
+  const costProblem = numberProblem(cost, { min: 0, max: COST_MAX, optional: true });
 
   const picked = splitPeople(person);
   // 예전에 한 칸에 여러 이름이 들어간 줄은 칩으로 내주지 않는다 —
   // 누르면 그 붙은 이름이 또 들어간다 (TODO 74).
-  const roster = meta.people.filter((name) => splitPeople(name).length === 1);
+  // 떠난 사람도 지난 기록의 주인이라 숨기지 않고 "(떠남)" 딱지로 뒤에 둔다 (TODO 214 D7)
+  const departed = departedNames(meta);
+  const roster = meta.people
+    .filter((name) => splitPeople(name).length === 1)
+    .sort((a, b) => Number(departed.has(a)) - Number(departed.has(b)));
+  const nameProblem = picked.map((name) => personNameProblem(name)).find(Boolean) ?? null;
+  const pickedDeparted = picked.filter((name) => departed.has(name));
+  const originalPerson = activity?.person ?? "";
 
   /** 명부에서 이름을 눌러 넣고 뺀다. 고칠 때는 한 사람만 들어간다. */
   function toggle(name: string) {
@@ -74,12 +97,35 @@ export default function ActivityForm({
     );
   }
 
-  const canSave = !busy && picked.length > 0 && Boolean(title.trim()) && !missingDate && !dateProblem;
+  const canSave =
+    !busy &&
+    picked.length > 0 &&
+    Boolean(title.trim()) &&
+    !missingDate &&
+    !startProblem &&
+    !dateProblem &&
+    !hoursProblem &&
+    !costProblem &&
+    !nameProblem;
 
   async function save() {
     if (!canSave) return;
     setBusy(true);
     setError(null);
+    // 명부에 없는 이름은 묻는다 — 예전에는 오타가 명부에 조용히 들어갔다 (TODO 214 D6). 고칠 때 사람이 그대로면 묻지 않는다
+    const asking = editing && picked.length === 1 && picked[0] === originalPerson.trim() ? [] : picked;
+    if (asking.length > 0) {
+      try {
+        if (!(await confirmPeople(asking, await freshRoster(meta), api.addPerson, "역량 기록 대상"))) {
+          setBusy(false);
+          return;
+        }
+      } catch (err) {
+        setError((err as Error).message);
+        setBusy(false);
+        return;
+      }
+    }
     // 빈 칸은 null 로 보낸다. "" 를 보내면 0 으로 굳어 "안 적었다"와 구분되지 않는다.
     const payload = {
       person: person.trim(),
@@ -89,21 +135,23 @@ export default function ActivityForm({
       title: title.trim(),
       host: host.trim() || null,
       place: place.trim() || null,
-      hours: hours.trim() === "" ? null : hours.trim(),
-      cost: cost.trim() === "" ? null : cost.trim(),
+      hours: hours.trim() === "" ? null : Number(hours.trim()),
+      cost: cost.trim() === "" ? null : Number(cost.trim().replace(/,/g, "")),
       takeaway: takeaway.trim() || null,
       link: link.trim() || null,
     } as unknown as Partial<Activity>;
     try {
       if (activity) {
-        await api.updateActivity(activity.id, payload);
-        onSaved("기록을 고쳤습니다.");
+        const result = await api.updateActivity(activity.id, payload);
+        onSaved(["기록을 고쳤습니다.", ...warningList(result)].join(" "));
       } else {
         const result = await api.createActivity(payload);
+        // 서버가 알린 것(명부 · 떠난 사람 등)을 함께 (TODO 214)
         onSaved(
-          result.count > 1
-            ? `${result.count}명의 기록으로 나눠 저장했습니다.`
-            : "기록을 저장했습니다.",
+          [
+            result.count > 1 ? `${result.count}명의 기록으로 나눠 저장했습니다.` : "기록을 저장했습니다.",
+            ...warningList(result),
+          ].join(" "),
         );
       }
     } catch (err) {
@@ -140,7 +188,14 @@ export default function ActivityForm({
           value={person}
           onChange={(event) => setPerson(event.target.value)}
           placeholder={editing ? "예: 권경락" : "예: 권경락, 김현우 — 쉼표로 여러 명"}
+          aria-invalid={nameProblem ? true : undefined}
         />
+        {nameProblem && <span className="field-error">{nameProblem}</span>}
+        {!nameProblem && pickedDeparted.length > 0 && (
+          <span className="form-warn activity-departed-warn">
+            {pickedDeparted.join(", ")} — 명부에서 떠난 사람입니다. 지난 기록이면 그대로 저장해도 됩니다.
+          </span>
+        )}
       </label>
       {roster.length > 0 && (
         <div className="tag-suggest">
@@ -149,10 +204,12 @@ export default function ActivityForm({
             <button
               key={name}
               type="button"
-              className={picked.includes(name) ? "tag-pick on" : "tag-pick"}
+              className={[picked.includes(name) ? "tag-pick on" : "tag-pick", departed.has(name) ? "departed" : ""].join(" ").trim()}
               onClick={() => toggle(name)}
+              title={departed.has(name) ? "명부에서 떠난 사람 — 지난 기록에만" : undefined}
             >
               {name}
+              {departed.has(name) && <span className="departed-tag"> (떠남)</span>}
             </button>
           ))}
         </div>
@@ -163,7 +220,7 @@ export default function ActivityForm({
         </p>
       ) : (
         <p className="hint">
-          쉼표(<code>,</code>)나 세미콜론(<code>;</code>)으로 여러 명을 적을 수 있습니다.
+          쉼표(<code>,</code>)로 여러 명을 적을 수 있습니다.
           {picked.length > 1 ? (
             <>
               {" "}저장하면 <b>{picked.join(" · ")}</b> 앞으로 <b>{picked.length}건</b>이 각각 만들어집니다.
@@ -180,18 +237,22 @@ export default function ActivityForm({
           <input
             type="date"
             value={date}
+            min={DATE_MIN}
+            max={today}
             onChange={(event) => setDate(event.target.value)}
             required
-            aria-invalid={missingDate ? true : undefined}
+            aria-invalid={missingDate || startProblem ? true : undefined}
           />
           {missingDate && <span className="form-warn date-warn">날짜를 적어 주세요.</span>}
+          {startProblem && <span className="field-error date-warn activity-future">{startProblem}</span>}
         </label>
         <label>
           종료일 (여러 날이면)
           <input
             type="date"
             value={endDate}
-            min={date}
+            min={date || DATE_MIN}
+            max={today}
             onChange={(event) => setEndDate(event.target.value)}
             aria-invalid={dateProblem ? true : undefined}
           />
@@ -235,22 +296,28 @@ export default function ActivityForm({
           <input
             type="number"
             min="0"
+            max={24 * span}
             step="0.5"
             value={hours}
             onChange={(event) => setHours(event.target.value)}
             placeholder="비워도 됨"
+            aria-invalid={hoursProblem ? true : undefined}
           />
+          {hoursProblem && <span className="field-error">{hoursProblem}</span>}
         </label>
         <label>
           비용 (선택, 원)
           <input
             type="number"
             min="0"
+            max={COST_MAX}
             step="1000"
             value={cost}
             onChange={(event) => setCost(event.target.value)}
             placeholder="비워도 됨"
+            aria-invalid={costProblem ? true : undefined}
           />
+          {costProblem && <span className="field-error">{costProblem}</span>}
         </label>
         <label className="grow">
           자료 위치 (선택)

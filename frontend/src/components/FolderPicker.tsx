@@ -14,6 +14,10 @@ import type { FolderListing } from "../types";
  * 줄 뿐이다. 그래서 **서버가 폴더 목록을 주고 여기서 눌러 들어간다.**
  * 이 도구는 본인 PC에서 도는 프로그램이라 서버가 곧 그 PC다.
  */
+/** 윈도우가 폴더 이름에 못 쓰는 글자와 제어문자 */
+// eslint-disable-next-line no-control-regex
+const BAD_FOLDER_CHARS = /[\\/:*?"<>|\u0000-\u001f]/;
+
 export default function FolderPicker({
   value,
   onPick,
@@ -59,7 +63,20 @@ export default function FolderPicker({
     find ? item.name.toLowerCase().includes(find.toLowerCase()) : true,
   );
 
+  // 새 폴더 이름 — 윈도우가 폴더 이름에 못 쓰는 글자 · 줄바꿈 · 끝의 점을 칸 옆에서 먼저 (TODO 214 U2)
+  const name = newName.trim();
+  const nameProblem = !name
+    ? null
+    : BAD_FOLDER_CHARS.test(name)
+      ? '폴더 이름에 \\ / : * ? " < > | 는 쓸 수 없습니다.'
+      : /\.$/.test(name)
+        ? "폴더 이름은 점(.)으로 끝날 수 없습니다."
+        : [...name].length > 100
+          ? "폴더 이름은 100자까지입니다."
+          : null;
+
   async function makeFolder() {
+    if (!name || nameProblem) return;
     try {
       const made = await api.createFolder(at, newName);
       load(made.path);
@@ -123,17 +140,24 @@ export default function FolderPicker({
               onChange={(event) => setNewName(event.target.value)}
               placeholder="새 폴더 이름"
               autoFocus
+              aria-invalid={nameProblem ? true : undefined}
               onKeyDown={(event) => {
-                if (event.key === "Enter") void makeFolder();
+                // 한글 조합 중 Enter 는 그대로 · 바깥 카드의 [저장](U9)으로 새지 않게 막는다 (TODO 214 U9)
+                if (event.key === "Enter" && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void makeFolder();
+                }
                 if (event.key === "Escape") setMaking(false);
               }}
             />
-            <button className="ghost small" onClick={() => void makeFolder()}>
+            <button className="ghost small" disabled={!name || Boolean(nameProblem)} onClick={() => void makeFolder()}>
               만들기
             </button>
             <button className="ghost small" onClick={() => setMaking(false)}>
               취소
             </button>
+            {nameProblem && <span className="field-error">{nameProblem}</span>}
           </span>
         ) : (
           <button className="ghost small" disabled={!at} onClick={() => setMaking(true)}>

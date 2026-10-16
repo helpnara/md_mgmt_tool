@@ -4,6 +4,16 @@ import type { BackupStatus } from "../types";
 import { formatBytes } from "../upload";
 import FolderPicker from "./FolderPicker";
 import { useEditedUnsaved } from "../util";
+import { numberProblem } from "../inputRules";
+import { enterToSave } from "./enterSave";
+
+/** 서버와 같은 범위 (TODO 214 F12 · F14) — 일 · 주기는 1~999, 주 · 월은 0~999(0 = 그 층은 안 씀) */
+const RANGES = {
+  keep: { min: 1, max: 999, integer: true },
+  weekly: { min: 0, max: 999, integer: true },
+  monthly: { min: 0, max: 999, integer: true },
+  hours: { min: 1, max: 999, integer: true },
+} as const;
 
 /**
  * 자동 백업 — 바깥쪽 안전망.
@@ -16,10 +26,11 @@ export default function BackupCard() {
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [dir, setDir] = useState("");
   // 층을 나눠 남긴다 — 일 · 주 · 월 (TODO 119)
-  const [keep, setKeep] = useState(7);
-  const [weekly, setWeekly] = useState(4);
-  const [monthly, setMonthly] = useState(6);
-  const [hours, setHours] = useState(24);
+  // 칸의 글 그대로 들고 있는다 — 숫자로 바로 바꾸면 빈 칸이 0 이 되어 400 이었다 (TODO 214 F12)
+  const [keep, setKeep] = useState("7");
+  const [weekly, setWeekly] = useState("4");
+  const [monthly, setMonthly] = useState("6");
+  const [hours, setHours] = useState("24");
   // 자동 백업에서 첨부를 빼고 문서만 (TODO 202 · 197 ③) — 첨부가 GB 면 한 벌이 너무 크다
   const [skipAssets, setSkipAssets] = useState(false);
   // 마지막으로 불러온 값 — 이것과 다르면 "저장 안 함" (TODO 211 ②)
@@ -38,19 +49,18 @@ export default function BackupCard() {
         const skip = Boolean(settings?.backup_skip_assets);
         setStatus(data);
         setDir(data.directory);
-        setKeep(data.keep_daily ?? data.keep);
-        setWeekly(data.keep_weekly ?? 0);
-        setMonthly(data.keep_monthly ?? 0);
-        setHours(data.every_hours);
+        const loaded = {
+          keep: String(data.keep_daily ?? data.keep),
+          weekly: String(data.keep_weekly ?? 0),
+          monthly: String(data.keep_monthly ?? 0),
+          hours: String(data.every_hours),
+        };
+        setKeep(loaded.keep);
+        setWeekly(loaded.weekly);
+        setMonthly(loaded.monthly);
+        setHours(loaded.hours);
         setSkipAssets(skip);
-        setSaved({
-          dir: data.directory,
-          keep: data.keep_daily ?? data.keep,
-          weekly: data.keep_weekly ?? 0,
-          monthly: data.keep_monthly ?? 0,
-          hours: data.every_hours,
-          skipAssets: skip,
-        });
+        setSaved({ dir: data.directory, ...loaded, skipAssets: skip });
       })
       .catch((err: Error) => setError(err.message));
   }, []);
@@ -59,17 +69,27 @@ export default function BackupCard() {
   // 고치다 메뉴를 누르면 묻는다 (TODO 211 ②)
   useEditedUnsaved("settings:backup", { dir, keep, weekly, monthly, hours, skipAssets }, saved, busy);
 
+  // 칸 옆에서 먼저 (TODO 214 U4 · U5)
+  const problems = {
+    keep: numberProblem(keep, RANGES.keep),
+    weekly: numberProblem(weekly, RANGES.weekly),
+    monthly: numberProblem(monthly, RANGES.monthly),
+    hours: numberProblem(hours, RANGES.hours),
+  };
+  const hasProblem = Object.values(problems).some(Boolean);
+
   async function save() {
+    if (hasProblem) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       await api.saveSettings({
         backup_dir: dir.trim(),
-        backup_keep: keep,
-        backup_keep_weekly: weekly,
-        backup_keep_monthly: monthly,
-        backup_every_hours: hours,
+        backup_keep: Number(keep),
+        backup_keep_weekly: Number(weekly),
+        backup_keep_monthly: Number(monthly),
+        backup_every_hours: Number(hours),
         backup_skip_assets: skipAssets,
       });
       setNotice(dir.trim() ? "저장했습니다. [지금 백업]으로 한 번 확인해 보세요." : "자동 백업을 껐습니다.");
@@ -82,7 +102,7 @@ export default function BackupCard() {
   }
 
   return (
-    <div className="card wide">
+    <div className="card wide backup-card" onKeyDown={enterToSave(() => void save(), !busy && !hasProblem)}>
       <h2>자동 백업</h2>
       <p className="hint">
         정한 폴더로 <b>전체 자료를 zip 한 벌</b>씩 내보냅니다. 폴더를 <b>네트워크 드라이브나
@@ -112,29 +132,36 @@ export default function BackupCard() {
         </label>
         {/* 층을 나눠 남긴다 (TODO 119). 하루 한 벌씩 열흘치만 남기면 되돌릴 수 있는
             범위가 열흘이다 — 같은 개수로 훨씬 긴 기간을 덮으려고 층을 나눈다. */}
+        {/* 최대값 표시는 서버와 같게 999 (TODO 214 F12 — 예전 표시 99 · 52 · 36 은 서버와 달랐다) */}
         <label>
           일
           <input
-            type="number" min={1} max={99} value={keep}
-            title="최근 며칠치를 그대로 남길지"
-            onChange={(event) => setKeep(Number(event.target.value))}
+            type="number" min={1} max={999} step={1} value={keep}
+            title="최근 며칠치를 그대로 남길지 (1~999)"
+            onChange={(event) => setKeep(event.target.value)}
+            aria-invalid={problems.keep ? true : undefined}
           />
+          {problems.keep && <span className="field-error">{problems.keep}</span>}
         </label>
         <label>
           주
           <input
-            type="number" min={0} max={52} value={weekly}
-            title="그 앞은 주마다 한 벌씩 몇 주"
-            onChange={(event) => setWeekly(Number(event.target.value))}
+            type="number" min={0} max={999} step={1} value={weekly}
+            title="그 앞은 주마다 한 벌씩 몇 주 (0 = 안 씀)"
+            onChange={(event) => setWeekly(event.target.value)}
+            aria-invalid={problems.weekly ? true : undefined}
           />
+          {problems.weekly && <span className="field-error">{problems.weekly}</span>}
         </label>
         <label>
           월
           <input
-            type="number" min={0} max={36} value={monthly}
-            title="그 앞은 달마다 한 벌씩 몇 달"
-            onChange={(event) => setMonthly(Number(event.target.value))}
+            type="number" min={0} max={999} step={1} value={monthly}
+            title="그 앞은 달마다 한 벌씩 몇 달 (0 = 안 씀)"
+            onChange={(event) => setMonthly(event.target.value)}
+            aria-invalid={problems.monthly ? true : undefined}
           />
+          {problems.monthly && <span className="field-error">{problems.monthly}</span>}
         </label>
         <label>
           주기 (시간)
@@ -142,11 +169,15 @@ export default function BackupCard() {
             type="number"
             min={1}
             max={999}
+            step={1}
             value={hours}
-            onChange={(event) => setHours(Number(event.target.value))}
+            onChange={(event) => setHours(event.target.value)}
+            aria-invalid={problems.hours ? true : undefined}
           />
+          {problems.hours && <span className="field-error">{problems.hours}</span>}
         </label>
       </div>
+      <p className="hint backup-range-hint">일 · 주기는 1~999, 주 · 월은 0~999 (0 이면 그 층은 쓰지 않습니다).</p>
 
       <label className="check-label backup-skip-assets">
         <input type="checkbox" checked={skipAssets} onChange={(event) => setSkipAssets(event.target.checked)} />
@@ -246,7 +277,7 @@ export default function BackupCard() {
         }}>
           지금 백업
         </button>
-        <button disabled={busy} onClick={() => void save()}>
+        <button disabled={busy || hasProblem} onClick={() => void save()}>
           {busy ? "저장 중…" : "저장"}
         </button>
       </div>

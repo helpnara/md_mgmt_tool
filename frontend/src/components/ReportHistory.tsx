@@ -5,6 +5,7 @@ import { backTarget, projectLink, useAddressBar } from "../nav";
 import LoadError from "./LoadError";
 import MonthGrid from "./MonthGrid";
 import { useLatest } from "../util";
+import { DATE_MAX, DATE_MIN, orderProblem } from "../inputRules";
 
 /**
  * 보고 이력 찾기.
@@ -67,6 +68,8 @@ export default function ReportHistory({ meta, query }: Props) {
   });
 
   const filtered = Boolean(audience || from || to || q || state || feedback);
+  // 기간이 거꾸로면 말없이 0건을 보이지 않고 칸 옆에 알린다 (TODO 214 U3)
+  const periodProblem = orderProblem(from, to, "기간 끝이 시작보다 앞섭니다 — 끝을 시작 뒤로 옮겨 주세요.");
   // 과제 × 월 표가 볼 연도. **기간 조건에서 받아 온다** — 화면 하나에 연도 고르는 곳이
   // 둘이면 어느 쪽이 이기는지 매번 헷갈린다 (TODO 79).
   const gridYear = (from || to || "").slice(0, 4) || String(new Date().getFullYear());
@@ -111,11 +114,25 @@ export default function ReportHistory({ meta, query }: Props) {
           </label>
           <label>
             기간 시작
-            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            <input
+              type="date"
+              value={from}
+              min={DATE_MIN}
+              max={to || DATE_MAX}
+              onChange={(event) => setFrom(event.target.value)}
+            />
           </label>
           <label>
             기간 끝
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            <input
+              type="date"
+              value={to}
+              min={from || DATE_MIN}
+              max={DATE_MAX}
+              onChange={(event) => setTo(event.target.value)}
+              aria-invalid={periodProblem ? true : undefined}
+            />
+            {periodProblem && <span className="field-error history-period-error">{periodProblem}</span>}
           </label>
           <label>
             검색어
@@ -168,7 +185,11 @@ export default function ReportHistory({ meta, query }: Props) {
       {items === null && <p className="hint">불러오는 중…</p>}
       {items && items.length === 0 && (
         <p className="empty">
-          {filtered ? "조건에 맞는 보고가 없습니다." : "아직 만든 보고가 없습니다."}
+          {periodProblem
+            ? "기간이 거꾸로라 찾을 수 없습니다 — 위의 기간 끝을 고쳐 주세요."
+            : filtered
+              ? "조건에 맞는 보고가 없습니다."
+              : "아직 만든 보고가 없습니다."}
         </p>
       )}
 

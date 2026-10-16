@@ -10,6 +10,7 @@ import ActivityForm from "./ActivityForm";
 import MeetingPanel from "./MeetingPanel";
 import TotalRow from "./TotalRow";
 import { cellCount, DASH, sumBy, useLatest } from "../util";
+import { isDeparted } from "../inputRules";
 
 /**
  * 팀원 역량 이력 (TODO 72).
@@ -425,7 +426,11 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       {!readonly && <MeetingPanel
         meta={meta}
         person={person}
-        people={summary.people.filter((item) => !item.left).map((item) => item.name).filter((name) => splitPeople(name).length === 1)}
+        // 떠난 날이 오늘 이후면 아직 있는 사람이다 — 전배 예정자와도 면담한다 (TODO 214 D8)
+        people={summary.people
+          .filter((item) => !item.left || (item.left_on ? !isDeparted({ left_on: item.left_on }) : false))
+          .map((item) => item.name)
+          .filter((name) => splitPeople(name).length === 1)}
         onChanged={load}
         onPickPerson={setPerson}
       />}
