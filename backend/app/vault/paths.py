@@ -5,8 +5,12 @@
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 from pathlib import Path
+from typing import Any, Callable, TypeVar
+
+_T = TypeVar("_T")
 
 _SLUG_STRIP = re.compile(r"[^0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ\s_-]+")
 _SLUG_SPACE = re.compile(r"[\s_]+")
@@ -39,16 +43,42 @@ class FileInUseError(RuntimeError):
     """다른 프로그램이 파일을 잡고 있어 옮기지 못할 때 (윈도우에서 흔하다)."""
 
 
-def move(source: Path, target: Path) -> None:
+# 윈도우의 일시적인 거부를 다시 시도하는 간격 (TODO 215). 합쳐 0.75초 — 사람이 느끼지 못할 만큼.
+RETRY_DELAYS = (0.05, 0.1, 0.2, 0.4)
+
+
+def retry_os(fn: Callable[..., _T], *args: Any, delays: tuple[float, ...] = RETRY_DELAYS, **kwargs: Any) -> _T:
+    """파일 지우기 · 바꿔 끼우기를 윈도우의 **잠깐** 거부(`WinError 5` 액세스 거부 · `WinError 32` 공유 위반)에 몇 번 다시 (TODO 215).
+
+    리눅스는 열려 있는 파일도 지워지지만, 윈도우는 다른 요청이 그 파일을 읽느라 열고 있거나 앞의 삭제가 아직
+    끝나지 않았으면(삭제 대기) PermissionError 를 낸다. 백신 · 색인 프로그램이 막 쓴 파일을 잠깐 여는 것도 같다.
+    우리 자신과 겹친 것이라 잠깐 뒤에는 풀린다. **끝내 안 되면 마지막 PermissionError 를 그대로 낸다** —
+    다른 프로그램이 계속 잡고 있는 경우(TODO 200 의 잠김 안내)의 뜻은 바뀌지 않는다.
+    """
+    for delay in delays:
+        try:
+            return fn(*args, **kwargs)
+        except PermissionError:
+            time.sleep(delay)
+    return fn(*args, **kwargs)
+
+
+def move(source: Path, target: Path, *, retry: bool = False) -> None:
     """파일/폴더를 옮긴다.
 
     윈도우에서는 엑셀·뷰어가 파일을 열어 두면 이동이 실패한다.
     500으로 터뜨리지 않고 무엇을 닫아야 하는지 알려 준다.
+
+    `retry=True` 면 **파일 하나**를 옮길 때 윈도우의 일시적 거부를 몇 번 다시 시도한다(TODO 215 ④ — `retry_os`).
+    폴더는 다시 시도하지 않는다 — shutil.move 가 복사 뒤 지우기로 넘어가 반쯤 옮긴 상태를 되풀이할 수 있다.
     """
     import shutil
 
     try:
-        shutil.move(str(source), str(target))
+        if retry and source.is_file():
+            retry_os(shutil.move, str(source), str(target))
+        else:
+            shutil.move(str(source), str(target))
     except PermissionError as exc:
         raise FileInUseError(
             f"'{source.name}' 을(를) 다른 프로그램이 사용 중이라 옮길 수 없습니다. "

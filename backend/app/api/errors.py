@@ -11,7 +11,19 @@ router = APIRouter(prefix="/api/errors", tags=["errors"])
 
 @router.get("")
 def list_errors(limit: int = Query(svc.RECENT_LIMIT, ge=1, le=200)) -> dict:
-    return {"items": svc.recent(limit), "keep_months": svc.KEEP_MONTHS}
+    """`items` 는 고장만 (TODO 216). 입력 확인으로 돌려보낸 것(400 · 422)은 `inputs` 로 따로 —
+    화면이 "입력 확인으로 돌려보낸 것 N건 [보기]" 한 줄로 세운다."""
+    counts = svc.input_counts()
+    return {
+        "items": svc.recent(limit),
+        "keep_months": svc.KEEP_MONTHS,
+        # 남겨 둔 고리(최근 input_keep 건) 안의 수 · 그중 오늘
+        "input_count": counts["total"],
+        "input_today": counts["today"],
+        "input_keep": svc.INPUT_KEEP,
+        # 최근 것부터 20건 — {at, action, detail}
+        "inputs": svc.recent_inputs(),
+    }
 
 
 @router.delete("")

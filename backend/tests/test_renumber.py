@@ -159,8 +159,12 @@ def test_a_very_long_code_is_refused(client):
 
 
 def test_ordinary_codes_still_pass(client):
-    for code in ["소재", "선강DX개발팀", "R&D", "소재-개발", "Team_1", "소재.개발"]:
+    for code in ["소재", "선강DX개발팀", "RnD", "Team1", "소재2"]:
         assert client.put("/api/settings", json={"project_code": code}).status_code == 200, code
+    # TODO 214 D16 — 한글 · 영문 · 숫자만. `-` 는 번호 분해를, `&` · `#` 은 임시 보관 열쇠 · 주소를 깨뜨렸다
+    for code in ["R&D", "소재-개발", "Team_1", "소재.개발", "팀#1"]:
+        response = client.put("/api/settings", json={"project_code": code})
+        assert response.status_code == 400 and "쓸 수 없는 문자" in response.json()["detail"], code
 
 
 def test_the_renumber_preview_refuses_a_bad_code_too(client):

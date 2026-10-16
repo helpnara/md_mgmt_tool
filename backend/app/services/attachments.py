@@ -463,7 +463,8 @@ def delete_attachment(conn: sqlite3.Connection, attachment_id: int) -> None:
         target = paths.unique_path(
             trash, f"{row['project_id']}-{datetime.now():%Y%m%d%H%M%S}-{path.stem}", path.suffix
         )
-        paths.move(path, target)
+        # TODO 215 ④ — 화면의 미리보기 · 썸네일 읽기와 잠깐 겹친 윈도우 거부는 몇 번 다시 (끝내 잠겨 있으면 지금처럼 423)
+        paths.move(path, target, retry=True)
         trash_service.record(
             "attachment",
             label=row["orig_name"],

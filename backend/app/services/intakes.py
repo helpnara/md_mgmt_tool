@@ -915,6 +915,24 @@ def map_body(intake_body: str | None, intake_id: str, title: str) -> dict[str, A
     }
 
 
+def _team_key(name: str) -> str:
+    return "".join(str(name or "").split()).casefold()
+
+
+def similar_team_warnings(conn: sqlite3.Connection, team: str | None) -> list[str]:
+    """요청 팀 이름이 쓰던 팀과 띄어쓰기 · 대소문자만 다르면 알린다 (TODO 214 D13 — "품질팀" vs "품질 팀"). 막지 않는다."""
+    team = " ".join(str(team or "").split())
+    if not team:
+        return []
+    key = _team_key(team)
+    used: set[str] = set()
+    for sql in ("SELECT DISTINCT team AS name FROM project_partner WHERE team <> ''",
+                "SELECT DISTINCT leader_team AS name FROM intake WHERE leader_team IS NOT NULL AND leader_team <> ''"):
+        used.update(str(row["name"]) for row in conn.execute(sql))
+    similar = sorted(name for name in used if name != team and _team_key(name) == key)
+    return [f"비슷한 팀 이름이 이미 있습니다: {', '.join(similar)} — 같은 팀이면 표기를 맞춰 주세요."] if similar else []
+
+
 def promotion_plan(conn: sqlite3.Connection, intake_id: str) -> dict[str, Any]:
     """승격 화면이 미리 채워 보여 줄 값. **사람이 확인하고 고친 뒤에** 승격한다.
 
@@ -926,7 +944,8 @@ def promotion_plan(conn: sqlite3.Connection, intake_id: str) -> dict[str, Any]:
     doc = md.load(intake_dir(conn, intake_id) / REQUEST_FILE)
     leader = (row["leader"] or "").strip()
     team = (row["leader_team"] or "").strip()
-    active = {person["name"] for person in settings_service.people() if not person.get("left_on")}
+    # 떠난 날이 아직 오지 않은 사람(전배 예정)은 그날까지 지금 있는 사람 (TODO 214 D8)
+    active = settings_service.active_names()
     leader_in_roster = bool(leader) and leader in active
     owners = [leader] if leader_in_roster else []
     partners = [] if leader_in_roster or not (leader or team) else [
@@ -961,21 +980,47 @@ def _preview_project_id(start_date: str | None) -> str:
     return next_project_id(project_year(start_date))
 
 
-def promote(conn: sqlite3.Connection, intake_id: str, data: dict[str, Any]) -> str:
+DECISION_NOTE_MAX = 200  # 착수 판정 메모 (TODO 214 D17) — 판정 사유와 같은 한 줄 길이
+
+
+def decision_note(value: object) -> str | None:
+    """착수 판정 메모 — 선택 칸, 200자까지 (TODO 214 D17). 줄바꿈은 한 줄로 편다."""
+    text = " ".join(str(value or "").split())
+    if len(text) > DECISION_NOTE_MAX:
+        raise ValueError(f"착수 판정 메모는 {DECISION_NOTE_MAX}자까지입니다 (지금 {len(text)}자).")
+    return text or None
+
+
+def promote(
+    conn: sqlite3.Connection, intake_id: str, data: dict[str, Any], warnings: list[str] | None = None,
+    same_title: list[dict[str, Any]] | None = None,
+) -> str:
     """접수를 과제로 승격한다 — **이때 비로소 과제 번호가 붙는다.**
 
     1. 과제를 만든다 (개요는 접수 본문을 같은 제목끼리 옮긴 것)
     2. 첨부를 **복사**한다 — 과제 폴더만 따로 건네도 깨지지 않게. 접수 쪽에도 원본이 남는다
     3. 접수 건을 `착수` 로 닫고 과제 번호를 적는다 — 양쪽에 링크가 남는다
+
+    `warnings` 에 목록을 넘기면 막지 않는 안내를 담아 준다 (TODO 214 D11 같은 이름 과제 · D6 명부에 없는 담당).
+    `same_title` 에는 같은 이름 과제 `{id, title}` 을.
     """
     from ..vault.indexer import index_project
     from . import projects as projects_service
 
     row = _row(conn, intake_id)
     _ensure_open(row)
+    note = decision_note(data.get("decision_note"))  # 과제를 만들기 전에 따진다
     directory = intake_dir(conn, intake_id)
     doc = md.load(directory / REQUEST_FILE)
     title = _text(data.get("title")) or row["title"]
+    # TODO 214 D11 — 같은 이름 과제는 막지 않고 알린다. **만들기 전에** 찾아야 방금 만든 과제가 섞이지 않는다
+    same = projects_service.same_title_projects(conn, title)
+    if same_title is not None:
+        same_title.extend(same)
+    if warnings is not None:
+        if same:
+            warnings.append("같은 이름의 과제가 이미 있습니다: " + ", ".join(f"{item['id']} {item['title']}" for item in same))
+        warnings.extend(settings_service.roster_warnings(rules.split_list(data.get("owners"))))
     mapped = map_body(doc.body, intake_id, title)
     project_id = projects_service.create_project(conn, {
         "title": title,
@@ -1006,7 +1051,7 @@ def promote(conn: sqlite3.Connection, intake_id: str, data: dict[str, Any]) -> s
         request = directory / REQUEST_FILE
         meta = md.merge_meta(doc.meta, {
             "status": "started", "project_id": project_id, "decided_on": today(),
-            "decision_note": (str(data.get("decision_note") or "").strip() or None),
+            "decision_note": note,
         })
         meta["updated_at"] = now_iso()
         md.save(request, md.MarkdownDoc(_ordered(meta), doc.body))
@@ -1103,6 +1148,41 @@ def demote_plan(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
     }
 
 
+def _demote_fields(meta: dict[str, Any], plan: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """되돌릴 과제의 머리 정보 → 접수에 적을 값 (TODO 214 F1). 접수 규칙(create_intake)을 **반드시 통과하는** 값만 남긴다.
+
+    손으로 고친 틀린 값은 비우고 무엇을 왜 비웠는지 `cleared` 에 한 줄씩 — 검토 기록에 남긴다.
+    """
+    from .projects import normalize_label
+
+    cleared: list[str] = []
+
+    def keep(field: str, value: object, clean):
+        try:
+            return clean(value)
+        except (TypeError, ValueError) as exc:
+            cleared.append(f"{rules.field_label(field)}: {str(exc).splitlines()[0] if str(exc) else value!r}")
+            return None
+
+    data: dict[str, Any] = {"title": _text(meta.get("title")) or _text(plan["title"]) or "되돌린 과제"}
+    for key in CLASSIFICATION_KEYS:
+        data[key] = keep(key, meta.get(key), normalize_label)
+    for key in ("start_date", "due_date"):
+        data[key] = keep(key, meta.get(key), lambda value, key=key: _day(value, key))
+    if data["start_date"] and data["due_date"] and data["due_date"] < data["start_date"]:
+        cleared.append(f"마감일: 시작일({data['start_date']})보다 빨라 비웠습니다 (받은 값: {data['due_date']})")
+        data["due_date"] = None
+    # 팀이 적어 둔 기대효과를 요청 효과 자리에 — 풀에서 견줄 수 있게(과제로 다시 갈 때는 옮기지 않는다)
+    data["effect_request"] = keep("effect_request", meta.get("effect_expected"), _effect)
+    data["tags"] = keep("tags", meta.get("tags"), _tags) or []
+    # 처음 과제로 등록한 날을 접수일로 — 풀의 "경과" 가 실제로 기다린 날수가 되게. 손으로 고친 created_at 이면 오늘
+    data["received_on"] = keep("received_on", plan["received_on"], lambda value: _day(value, "received_on")) or today()
+    # 마지막으로 접수 규칙 그대로 한 번 — 여기서 틀리면 보관함으로 옮기기 전에 멈춘다
+    _clean_fields(data)
+    rules.check_period(data.get("start_date"), data.get("due_date"), "start_date", "due_date")
+    return data, cleared
+
+
 def demote(conn: sqlite3.Connection, project_id: str) -> str:
     """과제를 접수로 되돌린다. 새 접수 번호를 돌려준다.
 
@@ -1119,6 +1199,10 @@ def demote(conn: sqlite3.Connection, project_id: str) -> str:
     source = projects_service.project_dir(conn, project_id)
     doc = md.load(source / "index.md")
     meta = doc.meta
+    # TODO 214 F1 — 접수에 적을 값을 **보관함으로 옮기기 전에** 만들고 검사한다. 예전에는 손으로 고친 과제(기간 거꾸로 ·
+    # 큰 효과 · 날짜 아닌 값)를 되돌리면 과제는 이미 보관함으로 갔는데 접수가 400 으로 안 생겼다. 틀린 값은 접수 쪽에서
+    # 비우고 검토 기록에 적는다 — 되돌리기는 끝까지 간다.
+    intake_data, cleared = _demote_fields(meta, plan)
 
     # 과제는 보관함으로 — 번호는 다시 쓰지 않는다. 옮긴 폴더를 찾기 위해 전후의 보관함 목록을 견준다.
     settings.trash_dir.mkdir(parents=True, exist_ok=True)
@@ -1130,18 +1214,7 @@ def demote(conn: sqlite3.Connection, project_id: str) -> str:
     ]
     source = max(moved_to, key=lambda path: path.name) if moved_to else source
 
-    intake_id = create_intake(conn, {
-        "title": str(meta.get("title") or plan["title"]),
-        **{key: meta.get(key) for key in CLASSIFICATION_KEYS},
-        "start_date": meta.get("start_date"),
-        "due_date": meta.get("due_date"),
-        # 팀이 적어 둔 기대효과를 요청 효과 자리에 — 풀에서 견줄 수 있게(과제로 다시 갈 때는 옮기지 않는다)
-        "effect_request": meta.get("effect_expected"),
-        "tags": list(meta.get("tags") or []),
-        # 처음 과제로 등록한 날을 접수일로 — 풀의 "경과" 가 실제로 기다린 날수가 되게
-        "received_on": plan["received_on"],
-        "body": doc.body,
-    })
+    intake_id = create_intake(conn, {**intake_data, "body": doc.body})
     directory = intake_dir(conn, intake_id)
     # 첨부 — 과제와 같은 assets/ 모양이라 개요 · 기록의 링크가 그대로 산다
     if (source / "assets").exists():
@@ -1177,7 +1250,9 @@ def demote(conn: sqlite3.Connection, project_id: str) -> str:
         directory,
         f"(되돌림) 과제 {project_id} 에서 접수로",
         f"직접 만든 과제 **{project_id} {plan['title']}** 을(를) 풀로 되돌렸다. 개요는 요청 내용으로, "
-        f"진행일지 {moved}건은 검토 기록으로(태그 `{TAG_FROM_PROJECT}`), 첨부는 복사했다. 과제는 삭제 보관함에 있다.\n",
+        f"진행일지 {moved}건은 검토 기록으로(태그 `{TAG_FROM_PROJECT}`), 첨부는 복사했다. 과제는 삭제 보관함에 있다.\n"
+        + ("\n과제 파일에서 읽지 못해 비운 값 (TODO 214 F1):\n\n" + "".join(f"- {line}\n" for line in cleared)
+           if cleared else ""),
     )
     index_intake(conn, directory)
     conn.commit()

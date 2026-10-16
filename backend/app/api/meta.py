@@ -153,6 +153,7 @@ def _meta(conn: sqlite3.Connection) -> dict:
         # **떠난 사람도 여기 남는다** — 빼면 지난해 담당자가 "명부에 없는 이름" 으로 잡힌다.
         "people": settings_service.known_names(),
         # 그중 떠난 사람 (TODO 122). 화면이 딱지를 붙이고 자동완성에서 뒤로 민다.
+        # 떠난 날이 아직 오지 않은 사람(전배 예정)은 그날까지 여기 없다 (TODO 214 D8)
         "people_left": settings_service.left_people(),
         "project_code": settings_service.project_code(),
         "vault": str(get_settings().vault_dir),
@@ -171,6 +172,8 @@ def _meta(conn: sqlite3.Connection) -> dict:
             {"key": key, "label": label, "pool": pool} for key, label, pool in INTAKE_STATUSES
         ],
         "intake_stale_days": settings_service.intake_stale_days(),
+        # 효과 금액 단위 확인 기준선 (TODO 214 D4, 억원/년) — 한 칸이 이보다 크면 화면이 저장 전에 묻는다. 0 은 묻지 않음
+        "effect_confirm_over": settings_service.effect_confirm_over(),
         # 사전점검 체크리스트 (TODO 155) — 항목·단계·점수와 구간 기준
         "precheck": _precheck_meta(),
         # 마지막으로 vault 를 훑었을 때 읽지 못한 파일 · 값 (TODO 164) — 홈 · 과제목록이 늘 띄운다

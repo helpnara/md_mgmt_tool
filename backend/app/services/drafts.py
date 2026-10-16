@@ -20,16 +20,27 @@ import os
 import re
 import sqlite3
 import tempfile
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..config import get_settings
+from ..vault import paths
 
 # 화면이 만드는 열쇠만 받는다 — 경로를 벗어나는 글자(`/` `..` `\`)는 아예 들어올 수 없다.
 KEY_PATTERN = re.compile(r"^(entry:new-[0-9A-Za-z가-힣_-]{1,80}|entry:\d{1,18}|overview:[0-9A-Za-z가-힣_-]{1,80}"
                          r"|report:\d{1,18}|intake:[0-9A-Za-z가-힣_-]{1,80})$")
 MAX_BYTES = 2_000_000  # 쓰다 만 글 하나로는 넉넉하다. 이보다 크면 무언가 잘못 붙은 것이다.
+
+
+# TODO 215 — 임시 보관 파일의 읽기 · 쓰기 · 지우기 · 목록을 **한 잠금 안에서.** 화면이 같은 열쇠를 동시에 두 번 지우거나,
+# 지우는 사이 목록(GET)이 모든 파일을 열면 윈도우가 `WinError 5 액세스 거부` 를 냈다. 쓰기 줄 세우기(get_db)에는
+# 넣지 않는다 — 자주 오고 다른 쓰기와 엮이지 않는다. 이 모듈 하나의 잠금이면 충분하다.
+_lock = threading.RLock()
+# 지우려 했지만 윈도우가 끝내 거부한 열쇠 — 지운 것으로 보고(열기 · 목록에서 숨김) 다음 목록 · 쓰기 · 지우기 때 다시 지운다.
+# 파일 경로로 적는다 — 데이터 폴더가 바뀌어도(시험 · --vault) 다른 폴더의 같은 열쇠를 숨기지 않게.
+_pending: set[Path] = set()
 
 
 def valid_key(key: str) -> bool:
@@ -50,13 +61,33 @@ def _key_of(path: Path) -> str:
     return path.stem.replace("__", ":", 1)
 
 
-def get(key: str) -> dict[str, Any] | None:
+def _read(key: str) -> dict[str, Any] | None:
     path = _file(key)
+    if path in _pending:
+        return None  # 지운 것으로 본다 (TODO 215)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) and "content" in data else None
+
+
+def get(key: str) -> dict[str, Any] | None:
+    _file(key)  # 열쇠 검사
+    with _lock:
+        return _read(key)
+
+
+def _retry_pending() -> None:
+    """지우지 못하고 남겨 둔 것을 다시 지운다 (TODO 215). 이번에도 안 되면 다음 차례에 — 오류로 내지 않는다."""
+    for path in list(_pending):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            continue
+        _pending.discard(path)
 
 
 def put(key: str, content: Any) -> dict[str, Any]:
@@ -65,25 +96,50 @@ def put(key: str, content: Any) -> dict[str, Any]:
     text = json.dumps(record, ensure_ascii=False)
     if len(text.encode("utf-8")) > MAX_BYTES:
         raise ValueError("임시 보관하기에 글이 너무 큽니다 — 저장해 주세요.")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # 쓰다 끊겨도 앞의 보관이 깨지지 않게 — 임시 파일에 쓰고 바꿔 끼운다(markdown.save 와 같은 방식)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
+    with _lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # 쓰다 끊겨도 앞의 보관이 깨지지 않게 — 임시 파일에 쓰고 바꿔 끼운다(markdown.save 와 같은 방식)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(text)
+            # TODO 215 — 바꿔 끼우기도 윈도우의 일시적 거부를 몇 번 다시
+            paths.retry_os(os.replace, tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+        # 새로 쓴 글이 섰다 — 지우려다 남겨 둔 표지는 뗀다
+        _pending.discard(path)
+        _retry_pending()
     return record
 
 
 def drop(key: str) -> bool:
-    try:
-        _file(key).unlink()
-        return True
-    except FileNotFoundError:
-        return False
+    """지운다. **실패해도 오류로 내지 않는다** (TODO 215) — 임시 보관 지우기는 "치우는 일" 이라, 기록 저장은 이미 끝났다.
+
+    윈도우의 일시적 거부는 몇 번 다시 시도하고, 그래도 안 되면 지운 것으로 표시해 두었다가 다음 목록 · 쓰기 · 지우기 때 다시 지운다.
+    """
+    path = _file(key)
+    with _lock:
+        try:
+            paths.retry_os(path.unlink)
+            removed = True
+        except FileNotFoundError:
+            removed = path in _pending
+        except OSError:
+            _pending.add(path)
+            return True
+        _pending.discard(path)
+        _retry_pending()
+        return removed
+
+
+def pending_keys() -> set[str]:
+    """지우려다 남겨 둔 열쇠 (시험 · 점검용)."""
+    return {_key_of(path) for path in _pending}
 
 
 def _describe(conn: sqlite3.Connection, key: str) -> dict[str, Any]:
@@ -128,14 +184,17 @@ def _describe(conn: sqlite3.Connection, key: str) -> dict[str, Any]:
 def listing(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """남아 있는 임시 보관 전부 — 새 것부터. 글 내용은 싣지 않는다(목록에는 무엇 · 어디만)."""
     folder = _dir()
-    items = []
-    for path in folder.glob("*.json") if folder.exists() else []:
-        key = _key_of(path)
-        if not valid_key(key):
-            continue
-        record = get(key)
-        if record is None:
-            continue
-        items.append({"key": key, "updated_at": record.get("updated_at"), **_describe(conn, key)})
+    records = []
+    with _lock:
+        _retry_pending()
+        for path in folder.glob("*.json") if folder.exists() else []:
+            key = _key_of(path)
+            if not valid_key(key):
+                continue
+            record = _read(key)
+            if record is not None:
+                records.append((key, record))
+    # 색인 조회(_describe)는 잠금 밖에서 — 파일은 이미 다 읽었다
+    items = [{"key": key, "updated_at": record.get("updated_at"), **_describe(conn, key)} for key, record in records]
     items.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
     return items

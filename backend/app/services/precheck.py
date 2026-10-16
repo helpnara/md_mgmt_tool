@@ -264,11 +264,19 @@ def build_snapshot(answers: list[dict[str, Any]], today: str) -> dict[str, Any]:
     current = definition()
     by_key = {_key(i["group"], i["item"]): i for i in current}
     items = []
+    seen: set[str] = set()
     for answer in answers:
         group, item = str(answer.get("group") or ""), str(answer.get("item") or "")
         choice = str(answer.get("choice") or "").strip()
         note = " ".join(str(answer.get("note") or "").split())[:MAX_NOTE] or None
+        # TODO 214 F2 — 같은 항목을 열 번 보내면 100점 "착수 권장" 이 됐다. 한 번에 한 항목은 한 번만
+        if _key(group, item) in seen:
+            raise ValueError(f"'{item[:16]}' 항목이 두 번 들어 있습니다 — 한 항목은 한 번만 매깁니다.")
+        seen.add(_key(group, item))
         if not choice:
+            if note:
+                # TODO 214 D17 — 예전에는 단계 없이 적은 근거를 말없이 버렸다
+                raise ValueError(f"'{item[:16]}': 단계를 고르지 않고 근거만 적었습니다 — 단계를 고르거나 근거를 지워 주세요.")
             continue
         definition_item = by_key.get(_key(group, item))
         if definition_item is None:

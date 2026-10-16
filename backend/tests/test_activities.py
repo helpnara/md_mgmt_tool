@@ -155,10 +155,15 @@ def test_comma_separated_names_become_one_record_each(client, vault_dir):
 
 
 def test_the_roster_never_gets_a_glued_name(client):
-    """명부에 `"A,B"` 가 들어가면 지우기 전까지 사람별 표에 남는다. 애초에 못 들어가게 한다."""
-    client.post("/api/activities", json={"person": "권경락,김현우", "title": "공동 교육"})
+    """명부에 `"A,B"` 가 들어가면 지우기 전까지 사람별 표에 남는다. 애초에 못 들어가게 한다.
 
-    names = client.get("/api/meta").json()["people"]
+    TODO 214 D6 — 이제 명부에 자동으로 넣지 않는다. 대신 사람별 표와 안내(warnings)에 두 이름이 따로 선다.
+    """
+    response = client.post("/api/activities", json={"person": "권경락,김현우", "title": "공동 교육"})
+    assert response.json()["warnings"] == ["명부에 없는 이름입니다: 권경락", "명부에 없는 이름입니다: 김현우"]
+
+    assert client.get("/api/meta").json()["people"] == []
+    names = [p["name"] for p in client.get("/api/activities/summary").json()["people"]]
     assert "권경락" in names and "김현우" in names
     assert not any("," in name for name in names)
 
@@ -217,7 +222,8 @@ def test_the_period_survives_a_reindex(client):
     assert client.get("/api/activities").json()[0]["end_date"] == "2026-05-14"
 
 
-def test_a_new_name_is_added_to_the_roster(client):
-    """명부에 없는 이름으로 기록하면 명부에 넣어 둔다 — 표기 흔들림을 막는 자리다."""
+def test_a_new_name_is_not_added_to_the_roster_by_itself(client):
+    """명부에 없는 이름으로 기록해도 명부에 **넣지 않는다** (TODO 214 D6 — 예전에는 넣었고, 오타가 명부에 굳었다).
+    화면이 "명부에 없는 이름 — 추가할까요?" 를 묻고 POST /api/people 로 넣는다."""
     add(client, person="새로운사람")
-    assert "새로운사람" in client.get("/api/meta").json()["people"]
+    assert "새로운사람" not in client.get("/api/meta").json()["people"]

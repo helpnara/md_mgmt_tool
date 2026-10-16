@@ -63,16 +63,34 @@ def _followups(value: object) -> list[dict[str, Any]]:
     return out
 
 
-def _validate(data: dict[str, Any]) -> dict[str, Any]:
+def _kind(value: object, stored: object = None) -> str | None:
+    """면담 구분 — 설정의 목록(비었으면 기본 목록)에 있는 것만 (TODO 214 F15). 비울 수 있다.
+
+    이미 적힌 옛 구분(목록에서 뺀 것)은 그대로 둔다 — 고치지 않은 칸 때문에 다른 칸을 저장 못 하면 안 된다.
+    """
+    kind = _clean(value)
+    if kind is None or kind == _clean(stored):
+        return kind
+    kinds = settings_service.meeting_kinds()
+    if kind not in kinds:
+        raise ValueError(f"면담 구분은 {' · '.join(kinds)} 중에서 골라 주세요 (받은 값: {kind[:30]}). 목록은 설정에서 고칩니다.")
+    return kind
+
+
+def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dict[str, Any]:
     people = split_people(data.get("person"))
     if len(people) != 1:
         raise ValueError("누구와의 면담인지 한 사람을 골라 주세요.")
-    # 이름에 경로 기호를 받지 않는다 (TODO 205 ㉞) — `../x` 가 `people/x/` 폴더로 들어가고 이름은 `../x` 로 남았다
+    # 이름에 경로 기호를 받지 않는다 (TODO 205 ㉞) — `../x` 가 `people/x/` 폴더로 들어가고 이름은 `../x` 로 남았다.
+    # 이미 적힌 이름은 그대로(손으로 고친 예전 표기), 새로 적은 이름은 명부와 같은 규칙 — 쉼표 · 40자 (TODO 214 F6)
     person = rules.plain_name(people[0], "person")
-    kind = _clean(data.get("kind"))
+    if person != _clean((stored or {}).get("person")):
+        person = settings_service.person_name(person)
+    kind = _kind(data.get("kind"), (stored or {}).get("kind"))
     # 날짜 — 엄격히, 비우면 오늘 · 다음 면담은 비울 수 있다 (TODO 205)
     meeting_date = rules.strict_day(data.get("date"), "date", default=date_cls.today().isoformat())
     next_date = rules.strict_day(data.get("next_date"), "next_date")
+    # 같은 날도 거절 — 화면도 같은 규칙으로 저장 전에 막는다 (TODO 216)
     if next_date and next_date <= meeting_date:
         raise ValueError("다음 면담은 이 면담 뒤여야 합니다.")
     summary = _clean(data.get("summary"))
@@ -105,10 +123,25 @@ def _wanted_name(fields: dict[str, Any]) -> str:
     return f"{fields['date']}-{paths.slugify(fields['kind'] or '면담')}"
 
 
-def create(conn: sqlite3.Connection, data: dict[str, Any]) -> int:
+def warnings(fields: dict[str, Any]) -> list[str]:
+    """막지 않는 안내 (TODO 214) — 명부에 없는 이름 · 떠난 사람(D6 · D7), 면담일이 오늘보다 뒤(D5)."""
+    out = settings_service.roster_warnings([fields["person"]])
+    if fields["date"] > date_cls.today().isoformat():
+        out.append(f"면담일이 오늘보다 뒤입니다 ({fields['date']}) — 예정이면 '다음 면담' 칸에 적어 두는 편이 맞습니다.")
+    return out
+
+
+def create(conn: sqlite3.Connection, data: dict[str, Any], notes: list[str] | None = None) -> int:
+    """면담 하나를 만든다. `notes` 에 목록을 넘기면 막지 않는 안내를 담는다.
+
+    **명부에 자동으로 넣지 않는다** (TODO 214 D6) — 오타가 명부에 굳었다. 화면이 "명부에 없는 이름 — 추가할까요?" 를
+    묻고 [POST /api/people] 로 넣는다.
+    """
     from ..vault.indexer import index_meetings
 
     fields = _validate(data)
+    if notes is not None:
+        notes.extend(warnings(fields))
     directory = person_dir(fields["person"])
     directory.mkdir(parents=True, exist_ok=True)
     stamp = now_iso()
@@ -120,20 +153,21 @@ def create(conn: sqlite3.Connection, data: dict[str, Any]) -> int:
     })
     target = paths.unique_path(directory, _wanted_name(fields), ".md")
     md.save(target, md.MarkdownDoc(meta, str(data.get("body") or "")))
-    settings_service.add_person(fields["person"])
     index_meetings(conn)
     conn.commit()
     rel = target.relative_to(get_settings().vault_dir).as_posix()
     return conn.execute("SELECT id FROM meeting WHERE rel_path = ?", (rel,)).fetchone()["id"]
 
 
-def update(conn: sqlite3.Connection, meeting_id: int, updates: dict[str, Any]) -> None:
+def update(conn: sqlite3.Connection, meeting_id: int, updates: dict[str, Any], notes: list[str] | None = None) -> None:
     from ..vault.indexer import index_meetings
 
     path = file_path(conn, meeting_id)
     doc = md.load(path)
     merged = {**doc.meta, **{key: value for key, value in updates.items() if key != "body"}}
-    fields = _validate(merged)
+    fields = _validate(merged, doc.meta)
+    if notes is not None:
+        notes.extend(warnings(fields))
     meta = _ordered({**doc.meta, **fields, "updated_at": now_iso()})
     body = updates.get("body")
     md.save(path, md.MarkdownDoc(meta, doc.body if body is None else str(body)))

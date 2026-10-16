@@ -88,12 +88,20 @@ def _clean(value: object) -> str | None:
     return text or None
 
 
-def _validate(data: dict[str, Any]) -> dict[str, Any]:
+COST_MAX = 1e12  # 비용(원) 위쪽 한계 — 1조 원. 이보다 크면 단위를 잘못 적은 것이다 (TODO 214 F14)
+FUTURE_REFUSED = "역량 기록은 지나간 일만 적습니다 — 날짜가 오늘보다 뒤입니다"
+
+
+def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dict[str, Any]:
     # 한 기록은 한 사람의 것이다. 여러 명은 create() 가 사람 수만큼 나눠 부른다.
     people = split_people(data.get("person"))
     if len(people) != 1:
         raise ValueError("누구의 기록인지 골라 주세요.")
     person = rules.plain_name(people[0], "person")  # 경로 기호는 받지 않는다 (TODO 205 ㉞)
+    stored = stored or {}
+    if person != _clean(stored.get("person")):
+        # 새로 적은 이름은 명부와 같은 규칙 — 40자 (TODO 214 F6). 이미 적힌 예전 표기는 그대로 둔다
+        person = settings_service.person_name(person)
     title = str(data.get("title") or "").strip()
     if not title:
         raise ValueError("제목을 입력하세요.")
@@ -109,6 +117,21 @@ def _validate(data: dict[str, Any]) -> dict[str, Any]:
         # 하루짜리를 같은 날짜 두 번으로 적어 두면 화면이 "~" 를 괜히 붙인다.
         if end == start:
             end = None
+    # TODO 214 D5 — "지나간 이력만" (모듈 머리 3번). 새로 적거나 바꾼 날짜가 오늘보다 뒤면 막는다.
+    # 이미 파일에 있는 미래 날짜(예전 기록)는 다른 칸을 고칠 때 막지 않는다 — 경고는 손 편집 알림이 맡는다.
+    today = date_cls.today().isoformat()
+    for value, field in ((start, "date"), (end, "end_date")):
+        if value and value > today and value != _day_quietly(stored.get(field)):
+            raise ValueError(f"{FUTURE_REFUSED} ({rules.field_label(field)} {value}).")
+    hours = normalize_number(data.get("hours"), "hours")
+    if hours is not None:
+        # TODO 214 F14 — 하루 24시간 × 걸친 날수를 넘을 수 없다 (1e300 을 받았다)
+        days = (date_cls.fromisoformat(end or start) - date_cls.fromisoformat(start)).days + 1
+        if hours > 24 * days:
+            raise ValueError(f"시간이 너무 큽니다 — {days}일이면 {24 * days}시간까지입니다 (받은 값: {hours:g}).")
+    cost = normalize_number(data.get("cost"), "cost")
+    if cost is not None and cost > COST_MAX:
+        raise ValueError("비용이 너무 큽니다 (최대 1조 원) — 단위를 확인하세요.")
     return {
         "person": person,
         "title": title,
@@ -117,12 +140,24 @@ def _validate(data: dict[str, Any]) -> dict[str, Any]:
         "end_date": end,
         "host": _clean(data.get("host")),
         "place": _clean(data.get("place")),
-        "hours": normalize_number(data.get("hours"), "시간"),
-        "cost": normalize_number(data.get("cost"), "비용"),
+        "hours": hours,
+        "cost": cost,
         "takeaway": _clean(data.get("takeaway")),
         "link": _clean(data.get("link")),
         "tags": rules.split_list(data.get("tags")),  # 담당자와 같은 쉼표 규칙 (TODO 205)
     }
+
+
+def _day_quietly(value: object) -> str | None:
+    try:
+        return rules.strict_day(value, "date")
+    except ValueError:
+        return None
+
+
+def warnings(people: list[str]) -> list[str]:
+    """막지 않는 안내 — 명부에 없는 이름 (TODO 214 D6). 떠난 사람은 알리지 않는다 — 지난 이력이라 그때는 있던 사람이다(D7)."""
+    return settings_service.roster_warnings(people, departed=False)
 
 
 def file_path(conn: sqlite3.Connection, activity_id: int) -> Path:
@@ -162,8 +197,7 @@ def _create_one(conn: sqlite3.Connection, data: dict[str, Any]) -> int:
         directory, f"{fields['date']}-{paths.slugify(fields['title'])}", ".md"
     )
     md.save(target, md.MarkdownDoc(meta, data.get("body") or BODY_TEMPLATE))
-    # 명부에 없는 이름이면 넣어 둔다 — 표기 흔들림을 막는 자리가 이미 있다 (TODO 38).
-    settings_service.add_person(fields["person"])
+    # 명부에 자동으로 넣지 않는다 (TODO 214 D6) — 오타가 명부에 굳었다. 화면이 "명부에 없는 이름 — 추가할까요?" 를 묻는다.
     index_activities(conn)
     conn.commit()
     rel = target.relative_to(get_settings().vault_dir).as_posix()
@@ -182,7 +216,7 @@ def update(conn: sqlite3.Connection, activity_id: int, updates: dict[str, Any]) 
     path = file_path(conn, activity_id)
     doc = md.load(path)
     merged = {**doc.meta, **{k: v for k, v in updates.items() if k != "body"}}
-    fields = _validate(merged)
+    fields = _validate(merged, doc.meta)
 
     meta = md.merge_meta(doc.meta, fields)
     meta["updated_at"] = now_iso()
@@ -316,8 +350,9 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
 
     # 명부에 있는 사람은 기록이 없어도 줄을 세운다 — 면담 대상이 빠지면 안 된다.
     names: list[str] = list(settings_service.known_names())
-    for row in conn.execute("SELECT DISTINCT person FROM activity ORDER BY person"):
-        if row["person"] not in names:
+    # 명부에 없는 이름도 기록이 있으면 줄을 세운다 — 면담만 있는 사람까지 (TODO 214 D6: 면담 · 역량이 명부에 자동으로 넣지 않는다)
+    for row in conn.execute("SELECT person FROM activity UNION SELECT person FROM meeting ORDER BY person"):
+        if row["person"] and row["person"] not in names:
             names.append(row["person"])
 
     # 떠난 사람 (TODO 122 · 194) — 줄은 남기되(이력은 사실) 면담 대상에는 세우지 않는다

@@ -45,6 +45,8 @@ class SettingsUpdate(BaseModel):
     meeting_cycle_days: int | None = None
     # 백업에 첨부를 넣지 않는다 (TODO 202) — 참/거짓만
     backup_skip_assets: StrictBool | None = None
+    # 효과 금액 단위 확인 기준선 (TODO 214 D4) — 억원/년, 0 이면 묻지 않음
+    effect_confirm_over: float | None = None
 
 
 @router.get("")

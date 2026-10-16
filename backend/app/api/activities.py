@@ -72,15 +72,18 @@ def create_activity(payload: ActivityIn, conn: sqlite3.Connection = Depends(get_
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # id 하나만 보던 예전 화면이 있어도 깨지지 않게 첫 건을 함께 준다.
-    return {"ids": ids, "count": len(ids), "id": ids[0]}
+    # warnings — 명부에 없는 이름 (TODO 214 D6, 막지 않는다 — 명부에 넣는 것은 화면이 물어본 뒤 POST /api/people)
+    return {"ids": ids, "count": len(ids), "id": ids[0],
+            "warnings": svc.warnings(svc.split_people(payload.person))}
 
 
 @router.patch("/{activity_id}")
 def update_activity(
     activity_id: RowId, payload: ActivityIn, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
+    changes = payload.changes()
     try:
-        svc.update(conn, activity_id, payload.changes())
+        svc.update(conn, activity_id, changes)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.") from exc
     except InvalidDateError as exc:
@@ -89,7 +92,8 @@ def update_activity(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileInUseError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {"ok": True}
+    # 사람을 바꾼 때만 — 명부에 없는 이름 (TODO 214 D6)
+    return {"ok": True, "warnings": svc.warnings(svc.split_people(changes["person"])) if changes.get("person") else []}
 
 
 @router.delete("/{activity_id}", status_code=204)

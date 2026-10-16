@@ -87,6 +87,7 @@ class Promotion(BaseModel):
     delivery: str | None = None
     cost_kind: str | None = None
     tags: list[str] = Field(default_factory=list)
+    # 착수 판정 메모 (TODO 214 D17) — 선택, 200자까지. 다른 판정 사유처럼 접수의 decision_note 에 남는다
     decision_note: str | None = None
 
 
@@ -269,7 +270,10 @@ def next_id(received_on: str | None = None) -> dict:
 @router.post("/api/intakes", status_code=201)
 def create_intake(payload: IntakeCreate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     intake_id = _errors(lambda: svc.create_intake(conn, payload.model_dump()))
-    return get_intake(intake_id, conn)
+    data = get_intake(intake_id, conn)
+    # 막지 않는 안내 (TODO 214 D13) — 요청 팀 이름이 쓰던 팀과 띄어쓰기 · 대소문자만 다를 때
+    data["warnings"] = svc.similar_team_warnings(conn, data.get("leader_team"))
+    return data
 
 
 @router.get("/api/intakes/{intake_id}")
@@ -302,8 +306,12 @@ def get_intake(intake_id: str, conn: sqlite3.Connection = Depends(get_db)) -> di
 
 @router.patch("/api/intakes/{intake_id}")
 def update_intake(intake_id: str, payload: IntakeUpdate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    _errors(lambda: svc.update_intake(conn, intake_id, payload.changes()))
-    return get_intake(intake_id, conn)
+    changes = payload.changes()
+    _errors(lambda: svc.update_intake(conn, intake_id, changes))
+    data = get_intake(intake_id, conn)
+    # 요청 팀을 고친 때만 (TODO 214 D13)
+    data["warnings"] = svc.similar_team_warnings(conn, data.get("leader_team")) if "leader_team" in changes else []
+    return data
 
 
 @router.post("/api/intakes/{intake_id}/status")
@@ -331,8 +339,12 @@ def promote(intake_id: str, payload: Promotion, conn: sqlite3.Connection = Depen
     data["partners"] = [
         {"team": item["team"], "people": item["people"]} for item in data.get("partners") or []
     ]
-    project_id = _errors(lambda: svc.promote(conn, intake_id, data))
-    return {"project_id": project_id, "intake": get_intake(intake_id, conn)}
+    warnings: list[str] = []
+    same_title: list[dict] = []
+    project_id = _errors(lambda: svc.promote(conn, intake_id, data, warnings, same_title))
+    # 막지 않는 안내 (TODO 214 D11 같은 이름 과제 · D6 명부에 없는 담당) — 착수 판정 메모는 접수의 decision_note 에 (D17)
+    return {"project_id": project_id, "intake": get_intake(intake_id, conn),
+            "warnings": warnings, "same_title": same_title}
 
 
 @router.post("/api/intakes/{intake_id}/archive", status_code=204)

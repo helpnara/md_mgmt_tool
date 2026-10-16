@@ -42,7 +42,15 @@ KEEP_MONTHS = 3
 MAX_LINES = 2000
 
 # 오류로 볼 응답 상태. 404(없는 것을 찾음)와 401·403 은 흔하고 대개 문제가 아니라 뺀다.
+# 400 · 422 가운데 입력 규칙이 돌려보낸 것은 여기 오지 않고 record_input 으로 간다 (TODO 216, main.is_input_rejection).
 RECORDED_4XX = frozenset({400, 409, 422, 423, 507})
+
+# 입력 확인으로 돌려보낸 것 (TODO 216). 사용자가 고치면 되는 거절(날짜 순서 · 빈 제목 · 형식)은 고장이 아니라
+# "최근 오류" 에 세우지 않는다. 다만 같은 거절이 자꾸 나면 화면이 미리 막지 못한 자리라는 신호라 **따로** 센다 —
+# 작은 고리 하나(최근 INPUT_KEEP 건)만 남긴다. 달마다 파일을 나누지 않는다 — 늘 최근 몇 건만 본다.
+INPUT_FILE = "input.log"
+INPUT_KEEP = 50
+INPUT_RECENT = 20
 
 # 최근 동작 꼬리. 요청마다 갱신되고 오류가 날 때만 함께 적힌다.
 _trail: deque[str] = deque(maxlen=TRAIL)
@@ -171,8 +179,68 @@ def recent(limit: int = RECENT_LIMIT) -> list[dict[str, Any]]:
     return items
 
 
+def record_input(*, action: str, status: int | None, detail: str | None = None) -> None:
+    """입력 확인으로 돌려보낸 요청 한 건 (TODO 216). "최근 오류" 와 다른 파일 · 작은 고리에 남긴다.
+
+    직전 동작 꼬리는 싣지 않는다 — 어느 칸이 왜 돌아갔는지면 충분하다. 기록 실패는 조용히 넘긴다(record 와 같다).
+    """
+    try:
+        settings = get_settings()
+        settings.logs_dir.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "at": datetime.now().isoformat(timespec="seconds"),
+            "action": action,
+            "status": status,
+            "detail": (detail or "")[:300] or None,
+        }
+        path = settings.logs_dir / INPUT_FILE
+        with _lock:
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                lines = []
+            lines = [line for line in lines if line.strip()][-(INPUT_KEEP - 1):]
+            lines.append(json.dumps(entry, ensure_ascii=False))
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except (OSError, ValueError, TypeError):
+        pass
+
+
+def _inputs() -> list[dict[str, Any]]:
+    path = get_settings().logs_dir / INPUT_FILE
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    items: list[dict[str, Any]] = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            items.append(item)
+    return items
+
+
+def recent_inputs(limit: int = INPUT_RECENT) -> list[dict[str, Any]]:
+    """입력 확인으로 돌려보낸 최근 것 — 새 것부터 `{at, action, detail}`."""
+    items = _inputs()[::-1][:limit]
+    return [{"at": item.get("at"), "action": item.get("action"), "detail": item.get("detail")} for item in items]
+
+
+def input_counts() -> dict[str, int]:
+    """남아 있는 고리(최근 INPUT_KEEP 건) 안의 수와 그중 오늘 것."""
+    items = _inputs()
+    today = date.today().isoformat()
+    return {"total": len(items), "today": sum(1 for item in items if str(item.get("at") or "").startswith(today))}
+
+
 def clear() -> int:
-    """기록을 모두 지운다. "지금부터 다시 해 볼게" 를 위한 자리다."""
+    """기록을 모두 지운다. "지금부터 다시 해 볼게" 를 위한 자리다. 입력 확인 고리도 함께 (TODO 216)."""
     settings = get_settings()
     if not settings.logs_dir.exists():
         return 0
@@ -180,5 +248,6 @@ def clear() -> int:
     for path in settings.logs_dir.glob("error-*.log"):
         path.unlink(missing_ok=True)
         removed += 1
+    (settings.logs_dir / INPUT_FILE).unlink(missing_ok=True)
     clear_trail()
     return removed

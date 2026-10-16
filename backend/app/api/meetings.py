@@ -43,23 +43,26 @@ def list_meetings(
 
 @router.post("", status_code=201)
 def create_meeting(payload: MeetingIn, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    notes: list[str] = []
     try:
-        return {"id": svc.create(conn, payload.model_dump())}
+        # warnings — 명부에 없는 이름 · 떠난 사람 · 미래 면담일 (TODO 214, 막지 않는다)
+        return {"id": svc.create(conn, payload.model_dump(), notes), "warnings": notes}
     except (InvalidDateError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/{meeting_id}")
 def update_meeting(meeting_id: RowId, payload: MeetingIn, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    notes: list[str] = []
     try:
-        svc.update(conn, meeting_id, payload.changes())
+        svc.update(conn, meeting_id, payload.changes(), notes)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="면담 기록을 찾을 수 없습니다.") from exc
     except (InvalidDateError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileInUseError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {"ok": True}
+    return {"ok": True, "warnings": notes}
 
 
 @router.delete("/{meeting_id}", status_code=204)

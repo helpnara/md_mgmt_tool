@@ -178,7 +178,8 @@ def restore(conn: sqlite3.Connection, trash_name: str) -> dict[str, Any]:
         # 같은 자리에 새 항목이 생겼을 수 있다. 덮어쓰지 않고 옆에 놓는다.
         target = paths.unique_path(target.parent, f"{target.stem}-복구", target.suffix)
     target.parent.mkdir(parents=True, exist_ok=True)
-    paths.move(source, target)
+    # TODO 215 ④ — 파일 하나(기록 · 첨부)면 윈도우의 일시적 거부를 몇 번 다시. 폴더(과제)는 지금처럼 한 번
+    paths.move(source, target, retry=True)
 
     # 파일이 제자리로 돌아왔으니 색인을 다시 만든다.
     from ..vault.indexer import reindex_all
@@ -360,7 +361,7 @@ def _write_atomic(path: Path, text: str) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp_name, path)
+        paths.retry_os(os.replace, tmp_name, path)  # TODO 215 ④ — 목록 읽기와 겹친 윈도우 거부
     except BaseException:
         Path(tmp_name).unlink(missing_ok=True)
         raise

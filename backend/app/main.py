@@ -218,10 +218,35 @@ async def record_failures(request: Request, call_next):
     return response
 
 
+def is_input_rejection(status: int, exc: BaseException) -> bool:
+    """입력 규칙이 돌려보낸 것인가 (TODO 216) — 그러면 "최근 오류" 가 아니라 "입력 확인" 으로 센다.
+
+    * 422 — 화면이 서버가 받지 못하는 모양을 보냈다(칸 검사).
+    * 400 이면서 원인이 **ValueError** — 서비스의 입력 규칙(`schemas` · 날짜 순서 · 빈 제목 …)이 낸 거절.
+      OSError(파일) · 백업 실패(BackupError) · 파일을 읽다 난 글자 깨짐(UnicodeError)은 입력이 아니라 고장이다.
+    원인이 없는 400(라우터가 바로 낸 것)은 지금처럼 오류로 남긴다.
+    """
+    if status == 422:
+        return True
+    if status != 400:
+        return False
+    cause = exc.__cause__ or exc.__context__
+    if not isinstance(cause, ValueError) or isinstance(cause, (OSError, UnicodeError)):
+        return False
+    from .services.backup import BackupError
+
+    return not isinstance(cause, BackupError)
+
+
 @app.exception_handler(StarletteHTTPException)
 async def record_http_error(request: Request, exc: StarletteHTTPException):
     """의도해서 돌려보낸 오류(파일이 열려 있음, 저장 공간 부족 …)를 사유까지 남긴다."""
-    if errorlog.should_record(exc.status_code):
+    if is_input_rejection(exc.status_code, exc):
+        # TODO 216 — 사용자가 고치면 되는 거절은 고장과 같은 줄에 세우지 않는다
+        errorlog.record_input(
+            action=f"{request.method} {request.url.path}", status=exc.status_code, detail=str(exc.detail)
+        )
+    elif errorlog.should_record(exc.status_code):
         errorlog.record(
             action=f"{request.method} {request.url.path}",
             status=exc.status_code,
@@ -275,13 +300,7 @@ async def file_not_found(request: Request, exc: FileNotFoundError):
 
 @app.exception_handler(RequestValidationError)
 async def record_validation_error(request: Request, exc: RequestValidationError):
-    """화면이 서버가 받지 못하는 값을 보낸 경우 — 대개 화면 쪽 결함이라 남길 값이 있다."""
-    errorlog.record(
-        action=f"{request.method} {request.url.path}",
-        status=422,
-        error="RequestValidationError",
-        detail=str(exc.errors())[:500],
-    )
+    """화면이 서버가 받지 못하는 값을 보낸 경우. "입력 확인" 고리에 남긴다 (TODO 216 — 최근 오류에는 세우지 않는다)."""
     # 받은 값(`input`)을 그대로 돌려주면 NaN · 무한대 같은 값은 JSON 으로 못 적어 **500 이 났다**
     # (TODO 167). 화면에 필요한 것은 어느 칸이 왜 틀렸는가뿐이다.
     # 문구는 한글로, 칸 이름을 붙여서 (TODO 205 ㉞) — 예전에는 pydantic 의 영어 문장이 그대로 나갔다.
@@ -291,10 +310,9 @@ async def record_validation_error(request: Request, exc: RequestValidationError)
          "type": str(error.get("type", ""))}
         for error in exc.errors()
     ]
-    return JSONResponse(
-        status_code=422,
-        content={"detail": items, "message": " · ".join(dict.fromkeys(item["msg"] for item in items))},
-    )
+    message = " · ".join(dict.fromkeys(item["msg"] for item in items))
+    errorlog.record_input(action=f"{request.method} {request.url.path}", status=422, detail=message)
+    return JSONResponse(status_code=422, content={"detail": items, "message": message})
 
 
 # 422 의 형별 한글 문구 (TODO 205 ㉞). 모르는 형은 마지막 줄.

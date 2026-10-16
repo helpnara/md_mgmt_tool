@@ -4,8 +4,11 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from ..config import FINISHED_STATUSES
+from pathlib import Path
+
+from ..config import FINISHED_STATUSES, get_settings
 from ..vault import markdown as md
+from ..vault import paths, versions
 from ..vault.indexer import index_project
 from . import settings as settings_service
 from .projects import now_iso, project_dir
@@ -54,11 +57,37 @@ def overview(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def _swap(names: list[str], old: str, new: str | None) -> list[str]:
+    """이름 목록에서 old → new (`new=None` 이면 뺀다). 새 이름이 이미 있으면 겹쳐 남기지 않는다."""
+    out: list[str] = []
+    for name in names:
+        name = str(name).strip()
+        if name == old:
+            if new is None:
+                continue
+            name = new
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
 def _replace_in_projects(
     conn: sqlite3.Connection, project_ids: list[str], old: str, new: str | None
 ) -> list[str]:
-    """과제 파일의 담당자 이름을 바꾼다(또는 `new=None` 이면 뺀다). **파일이 원본이다.**"""
-    changed = []
+    """과제 파일의 담당자 이름을 바꾼다(또는 `new=None` 이면 뺀다). **파일이 원본이다.**
+
+    TODO 214 D9 — 유관부서 담당자(`partners[].people`)도 함께 바꾼다. 담당 · 유관부서 어느 쪽이든 바뀐 과제의 번호를 돌려준다.
+    """
+    return [project_id for project_id, _, _ in _rename_in_projects(conn, project_ids, old, new)]
+
+
+def _rename_in_projects(
+    conn: sqlite3.Connection, project_ids: list[str], old: str, new: str | None
+) -> list[tuple[str, bool, bool]]:
+    """과제마다 (번호, 담당이 바뀌었나, 유관부서가 바뀌었나). 바뀐 것이 없는 과제는 파일을 건드리지 않는다."""
+    from .projects import normalize_partners
+
+    out: list[tuple[str, bool, bool]] = []
     for project_id in project_ids:
         directory = project_dir(conn, project_id)
         index_md = directory / "index.md"
@@ -66,22 +95,104 @@ def _replace_in_projects(
         owners = doc.meta.get("owners") or []
         if isinstance(owners, str):
             owners = [owners]
-        replaced: list[str] = []
-        for name in owners:
-            name = str(name).strip()
-            if name == old:
-                if new is None:
-                    continue
-                name = new
-            # 새 이름이 이미 있으면 중복으로 남기지 않는다.
-            if name and name not in replaced:
-                replaced.append(name)
-        doc.meta["owners"] = replaced
+        owners = [str(name).strip() for name in owners]
+        new_owners = _swap(owners, old, new)
+        owners_changed = old in owners
+        partners = normalize_partners(doc.meta.get("partners"))
+        partners_changed = any(old in row["people"] for row in partners)
+        if not owners_changed and not partners_changed:
+            continue
+        if owners_changed:
+            doc.meta["owners"] = new_owners
+        if partners_changed:
+            # 넘기기(new=None 은 쓰지 않음)든 통일이든 팀 줄은 그대로, 사람만 바꾼다
+            doc.meta["partners"] = [{**row, "people": _swap(row["people"], old, new)} for row in partners]
         doc.meta["updated_at"] = now_iso()
         md.save(index_md, doc)
         index_project(conn, directory)
-        changed.append(project_id)
-    return changed
+        out.append((project_id, owners_changed, partners_changed))
+    return out
+
+
+def _projects_naming(conn: sqlite3.Connection, name: str, include_finished: bool = True) -> list[str]:
+    """그 이름이 담당 또는 유관부서 담당으로 들어간 과제의 번호."""
+    sql = ("SELECT p.id AS id FROM project p WHERE p.id IN ("
+           " SELECT project_id FROM project_owner WHERE name = ?"
+           " UNION SELECT project_id FROM project_partner WHERE person = ?)")
+    params: list[Any] = [name, name]
+    if not include_finished:
+        sql += f" AND p.status NOT IN ({','.join('?' for _ in FINISHED_STATUSES)})"
+        params.extend(FINISHED_STATUSES)
+    return [row["id"] for row in conn.execute(sql + " ORDER BY p.id", params)]
+
+
+def _rename_person_records(conn: sqlite3.Connection, table: str, old: str, new: str) -> int:
+    """역량 · 면담 기록의 `person` 을 바꾸고 파일을 새 이름의 폴더로 옮긴다 (TODO 214 D9). 옮길 자리에 같은 이름이 있으면 옆에.
+
+    사람 폴더가 이미 있으면 그 안으로 합친다. 비게 된 옛 폴더는 지운다.
+    """
+    from . import activities as activities_service
+    from . import meetings as meetings_service
+
+    vault = get_settings().vault_dir
+    person_dir = activities_service.person_dir if table == "activity" else meetings_service.person_dir
+    rows = conn.execute(f"SELECT rel_path FROM {table} WHERE person = ? ORDER BY rel_path", (old,)).fetchall()
+    emptied: set[Path] = set()
+    for row in rows:
+        path = paths.safe_join(vault, row["rel_path"])
+        doc = md.load(path)
+        doc.meta["person"] = new
+        doc.meta["updated_at"] = now_iso()
+        md.save(path, doc)
+        directory = person_dir(new)
+        if path.parent != directory:
+            directory.mkdir(parents=True, exist_ok=True)
+            target = directory / path.name
+            if target.exists():
+                target = paths.unique_path(directory, path.stem, path.suffix)
+            paths.move(path, target)
+            versions.follow(path, target)
+            emptied.add(path.parent)
+    for folder in emptied:
+        # people/<옛 이름>/activities → people/<옛 이름> 순으로, 비었을 때만
+        for candidate in (folder, folder.parent):
+            try:
+                candidate.rmdir()
+            except OSError:
+                break
+    return len(rows)
+
+
+def _rename_intake_leaders(conn: sqlite3.Connection, old: str, new: str, *, pool_only: bool) -> int:
+    """접수의 과제리더(요청자) 이름 (TODO 214 D9). 넘기기는 풀에 있는(판정 전) 접수만 — 닫힌 접수는 그때의 기록이다."""
+    from ..config import INTAKE_POOL_STATUSES
+    from . import intakes as intakes_service
+
+    sql, params = "SELECT id FROM intake WHERE leader = ?", [old]
+    if pool_only:
+        sql += f" AND status IN ({','.join('?' for _ in INTAKE_POOL_STATUSES)})"
+        params.extend(INTAKE_POOL_STATUSES)
+    count = 0
+    for row in conn.execute(sql + " ORDER BY id", params).fetchall():
+        directory = intakes_service.intake_dir(conn, row["id"])
+        request = directory / intakes_service.REQUEST_FILE
+        doc = md.load(request)
+        doc.meta["leader"] = new
+        doc.meta["updated_at"] = now_iso()
+        md.save(request, doc)
+        intakes_service.index_intake(conn, directory)
+        count += 1
+    return count
+
+
+def _names(old: str, new: str, empty_message: str) -> tuple[str, str]:
+    """옛 이름은 그대로(손으로 고친 이상한 표기를 고치려고 부르는 자리다), 새 이름은 명부 규칙으로 (TODO 214 F6)."""
+    old, new = (old or "").strip(), (new or "").strip()
+    if not old or not new:
+        raise ValueError(empty_message)
+    if old == new:
+        raise ValueError("두 이름이 같습니다.")
+    return old, settings_service.person_name(new)
 
 
 def handover(
@@ -95,72 +206,39 @@ def handover(
     * 명부는 건드리지 않는다 — 떠난 사람은 떠난 사람으로 남는다.
     * **끝난 과제는 기본으로 손대지 않는다.** 그때 그 사람이 한 것은 사실이고,
       바꾸면 지난 보고·지난해 팀원별 성과와 어긋난다.
+    * TODO 214 D9 — 담당뿐 아니라 **유관부서 담당 · 풀에 있는 접수의 과제리더**도 넘긴다(남은 일).
+      역량 · 면담 기록은 넘기지 않는다 — 그 사람의 지난 이력이지 일감이 아니다.
     """
-    old, new = (old or "").strip(), (new or "").strip()
-    if not old or not new:
-        raise ValueError("넘길 사람과 받을 사람을 모두 고르세요.")
-    if old == new:
-        raise ValueError("두 이름이 같습니다.")
-
-    clause = ""
-    params: list[Any] = [old]
-    if not include_finished:
-        marks = ",".join("?" for _ in FINISHED_STATUSES)
-        clause = f" AND p.status NOT IN ({marks})"
-        params.extend(FINISHED_STATUSES)
-    targets = [
-        row["project_id"]
-        for row in conn.execute(
-            "SELECT DISTINCT po.project_id AS project_id FROM project_owner po"
-            f" JOIN project p ON p.id = po.project_id WHERE po.name = ?{clause}"
-            " ORDER BY po.project_id",
-            params,
-        )
-    ]
-    changed = _replace_in_projects(conn, targets, old, new)
+    old, new = _names(old, new, "넘길 사람과 받을 사람을 모두 고르세요.")
+    targets = _projects_naming(conn, old, include_finished)
+    changes = _rename_in_projects(conn, targets, old, new)
+    intakes = _rename_intake_leaders(conn, old, new, pool_only=True)
     conn.commit()
+    changed = [project_id for project_id, _, _ in changes]
     return {"changed": changed, "count": len(changed), "old": old, "new": new,
-            "include_finished": include_finished}
+            "include_finished": include_finished,
+            "counts": {"owners": sum(1 for _, o, _ in changes if o), "partners": sum(1 for _, _, p in changes if p),
+                       "activities": 0, "meetings": 0, "intakes": intakes}}
 
 
 def rename_owner(conn: sqlite3.Connection, old: str, new: str) -> dict[str, Any]:
-    """담당자 표기를 한 번에 바꾼다. **파일이 원본이므로 파일부터 고친다.**
+    """사람 표기를 한 번에 바꾼다. **파일이 원본이므로 파일부터 고친다.**
 
     `권 경락` → `권경락` 처럼 이미 쌓인 흔들림을 정리하는 데 쓴다.
+    TODO 214 D9 — 담당 · 유관부서 담당 · 역량 기록 · 면담 기록(파일 이름과 폴더까지) · 접수 과제리더 · 명부.
+    작성자 · 등록자(author · created_by)는 그때의 사실이라 두고, 끝난 과제도 바꾼다(같은 사람의 표기이므로).
     """
-    old, new = (old or "").strip(), (new or "").strip()
-    if not old or not new:
-        raise ValueError("바꿀 이름과 새 이름을 모두 입력하세요.")
-    if old == new:
-        raise ValueError("두 이름이 같습니다.")
+    from ..vault.indexer import index_activities, index_meetings
 
-    targets = [
-        row["project_id"]
-        for row in conn.execute(
-            "SELECT DISTINCT project_id FROM project_owner WHERE name = ? ORDER BY project_id",
-            (old,),
-        )
-    ]
-
-    changed = []
-    for project_id in targets:
-        directory = project_dir(conn, project_id)
-        index_md = directory / "index.md"
-        doc = md.load(index_md)
-        owners = doc.meta.get("owners") or []
-        if isinstance(owners, str):
-            owners = [owners]
-        # 새 이름이 이미 있으면 중복으로 남기지 않는다.
-        renamed: list[str] = []
-        for name in owners:
-            name = new if str(name).strip() == old else str(name).strip()
-            if name and name not in renamed:
-                renamed.append(name)
-        doc.meta["owners"] = renamed
-        doc.meta["updated_at"] = now_iso()
-        md.save(index_md, doc)
-        index_project(conn, directory)
-        changed.append(project_id)
+    old, new = _names(old, new, "바꿀 이름과 새 이름을 모두 입력하세요.")
+    changes = _rename_in_projects(conn, _projects_naming(conn, old), old, new)
+    activities = _rename_person_records(conn, "activity", old, new)
+    meetings = _rename_person_records(conn, "meeting", old, new)
+    if activities:
+        index_activities(conn)
+    if meetings:
+        index_meetings(conn)
+    intakes = _rename_intake_leaders(conn, old, new, pool_only=False)
 
     # 명부에서도 이름을 바꾼다 (사번·계정은 그대로 따라간다).
     registered = settings_service.people()
@@ -174,4 +252,7 @@ def rename_owner(conn: sqlite3.Connection, old: str, new: str) -> dict[str, Any]
         settings_service.save({"people": merged})
 
     conn.commit()
-    return {"changed": changed, "count": len(changed), "old": old, "new": new}
+    changed = [project_id for project_id, _, _ in changes]
+    return {"changed": changed, "count": len(changed), "old": old, "new": new,
+            "counts": {"owners": sum(1 for _, o, _ in changes if o), "partners": sum(1 for _, _, p in changes if p),
+                       "activities": activities, "meetings": meetings, "intakes": intakes}}

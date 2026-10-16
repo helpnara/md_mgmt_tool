@@ -68,9 +68,13 @@ DEFAULTS: dict[str, Any] = {
     # 백업에 첨부(assets)를 넣지 않는다 (TODO 202 · 197) — 첨부가 GB 단위면 백업이 조용히 실패했다.
     # 끄면(False, 기본) 지금처럼 전부 넣는다. 백업 서비스가 읽는다.
     "backup_skip_assets": False,
+    # 효과 금액 단위 확인 기준선 (TODO 214 D4) — 억원/년. 한 칸이 이보다 크면 화면이 저장 전에 "단위를 확인하세요" 를 묻는다.
+    # 0 이면 묻지 않는다. 서버는 막지 않는다(상한은 schemas.NUMBER_MAX).
+    "effect_confirm_over": 100,
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
-_TEXT_KEYS = ("author", "report_template", "project_code",
+# 팀 코드(project_code)는 여기서 빼 저장할 때도 검사한다 (TODO 214 D16).
+_TEXT_KEYS = ("author", "report_template",
               "ai_prompt_prefix", "ai_prompt_suffix", "intake_template")
 
 
@@ -91,6 +95,17 @@ _unreadable: list[str] = []
 
 def _shape_ok(key: str, value: Any) -> bool:
     default = DEFAULTS[key]
+    if key == "effect_confirm_over":
+        return _confirm_over_ok(value)
+    if key == "project_code":
+        # TODO 214 F3 — 손으로 고친 팀 코드(`a/b`)를 그대로 쓰면 폴더가 두 단으로 생겼다. 틀리면 빈 코드로 읽고 알린다.
+        if not isinstance(value, str):
+            return False
+        try:
+            validate_project_code(value)
+        except ValueError:
+            return False
+        return True
     if key in _NULLABLE_SHAPES:
         return value is None or isinstance(value, _NULLABLE_SHAPES[key])
     if isinstance(default, bool):
@@ -169,6 +184,10 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = backup_service.validate_dir(str(updates[key] or ""))
         elif key in ("backup_keep", "backup_every_hours"):
             current[key] = _positive_int(key, updates[key])
+        elif key == "effect_confirm_over":
+            current[key] = validate_effect_confirm_over(updates[key])
+        elif key == "project_code":
+            current[key] = validate_project_code(str(updates[key]))
         elif key in ("backup_keep_weekly", "backup_keep_monthly"):
             # 층은 0 이 될 수 있다 — "주 단위는 안 쓴다" 는 뜻이다 (TODO 119).
             current[key] = _zero_or_more(key, updates[key])
@@ -241,15 +260,24 @@ def check_thresholds(value: Any) -> list[float]:
 
 
 def check_people(value: Any) -> None:
-    """화면 · API 로 보낸 명부의 검사 (TODO 205 ㉞). 빈 이름 줄은 지금처럼 버린다(새 줄을 비워 둔 것)."""
+    """화면 · API 로 보낸 명부의 검사 (TODO 205 ㉞). 빈 이름 줄은 지금처럼 버린다(새 줄을 비워 둔 것).
+
+    TODO 214 — 새 이름은 사람 이름 규칙(F6) · 같은 사번 둘은 막음(D10) · 떠난 사유는 고를 수 있는 것만.
+    이미 명부에 있던 이름은 규칙을 다시 따지지 않는다 — 예전 표기 하나 때문에 명부 전체를 저장 못 하면 안 된다
+    ([다른 이름으로 통일] 로 고치면 된다).
+    """
     if not isinstance(value, list):
         raise ValueError("명부는 목록으로 보내야 합니다.")
+    stored = {person["name"] for person in normalize_people(load()["people"])}
     seen: set[str] = set()
+    ids: dict[str, str] = {}
     for raw in value:
         item = raw if isinstance(raw, dict) else {"name": raw}
         name = rules.clean_text(item.get("name"))
         if not name:
             continue
+        if name not in stored:
+            name = person_name(name)
         if name in seen:
             raise ValueError(f"명부에 같은 이름이 둘 있습니다: {name}")
         seen.add(name)
@@ -258,6 +286,34 @@ def check_people(value: Any) -> None:
         except ValueError as exc:
             # 예전에는 `left_on: "x"` 가 **조용히 지워졌다** — 떠난 사람이 지금 있는 사람으로 돌아갔다
             raise ValueError(f"{name}: {exc}") from exc
+        reason = rules.clean_text(item.get("left_reason"))
+        if reason and reason not in LEFT_REASONS:
+            # 예전에는 말없이 비웠다 (TODO 214)
+            raise ValueError(f"{name}: 떠난 사유는 {' · '.join(LEFT_REASONS)} 중 하나입니다 (받은 값: {reason[:20]})")
+        employee_id = rules.clean_text(item.get("employee_id"))
+        if employee_id:
+            if employee_id in ids:
+                raise ValueError(f"같은 사번({employee_id})이 두 사람에게 있습니다: {ids[employee_id]} · {name}")
+            ids[employee_id] = name
+
+
+# 사람 이름 하나 (TODO 214 F6 · D14) — 명부 · 면담 · 역량 · [다른 이름으로 통일] · [넘기기] 가 같은 규칙.
+PERSON_NAME_MAX = 40
+
+
+def person_name(value: object, field: str = "person") -> str:
+    """앞뒤 공백을 걷고, 경로 기호(`/` `\\` `..`) · 줄바꿈 · 쉼표 · 40자 넘는 이름은 400.
+
+    쉼표가 든 이름(`"가, 나"`)은 담당 · 유관부서 칸에서 두 사람으로 갈라져 한 사람으로 굳지 못한다.
+    """
+    name = rules.plain_name(value, field)
+    if not name:
+        raise ValueError("이름을 입력하세요.")
+    if "," in name or ";" in name:
+        raise ValueError(f"이름에는 쉼표(,)를 쓸 수 없습니다 — 한 사람씩 적어 주세요 (받은 값: {name[:40]})")
+    if len(name) > PERSON_NAME_MAX:
+        raise ValueError(f"이름은 {PERSON_NAME_MAX}자까지입니다 (받은 값: {name[:20]}…)")
+    return name
 
 
 # ── 팀원 면담 (TODO 182) ────────────────────
@@ -299,8 +355,10 @@ def current_author(explicit: str | None = None) -> str:
 
     로그인이 생기면 explicit 자리에 로그인 사용자가 들어온다.
     """
-    if explicit and explicit.strip():
-        return explicit.strip()
+    # TODO 214 F13 — 요청이 보낸 작성자도 작성자 규칙(한 줄 · 40자)을 거친다. 틀리면 ValueError → 400
+    text = rules.clean_author(explicit) if explicit else ""
+    if text:
+        return text
     return load()["author"]
 
 
@@ -444,7 +502,7 @@ def normalize_people(value: object) -> list[dict[str, str]]:
             }
         )
     # 떠난 사람은 아래로. 자동완성·고르기에서 지금 있는 사람이 먼저 보여야 한다.
-    people.sort(key=lambda person: (bool(person["left_on"]), person["name"]))
+    people.sort(key=lambda person: (has_left(person), person["name"]))
     return people
 
 
@@ -474,21 +532,50 @@ def people() -> list[dict[str, str]]:
     return normalize_people(load()["people"])
 
 
+def has_left(person: dict[str, Any], today: str | None = None) -> bool:
+    """떠났는가 (TODO 214 D8) — 떠난 날이 **오늘이거나 지났을 때만.** 미래 날짜(전배 예정)는 그날까지 지금 있는 사람이다.
+
+    예전에는 적는 즉시 떠난 사람이 되어, 다음 달 전배 예정자가 승격 · 면담에서 엇갈렸다.
+    """
+    left_on = str(person.get("left_on") or "")
+    if not left_on:
+        return False
+    from datetime import date
+
+    return left_on <= (today or date.today().isoformat())
+
+
 def known_names(include_left: bool = True) -> list[str]:
     """명부의 이름. `include_left=False` 면 **지금 있는 사람만** (자동완성용, TODO 122)."""
-    return [p["name"] for p in people() if include_left or not p["left_on"]]
+    return [p["name"] for p in people() if include_left or not has_left(p)]
+
+
+def active_names() -> set[str]:
+    """지금 있는 사람(떠난 날이 없거나 아직 오지 않은 사람)의 이름 (TODO 214 D8)."""
+    return {p["name"] for p in people() if not has_left(p)}
 
 
 def left_people() -> list[dict[str, str]]:
-    """떠난 사람만. 화면의 딱지와 홈의 알림이 이것을 본다."""
-    return [person for person in people() if person["left_on"]]
+    """떠난 사람만 — 떠난 날이 오늘이거나 지난 사람 (TODO 214 D8). 화면의 딱지와 홈의 알림이 이것을 본다."""
+    return [person for person in people() if has_left(person)]
+
+
+def roster_warnings(names: list[str], *, departed: bool = True) -> list[str]:
+    """명부에 없는 이름 · 떠난 사람 — 막지 않고 알린다 (TODO 214 D6 · D7). 면담 · 역량 · 승격이 같은 문구."""
+    roster = {person["name"]: person for person in people()}
+    out: list[str] = []
+    for name in names:
+        person = roster.get(name)
+        if person is None:
+            out.append(f"명부에 없는 이름입니다: {name}")
+        elif departed and has_left(person):
+            out.append(f"떠난 사람입니다: {name}")
+    return out
 
 
 def add_person(name: str) -> list[dict[str, str]]:
     """명부에 없는 이름을 그 자리에서 추가한다 (화면에서 물어본 뒤 부른다)."""
-    name = (name or "").strip()
-    if not name:
-        raise ValueError("이름을 입력하세요.")
+    name = person_name(name)  # 경로 기호 · 쉼표 · 40자 (TODO 214 F6)
     current = people()
     if any(person["name"] == name for person in current):
         return current
@@ -499,7 +586,10 @@ def add_person(name: str) -> list[dict[str, str]]:
 # ── 과제 번호 코드 ────────────────────────────────────
 
 def project_code() -> str:
-    """과제 번호에 넣을 팀·부문 코드. 비어 있으면 번호는 지금 형태 그대로다."""
+    """과제 번호에 넣을 팀·부문 코드. 비어 있으면 번호는 지금 형태 그대로다.
+
+    손으로 고친 설정 파일의 틀린 코드는 load() 가 빈 코드로 읽고 `unreadable` 에 적는다 (TODO 214 F3).
+    """
     return str(load()["project_code"]).strip()
 
 
@@ -510,13 +600,17 @@ _CODE_FORBIDDEN = '/\\:*?"<>| \t\r\n'
 MAX_CODE_LEN = 20
 
 
-def validate_project_code(code: str) -> str:
-    """과제 번호에 쓸 팀 코드를 검사한다.
+# TODO 214 D16 — 한글 · 영문 · 숫자만. `팀-2` 는 번호 분해(renumber.split_id)가 `-숫자` 를 일련번호로 잘못 읽고,
+# `&` · `#` 은 임시 보관 열쇠 · 주소에서 늘 실패했다. 사용자 확인: 지금 쓰는 팀 코드에 특수문자 없음.
+_CODE_SHAPE = __import__("re").compile(r"[가-힣A-Za-z0-9]+")
 
-    막는 것 넷:
+
+def validate_project_code(code: str) -> str:
+    """과제 번호에 쓸 팀 코드를 검사한다 — 한글 · 영문 · 숫자 1~20자, 숫자만은 안 됨 (TODO 214 D16).
+
+    막는 것:
       · 숫자만  — 일련번호와 구분되지 않는다
-      · 윈도우가 파일 이름에 못 쓰는 문자 — 폴더를 만들 수 없다
-      · 끝의 점 — 탐색기가 잘라 내 폴더 이름이 어긋난다
+      · 한글 · 영문 · 숫자 밖의 글자 — 폴더 이름 · 번호 분해 · 주소가 깨진다
       · 너무 긴 것 — 폴더 이름이 길어져 윈도우 260자 경로 제한에 걸린다
     """
     code = (code or "").strip()
@@ -524,14 +618,10 @@ def validate_project_code(code: str) -> str:
         return ""
     if code.isdigit():
         raise ValueError("팀 코드는 숫자만으로 지을 수 없습니다. 일련번호와 구분되지 않습니다.")
-    bad = sorted({ch for ch in code if ch in _CODE_FORBIDDEN})
-    if bad:
-        shown = " ".join(repr(ch).strip("'") if ch.strip() else "공백" for ch in bad)
-        raise ValueError(f"팀 코드에 쓸 수 없는 문자가 있습니다: {shown}")
-    if code != code.rstrip("."):
-        raise ValueError("팀 코드는 점(.)으로 끝날 수 없습니다. 윈도우에서 잘려 나갑니다.")
-    if set(code) <= {"."}:
-        raise ValueError("팀 코드를 점만으로 지을 수 없습니다.")
+    if not _CODE_SHAPE.fullmatch(code):
+        bad = sorted({ch for ch in code if not _CODE_SHAPE.fullmatch(ch)})
+        shown = " ".join("공백" if not ch.strip() else ch for ch in bad)
+        raise ValueError(f"팀 코드에 쓸 수 없는 문자가 있습니다: {shown} — 한글 · 영문 · 숫자만 쓸 수 있습니다.")
     if len(code) > MAX_CODE_LEN:
         raise ValueError(f"팀 코드는 {MAX_CODE_LEN}자 이내여야 합니다. 폴더 이름이 너무 길어집니다.")
     return code
@@ -560,35 +650,93 @@ def validate_report_weekday(value: object) -> int:
     return number
 
 
+# 숫자 칸의 한글 이름 — 화면의 칸 이름과 같다 (TODO 214 F12: 묵힘 기준 · 면담 주기에 영문 키가 그대로 나왔다).
 LABELS = {
     "backup_keep": "일 단위로 남길 백업 수",
     "backup_keep_weekly": "주 단위로 남길 백업 수",
     "backup_keep_monthly": "달 단위로 남길 백업 수",
     "backup_every_hours": "백업 주기(시간)",
+    "intake_stale_days": "묵힘 기준일",
+    "meeting_cycle_days": "면담 주기(일)",
+    "effect_confirm_over": "효과 금액 확인 기준(억원/년)",
 }
+NUMBER_LIMIT = 999
+
+
+def _label(key: str) -> str:
+    return LABELS.get(key) or rules.field_label(key)
+
+
+def _whole_number(key: str, value: object) -> int:
+    """정수 하나. 비운 값 · 글자 · 소수는 한글 칸 이름으로 400 (TODO 214 F12)."""
+    label = _label(key)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise ValueError(f"{josa_of(label, '을를')} 비울 수 없습니다 — 숫자를 적어 주세요.")
+    if isinstance(value, bool):
+        raise ValueError(f"{josa_of(label, '은는')} 숫자여야 합니다.")
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError(f"{josa_of(label, '은는')} 소수 없이 정수로 적어 주세요.")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{josa_of(label, '은는')} 숫자여야 합니다 (받은 값: {str(value)[:20]}).") from exc
+
+
+def josa_of(word: str, pair: str) -> str:
+    """괄호로 끝나는 이름(`백업 주기(시간)`)은 괄호 앞 글자로 조사를 고른다."""
+    head = word.rstrip(")").rsplit("(", 1)[0] if word.endswith(")") else word
+    return word + rules.josa(head, pair)[len(head):]
 
 
 def _zero_or_more(key: str, value: object) -> int:
-    try:
-        number = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{LABELS.get(key, key)}는 숫자여야 합니다.") from exc
+    number = _whole_number(key, value)
     if number < 0:
-        raise ValueError(f"{LABELS.get(key, key)}는 0 이상이어야 합니다.")
+        raise ValueError(f"{josa_of(_label(key), '은는')} 0 이상이어야 합니다.")
+    if number > NUMBER_LIMIT:
+        # TODO 214 F14 — 주 · 달 단위 백업 수에 상한이 없었다(1e300 을 받았다)
+        raise ValueError(f"{josa_of(_label(key), '은는')} {NUMBER_LIMIT} 이하로 적어 주세요.")
     return number
 
 
 def _positive_int(key: str, value: object) -> int:
-    labels = LABELS
-    try:
-        number = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{labels.get(key, key)}는 숫자여야 합니다.") from exc
+    number = _whole_number(key, value)
     if number < 1:
-        raise ValueError(f"{labels.get(key, key)}는 1 이상이어야 합니다.")
-    if number > 999:
-        raise ValueError(f"{labels.get(key, key)}가 너무 큽니다.")
+        # 0 은 "끔" 이 아니다 — 비우거나 0 으로 두면 이 문구 (TODO 214 F12)
+        raise ValueError(f"{josa_of(_label(key), '은는')} 1 이상이어야 합니다.")
+    if number > NUMBER_LIMIT:
+        raise ValueError(f"{josa_of(_label(key), '은는')} {NUMBER_LIMIT} 이하로 적어 주세요.")
     return number
+
+
+def _confirm_over_ok(value: object) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return value == value and 0 <= value <= rules.NUMBER_MAX
+
+
+def validate_effect_confirm_over(value: object) -> float | int:
+    """효과 금액 확인 기준 (TODO 214 D4) — 0 이상의 숫자(억원/년). 0 은 "묻지 않음"."""
+    label = _label("effect_confirm_over")
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise ValueError(f"{josa_of(label, '을를')} 비울 수 없습니다 — 묻지 않으려면 0 을 적어 주세요.")
+    if isinstance(value, bool):
+        raise ValueError(f"{josa_of(label, '은는')} 숫자여야 합니다.")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{josa_of(label, '은는')} 숫자여야 합니다 (받은 값: {str(value)[:20]}).") from exc
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValueError(f"{josa_of(label, '은는')} 숫자여야 합니다.")
+    if number < 0:
+        raise ValueError(f"{josa_of(label, '은는')} 0 이상이어야 합니다 (0 은 묻지 않음).")
+    if number > rules.NUMBER_MAX:
+        raise ValueError(f"{josa_of(label, '이가')} 너무 큽니다 (최대 {rules.NUMBER_MAX:,.0f}).")
+    return int(number) if number.is_integer() else number
+
+
+def effect_confirm_over() -> float | int:
+    value = load()["effect_confirm_over"]
+    return value if _confirm_over_ok(value) else DEFAULTS["effect_confirm_over"]
 
 
 # ── 과제 속성 (TODO 100) ──────────────────────────────
