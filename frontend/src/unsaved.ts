@@ -127,18 +127,51 @@ export async function loadDraft<T = unknown>(key: string, isOriginal: (content: 
 // 창을 닫는 순간 아직 보내지 못한 글 — pagehide 에서 keepalive 로 마저 보낸다
 const pending = new Map<string, unknown>();
 
+// 같은 열쇠의 지우기를 겹쳐 보내지 않는다 (TODO 215). 기록을 고쳐 저장하면 같은 `entry:186` 에 DELETE 가 동시에
+// 두 번 가서, 윈도우에서는 뒤의 것이 `WinError 5 액세스 거부` 로 최근 오류에 쌓였다.
+//  - deleting — 지금 가고 있는 지우기(열쇠 → 요청). 같은 열쇠면 그것을 같이 기다린다
+//  - dropped  — 이미 지운 열쇠. 그 뒤로 새로 남긴 것(PUT)이 없으면 지우기를 다시 보내지 않는다
+//    (편집기의 임시 보관 지킴이가 저장 직후 "원문으로 돌아왔다" 며 한 번 더 지우려 한다)
+const deleting = new Map<string, Promise<unknown>>();
+const dropped = new Set<string>();
+// 보내는 중인 요청 수 — 다 끝났을 때 목록을 **한 번만** 다시 읽는다 (지우기 둘이면 GET 도 둘이던 것)
+let inFlight = 0;
+
+function settle(): void {
+  inFlight -= 1;
+  if (inFlight > 0) return;
+  // 이미 읽는 중이면 그 요청은 지우기 전 목록일 수 있다 — 끝난 뒤 한 번 더
+  if (loading) void loading.then(() => refreshDrafts());
+  else void refreshDrafts();
+}
+
 function send(key: string, content: unknown | null, keepalive = false): Promise<unknown> {
   pending.delete(key);
-  const request =
-    content === null
-      ? fetch(draftUrl(key), { method: "DELETE", keepalive })
-      : fetch(draftUrl(key), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
-          keepalive,
-        });
-  return request.then(() => refreshDrafts()).catch(() => undefined);
+  if (content === null) {
+    const running = deleting.get(key);
+    if (running) return running;
+    if (dropped.has(key)) return Promise.resolve();
+    dropped.add(key);
+    inFlight += 1;
+    const request = fetch(draftUrl(key), { method: "DELETE", keepalive })
+      .catch(() => undefined)
+      .finally(() => {
+        deleting.delete(key);
+        settle();
+      });
+    deleting.set(key, request);
+    return request;
+  }
+  dropped.delete(key);
+  inFlight += 1;
+  return fetch(draftUrl(key), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+    keepalive,
+  })
+    .catch(() => undefined)
+    .finally(settle);
 }
 
 if (typeof window !== "undefined") {
@@ -147,9 +180,12 @@ if (typeof window !== "undefined") {
   });
 }
 
+/** 임시 보관을 지운다 — 같은 열쇠의 지우기가 이미 가고 있거나 막 지웠으면 다시 보내지 않는다 (TODO 215) */
 export function dropDraft(key: string): void {
   items = items.filter((item) => item.key !== key);
   for (const listener of listeners) listener();
+  // 저장 · 버리기는 "지금 남은 것을 지워라" 다 — 다른 창이 그사이 남긴 것도 지우도록, 막 지운 표시는 무시한다
+  if (!deleting.has(key)) dropped.delete(key);
   void send(key, null);
 }
 

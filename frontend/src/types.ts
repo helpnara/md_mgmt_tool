@@ -1067,3 +1067,44 @@ export interface MeetingListing {
   items: Meeting[];
   open_followups: { meeting_id: number; index: number; person: string; date: string; text: string }[];
 }
+
+// ── TODO 214 — 서버가 새로 주는 칸 (아직 안 올 수도 있다, 인터페이스 합치기) ─────────────
+export interface Meta {
+  /** 효과 금액 확인 기준선 (D4, 억원/년). 0 이면 묻지 않는다 · 없으면 100 */
+  effect_confirm_over?: number | null;
+}
+export interface Entry {
+  /** 저장은 했지만 알릴 것 — 과제 기간 밖 날짜 등 (D5) */
+  warnings?: string[];
+}
+
+// ── TODO 214 · 216 사람 · 면담 · 설정 (화면 2) — 서버가 새로 주는 칸, 아직 안 올 수도 있다 ─────────────
+export interface AppSettings {
+  /** 효과 금액 확인 기준선 (D4, 억원/년). 0 이면 묻지 않는다 · 없으면 100 */
+  effect_confirm_over?: number | null;
+}
+
+/** [다른 이름으로 통일] · [넘기기] 의 결과 (TODO 214 D9) — 과제 말고도 유관부서 · 역량 · 면담 · 접수 과제리더의 수 */
+export interface PeopleChangeResult {
+  count: number;
+  changed: string[];
+  /** 종류별 바꾼 수 — 모양은 서버를 따른다(없을 수도 있다) */
+  counts?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** 입력 확인으로 돌려보낸 요청 한 건 (TODO 216) — 고장이 아니라 "최근 오류" 에 세우지 않는다 */
+export interface InputRejection {
+  at: string;
+  action: string;
+  detail: string | null;
+}
+
+/** `/api/errors` — 고장(items)과 입력 확인(inputs)을 따로 (TODO 216) */
+export interface ErrorListing {
+  items: ErrorEntry[];
+  keep_months: number;
+  input_count?: number;
+  input_today?: number;
+  inputs?: InputRejection[];
+}

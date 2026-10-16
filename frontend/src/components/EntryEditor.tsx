@@ -14,6 +14,7 @@ import { scrollEditorIntoView, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import TagSuggestions from "./TagSuggestions";
+import { DATE_MIN, LIMITS, dateProblem, lengthHint, titleProblem, today, warningList } from "../inputRules";
 
 const AUTOSAVE_DELAY_MS = 10_000;
 const AUTOSAVE_PREF_KEY = "md-mgmt:autosave";
@@ -40,11 +41,21 @@ interface Props {
   docPath?: string;
   /** 되돌린 뒤 화면을 다시 읽는다. */
   onRestored?: () => void;
+  /** 과제 기간 — 기록 날짜가 밖이면 알린다(막지는 않는다) (TODO 214 D5) */
+  period?: { start?: string | null; due?: string | null };
 }
 
 /** 임시 보관 열쇠 (TODO 170) — 새 기록은 과제로, 고치는 기록은 그 번호로. 데이터 폴더의 `.drafts/` 에 남는다. */
 function draftKey(projectId: string, entryId: number | null): string {
   return `entry:${entryId ?? `new-${projectId}`}`;
+}
+
+/**
+ * 열쇠들을 **한 번씩만** 지운다 (TODO 215). 있는 기록을 고칠 때는 "처음 연 열쇠" 와 "이 기록의 열쇠" 가 똑같이
+ * `entry:186` 이라 DELETE 가 같은 파일에 동시에 두 번 갔다 — 윈도우에서 뒤의 것이 WinError 5 로 최근 오류에 쌓였다.
+ */
+function dropDrafts(...keys: string[]): void {
+  for (const key of new Set(keys)) dropDraft(key);
 }
 
 interface EntryDraft {
@@ -54,7 +65,7 @@ interface EntryDraft {
   tags: string;
 }
 
-export default function EntryEditor({ projectId, knownTags = [], dirName, initial, onSaved, onCancel, docPath, onRestored }: Props) {
+export default function EntryEditor({ projectId, knownTags = [], dirName, initial, onSaved, onCancel, docPath, onRestored, period }: Props) {
   const [showVersions, setShowVersions] = useState(false);
   const [entryId, setEntryId] = useState<number | null>(initial?.id ?? null);
   const [date, setDate] = useState(initial?.date ?? todayIso());
@@ -85,8 +96,27 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
   const [discarding, setDiscarding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 저장은 했지만 서버가 알린 것 — 과제 기간 밖 등 (TODO 214 D5)
+  const [notice, setNotice] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   const [preview, togglePreview] = usePreview();
+  // 날짜 · 제목 검사 (TODO 214 D5 · D14) — 미래 날짜는 막고, 과제 기간 밖은 알린다
+  const todayDay = today();
+  const dateError =
+    dateProblem(date, "날짜") ??
+    (date && date > todayDay ? `진행일지는 오늘(${todayDay}) 이후 날짜로 적을 수 없습니다 — 계획은 본문의 「계획」에 적습니다.` : null);
+  const outsidePeriod =
+    !dateError && date && ((period?.start && date < period.start) || (period?.due && date > period.due))
+      ? `과제 기간(${period?.start ?? "…"} ~ ${period?.due ?? "…"}) 밖의 날짜입니다 — 맞는지 확인해 주세요.`
+      : null;
+  const titleError = titleProblem(title, "제목");
+  const titleLeft = lengthHint(title, LIMITS.title);
+  const blocker = dateError ?? titleError;
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+  // 기간 밖 안내를 이미 칸 옆에 보였으면 저장 뒤 같은 말을 다시 띄우지 않는다
+  const outsideRef = useRef(Boolean(outsidePeriod));
+  outsideRef.current = Boolean(outsidePeriod);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -146,6 +176,8 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
    */
   const save = useCallback(
     async (options: { close: boolean }, origin: "user" | "auto" | "attach" = "user"): Promise<Entry> => {
+      // 서버가 거절할 값이면 보내지 않는다 — 칸 옆에 이유가 이미 있다 (TODO 214 U2)
+      if (blockerRef.current) throw new Error(blockerRef.current);
       const current = stateRef.current;
       const payload = {
         date: current.date,
@@ -173,8 +205,13 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
       }
       setDirty(false);
       setRestored(false);
-      dropDraft(draftKey(projectId, initial?.id ?? null));
-      dropDraft(draftKey(projectId, entry.id));
+      dropDrafts(draftKey(projectId, initial?.id ?? null), draftKey(projectId, entry.id));
+      // 서버가 막지 않고 알린 것 (D5) — 닫으면 아래 알림으로, 열어 두면 편집기 안에
+      const warnings = warningList(entry, outsideRef.current ? /기간/ : undefined);
+      if (warnings.length > 0 && origin !== "attach") {
+        if (options.close) for (const warning of warnings) notifyError(`저장했습니다 — ${warning}`);
+        else setNotice(warnings.join(" · "));
+      } else if (origin !== "attach") setNotice(null);
       onSaved(entry, options);
       if (origin !== "attach" && entry.id) refreshAttachments(entry.id);
       return entry;
@@ -184,14 +221,14 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
     [projectId, initial?.id, onSaved, refreshAttachments],
   );
 
-  // 자동 저장: 입력이 멈추고 10초 뒤에 저장한다.
+  // 자동 저장: 입력이 멈추고 10초 뒤에 저장한다. 고칠 칸이 있으면 기다린다 (TODO 214)
   useEffect(() => {
-    if (!autosave || !dirty) return;
+    if (!autosave || !dirty || blocker) return;
     const timer = window.setTimeout(() => {
       save({ close: false }, "auto").catch((err: Error) => setError(err.message));
     }, AUTOSAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [autosave, dirty, date, title, body, tags, save]);
+  }, [autosave, dirty, date, title, body, tags, save, blocker]);
 
   function markDirty() {
     setDirty(true);
@@ -267,8 +304,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
       }
       setProvisional(null);
     }
-    dropDraft(draftKey(projectId, entryId));
-    dropDraft(draftKey(projectId, initial?.id ?? null));
+    dropDrafts(draftKey(projectId, entryId), draftKey(projectId, initial?.id ?? null));
     setDiscarding(false);
     onCancel();
   }
@@ -353,11 +389,18 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           <input
             type="date"
             value={date}
+            min={DATE_MIN}
+            max={todayDay}
             onChange={(event) => {
               setDate(event.target.value);
               markDirty();
             }}
+            aria-invalid={dateError ? true : undefined}
           />
+          {/* 비우면 서버가 오늘로 남긴다 — 말없이 바뀌지 않게 (TODO 214 U10) */}
+          {!date && <span className="hint">비우면 오늘</span>}
+          {dateError && <span className="form-warn date-warn">{dateError}</span>}
+          {outsidePeriod && <span className="hint warn-text">{outsidePeriod}</span>}
         </label>
         <label className="grow">
           제목
@@ -368,7 +411,13 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
               markDirty();
             }}
             placeholder="예: 1차 측정 결과"
+            aria-invalid={titleError ? true : undefined}
           />
+          {titleError ? (
+            <span className="form-warn">{titleError}</span>
+          ) : (
+            titleLeft && <span className="hint length-count">{titleLeft}</span>
+          )}
         </label>
         <label>
           태그
@@ -510,23 +559,24 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           첨부를 올리려고 기록을 먼저 만들었습니다 — [저장] 하지 않고 닫으면 이 기록과 이번에 올린 첨부를 지웁니다.
         </p>
       )}
-      {error && (
-        <p className="form-error">
-          {error}
-          {error.includes("다시 읽기") && (
-            <button
-              className="ghost small"
-              onClick={async () => {
-                if (await attempt(() => api.reindex())) window.location.reload();
-              }}
-            >
-              지금 다시 읽기
-            </button>
-          )}
-        </p>
-      )}
-
       <div className="editor-footer">
+        {/* 오류 · 알림은 단추 바로 위에 — 첨부 목록 아래에서는 놓쳤다 (TODO 214 U5) */}
+        {notice && <p className="hint warn-text entry-notice">{notice}</p>}
+        {(error || blocker) && (
+          <p className="form-error entry-error" role="alert">
+            {error ?? `저장하려면 — ${blocker}`}
+            {error?.includes("다시 읽기") && (
+              <button
+                className="ghost small"
+                onClick={async () => {
+                  if (await attempt(() => api.reindex())) window.location.reload();
+                }}
+              >
+                지금 다시 읽기
+              </button>
+            )}
+          </p>
+        )}
         <label className="toggle">
           <input
             type="checkbox"
@@ -566,7 +616,8 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
           </button>
           <button
             type="button"
-            disabled={busy || discarding}
+            disabled={busy || discarding || Boolean(blocker)}
+            title={blocker ?? undefined}
             onClick={async () => {
               setBusy(true);
               try {

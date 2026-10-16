@@ -80,6 +80,12 @@ export default function PrecheckDialog({
   }
   const complete = rated === items.length && max > 0;
   const score = complete ? Math.round((raw * 100) / max) : null;
+  // 근거만 적고 단계를 고르지 않은 줄 — 예전에는 말없이 버렸다. 이제 서버가 400 이라 화면이 먼저 막는다 (TODO 214 D17)
+  const noteOnly = readOnly
+    ? []
+    : items
+        .map((item) => key(item.group, item.item))
+        .filter((itemKey) => (answers[itemKey]?.note ?? "").trim() !== "" && !answers[itemKey]?.choice);
 
   function close() {
     if (dirty && !readOnly && !window.confirm("저장하지 않은 점수가 있습니다. 닫을까요?")) return;
@@ -102,6 +108,7 @@ export default function PrecheckDialog({
   }
 
   async function save() {
+    if (noteOnly.length > 0) return;
     setBusy(true);
     setError(null);
     try {
@@ -156,8 +163,12 @@ export default function PrecheckDialog({
               const scores = item.choices.map(([, s]) => s);
               const top = Math.max(...scores);
               const bottom = Math.min(...scores);
+              const missingChoice = noteOnly.includes(itemKey);
               return (
-                <div key={itemKey} className={`precheck-row${answer?.choice ? "" : " unrated"}`}>
+                <div
+                  key={itemKey}
+                  className={`precheck-row${answer?.choice ? "" : " unrated"}${missingChoice ? " precheck-row-invalid" : ""}`}
+                >
                   <div className="precheck-item">{item.item}</div>
                   <div className="precheck-choices" role="radiogroup" aria-label={item.item}>
                     {item.choices.map(([label, value]) => {
@@ -190,14 +201,23 @@ export default function PrecheckDialog({
                     }
                     placeholder={readOnly ? "" : "근거 한 줄 (선택) — 예: 9/12 사업부장 회의"}
                     aria-label={`${item.item} 근거`}
+                    aria-invalid={missingChoice ? true : undefined}
                   />
+                  {missingChoice && (
+                    <span className="form-warn precheck-note-error">단계를 골라 주세요 — 근거만 적은 줄은 저장할 수 없습니다.</span>
+                  )}
                 </div>
               );
             })}
           </section>
         ))}
 
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error form-error">{error}</p>}
+        {noteOnly.length > 0 && (
+          <p className="hint warn-text form-blocker">
+            근거만 적고 단계를 고르지 않은 항목이 {noteOnly.length}개 있습니다 — 단계를 고르거나 근거를 지워야 저장할 수 있습니다.
+          </p>
+        )}
         <div className="form-actions precheck-foot">
           <span className="precheck-total">
             합계{" "}
@@ -218,7 +238,7 @@ export default function PrecheckDialog({
               <button className="ghost" onClick={close} disabled={busy}>
                 취소
               </button>
-              <button onClick={() => void save()} disabled={busy || !dirty}>
+              <button onClick={() => void save()} disabled={busy || !dirty || noteOnly.length > 0}>
                 {busy ? "저장 중…" : "저장"}
               </button>
             </>

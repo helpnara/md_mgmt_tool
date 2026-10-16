@@ -20,9 +20,29 @@ import PrecheckDialog, { BandChip } from "./PrecheckDialog";
 import { type PasteOffer, handleEditorPaste } from "../table";
 import type { IntakeAttachment, IntakeDetail as Detail, IntakeLog, Meta, Project, PromotionPlan } from "../types";
 import { type Attachment, uploadAttachment } from "../upload";
-import { effectNumber, todayIso, useEscape } from "../util";
+import { dateOrderProblem, effectNumber, todayIso, useEscape } from "../util";
+import {
+  DATE_MAX,
+  DATE_MIN,
+  LIMITS,
+  checkPeople,
+  confirmEffects,
+  confirmOutsiders,
+  confirmPeople,
+  dateProblem as dayProblem,
+  effectProblem,
+  isDeparted,
+  lengthHint,
+  similarTeam,
+  splitNames,
+  titleProblem,
+  warningList,
+  FORM_SHOWN_WARNING,
+} from "../inputRules";
+import { confirmSameTitle } from "./ProjectForm";
 import AttachmentList from "./AttachmentList";
 import IntakeForm from "./IntakeForm";
+import TagSuggestions from "./TagSuggestions";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import StatusBadge from "./StatusBadge";
 import VersionPanel from "./VersionPanel";
@@ -342,6 +362,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
         {editingMeta && open && (
           <IntakeForm
             meta={meta}
+            onMetaChange={onMetaChange}
             initial={intake}
             submitLabel="저장"
             onCancel={() => setEditingMeta(false)}
@@ -372,6 +393,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
         <PromoteDialog
           intake={intake}
           meta={meta}
+          onMetaChange={onMetaChange}
           onClose={() => setPromoting(false)}
           onDone={(projectId) => {
             setPromoting(false);
@@ -501,6 +523,13 @@ function DecisionPanel({
     merged: "왜 같은 일로 보았는지 (선택)",
   };
   const required = kind !== "merged";
+  // [정리] 단추가 꺼진 까닭 (TODO 214 U2)
+  const why =
+    kind === "merged" && !target
+      ? "흡수할 과제를 골라 주세요."
+      : required && !note.trim()
+        ? `${STATUS_LINES[kind]} 사유를 적어 주세요.`
+        : null;
 
   // 흡수할 과제 고르기 (TODO 151) — **과제 번호순**, 찾기 칸의 낱말은 띄어 쓰면 **모두 든 것**만 남긴다.
   // 번호로도 찾는다(`007`). 찾기 전에는 접수 제목과 낱말이 겹치는 과제를 위에 따로 세운다 — 같은
@@ -570,13 +599,15 @@ function DecisionPanel({
         </div>
       )}
       <label>
-        {STATUS_LINES[kind]} {required ? "사유" : "메모"}
+        {/* 필수 표시 * (TODO 214 U1) */}
+        {STATUS_LINES[kind]} {required ? "사유 *" : "메모"}
         <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={prompts[kind]} rows={2} />
       </label>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error form-error">{error}</p>}
       <div className="form-actions left">
         <button
-          disabled={busy || (required && !note.trim()) || (kind === "merged" && !target)}
+          disabled={busy || Boolean(why)}
+          title={why ?? undefined}
           onClick={async () => {
             setBusy(true);
             setError(null);
@@ -594,6 +625,8 @@ function DecisionPanel({
         <button className="ghost" onClick={onCancel} disabled={busy}>
           취소
         </button>
+        {/* 단추가 꺼진 까닭은 단추 옆에 (TODO 214 U1 · U2) */}
+        {why && <span className="hint warn-text decision-why">{why}</span>}
       </div>
     </div>
   );
@@ -1230,8 +1263,18 @@ function LogEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 날짜 · 제목 검사 (TODO 214 D5 · D14 · U10) — 비우면 서버가 오늘로 남긴다
+  const dateError = dayProblem(date, "날짜");
+  const titleError = titleProblem(title, "제목");
+  const titleLeft = lengthHint(title, LIMITS.title);
+  const blocker = dateError ?? titleError;
+
   async function save() {
     if (busy) return;
+    if (blocker) {
+      setError(blocker);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -1279,11 +1322,31 @@ function LogEditor({
       <div className="form-row">
         <label>
           날짜
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <input
+            type="date"
+            value={date}
+            min={DATE_MIN}
+            max={DATE_MAX}
+            onChange={(e) => setDate(e.target.value)}
+            aria-invalid={dateError ? true : undefined}
+          />
+          {!date && <span className="hint">비우면 오늘</span>}
+          {dateError && <span className="form-warn date-warn">{dateError}</span>}
         </label>
         <label className="grow">
           제목
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 1차 인터뷰 — 적용 범위 협의" autoFocus />
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="예: 1차 인터뷰 — 적용 범위 협의"
+            autoFocus
+            aria-invalid={titleError ? true : undefined}
+          />
+          {titleError ? (
+            <span className="form-warn">{titleError}</span>
+          ) : (
+            titleLeft && <span className="hint length-count">{titleLeft}</span>
+          )}
         </label>
       </div>
       <MarkdownArea
@@ -1313,12 +1376,12 @@ function LogEditor({
           </button>
         </p>
       )}
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error form-error">{error}</p>}
       <div className="form-actions">
         <button className="ghost" onClick={() => void discard()} disabled={busy}>
           취소
         </button>
-        <button disabled={busy} onClick={() => void save()}>
+        <button disabled={busy || Boolean(blocker)} title={blocker ?? undefined} onClick={() => void save()}>
           {busy ? "저장 중…" : "저장"}
         </button>
       </div>
@@ -1328,14 +1391,19 @@ function LogEditor({
 
 // ── 승격 ───────────────────────────────────────────────────────────────────
 
+/** 유관부서 담당자 칸의 이름들 — 서버처럼 쉼표 · 세미콜론 · 줄바꿈으로 나눈다 */
+const partnerNames = (value: string) => splitNames(value.replace(/[;\n]/g, ","));
+
 function PromoteDialog({
   intake,
   meta,
+  onMetaChange,
   onClose,
   onDone,
 }: {
   intake: Detail;
   meta: Meta;
+  onMetaChange: () => void;
   onClose: () => void;
   onDone: (projectId: string) => void;
 }) {
@@ -1366,6 +1434,7 @@ function PromoteDialog({
           delivery: row.delivery ?? "",
           cost_kind: row.cost_kind ?? "",
           tags: row.tags.join(", "),
+          decision_note: "",
         });
         setPartners(row.partners.map((p) => ({ team: p.team, people: p.people.join(", ") })));
       })
@@ -1373,6 +1442,82 @@ function PromoteDialog({
   }, [intake.id]);
 
   const set = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  // ── 과제 폼과 같은 검사 (TODO 214 F9 · U2 · U4) — 전에는 시작 > 마감을 막지 않았고, 효과는 `<form>` 밖이라
+  //    음수 · `1,000` 이 저장한 뒤에야 400 이었다.
+  const title = form.title ?? "";
+  const titleError = plan ? (title.trim() ? titleProblem(title, "과제명") : "과제명을 적어 주세요.") : null;
+  const titleLeft = lengthHint(title, LIMITS.title);
+  const startProblem = dayProblem(form.start_date, "시작일");
+  const dueProblem =
+    dayProblem(form.due_date, "마감일") ?? dateOrderProblem(form.start_date, form.due_date, "시작일", "마감일");
+  const effectError = effectProblem(form.effect_expected ?? "", "기대효과");
+  // 유관부서 — 담당자만 적고 부서를 비운 줄은 말없이 사라졌다 (F8)
+  const partnerMissingTeam = partners
+    .map((row, index) => (!row.team.trim() && row.people.trim() ? index : -1))
+    .filter((index) => index >= 0);
+  const blockers = [
+    titleError,
+    startProblem,
+    dueProblem,
+    effectError,
+    partnerMissingTeam.length > 0 ? "유관부서 줄에 부서를 적어 주세요." : null,
+  ].filter((item): item is string => Boolean(item));
+  // 담당 자동완성 — 떠난 사람은 뺀다 (D7 · D8). 전에는 명부 전체가 보였다
+  const departed = new Set((meta.people_left ?? []).filter(isDeparted).map((person) => person.name));
+  const ownerOptions = meta.people.filter((name) => !departed.has(name));
+
+  async function promote() {
+    if (!plan || busy || blockers.length > 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // 같은 이름 과제 (D11)
+      if (!(await confirmSameTitle(title))) return setBusy(false);
+      // 담당자 — 명부에 없으면 추가할지, 떠난 사람이면 그래도 맡길지 (D6 · D7)
+      const owners = splitNames(form.owners ?? "");
+      const addsPeople = checkPeople(owners, meta).unknown.length > 0;
+      if (!(await confirmPeople(owners, meta, api.addPerson, "담당자"))) return setBusy(false);
+      if (addsPeople) onMetaChange();
+      // 유관부서 담당자 — 처음 적는 이름이면 묻는다(명부에는 넣지 않는다). 접수에서 넘어온 이름은 묻지 않는다
+      const planned = plan.partners.flatMap((row) => row.people);
+      const newPartnerPeople = partners
+        .flatMap((row) => partnerNames(row.people))
+        .filter((name) => !planned.includes(name));
+      if (
+        !(await confirmOutsiders(newPartnerPeople, meta, { role: "유관부서 담당자", known: meta.partner_people ?? [] }))
+      )
+        return setBusy(false);
+      // 금액 단위 (D4)
+      const effect = (form.effect_expected ?? "").trim() === "" ? null : Number(form.effect_expected);
+      if (!confirmEffects([{ label: "기대효과", value: effect }], meta)) return setBusy(false);
+      const result = await api.promoteIntake(intake.id, {
+        title: title.trim(),
+        type: form.type,
+        status: form.status,
+        owners,
+        partners: partners
+          .filter((row) => row.team.trim())
+          .map((row) => ({ team: row.team.trim(), people: partnerNames(row.people) })),
+        start_date: form.start_date || null,
+        due_date: form.due_date || null,
+        effect_expected: effect,
+        nature: form.nature || null,
+        category: form.category || null,
+        delivery: form.delivery || null,
+        cost_kind: form.cost_kind || null,
+        tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+        // 착수 판정 메모 — 선택 (D17). 비우면 보내지 않는다
+        ...((form.decision_note ?? "").trim() ? { decision_note: form.decision_note.trim() } : {}),
+      });
+      // 서버가 막지 않고 알린 것 — 같은 이름 · 명부에 없는 이름 · 떠난 사람은 위에서 물었으니 빼고
+      for (const warning of warningList(result, FORM_SHOWN_WARNING)) notifyError(`승격했습니다 — ${warning}`);
+      onDone(result.project_id);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="과제로 승격">
@@ -1391,8 +1536,14 @@ function PromoteDialog({
               {form.start_date ? " (시작일의 연도 기준)" : ""}. 접수 건은 <b>착수</b>로 닫히고, 양쪽에 링크가 남습니다.
             </p>
             <label>
-              과제명
-              <input value={form.title} onChange={(e) => set("title", e.target.value)} />
+              {/* 필수 표시 * (TODO 214 U1) · 남은 글자 (D14) */}
+              과제명 *
+              <input value={title} onChange={(e) => set("title", e.target.value)} aria-invalid={titleError ? true : undefined} />
+              {titleError ? (
+                <span className="form-warn">{titleError}</span>
+              ) : (
+                titleLeft && <span className="hint length-count">{titleLeft}</span>
+              )}
             </label>
             <div className="form-row">
               <label>
@@ -1418,18 +1569,34 @@ function PromoteDialog({
               </label>
               <label>
                 시작일
-                <input type="date" value={form.start_date} onChange={(e) => set("start_date", e.target.value)} />
+                <input
+                  type="date"
+                  value={form.start_date}
+                  min={DATE_MIN}
+                  max={DATE_MAX}
+                  onChange={(e) => set("start_date", e.target.value)}
+                  aria-invalid={startProblem ? true : undefined}
+                />
+                {startProblem && <span className="form-warn date-warn">{startProblem}</span>}
               </label>
               <label>
                 마감일
-                <input type="date" value={form.due_date} onChange={(e) => set("due_date", e.target.value)} />
+                <input
+                  type="date"
+                  value={form.due_date}
+                  min={form.start_date || DATE_MIN}
+                  max={DATE_MAX}
+                  onChange={(e) => set("due_date", e.target.value)}
+                  aria-invalid={dueProblem ? true : undefined}
+                />
+                {dueProblem && <span className="form-warn date-warn">{dueProblem}</span>}
               </label>
             </div>
             <label>
               담당자 (우리 팀 · 쉼표로 여러 명)
               <input list="promote-owner-options" value={form.owners} onChange={(e) => set("owners", e.target.value)} />
               <datalist id="promote-owner-options">
-                {meta.people.map((name) => (
+                {ownerOptions.map((name) => (
                   <option key={name} value={name} />
                 ))}
               </datalist>
@@ -1453,31 +1620,56 @@ function PromoteDialog({
                   + 부서 추가
                 </button>
               </div>
-              {partners.map((row, index) => (
-                <div key={index} className="partner-row">
-                  <input
-                    value={row.team}
-                    placeholder="부서"
-                    onChange={(e) =>
-                      setPartners((prev) => prev.map((r, i) => (i === index ? { ...r, team: e.target.value } : r)))
-                    }
-                  />
-                  <input
-                    value={row.people}
-                    placeholder="담당자 (쉼표로)"
-                    onChange={(e) =>
-                      setPartners((prev) => prev.map((r, i) => (i === index ? { ...r, people: e.target.value } : r)))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="ghost small"
-                    onClick={() => setPartners((prev) => prev.filter((_, i) => i !== index))}
-                  >
-                    삭제
-                  </button>
-                </div>
-              ))}
+              {partners.map((row, index) => {
+                // 비슷한 팀 이름 (D13) · 부서 없는 줄 (F8)
+                const similar = similarTeam(row.team.trim(), meta.partner_teams ?? []);
+                const noTeam = partnerMissingTeam.includes(index);
+                return (
+                  <div key={index} className="partner-row">
+                    <input
+                      value={row.team}
+                      placeholder="부서"
+                      list="promote-team-options"
+                      aria-label={`유관부서 ${index + 1} 부서명`}
+                      aria-invalid={noTeam ? true : undefined}
+                      onChange={(e) =>
+                        setPartners((prev) => prev.map((r, i) => (i === index ? { ...r, team: e.target.value } : r)))
+                      }
+                    />
+                    <input
+                      value={row.people}
+                      placeholder="담당자 (쉼표로)"
+                      list="promote-partner-person-options"
+                      aria-label={`유관부서 ${index + 1} 담당자`}
+                      onChange={(e) =>
+                        setPartners((prev) => prev.map((r, i) => (i === index ? { ...r, people: e.target.value } : r)))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="ghost small"
+                      onClick={() => setPartners((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      삭제
+                    </button>
+                    {noTeam && <span className="form-warn partner-warn">부서를 적어 주세요 — 담당자만 적은 줄은 저장할 수 없습니다.</span>}
+                    {similar && <span className="hint warn-text partner-warn">비슷한 팀이 있습니다: {similar}</span>}
+                  </div>
+                );
+              })}
+              {/* 자동완성 출처 통일 — 팀은 쓰던 팀, 사람은 쓰던 유관부서 담당자(떠난 사람 빼고) (U7) */}
+              <datalist id="promote-team-options">
+                {(meta.partner_teams ?? []).map((team) => (
+                  <option key={team} value={team} />
+                ))}
+              </datalist>
+              <datalist id="promote-partner-person-options">
+                {(meta.partner_people ?? [])
+                  .filter((name) => !departed.has(name))
+                  .map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+              </datalist>
             </div>
             <div className="form-row class-row">
               {meta.classifications.map((info) => (
@@ -1499,14 +1691,17 @@ function PromoteDialog({
             <div className="form-row">
               <label>
                 기대효과 (억원/년) — 검토한 값
+                {/* 글 칸으로 받아 직접 검사한다 — 숫자 칸은 `1,000` 을 빈 값으로 넘겼다 (U4) */}
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   value={form.effect_expected}
                   onChange={(e) => set("effect_expected", e.target.value)}
                   placeholder="검토 후 확정한 값"
+                  aria-label="기대효과 (억원/년)"
+                  aria-invalid={effectError ? true : undefined}
                 />
+                {effectError && <span className="form-warn">{effectError}</span>}
                 {plan.effect_request !== null && (
                   <span className="hint">
                     요청자 추정 <b>{effectNumber(plan.effect_request)}</b> — 참고용입니다. 홈의 팀 합계에는 검토한 값만
@@ -1517,8 +1712,19 @@ function PromoteDialog({
               <label className="grow">
                 태그
                 <input value={form.tags} onChange={(e) => set("tags", e.target.value)} />
+                <TagSuggestions known={meta.tags ?? []} value={form.tags ?? ""} onPick={(next) => set("tags", next)} />
               </label>
             </div>
+            {/* 착수 판정 메모 — 선택 (TODO 214 D17). 판정 줄 · 검토 기록에 남는다 */}
+            <label className="stack-label">
+              판정 메모 (선택)
+              <textarea
+                rows={2}
+                value={form.decision_note ?? ""}
+                onChange={(e) => set("decision_note", e.target.value)}
+                placeholder="예: 9/12 사업부장 회의에서 착수 결정 — 1단계는 3라인만"
+              />
+            </label>
             <div className="promote-preview">
               <p>
                 <b>개요로 넘어가는 것</b> —{" "}
@@ -1551,41 +1757,22 @@ function PromoteDialog({
             </div>
           </>
         )}
-        {error && <p className="error">{error}</p>}
+        {/* 오류 · 막는 까닭은 단추 바로 위에 (TODO 214 U5) */}
+        {error && <p className="error form-error">{error}</p>}
+        {plan && blockers.length > 0 && (
+          <p className="hint warn-text form-blocker">
+            {startProblem || dueProblem ? "날짜를 고쳐야 승격할 수 있습니다." : `승격하려면 — ${blockers[0]}`}
+          </p>
+        )}
         <div className="form-actions">
           <button className="ghost" onClick={onClose} disabled={busy}>
             취소
           </button>
           <button
             className="primary commit"
-            disabled={busy || !plan || !form.title?.trim()}
-            onClick={async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                const result = await api.promoteIntake(intake.id, {
-                  title: form.title.trim(),
-                  type: form.type,
-                  status: form.status,
-                  owners: form.owners.split(",").map((n) => n.trim()).filter(Boolean),
-                  partners: partners
-                    .filter((row) => row.team.trim())
-                    .map((row) => ({ team: row.team.trim(), people: row.people.split(",").map((n) => n.trim()).filter(Boolean) })),
-                  start_date: form.start_date || null,
-                  due_date: form.due_date || null,
-                  effect_expected: form.effect_expected.trim() === "" ? null : Number(form.effect_expected),
-                  nature: form.nature || null,
-                  category: form.category || null,
-                  delivery: form.delivery || null,
-                  cost_kind: form.cost_kind || null,
-                  tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
-                });
-                onDone(result.project_id);
-              } catch (err) {
-                setError((err as Error).message);
-                setBusy(false);
-              }
-            }}
+            disabled={busy || !plan || blockers.length > 0}
+            title={blockers[0]}
+            onClick={() => void promote()}
           >
             {busy ? "승격 중…" : "승격하고 과제 열기"}
           </button>

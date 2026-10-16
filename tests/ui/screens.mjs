@@ -688,10 +688,18 @@ async function main() {
       body: JSON.stringify({ project_code: "12" }), // 숫자만 → 거절
     });
     await go("#/settings");
+    // 입력 규칙이 돌려보낸 400 은 고장이 아니라 "입력 확인" 한 줄로 센다 (TODO 216) — 둘 중 한 자리에는 서야 한다
     const rows = await page.locator(".error-list li").count();
-    expect(rows > 0, "오류가 기록되지 않았습니다");
-    const text = await page.locator(".error-list li").first().innerText();
-    expect(text.includes("/api/settings"), `무슨 동작이었는지 안 보입니다: ${text}`);
+    const errorText = rows > 0 ? await page.locator(".error-list li").first().innerText() : "";
+    const line = page.locator('[data-testid="input-rejections"]');
+    let inputText = "";
+    if ((await line.count()) > 0) {
+      await line.getByRole("button", { name: "보기" }).click();
+      inputText = await line.innerText();
+      await line.getByRole("button", { name: "접기" }).click();
+    }
+    expect(errorText.includes("/api/settings") || inputText.includes("/api/settings"),
+      `무슨 동작이었는지 안 보입니다: ${errorText} / ${inputText}`);
   });
 
   console.log("\n[2-2] 왔던 화면으로 돌아가는가 (TODO 48)");
@@ -2572,14 +2580,14 @@ async function main() {
       // 이름은 input 안에 있어 글자로는 찾히지 않는다 — 줄에 붙여 둔 이름으로 찾는다.
       const row = card.locator('tr[data-name="홍길동"]').first();
       expect((await row.innerText()).includes("남은 1건"), `남은 건수: ${await row.innerText()}`);
-      // 넘기기는 prompt(받을 사람) → confirm 순이다. 위쪽 전역 handler 는 글자 없이 accept 만
-      // 하므로 잠시 걷어내고 이 시험의 것으로 바꾼다 (끝나면 되돌린다).
-      page.removeAllListeners("dialog");
-      page.on("dialog", (dialog) =>
-        dialog.type() === "prompt" ? dialog.accept("김현우") : dialog.accept(),
-      );
+      // 넘기기는 이름 창(받을 사람)에서 — 브라우저 prompt() 는 쓰지 않는다 (TODO 214 F6)
       await row.getByRole("button", { name: "넘기기" }).click();
+      const nameDialog = page.locator(".name-dialog");
+      await nameDialog.waitFor({ timeout: 3000 });
+      await nameDialog.locator("input").first().fill("김현우");
+      await nameDialog.getByRole("button", { name: "넘기기" }).click();
       await page.waitForTimeout(1500);
+      await nameDialog.getByRole("button", { name: "닫기" }).click();
       equal((await api.get(`/api/projects/${live.id}`)).owners.join(), "김현우", "넘어간 과제");
       equal((await api.get(`/api/projects/${done.id}`)).owners.join(), "홍길동", "끝난 과제는 그대로");
       await go("#/");
@@ -4832,6 +4840,402 @@ async function main() {
       equal(await page.locator(".load-error").count(), 0, "[다시 시도] 로 살아난다");
       equal(await page.locator(".search-title").count(), 1, "결과 제목");
     });
+  });
+
+  console.log("\n[44] 사람 · 면담 · 설정 입력 — 저장 전에 화면이 먼저 (TODO 214 · 216)");
+
+  // 이 PC 의 날짜 (YYYY-MM-DD) — 화면의 "오늘" 과 같은 기준
+  const localDay = (offsetDays = 0) => {
+    const at = new Date(Date.now() + offsetDays * 86400000);
+    at.setMinutes(at.getMinutes() - at.getTimezoneOffset());
+    return at.toISOString().slice(0, 10);
+  };
+
+  await check("다음 면담이 면담일과 같거나 앞이면 [저장] 이 꺼지고, 면담일을 옮겨 앞서게 되면 바로 알린다 (216)", async () => {
+    await go("#/skills");
+    await page.waitForTimeout(800);
+    const panel = page.locator(".meeting-panel");
+    await panel.getByRole("button", { name: "면담 추가" }).click();
+    const form = panel.locator(".meeting-form");
+    await form.locator("input").first().fill("권경락");
+    await form.locator('input[type="date"]').first().fill("2026-09-10");
+    await form.getByPlaceholder(/3분기 목표 점검/).fill("다음 면담 시험");
+    const next = form.locator("input.meeting-next-date");
+    equal(await next.getAttribute("min"), "2026-09-11", "다음 면담 달력의 하한");
+    const save = form.getByRole("button", { name: "저장" });
+    await next.fill("2026-09-10");
+    expect((await form.innerText()).includes("다음 면담은 면담일 뒤여야 합니다"), "같은 날이면 칸 옆에 안내");
+    expect(await save.isDisabled(), "같은 날이면 [저장] 이 꺼진다");
+    await next.fill("2026-09-20");
+    expect(!(await save.isDisabled()), "뒤 날이면 켜진다");
+    equal(await form.locator(".meeting-next-error").count(), 0, "안내가 사라진다");
+    // 다음 면담을 먼저 고른 뒤 면담일을 그 뒤로 옮기면 — 저장을 누르기 전에 안다
+    await form.locator('input[type="date"]').first().fill("2026-09-25");
+    equal(await form.locator(".meeting-next-error").count(), 1, "면담일을 옮기자 바로 안내");
+    expect(await save.isDisabled(), "다시 꺼진다");
+    // 닫기 — "버릴까요?" 는 전역 handler 가 받는다
+    await form.getByRole("button", { name: "취소" }).click();
+    await page.waitForTimeout(300);
+    equal(await panel.locator(".meeting-form").count(), 0, "닫혔다");
+  });
+
+  await check("입력 확인으로 돌려보낸 것은 최근 오류에 서지 않고, 그 아래 한 줄로 센다 (216)", async () => {
+    await api.delete("/api/errors");
+    const response = await fetch(`${BASE}/api/meetings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ person: "권경락", date: "2026-09-10", summary: "거꾸로 잡은 다음 면담", next_date: "2026-09-01" }),
+    });
+    expect([400, 422].includes(response.status), `서버가 거절해야 한다: ${response.status}`);
+    await go("#/settings");
+    const card = page.locator(".card", { hasText: "최근 오류" }).first();
+    const errorText = (await card.locator(".error-list").count()) > 0 ? await card.locator(".error-list").innerText() : "";
+    expect(!errorText.includes("/api/meetings"), `최근 오류에 입력 거절이 섰다: ${errorText}`);
+    const line = card.locator('[data-testid="input-rejections"]');
+    equal(await line.count(), 1, "입력 확인 한 줄");
+    expect((await line.innerText()).includes("입력 확인으로 돌려보낸 것 1건"), `건수: ${await line.innerText()}`);
+    await line.getByRole("button", { name: "보기" }).click();
+    const opened = await line.innerText();
+    expect(opened.includes("/api/meetings"), `무슨 동작이었는지: ${opened}`);
+    expect(opened.includes("화면이 미리 막지 못한 자리"), "안내 문구");
+    await api.delete("/api/errors");
+  });
+
+  await check("명부에 없는 면담 상대는 묻는다 — [취소] 면 폼에 남고, [확인] 이면 명부에 넣고 저장한다 (214 D6)", async () => {
+    const before = await api.get("/api/people");
+    if (before.people.length === 0) await api.post("/api/people", { name: "권경락" }); // 명부가 비면 묻지 않는다
+    const stranger = "면담시험인";
+    try {
+      await go("#/skills");
+      await page.waitForTimeout(800);
+      const panel = page.locator(".meeting-panel");
+      await panel.getByRole("button", { name: "면담 추가" }).click();
+      const form = panel.locator(".meeting-form");
+      await form.locator("input").first().fill(stranger);
+      await form.locator('input[type="date"]').first().fill("2026-09-15");
+      await form.getByPlaceholder(/3분기 목표 점검/).fill("명부 밖 상대");
+      let asked = "";
+      nextDialog((d) => { asked = d.message(); d.dismiss(); });
+      await form.getByRole("button", { name: "저장" }).click();
+      await page.waitForTimeout(900);
+      expect(asked.includes("명부에 없는 이름"), `묻지 않았다: ${asked}`);
+      equal(await panel.locator(".meeting-form").count(), 1, "[취소] 면 폼에 남는다");
+      expect(!(await api.get("/api/people")).people.some((p) => p.name === stranger), "명부에 들어가지 않았다");
+      equal((await api.get(`/api/meetings?person=${encodeURIComponent(stranger)}`)).items.length, 0, "저장되지 않았다");
+      nextDialog((d) => d.accept());
+      await form.getByRole("button", { name: "저장" }).click();
+      await page.waitForTimeout(1200);
+      expect((await api.get("/api/people")).people.some((p) => p.name === stranger), "[확인] 이면 명부에 들어간다");
+      equal((await api.get(`/api/meetings?person=${encodeURIComponent(stranger)}`)).items.length, 1, "면담이 저장됐다");
+    } finally {
+      for (const item of (await api.get(`/api/meetings?person=${encodeURIComponent(stranger)}`)).items ?? []) {
+        await api.delete(`/api/meetings/${item.id}`);
+      }
+      await api.put("/api/people", { people: before.people });
+    }
+  });
+
+  await check("역량 기록에 오늘 뒤의 날짜를 적으면 칸 옆에서 막는다 (214 D5)", async () => {
+    await go("#/skills");
+    await page.getByRole("button", { name: "기록 추가" }).click();
+    await page.waitForTimeout(400);
+    const form = page.locator(".activity-form");
+    await form.locator('input[placeholder^="예: 권경락, 김현우"]').fill("권경락");
+    await form.locator('input[placeholder^="예: 열처리"]').fill("미래 교육");
+    const day = form.locator('input[type="date"]').first();
+    equal(await day.getAttribute("max"), localDay(), "달력의 상한은 오늘");
+    await day.fill(localDay(10));
+    expect((await form.innerText()).includes("오늘 뒤의 날짜는 저장할 수 없습니다"), "칸 옆 안내");
+    expect(await form.getByRole("button", { name: "저장" }).isDisabled(), "[저장] 이 꺼진다");
+    // 시간은 하루 24시간 × 날수까지 (214 F14)
+    await day.fill(localDay());
+    await form.locator('input[type="number"]').first().fill("30");
+    expect((await form.innerText()).includes("24시간"), "시간 상한 안내");
+    expect(await form.getByRole("button", { name: "저장" }).isDisabled(), "시간이 넘으면 꺼진다");
+    await form.getByRole("button", { name: "취소" }).click(); // "버릴까요?" 는 전역 handler 가 받는다
+    await page.waitForTimeout(300);
+    equal(await page.locator(".activity-form").count(), 0, "닫혔다");
+  });
+
+  await check("명부의 [넘기기] 는 이름 창을 열고(브라우저 prompt 아님), 쉼표 든 이름은 막는다 (214 D9 · F6)", async () => {
+    const before = await api.get("/api/people");
+    const live = await api.post("/api/projects", { title: "넘기기 창 시험", status: "in_progress", owners: ["떠난시험인"] });
+    let prompted = false;
+    try {
+      await api.put("/api/people", {
+        people: [...before.people, { name: "떠난시험인", left_on: "2026-09-30", left_reason: "전배" }],
+      });
+      await go("#/settings");
+      const card = page.locator(".card", { hasText: "담당자 명부" }).first();
+      const row = card.locator('tr[data-name="떠난시험인"]').first();
+      page.removeAllListeners("dialog");
+      page.on("dialog", (dialog) => {
+        if (dialog.type() === "prompt") prompted = true;
+        dialog.accept();
+      });
+      await row.getByRole("button", { name: "넘기기" }).click();
+      const dialog = page.locator(".name-dialog");
+      await dialog.waitFor({ timeout: 3000 });
+      expect(!prompted, "브라우저 prompt() 가 떴다");
+      const input = dialog.locator("input").first();
+      const go_ = dialog.getByRole("button", { name: "넘기기" });
+      await input.fill("가, 나");
+      expect((await dialog.innerText()).includes("쉼표"), `쉼표 안내: ${await dialog.innerText()}`);
+      expect(await go_.isDisabled(), "쉼표 든 이름이면 꺼진다");
+      await input.fill("../x");
+      expect(await go_.isDisabled(), "경로 기호면 꺼진다");
+      await input.fill("김현우");
+      expect(!(await go_.isDisabled()), "고치면 켜진다");
+      await go_.click();
+      await page.waitForTimeout(1200);
+      const done = await dialog.innerText();
+      expect(done.includes("과제 담당 1건"), `종류별로 바꾼 수: ${done}`);
+      await dialog.getByRole("button", { name: "닫기" }).click();
+      equal(await page.locator(".name-dialog").count(), 0, "창이 닫힌다");
+      equal((await api.get(`/api/projects/${live.id}`)).owners.join(), "김현우", "넘어간 과제");
+    } finally {
+      page.removeAllListeners("dialog");
+      page.on("dialog", (dialog) => dialog.accept());
+      await api.put("/api/people", { people: before.people });
+      await fetch(`${BASE}/api/projects/${live.id}/archive`, { method: "POST" });
+    }
+  });
+
+  await check("과제 번호 체계 카드는 '팀-2' 를 칸 옆에서 막고, 미리보기에 틀린 번호를 세우지 않는다 (214 D16)", async () => {
+    await go("#/settings");
+    const card = page.locator(".project-code-card");
+    const input = card.locator('input[placeholder^="예: 소재"]');
+    const original = await input.inputValue();
+    await input.fill("팀-2");
+    expect((await card.innerText()).includes("한글 · 영문 · 숫자만"), `규칙 안내: ${await card.innerText()}`);
+    expect(await card.getByRole("button", { name: "저장" }).isDisabled(), "[저장] 이 꺼진다");
+    expect(!(await card.locator(".effect-hint").innerText()).includes("팀-2"), "미리보기에 틀린 번호가 없다");
+    await input.fill("12");
+    expect(await card.getByRole("button", { name: "저장" }).isDisabled(), "숫자만이면 꺼진다");
+    await input.fill(original);
+  });
+
+  await check("설정의 숫자 칸을 비우면 0 으로 보내지 않고 칸 옆에 '숫자를 적어 주세요' (214 F12)", async () => {
+    await go("#/settings");
+    const card = page.locator(".meeting-settings");
+    const cycle = card.locator('input[type="number"]');
+    const original = await cycle.inputValue();
+    await cycle.fill("");
+    expect((await card.innerText()).includes("숫자를 적어 주세요"), "빈 칸 안내");
+    expect(await card.getByRole("button", { name: "저장" }).isDisabled(), "[저장] 이 꺼진다");
+    await cycle.fill("1000");
+    expect((await card.locator(".field-error").innerText()).includes("1~999"), "범위 안내");
+    await cycle.fill(original);
+  });
+
+  console.log("\n[43] 과제 · 기록 · 접수 입력 — 화면이 먼저 막고 묻는다 (TODO 214 · 215)");
+
+  await check("새 과제 폼 — 시작 > 마감 · 미래 완료일이면 [만들기] 가 꺼지고, 효과 비대상이면 금액 칸이 잠긴다 (214 D1 · D2)", async () => {
+    await go("#/projects");
+    await page.getByRole("button", { name: "과제 추가", exact: true }).click();
+    const form = page.locator(".project-form");
+    await form.locator("input").first().fill("214 날짜 시험 과제");
+    const submit = form.getByRole("button", { name: "만들기" });
+    expect(!(await submit.isDisabled()), "처음부터 꺼져 있다");
+    // 시작 > 마감
+    const dates = form.locator('input[type="date"]');
+    await dates.nth(0).fill("2026-05-01");
+    await dates.nth(1).fill("2026-04-01");
+    await page.waitForTimeout(200);
+    expect(await submit.isDisabled(), "시작 > 마감인데 [만들기] 가 켜져 있다");
+    await dates.nth(1).fill("2026-06-30");
+    await page.waitForTimeout(200);
+    expect(!(await submit.isDisabled()), "날짜를 고쳤는데 [만들기] 가 꺼져 있다");
+    // 완료 + 미래 완료일 → 막힘, 비우면 "비워 두면 오늘"
+    await form.locator("select").first().selectOption("done");
+    const completed = form.locator("label", { hasText: "완료일" }).locator("input");
+    expect((await form.locator("label", { hasText: "완료일" }).innerText()).includes("비워 두면 오늘"), "비워 두면 오늘 안내");
+    equal(await completed.getAttribute("max"), dayFromToday(0), "완료일 달력의 상한은 오늘");
+    await completed.fill(dayFromToday(3));
+    await page.waitForTimeout(200);
+    expect(await submit.isDisabled(), "미래 완료일인데 [만들기] 가 켜져 있다");
+    expect((await form.locator("label", { hasText: "완료일" }).locator(".date-warn").innerText()).includes("오늘"), "완료일 경고");
+    await completed.fill("2026-04-15"); // 시작일보다 앞
+    await page.waitForTimeout(200);
+    expect(await submit.isDisabled(), "시작일보다 앞선 완료일인데 [만들기] 가 켜져 있다");
+    await completed.fill("2026-05-20");
+    await page.waitForTimeout(200);
+    expect(!(await submit.isDisabled()), "맞는 완료일인데 꺼져 있다");
+    // 효과 비대상 — 금액 칸이 잠기고 "합계에서 빠집니다", 적어 둔 값은 남는다
+    const expected = form.locator('input[aria-label="기대효과 (억원/년)"]');
+    await expected.fill("3");
+    await form.locator("label.check-label", { hasText: "효과성 관리 비대상" }).locator("input").check();
+    await page.waitForTimeout(200);
+    expect(await expected.isDisabled(), "기대효과 칸이 잠기지 않았다");
+    expect(await form.locator('input[aria-label="실증효과 (억원/년)"]').isDisabled(), "실증효과 칸이 잠기지 않았다");
+    expect((await form.locator(".effect-locked-note").innerText()).includes("합계에서 빠집니다"), "비대상 안내");
+    equal(await expected.inputValue(), "3", "잠가도 값은 남는다");
+    await form.locator("label.check-label", { hasText: "효과성 관리 비대상" }).locator("input").uncheck();
+    expect(!(await expected.isDisabled()), "풀면 다시 고칠 수 있다");
+    // 버린다
+    nextDialog((d) => d.accept());
+    await form.getByRole("button", { name: "취소", exact: true }).click();
+    await page.waitForTimeout(300);
+    equal(await page.locator(".project-form").count(), 0, "버리면 닫힌다");
+  });
+
+  await check("같은 이름 과제는 저장 전에 묻고, [취소] 면 폼이 그대로다 (214 D11)", async () => {
+    const before = (await api.get("/api/projects")).filter((row) => row.title === "고강도 소재 개발").length;
+    await go("#/projects");
+    await page.getByRole("button", { name: "과제 추가", exact: true }).click();
+    const form = page.locator(".project-form");
+    await form.locator("input").first().fill("고강도 소재 개발");
+    let asked = "";
+    nextDialog((d) => { asked = d.message(); d.dismiss(); });
+    await form.getByRole("button", { name: "만들기" }).click();
+    await page.waitForTimeout(800);
+    expect(asked.includes("같은 이름의 과제가 이미 있습니다") && asked.includes(seeded.projectA), `묻지 않았다: ${asked}`);
+    equal(await page.locator(".project-form").count(), 1, "취소했는데 폼이 닫혔다");
+    equal(await form.locator("input").first().inputValue(), "고강도 소재 개발", "쓰던 제목");
+    equal((await api.get("/api/projects")).filter((row) => row.title === "고강도 소재 개발").length, before, "취소했는데 과제가 생겼다");
+    nextDialog((d) => d.accept());
+    await form.getByRole("button", { name: "취소", exact: true }).click();
+    await page.waitForTimeout(300);
+  });
+
+  await check("명부에 없는 담당자는 저장 전에 묻는다 — [취소] 면 폼으로, [확인] 이면 명부에 넣고 저장 (214 D6)", async () => {
+    const roster = await api.get("/api/people");
+    if (roster.people.length === 0) await api.post("/api/people", { name: "박지훈" });
+    const stranger = "명부밖이름";
+    let made = null;
+    try {
+      await go("#/projects");
+      await page.getByRole("button", { name: "과제 추가", exact: true }).click();
+      const form = page.locator(".project-form");
+      await form.locator("input").first().fill("214 명부 확인 과제");
+      await form.locator('input[list="owner-options"]').fill(stranger);
+      let asked = "";
+      nextDialog((d) => { asked = d.message(); d.dismiss(); });
+      await form.getByRole("button", { name: "만들기" }).click();
+      await page.waitForTimeout(800);
+      expect(asked.includes("명부에 없는 이름") && asked.includes(stranger), `묻지 않았다: ${asked}`);
+      equal(await page.locator(".project-form").count(), 1, "취소했는데 폼이 닫혔다");
+      expect(!(await api.get("/api/people")).people.some((person) => person.name === stranger), "취소했는데 명부에 들어갔다");
+      // 이번에는 받는다 — 명부에 넣고 저장
+      nextDialog((d) => d.accept());
+      await form.getByRole("button", { name: "만들기" }).click();
+      await page.waitForFunction(() => /#\/projects\/[^?]+/.test(location.hash), null, { timeout: 5000 });
+      await page.waitForTimeout(600);
+      made = page.url().split("#/projects/")[1].split("?")[0];
+      expect((await api.get("/api/people")).people.some((person) => person.name === stranger), "명부에 들어가지 않았다");
+      equal(JSON.stringify((await api.get(`/api/projects/${made}`)).owners), JSON.stringify([stranger]), "저장된 담당자");
+    } finally {
+      if (made) await fetch(`${BASE}/api/projects/${made}/archive`, { method: "POST" });
+      await api.put("/api/people", { people: roster.people });
+    }
+  });
+
+  await check("진행일지 — 미래 날짜는 [저장] 이 꺼지고 칸 옆에 이유가 선다 (214 D5)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.getByRole("button", { name: "기록 추가", exact: true }).click();
+    const editor = page.locator(".entry-editor");
+    await editor.waitFor();
+    const date = editor.locator('input[type="date"]');
+    equal(await date.getAttribute("max"), dayFromToday(0), "날짜 달력의 상한은 오늘");
+    const save = editor.locator(".editor-footer").getByRole("button", { name: "저장", exact: true });
+    await date.fill(dayFromToday(3));
+    await page.waitForTimeout(200);
+    expect(await save.isDisabled(), "미래 날짜인데 [저장] 이 켜져 있다");
+    expect((await editor.locator(".date-warn").innerText()).includes("오늘"), "날짜 경고");
+    // 막는 까닭은 단추 바로 위 (U5)
+    equal(await editor.locator(".editor-footer .entry-error").count(), 1, "단추 위 오류 줄");
+    await date.fill(dayFromToday(-1));
+    await page.waitForTimeout(200);
+    expect(!(await save.isDisabled()), "지난 날짜인데 꺼져 있다");
+    nextDialog((d) => d.accept());
+    await editor.getByRole("button", { name: "닫기", exact: true }).click();
+    await page.waitForTimeout(500);
+    equal(await page.locator(".entry-editor").count(), 0, "닫히지 않았다");
+  });
+
+  await check("있는 기록을 고쳐 저장하면 임시 보관 DELETE 는 한 번만 간다 (215)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+    const editor = page.locator(".entry-editor");
+    await editor.waitFor();
+    const title = editor.locator("label", { hasText: "제목" }).locator("input");
+    const original = await title.inputValue();
+    await title.fill(`${original} (고침)`);
+    await page.waitForTimeout(1200); // 임시 보관(0.7초)이 한 번 남도록
+    const deletes = [];
+    const listener = (request) => {
+      if (request.method() === "DELETE" && request.url().includes("/api/drafts")) deletes.push(request.url());
+    };
+    page.on("request", listener);
+    try {
+      await editor.locator(".editor-footer").getByRole("button", { name: "저장", exact: true }).click();
+      await page.waitForTimeout(2000); // 편집기의 임시 보관 지킴이(0.7초)가 뒤따라 지우려 해도 보내지 않는다
+    } finally {
+      page.off("request", listener);
+    }
+    equal(deletes.length, 1, `임시 보관 DELETE 수 (${deletes.join(", ")})`);
+    // 되돌려 둔다
+    await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+    await page.locator(".entry-editor label", { hasText: "제목" }).locator("input").fill(original);
+    await page.locator(".entry-editor .editor-footer").getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForTimeout(800);
+  });
+
+  await check("승격 창 — 시작 > 마감 · 쉼표 금액이면 [승격] 이 꺼지고, 판정 메모 칸이 있다 (214 F9 · U4 · D17)", async () => {
+    const made = await api.post("/api/intakes", { title: "214 승격 창 시험", received_on: dayFromToday(-1) });
+    try {
+      await go(`#/intakes/${encodeURIComponent(made.id)}`);
+      await page.getByRole("button", { name: "착수 · 과제로 승격" }).click();
+      const dialog = page.locator(".promote-dialog");
+      await dialog.locator(".next-id").first().waitFor({ timeout: 5000 });
+      const submit = dialog.getByRole("button", { name: "승격하고 과제 열기" });
+      expect(!(await submit.isDisabled()), "처음부터 꺼져 있다");
+      const dates = dialog.locator('input[type="date"]');
+      await dates.nth(0).fill("2026-05-01");
+      await dates.nth(1).fill("2026-04-01");
+      await page.waitForTimeout(200);
+      expect(await submit.isDisabled(), "시작 > 마감인데 [승격] 이 켜져 있다");
+      expect(await dialog.locator(".date-warn").count() >= 1, "날짜 경고");
+      await dates.nth(1).fill("2026-06-30");
+      await dialog.locator('input[aria-label="기대효과 (억원/년)"]').fill("1,000");
+      await page.waitForTimeout(200);
+      expect(await submit.isDisabled(), "쉼표 금액인데 [승격] 이 켜져 있다");
+      await dialog.locator('input[aria-label="기대효과 (억원/년)"]').fill("");
+      await page.waitForTimeout(200);
+      expect(!(await submit.isDisabled()), "고쳤는데 꺼져 있다");
+      equal(await dialog.locator("label", { hasText: "판정 메모" }).locator("textarea").count(), 1, "판정 메모 칸");
+      expect((await dialog.locator("label", { hasText: "과제명" }).first().innerText()).includes("*"), "과제명 필수 표시");
+      await dialog.getByRole("button", { name: "취소", exact: true }).click();
+      await page.waitForTimeout(300);
+      equal(await page.locator(".promote-dialog").count(), 0, "닫히지 않았다");
+    } finally {
+      await fetch(`${BASE}/api/intakes/${encodeURIComponent(made.id)}/archive`, { method: "POST" });
+    }
+  });
+
+  await check("사전점검 — 근거만 적고 단계를 안 고른 줄이 있으면 [저장] 이 꺼진다 (214 D17)", async () => {
+    const made = await api.post("/api/intakes", { title: "214 근거만 시험", received_on: dayFromToday(-1) });
+    try {
+      await go(`#/intakes/${encodeURIComponent(made.id)}`);
+      await page.locator(".summary-bar .precheck-cell").getByRole("button", { name: "체크리스트" }).click();
+      const dialog = page.locator(".precheck-dialog");
+      await dialog.waitFor();
+      const row = dialog.locator(".precheck-row").first();
+      const save = dialog.getByRole("button", { name: "저장" });
+      await row.locator(".precheck-note").fill("근거만 적음");
+      await page.waitForTimeout(200);
+      expect(await save.isDisabled(), "근거만 적은 줄이 있는데 [저장] 이 켜져 있다");
+      equal(await row.locator(".precheck-note-error").count(), 1, "줄 안의 안내");
+      await row.locator(".precheck-choice").first().click();
+      await page.waitForTimeout(200);
+      expect(!(await save.isDisabled()), "단계를 골랐는데 꺼져 있다");
+      equal(await row.locator(".precheck-note-error").count(), 0, "안내가 남았다");
+      nextDialog((d) => d.accept());
+      await dialog.getByRole("button", { name: "닫기" }).click();
+      await page.waitForTimeout(300);
+    } finally {
+      await fetch(`${BASE}/api/intakes/${encodeURIComponent(made.id)}/archive`, { method: "POST" });
+    }
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

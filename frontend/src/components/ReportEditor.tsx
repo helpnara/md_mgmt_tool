@@ -18,6 +18,7 @@ import PreviewToggle, { usePreview } from "./PreviewToggle";
 import AiPromptPanel from "./AiPromptPanel";
 import ReportDiff from "./ReportDiff";
 import VersionPanel from "./VersionPanel";
+import { REPORT_DRAFT_DAYS, REPORT_FREEZE_AHEAD_DAYS, addDays, reportDateProblem, today } from "../inputRules";
 
 interface UploadState {
   key: string;
@@ -88,6 +89,16 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   // Ctrl+S 도 아무 일도 하지 않는다. 복사 단추는 남는다 — 공유의 쓸모가 그것이다.
   const readonly = isReadonly();
   const editable = !frozen && !readonly;
+  // 보고일 검사 (TODO 214 D5 · U10) — 바꾼 날짜만 본다(예전 보고의 날짜는 그대로 둔다). 비우면 원래 날짜로 남는다
+  const todayDay = today();
+  const dateError = editable && reportDate && reportDate !== report.report_date ? reportDateProblem(reportDate) : null;
+  // 확정은 보고일이 오늘보다 1주 넘게 뒤면 막는다 — 미래 날짜로 확정하면 그 과제가 보고 대상에서 영영 빠졌다
+  const effectiveDate = reportDate || report.report_date;
+  const freezeLimit = addDays(todayDay, REPORT_FREEZE_AHEAD_DAYS);
+  const freezeBlocked =
+    effectiveDate > freezeLimit
+      ? `보고일(${effectiveDate})이 오늘보다 ${REPORT_FREEZE_AHEAD_DAYS}일 넘게 뒤라 아직 확정할 수 없습니다 — 보고한 뒤 확정합니다.`
+      : null;
 
   const refresh = useCallback(() => {
     api.listReportAttachments(report.id).then(setAttachments).catch(() => undefined);
@@ -188,6 +199,11 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
   const saving = useRef(false);
   async function runSave(): Promise<void> {
     if (saving.current) return;
+    // 서버가 거절할 날짜면 보내지 않는다 — 칸 옆에 이유가 있다 (TODO 214 U2)
+    if (dateError) {
+      setError(dateError);
+      return;
+    }
     saving.current = true;
     setBusy(true);
     try {
@@ -396,12 +412,17 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             type="date"
             value={reportDate}
             disabled={!editable}
+            min={editable ? addDays(todayDay, -REPORT_DRAFT_DAYS) : undefined}
+            max={editable ? addDays(todayDay, REPORT_DRAFT_DAYS) : undefined}
             title={frozen ? "확정된 보고의 날짜는 바꿀 수 없습니다. 확정을 풀면 고칠 수 있습니다." : undefined}
             onChange={(event) => {
               setReportDate(event.target.value);
               setDirty(true);
             }}
+            aria-invalid={dateError ? true : undefined}
           />
+          {editable && !reportDate && <span className="hint">비우면 원래 날짜({report.report_date})</span>}
+          {dateError && <span className="form-warn date-warn">{dateError}</span>}
         </label>
         <label>
           피보고자 · 회의체
@@ -770,6 +791,8 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             </button>
           ) : (
             <>
+              {/* 확정이 꺼진 까닭은 단추 줄에 (TODO 214 U2) */}
+              {(freezeBlocked || dateError) && <span className="form-warn freeze-why">{freezeBlocked ?? dateError}</span>}
               {/* 초안을 잘못 만들었을 때 만든 자리에서 바로 지운다. 지금까지는 편집기를 닫고
                   과제 상세의 보고 이력 목록까지 가야 했다. 확정된 보고에는 두지 않는다 —
                   그 문서는 "언제 무엇을 보고했는가"라는 기록이라, 확정을 먼저 풀어야 한다. */}
@@ -794,12 +817,19 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
               >
                 삭제
               </button>
-              <button data-write className="ghost" disabled={busy || (!dirty && ledger.empty)} onClick={() => void runSave()}>
+              <button
+                data-write
+                className="ghost"
+                disabled={busy || (!dirty && ledger.empty) || Boolean(dateError)}
+                title={dateError ?? undefined}
+                onClick={() => void runSave()}
+              >
                 {busy ? "저장 중…" : "저장"}
               </button>
               <button
                 className="commit"
-                disabled={busy}
+                disabled={busy || Boolean(freezeBlocked) || Boolean(dateError)}
+                title={freezeBlocked ?? dateError ?? undefined}
                 onClick={async () => {
                   if (!window.confirm("보고를 확정하면 이 문서는 읽기 전용이 되고, 미보고 분량이 초기화됩니다.")) return;
                   setBusy(true);

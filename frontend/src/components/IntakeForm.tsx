@@ -3,6 +3,21 @@ import { api } from "../api";
 import type { ClassificationKey, Intake, Meta } from "../types";
 import { useFormUnsaved } from "../unsaved";
 import { confirmDiscard, dateOrderProblem, todayIso } from "../util";
+import {
+  DATE_MAX,
+  DATE_MIN,
+  LIMITS,
+  confirmEffects,
+  confirmOutsiders,
+  dateProblem as dayProblem,
+  isDeparted,
+  lengthHint,
+  lengthState,
+  hasControlChars,
+  similarTeam,
+  titleProblem,
+} from "../inputRules";
+import TagSuggestions from "./TagSuggestions";
 
 /**
  * 접수의 칸 (TODO 136) — 등록할 때와 고칠 때 같은 폼이다.
@@ -13,6 +28,8 @@ import { confirmDiscard, dateOrderProblem, todayIso } from "../util";
  */
 interface Props {
   meta: Meta;
+  /** 명부에 사람을 새로 넣었을 때 상단 meta 를 다시 읽는다 (TODO 214 D6) */
+  onMetaChange?: () => void;
   initial?: Partial<Intake>;
   submitLabel: string;
   /** 등록할 때 고른 파일도 함께 넘긴다 — 등록 직후 차례로 올린다 (TODO 138) */
@@ -22,7 +39,7 @@ interface Props {
 
 const PRIORITIES = ["상", "중", "하"];
 
-export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCancel }: Props) {
+export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCancel, onMetaChange = () => undefined }: Props) {
   const creating = !initial?.id;
   const [form, setForm] = useState(() => ({
     title: initial?.title ?? "",
@@ -56,9 +73,30 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
     if (busy) return;
     if (confirmDiscard(dirty)) onCancel();
   };
-  // 날짜 화면 검사 (TODO 212) — 접수일은 번호의 연도라 비울 수 없다 · 시작 > 종료
+  // 날짜 화면 검사 (TODO 212) — 접수일은 번호의 연도라 비울 수 없다 · 시작 > 종료 · 2000~2100년 (TODO 214 D5)
   const missingReceived = !form.received_on;
-  const dateProblem = dateOrderProblem(form.start_date, form.due_date, "추진 시작", "추진 종료");
+  const receivedProblem = dayProblem(form.received_on, "접수일");
+  const startProblem = dayProblem(form.start_date, "추진 시작");
+  const dateProblem =
+    dayProblem(form.due_date, "추진 종료") ??
+    dateOrderProblem(form.start_date, form.due_date, "추진 시작", "추진 종료");
+  // 제목 · 이름 (TODO 214 D14) — 상한 · 줄바꿈 · 제어문자
+  const titleError = titleProblem(form.title, "과제명");
+  const titleLeft = lengthHint(form.title, LIMITS.title);
+  const leaderError = hasControlChars(form.leader)
+    ? "과제리더에 줄바꿈 · 탭을 쓸 수 없습니다."
+    : lengthState(form.leader.trim(), LIMITS.name).over
+      ? `과제리더 이름은 ${LIMITS.name}자까지입니다.`
+      : null;
+  // 비슷한 팀 이름 (D13)
+  const similar = similarTeam(form.leader_team.trim(), meta.partner_teams ?? []);
+  // 요청 기대효과 — 음수는 막는다(폼의 min 이 막지만 칸 옆에 이유를)
+  const effectError =
+    form.effect_request.trim() !== "" && Number(form.effect_request) < 0 ? "요청 기대효과는 0보다 작을 수 없습니다." : null;
+  const blockers = [titleError, leaderError, receivedProblem, startProblem, dateProblem, effectError].filter(
+    (item): item is string => Boolean(item),
+  );
+  const dateBlocked = missingReceived || Boolean(receivedProblem || startProblem || dateProblem);
   // FileList 는 **살아 있는 목록**이다 — 입력 칸을 비우거나 끌어다 놓기가 끝나면 비워진다.
   // 상태 갱신 함수 안에서 읽으면 그때는 이미 비어 있으므로 여기서 바로 배열로 떠 둔다.
   const addFiles = (list: FileList | File[] | null) => {
@@ -82,14 +120,33 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
   }, [creating, form.received_on]);
 
   // 과제리더 자동완성 — 명부의 이름을 먼저 보여 준다. 명부에 없는 이름(현업 사람)도 받는다.
-  const leaders = meta.people.filter((name) => !(meta.people_left ?? []).some((p) => p.name === name));
+  // 떠난 사람은 빼되, 떠난 날이 아직 오지 않았으면 남긴다 (TODO 214 D7 · D8)
+  const leaders = meta.people.filter(
+    (name) => !(meta.people_left ?? []).some((p) => p.name === name && isDeparted(p)),
+  );
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (missingReceived || dateProblem) return;
+    if (missingReceived || blockers.length > 0 || busy) return;
     setBusy(true);
     setError(null);
     try {
+      // 과제리더 — 명부에 없으면 묻는다. 현업 사람이면 명부에 넣지 않고 그대로 (D6 · D7). 바꾼 이름만
+      const leader = form.leader.replace(/\s+/g, " ").trim();
+      if (leader && leader !== (initial?.leader ?? "")) {
+        const ok = await confirmOutsiders([leader], meta, {
+          role: "과제리더",
+          known: meta.partner_people ?? [],
+          addPerson: async (name) => {
+            await api.addPerson(name);
+            onMetaChange();
+          },
+        });
+        if (!ok) return;
+      }
+      // 요청 기대효과의 단위 (D4)
+      const requested = form.effect_request.trim() === "" ? null : Number(form.effect_request);
+      if (!confirmEffects([{ label: "요청 기대효과", value: requested }], meta)) return;
       await onSubmit({
         title: form.title.trim(),
         leader: form.leader.trim() || null,
@@ -126,8 +183,20 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
       }}
     >
       <label>
-        과제명 <span className="hint">예: 00을 위한 00 구축/개발</span>
-        <input value={form.title} onChange={(e) => update("title", e.target.value)} required autoFocus />
+        {/* 필수 표시 * (TODO 214 U1) */}
+        과제명 * <span className="hint">예: 00을 위한 00 구축/개발</span>
+        <input
+          value={form.title}
+          onChange={(e) => update("title", e.target.value)}
+          required
+          autoFocus
+          aria-invalid={titleError ? true : undefined}
+        />
+        {titleError ? (
+          <span className="form-warn">{titleError}</span>
+        ) : (
+          titleLeft && <span className="hint length-count">{titleLeft}</span>
+        )}
       </label>
       <div className="form-row">
         <label>
@@ -137,7 +206,9 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
             value={form.leader}
             onChange={(e) => update("leader", e.target.value)}
             placeholder="예: 홍길동"
+            aria-invalid={leaderError ? true : undefined}
           />
+          {leaderError && <span className="form-warn">{leaderError}</span>}
           <datalist id="intake-leader-options">
             {leaders.map((name) => (
               <option key={name} value={name} />
@@ -152,6 +223,7 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
             onChange={(e) => update("leader_team", e.target.value)}
             placeholder="예: 압연기술팀"
           />
+          {similar && <span className="hint warn-text">비슷한 팀이 있습니다: {similar}</span>}
           <datalist id="intake-team-options">
             {(meta.partner_teams ?? []).map((team) => (
               <option key={team} value={team} />
@@ -159,15 +231,18 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
           </datalist>
         </label>
         <label>
-          접수일
+          접수일 *
           <input
             type="date"
             value={form.received_on}
+            min={DATE_MIN}
+            max={DATE_MAX}
             onChange={(e) => update("received_on", e.target.value)}
             required
-            aria-invalid={missingReceived ? true : undefined}
+            aria-invalid={missingReceived || receivedProblem ? true : undefined}
           />
           {missingReceived && <span className="form-warn date-warn">접수일을 적어 주세요 — 접수 번호의 연도입니다.</span>}
+          {receivedProblem && <span className="form-warn date-warn">{receivedProblem}</span>}
         </label>
       </div>
       <p className="hint">
@@ -195,13 +270,23 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
       <div className="form-row">
         <label>
           추진 시작
-          <input type="date" value={form.start_date} onChange={(e) => update("start_date", e.target.value)} />
+          <input
+            type="date"
+            value={form.start_date}
+            min={DATE_MIN}
+            max={DATE_MAX}
+            onChange={(e) => update("start_date", e.target.value)}
+            aria-invalid={startProblem ? true : undefined}
+          />
+          {startProblem && <span className="form-warn date-warn">{startProblem}</span>}
         </label>
         <label>
           추진 종료
           <input
             type="date"
             value={form.due_date}
+            min={form.start_date || DATE_MIN}
+            max={DATE_MAX}
             onChange={(e) => update("due_date", e.target.value)}
             aria-invalid={dateProblem ? true : undefined}
           />
@@ -216,7 +301,9 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
             value={form.effect_request}
             onChange={(e) => update("effect_request", e.target.value)}
             placeholder="요청자 추정"
+            aria-invalid={effectError ? true : undefined}
           />
+          {effectError && <span className="form-warn">{effectError}</span>}
           <span className="hint">과제로 옮기지 않습니다 — 승격할 때 참고로만 보입니다</span>
         </label>
       </div>
@@ -243,6 +330,8 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
         <label>
           태그
           <input value={form.tags} onChange={(e) => update("tags", e.target.value)} placeholder="쉼표로 구분" />
+          {/* 쓰던 태그 · 모양만 다른 태그는 그 표기로 (TODO 214 U7 · D12) */}
+          <TagSuggestions known={meta.tags ?? []} value={form.tags} onPick={(next) => update("tags", next)} />
         </label>
       </div>
       {creating && (
@@ -296,12 +385,16 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
       )}
       {/* 서버가 거절한 사유는 단추 바로 위에 (TODO 205) */}
       {error && <p className="form-error" role="alert">{error}</p>}
-      {(missingReceived || dateProblem) && <p className="hint warn-text">날짜를 고쳐야 저장할 수 있습니다.</p>}
+      {(dateBlocked || blockers.length > 0) && (
+        <p className="hint warn-text form-blocker">
+          {dateBlocked ? "날짜를 고쳐야 저장할 수 있습니다." : `저장하려면 — ${blockers[0]}`}
+        </p>
+      )}
       <div className="form-actions">
         <button type="button" className="ghost" onClick={cancel} disabled={busy}>
           취소
         </button>
-        <button type="submit" disabled={busy || missingReceived || Boolean(dateProblem)}>
+        <button type="submit" disabled={busy || missingReceived || blockers.length > 0}>
           {busy ? "저장 중…" : submitLabel}
         </button>
       </div>

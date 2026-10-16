@@ -22,6 +22,7 @@ import ProjectForm from "./ProjectForm";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
 import { leftLabel } from "../people";
 import StageBand from "./StageBand";
+import { FORM_SHOWN_WARNING, REPORT_DRAFT_DAYS, addDays, reportDateProblem, warningList } from "../inputRules";
 
 interface Props {
   projectId: string;
@@ -898,11 +899,24 @@ export default function ProjectDetail({
             <dd>
               {(() => {
                 const effect = effectText(project.effect_expected, project.effect_verified);
+                // 비대상 과제 — 금액이 있어도 합계에서 빠진다(흐리게) · 완료 전 실증은 합계에 안 든다 (TODO 214 D2 · D3)
+                if (project.no_effect)
+                  return (
+                    <span className="effect-dim" title="효과성 관리 비대상 과제 — 적어 둔 금액은 합계에서 빠집니다">
+                      {effect ? effect.text : "비대상"}
+                      {effect && <span className="muted"> · 비대상, 합계에서 빠집니다</span>}
+                    </span>
+                  );
                 if (!effect) return <span className="muted">미입력</span>;
                 return (
                   <span className={effect.verified ? "accent" : undefined}>
                     {effect.text}
                     {!effect.verified && <span className="muted"> · 기대</span>}
+                    {effect.verified && project.status !== "done" && (
+                      <span className="muted" title="실증효과는 완료한 과제만 합계에 들어갑니다">
+                        {" "}· 완료 전이라 실증은 합계 밖
+                      </span>
+                    )}
                   </span>
                 );
               })()}
@@ -925,7 +939,9 @@ export default function ProjectDetail({
             submitLabel="저장"
             onCancel={() => setEditingProject(false)}
             onSubmit={async (payload) => {
-              await api.updateProject(project.id, payload);
+              const saved = await api.updateProject(project.id, payload);
+              // 서버가 막지 않고 알린 것 — 폼이 저장 전에 이미 보인 것(같은 이름 · 효과 · 선행 과제 연도)은 빼고 (TODO 214)
+              for (const warning of warningList(saved, FORM_SHOWN_WARNING)) notifyError(`저장했습니다 — ${warning}`);
               setEditingProject(false);
               load();
               onMetaChange();
@@ -1100,15 +1116,20 @@ export default function ProjectDetail({
           </h2>
           {/* 초안 만들기는 쓰기 — 읽기 전용 공유에서는 날짜 칸만 덩그러니 남지 않게 묶음째 숨긴다 (TODO 208) */}
           <div className="draft-controls" data-write>
+            {/* 초안 날짜는 오늘 앞뒤 1년 (TODO 214 D5) — 달력이 먼저 흐리고, 손으로 친 값은 단추 옆에 이유 */}
             <input
               type="date"
               value={draftDate}
+              min={addDays(todayIso(), -REPORT_DRAFT_DAYS)}
+              max={addDays(todayIso(), REPORT_DRAFT_DAYS)}
               onChange={(event) => setDraftDate(event.target.value)}
               title="이 날짜로 보고 초안을 만듭니다. 만든 뒤에도 바꿀 수 있습니다."
+              aria-invalid={reportDateProblem(draftDate) ? true : undefined}
             />
+            {reportDateProblem(draftDate) && <span className="form-warn date-warn">{reportDateProblem(draftDate)}</span>}
             <button
               className="report"
-              disabled={!draftDate || creatingDraft}
+              disabled={!draftDate || creatingDraft || Boolean(reportDateProblem(draftDate))}
               onClick={async () => {
                 if (creatingDraft) return;
                 // 열린 보고를 고치던 중이면 먼저 묻는다 (TODO 211 ④)
@@ -1309,6 +1330,7 @@ export default function ProjectDetail({
           projectId={project.id}
           knownTags={meta.tags}
           dirName={project.dir_name}
+          period={{ start: project.start_date, due: project.status === "done" && project.completed_at ? project.completed_at : project.due_date }}
           initial={{ body: entrySeed ?? project.entry_template ?? "" }}
           onCancel={() => {
             // 편집기가 임시 기록 · 이번에 올린 첨부를 지운 **뒤에** 불린다 — 다시 읽어 수행 이력에서 빠지게 (TODO 213 ①)
@@ -1377,6 +1399,7 @@ export default function ProjectDetail({
                 projectId={current.id}
                 knownTags={meta.tags}
                 dirName={current.dir_name}
+                period={{ start: current.start_date, due: current.status === "done" && current.completed_at ? current.completed_at : current.due_date }}
                 initial={entry}
                 docPath={`projects/${current.dir_name}/${entry.rel_path}`}
                 onRestored={() => {

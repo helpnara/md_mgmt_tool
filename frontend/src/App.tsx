@@ -368,7 +368,7 @@ export default function App() {
         {route.name === "home" && <Home meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}
         {route.name === "help" && <Help />}
-        {route.name === "intakes" && <IntakePool meta={meta} query={route.query} />}
+        {route.name === "intakes" && <IntakePool meta={meta} query={route.query} onMetaChange={loadMeta} />}
         {route.name === "intake" && (
           <IntakeDetail
             key={route.id}

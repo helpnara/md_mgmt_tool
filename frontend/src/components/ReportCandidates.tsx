@@ -12,6 +12,7 @@ import { isReadonly } from "../readonly";
 import StatusBadge from "./StatusBadge";
 import CopyTableButton from "./CopyTableButton";
 import StageBand from "./StageBand";
+import { REPORT_DRAFT_DAYS, addDays, reportDateProblem, today } from "../inputRules";
 
 const PICKS_KEY = "md-mgmt:report-picks";
 /** 이만큼 지나면 붉게 — 주간 보고 기준으로 두 주를 넘긴 것. */
@@ -132,6 +133,12 @@ export default function ReportCandidates({ meta, query }: Props) {
   }
 
   async function makeDraft(projectId: string) {
+    // 초안 날짜는 오늘 앞뒤 1년 (TODO 214 D5) — 서버 거절 전에
+    const problem = reportDateProblem(reportDate);
+    if (problem) {
+      notifyError(problem);
+      return;
+    }
     setBusy(true);
     try {
       const report = await api.createDraft(projectId, reportDate);
@@ -166,7 +173,15 @@ export default function ReportCandidates({ meta, query }: Props) {
         <div className="candidate-controls">
           <label>
             보고 예정일
-            <input type="date" value={reportDate} onChange={(event) => setReportDate(event.target.value)} />
+            <input
+              type="date"
+              value={reportDate}
+              min={addDays(today(), -REPORT_DRAFT_DAYS)}
+              max={addDays(today(), REPORT_DRAFT_DAYS)}
+              onChange={(event) => setReportDate(event.target.value)}
+              aria-invalid={reportDateProblem(reportDate) ? true : undefined}
+            />
+            {reportDateProblem(reportDate) && <span className="form-warn date-warn">{reportDateProblem(reportDate)}</span>}
           </label>
           <label className="toggle">
             <input

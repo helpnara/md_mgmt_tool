@@ -24,6 +24,8 @@ import SortHeader, { type SortState } from "./SortHeader";
 interface Props {
   meta: Meta;
   query: string;
+  /** 명부에 사람을 넣으면 메타를 다시 읽게 (TODO 214 D6) */
+  onMetaChange?: () => void;
 }
 
 const DEFAULTS = {
@@ -51,7 +53,7 @@ function readFilters(params: URLSearchParams): Filters {
   return out;
 }
 
-export default function IntakePool({ meta, query }: Props) {
+export default function IntakePool({ meta, query, onMetaChange }: Props) {
   const [filters, setFilters] = useState<Filters>(() => readFilters(new URLSearchParams(query)));
   const [data, setData] = useState<IntakeListing | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +140,7 @@ export default function IntakePool({ meta, query }: Props) {
           <h2>새 접수</h2>
           <IntakeForm
             meta={meta}
+            onMetaChange={onMetaChange}
             submitLabel="접수 등록"
             onCancel={() => setCreating(false)}
             onSubmit={async (payload, files) => {

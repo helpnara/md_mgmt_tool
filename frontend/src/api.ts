@@ -183,7 +183,9 @@ export const api = {
   createProject: (payload: Partial<Project>) =>
     invalidating(request<Project>("/api/projects", { method: "POST", body: JSON.stringify(payload) })).then((created) => {
       for (const warning of Array.isArray(created?.warnings) ? created.warnings : []) {
-        if (typeof warning === "string" && warning.trim()) notifyError(`만들었습니다 — ${warning}`);
+        // 같은 이름 · 효과 · 선행 과제 연도는 과제 폼이 저장 **전에** 보였다 — 두 번 알리지 않는다 (TODO 214 D11)
+        if (typeof warning === "string" && warning.trim() && !/같은 이름|효과|선행 과제/.test(warning))
+          notifyError(`만들었습니다 — ${warning}`);
       }
       return created;
     }),
@@ -424,3 +426,19 @@ export const api = {
   /** 점검 (TODO 204 · 206) — 첨부 전체 용량 · 이전 버전 보관 실패. 새 칸은 서버가 아직 안 줄 수도 있다 */
   health: () => request<Health>("/api/health"),
 };
+
+// ── TODO 214 D11 — 같은 이름 과제를 저장 **전에** 묻는다 ─────────────────────────────
+/** 같은 제목의 과제들. 서버가 아직 이 길을 모르거나 실패하면 빈 목록 — 묻지 못해도 저장은 막지 않는다 */
+export function projectTitleCheck(title: string, exclude?: string | null): Promise<{ id: string; title: string }[]> {
+  const params = new URLSearchParams({ title });
+  if (exclude) params.set("exclude", exclude);
+  return request<{ same?: unknown }>(`/api/projects/title-check?${params.toString()}`)
+    .then((data) =>
+      Array.isArray(data?.same)
+        ? (data.same as { id?: unknown; title?: unknown }[])
+            .filter((row) => typeof row?.id === "string")
+            .map((row) => ({ id: String(row.id), title: String(row.title ?? "") }))
+        : [],
+    )
+    .catch(() => []);
+}

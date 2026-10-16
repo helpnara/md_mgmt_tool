@@ -2025,3 +2025,57 @@ input[aria-invalid="true"] { border-color: var(--warn); }
 .health-line { margin: 4px 0 8px; }
 .keep-failures ul { margin: 6px 0 2px; padding-left: 18px; }
 .keep-failures code { font-size: 12px; word-break: break-all; }
+
+/* TODO 214 · 216 사람 · 면담 · 설정 입력 (F2) ─────────────────────────────────
+   칸 옆의 막는 이유(빨강) · 받되 알릴 것(주황) · 이름 창 · 입력 확인 줄 · 떠날 예정인 사람 · 떠난 사람 칩 딱지. */
+.field-error { display: block; color: var(--danger); font-size: 12px; font-weight: 400; line-height: 1.4; margin-top: 2px; }
+label > .form-warn, label > .hint.length-count { display: block; margin-top: 2px; font-weight: 400; }
+textarea[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--warn); }
+.meeting-notice { margin: 6px 0; }
+.meeting-form .form-row label { min-width: 0; }
+.tag-pick.departed { opacity: 0.75; border-style: dashed; }
+.tag-pick .departed-tag { font-size: 11px; color: var(--muted-strong); }
+.person-leaving td { color: var(--text); }
+.person-leaving-hint { display: block; font-size: 11px; margin-top: 2px; }
+.people-table td .field-error { white-space: normal; }
+.people-dup-ids { margin: 8px 0 0; }
+.form-actions > .form-warn { margin-right: auto; align-self: center; }
+.name-dialog { max-width: 460px; display: flex; flex-direction: column; gap: 10px; }
+.name-dialog h2 { margin: 0; font-size: 16px; }
+.name-dialog-message { margin: 0; }
+.name-dialog .stack-label input { width: 100%; }
+.name-dialog-done { padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); }
+.name-dialog-done p { margin: 2px 0; }
+.input-rejections { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.input-rejections .hint { margin: 2px 0; }
+.input-rejection-list { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
+.input-rejection-list li { display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 2px 0; }
+.input-rejection-list code { font-size: 12px; word-break: break-all; }
+.backup-range-hint { margin: 2px 0 6px; }
+.history-filters .field-error { max-width: 220px; }
+
+/* TODO 214 과제 · 기록 · 접수 입력 (F1) ───────────────────────────────────────
+   효과 비대상이면 금액 칸 잠금 · 흐림(D2) · 유관부서 줄 경고(F8 · D13) · 선행 과제 칩의 찾을 수 없음 / 목록에 없음(D15) ·
+   단추 위 막는 까닭 · 진행일지 오류를 단추 옆으로(U5) · 사전점검 근거만 적은 줄(D17) · 태그 표기 안내(D12). */
+.effect-row.effect-locked label { opacity: 0.55; }
+.effect-row.effect-locked input:disabled { background: var(--surface-muted, #f1f5f9); cursor: not-allowed; }
+.effect-locked-note { flex: 1 1 100%; margin: 0; }
+.effect-row { flex-wrap: wrap; }
+.effect-row .effect-hint { flex: 2 1 0; }
+.effect-note { display: block; margin-top: 2px; }
+.effect-dim { opacity: 0.6; }
+.partner-rows li .partner-warn, .promote-dialog .partner-row .partner-warn { flex: 1 1 100%; font-size: 12px; }
+.promote-dialog .partner-row { flex-wrap: wrap; }
+.predecessor-field > .form-warn, .predecessor-field > .warn-text { display: block; margin-top: 4px; font-size: 12px; }
+.predecessor-chip.missing { border: 1px dashed var(--border); background: transparent; }
+.predecessor-chip.invalid { border: 1px solid var(--warn); }
+.form-blocker { margin: 8px 0 0; }
+.entry-editor .editor-footer { flex-wrap: wrap; }
+.entry-editor .editor-footer > .entry-error, .entry-editor .editor-footer > .entry-notice { flex: 1 1 100%; margin: 0; }
+.draft-controls .date-warn, .candidate-controls .date-warn { display: block; max-width: 260px; }
+.report-date-field .hint, .report-date-field .form-warn { display: block; font-weight: 400; }
+.freeze-why { max-width: 320px; font-size: 12px; }
+.decision-why { align-self: center; }
+.precheck-row-invalid .precheck-note { border-color: var(--warn); }
+.precheck-note-error { grid-column: 1 / -1; font-size: 12px; }
+.tag-merge-hint { margin: 2px 0 0; color: var(--warn); }
