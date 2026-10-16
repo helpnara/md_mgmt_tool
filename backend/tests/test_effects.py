@@ -123,7 +123,9 @@ def test_broken_effect_value_does_not_stop_indexing(client, vault_dir):
         encoding="utf-8",
     )
 
-    assert client.post("/api/reindex").json()["problems"] == []
+    # 버리되 알린다 (TODO 214 D18) — 예전에는 말없이 버렸다
+    problems = client.post("/api/reindex").json()["problems"]
+    assert len(problems) == 1 and "effect_expected" in problems[0]["reason"], problems
     again = client.get(f"/api/projects/{project['id']}").json()
     assert again["title"] == "손으로 고침"
     assert again["effect_expected"] is None

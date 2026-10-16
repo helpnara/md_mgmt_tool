@@ -368,10 +368,12 @@ def test_422_messages_are_korean_and_name_the_field(client):
 
 
 def test_422_is_still_recorded_in_the_error_log(client):
+    """422 는 남는다 — 다만 TODO 216 부터 "최근 오류" 가 아니라 "입력 확인" 고리에 (화면이 미리 막지 못한 자리의 신호)."""
     from app.services import errorlog
 
     client.post("/api/projects", json={"title": "x", "effect_expected": "abc"})
-    assert any(item.get("status") == 422 for item in errorlog.recent())
+    assert not any(item.get("status") == 422 for item in errorlog.recent())
+    assert any(item.get("action") == "POST /api/projects" for item in errorlog.recent_inputs())
 
 
 # ── settings.json — 임시 파일 + replace, 쓰기 잠금 (TODO 202 ㉓) ─────────────

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import get_settings
+from .. import schemas as rules
 from ..vault import markdown as md
 from ..vault import versions
 from ..vault import paths
@@ -122,7 +123,8 @@ def create_draft(
     from .entries import require_project_folder
 
     require_project_folder(directory)  # 지워진 과제 폴더를 되살리지 않는다 (TODO 200)
-    report_date = paths.validate_date(report_date, default_report_date())
+    # 보고일 — 다른 날짜 칸과 같은 엄격한 규칙(F15: `20260101` · `2026-W02-1` 을 받았다) + 오늘 ±1년 (TODO 214 D5)
+    report_date = check_report_date(report_date, default_report_date())
     # 같은 날짜에 중간·완료 보고를 각각 남길 수 있어야 한다.
     # 첫 건은 reports/2026-09-08/, 다음부터 -2, -3 … 을 붙인다.
     folder = paths.unique_path(directory / "reports", report_date, "")
@@ -139,7 +141,7 @@ def create_draft(
         "covers_from": entries[0]["date"] if entries else None,
         "covers_to": entries[-1]["date"] if entries else None,
         "covered_entries": [row["rel_path"] for row in entries],
-        "author": settings_service.current_author(author) or None,
+        "author": settings_service.current_author(rules.clean_author(author)) or None,  # TODO 214 F13
         "attachments": [],
         "frozen_at": None,
         "report_type": None,  # 예약 필드 — 필요해지면 UI에 노출한다
@@ -157,6 +159,23 @@ def create_draft(
     if row is None:
         raise RuntimeError(f"보고 문서를 인덱싱하지 못했습니다: {rel_path}")
     return int(row["id"])
+
+
+# 보고일로 받는 범위 — 오늘 앞뒤 1년 (TODO 214 D5). 다음 주 화요일 보고를 미리 쓰므로 미래도 받는다.
+REPORT_DATE_SPAN_DAYS = 365
+# 확정할 수 있는 보고일의 끝 — 오늘 + 1주. 먼 미래 날짜로 확정하면 그 과제가 보고 대상에서 영영 빠졌다.
+FREEZE_AHEAD_DAYS = 7
+
+
+def check_report_date(value: object, default: str | None = None) -> str:
+    """보고일 (TODO 214 D5 · F15) — `strict_day`(형식 · 2000~2100) 위에 오늘 ±1년."""
+    day = rules.strict_day(value, "report_date", default=default)
+    today = date_cls.today()
+    low = (today - timedelta(days=REPORT_DATE_SPAN_DAYS)).isoformat()
+    high = (today + timedelta(days=REPORT_DATE_SPAN_DAYS)).isoformat()
+    if not low <= day <= high:
+        raise paths.InvalidDateError(f"보고일은 오늘 앞뒤 1년 안이어야 합니다 ({low} ~ {high}, 받은 값: {day}).")
+    return day
 
 
 def open_feedback(conn: sqlite3.Connection, project_id: str) -> list[sqlite3.Row]:
@@ -254,11 +273,20 @@ def update_report(conn: sqlite3.Connection, report_id: int, updates: dict[str, A
     md.ensure_unchanged(path, row["file_mtime"])
     doc = md.load(path)
     body = updates.pop("body", None)
+    if body is not None and body != doc.body:
+        rules.check_body(body)  # TODO 214 D14
+    if "audience" in updates:
+        # 피보고자 — 만들 때처럼 앞뒤 공백을 걷는다. "팀장" 과 "팀장 " 이 따로 쌓였다 (TODO 214 F11)
+        updates["audience"] = rules.clean_text(updates["audience"]) or None
 
     # 보고일을 바꾸면 폴더도 함께 옮긴다.
     new_date = updates.get("report_date")
     if new_date is not None:
-        new_date = paths.validate_date(new_date, row["report_date"])
+        # 엄격한 형식 + 오늘 ±1년 (TODO 214 D5 · F15). 그대로 보낸 날짜는 따지지 않는다.
+        if rules.clean_text(new_date) in ("", row["report_date"]):
+            new_date = row["report_date"]
+        else:
+            new_date = check_report_date(new_date, row["report_date"])
         updates["report_date"] = new_date
         # 제목을 손대지 않았다면(기본 제목 그대로면) 날짜를 따라가게 한다.
         if "title" not in updates and doc.meta.get("title") == f"{row['report_date']} 보고":
@@ -284,6 +312,10 @@ def update_report(conn: sqlite3.Connection, report_id: int, updates: dict[str, A
 def freeze_report(conn: sqlite3.Connection, report_id: int) -> None:
     """보고 확정. 이 시점의 문서를 그대로 굳히고 포함된 진행일지를 기록한다."""
     row, path = report_path(conn, report_id)
+    # 먼 미래의 보고일로 확정하면 그 과제는 보고 대상에서 영영 빠진다 (TODO 214 D5)
+    limit = (date_cls.today() + timedelta(days=FREEZE_AHEAD_DAYS)).isoformat()
+    if str(row["report_date"] or "") > limit:
+        raise ValueError(f"보고일이 1주 넘게 남은 보고는 확정할 수 없습니다 (보고일 {row['report_date']}).")
     doc = md.load(path)
     entries = unreported_entries(conn, row["project_id"], until=row["report_date"])
     covered = doc.meta.get("covered_entries") or [entry["rel_path"] for entry in entries]
@@ -293,12 +325,19 @@ def freeze_report(conn: sqlite3.Connection, report_id: int) -> None:
         for rel in covered
         if (_entry_date(rel) or row["report_date"]) <= row["report_date"]
     ]
+    # 담은 범위는 **실제로 담은 기록**의 날짜로 다시 잰다 (TODO 214 F5) — 보고일을 앞당기면 끝이 그대로 남았다.
+    dated = {
+        item["rel_path"]: item["date"]
+        for item in conn.execute("SELECT rel_path, date FROM entry WHERE project_id = ?", (row["project_id"],))
+    }
+    days = sorted(day for day in (dated.get(rel) or _entry_date(rel) for rel in covered) if day)
 
     doc.meta = md.merge_meta(
         doc.meta,
         {
             "covered_entries": covered,
-            "covers_from": doc.meta.get("covers_from") or (covered[0][5:15] if covered else None),
+            "covers_from": days[0] if days else None,
+            "covers_to": days[-1] if days else None,
             "frozen_at": now_iso(),
         },
     )

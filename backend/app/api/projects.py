@@ -214,6 +214,10 @@ def _serialize(
         "intake_id": row["intake_id"],
         # 선행 과제들 (TODO 172)
         "predecessors": batch.predecessors.get(pid, []) if batch else svc._predecessors_of(conn, pid),
+        # 합계에 드는 효과 (TODO 214 D2 · D3) — 효과 관리 안 함은 0, 실증은 완료한 과제만, 연도를 고르면 그 해에 세는 것만.
+        # 홈 · 과제목록 합계 줄이 같은 값을 더해야 숫자가 같다(5.8). 목록에서만 온다.
+        "effect_counted_expected": row["y_ee"] if "y_ee" in row.keys() else None,
+        "effect_counted_verified": row["y_ev"] if "y_ev" in row.keys() else None,
         # 효과 금액을 세는 해 — 끝나는 해 (TODO 181). 목록(연도 거르기)에서만 온다.
         "effect_year": row["y_effect_year"] if "y_effect_year" in row.keys() else None,
         # 그 해의 상태 (TODO 184) — 목록(연도 거르기)에서만 온다. 2025~2026 과제를 2025 에서 보면 진행중.
@@ -359,7 +363,8 @@ def list_projects(
         params.append(done_year)
     if verified == "none":
         # 홈의 done_unverified 와 같은 조건 — 그 해에 끝낸 과제 중 실증 미입력 (181: 그 해의 상태)
-        where.append("p.y_status = 'done' AND (p.effect_verified IS NULL OR p.effect_verified <= 0)")
+        # 효과 관리 안 함은 뺀다 — 홈의 done_unverified 가 빼고 세므로 눌렀을 때 같은 수여야 한다 (TODO 214 · 5.8)
+        where.append("p.y_status = 'done' AND p.no_effect = 0 AND (p.effect_verified IS NULL OR p.effect_verified <= 0)")
     if q and q.strip():
         # 과제 본문뿐 아니라 진행일지·첨부 파일명에 걸려도 그 과제를 남긴다.
         matched = search_svc.project_ids_matching(conn, q.strip())
@@ -388,14 +393,24 @@ def list_projects(
 def create_project(payload: ProjectCreate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     # 같은 이름의 과제가 이미 있으면 막지 않고 알린다 (TODO 205 ㉞) — 해마다 같은 이름으로 도는 과제가 있다.
     same = svc.same_title_ids(conn, payload.title)
+    warnings: list[str] = []
     try:
-        project_id = svc.create_project(conn, payload.model_dump())
+        project_id = svc.create_project(conn, payload.model_dump(), warnings)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = conn.execute("SELECT * FROM project WHERE id = ?", (project_id,)).fetchone()
     data = _serialize(conn, row)
-    data["warnings"] = [f"같은 이름의 과제가 이미 있습니다: {', '.join(same)}"] if same else []
+    data["warnings"] = ([f"같은 이름의 과제가 이미 있습니다: {', '.join(same)}"] if same else []) + warnings
     return data
+
+
+@router.get("/title-check")
+def title_check(
+    title: str = Query(""), exclude: str | None = Query(None), conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
+    """같은 이름의 과제 (TODO 214 D11) — 화면이 **저장 전에** 묻는다(새 과제 · 제목 수정 · 승격 · 이 과제로 새 과제).
+    `/{project_id}` 보다 먼저 서야 한다."""
+    return {"same": svc.same_title_projects(conn, title, exclude or None)}
 
 
 @router.get("/next-id")
@@ -460,8 +475,10 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
 def update_project(
     project_id: str, payload: ProjectUpdate, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
+    changes = payload.changes()
+    before = conn.execute("SELECT title FROM project WHERE id = ?", (project_id,)).fetchone()
     try:
-        svc.update_project(conn, project_id, payload.changes())
+        warnings = svc.update_project(conn, project_id, changes) or []
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
     except ExternalChangeError as exc:
@@ -470,7 +487,14 @@ def update_project(
         raise HTTPException(status_code=423, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return get_project(project_id, conn)
+    data = get_project(project_id, conn)
+    # 제목을 바꿨으면 같은 이름의 과제를 알린다 — 만들 때와 같은 알림 (TODO 214 D11)
+    if changes.get("title") and before is not None and data["title"] != before["title"]:
+        same = [item["id"] for item in svc.same_title_projects(conn, data["title"], project_id)]
+        if same:
+            warnings = [f"같은 이름의 과제가 이미 있습니다: {', '.join(same)}", *warnings]
+    data["warnings"] = warnings
+    return data
 
 
 # ── 과제 번호의 연도를 착수년도에 맞추기 (TODO 95) ──────────────────────────

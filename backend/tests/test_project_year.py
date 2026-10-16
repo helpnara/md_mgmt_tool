@@ -52,9 +52,15 @@ def test_each_year_counts_its_own_sequence(client):
 
 
 def test_a_nonsense_start_date_does_not_make_a_nonsense_year(client):
-    # 오타로 0025-01-01 이 들어오면 없는 연도의 번호가 생긴다. 그때는 올해로 둔다.
-    project = make(client, "오타", start_date="0025-01-01")
-    assert project["id"].startswith(f"{this_year()}-"), project["id"]
+    # 오타로 0025-01-01 이 들어오면 없는 연도의 번호가 생긴다. 이제는 날짜 칸이 2000~2100 년만 받으므로 400 (TODO 214 D5).
+    response = client.post("/api/projects", json={"title": "오타", "start_date": "0025-01-01"})
+    assert response.status_code == 400, response.text
+    assert "2000~2100" in response.json()["detail"]
+    assert client.get("/api/projects").json() == []
+    # 번호의 연도를 정하는 함수 자체는 여전히 엉뚱한 연도를 올해로 둔다(손으로 고친 파일 · 미리보기 길)
+    from app.services.projects import project_year
+
+    assert project_year("0025-01-01") == int(this_year())
 
 
 def test_the_form_can_ask_which_number_it_would_get(client):

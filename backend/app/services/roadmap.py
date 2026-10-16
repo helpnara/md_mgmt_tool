@@ -43,7 +43,7 @@ def build(conn: sqlite3.Connection, today: date | None = None) -> dict[str, Any]
         row["id"]: dict(row)
         for row in conn.execute(
             "SELECT id, title, status, type, grp, start_date, due_date, completed_at,"
-            " effect_expected, effect_verified FROM project"
+            " effect_expected, effect_verified, no_effect FROM project"
         )
     }
     owners: dict[str, list[str]] = {}
@@ -157,8 +157,14 @@ def build(conn: sqlite3.Connection, today: date | None = None) -> dict[str, Any]
             "current_stage": max(live_stages) if live_stages else None,
             "start_date": min(starts) if starts else None,
             "end_date": max(ends) if ends else None,
-            "effect_expected": sum(item["effect_expected"] or 0 for item in present),
-            "effect_verified": sum(item["effect_verified"] or 0 for item in present),
+            # 홈과 같은 셈 (TODO 214 D2 · D3) — 효과 관리 안 함은 빼고, 실증은 완료한 과제만
+            "effect_expected": sum(
+                item["effect_expected"] or 0 for item in present if not rows[item["id"]]["no_effect"]
+            ),
+            "effect_verified": sum(
+                item["effect_verified"] or 0 for item in present
+                if not rows[item["id"]]["no_effect"] and item["status"] == "done"
+            ),
             "projects": projects,
             "warnings": warnings,
         })

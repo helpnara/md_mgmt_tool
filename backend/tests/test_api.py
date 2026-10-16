@@ -73,12 +73,14 @@ def test_entries_on_same_day_do_not_collide(client):
 
 def test_project_updated_at_follows_latest_entry(client):
     project = create_project(client)
-    client.post(
+    # 미래 날짜의 진행일지는 이제 받지 않는다 (TODO 214 D5) — 최근 갱신은 가장 늦게 쓴 기록을 따른다
+    entry = client.post(
         f"/api/projects/{project['id']}/entries",
-        json={"date": "2030-01-01", "title": "미래 기록"},
-    )
+        json={"date": "2026-01-01", "title": "지난 기록"},
+    ).json()
     refreshed = client.get(f"/api/projects/{project['id']}").json()
-    assert refreshed["updated_at"].startswith("2030-01-01")
+    assert refreshed["updated_at"] == entry["updated_at"]
+    assert refreshed["updated_at"] >= project["updated_at"]
 
 
 def test_renaming_project_moves_its_folder(client, vault_dir):

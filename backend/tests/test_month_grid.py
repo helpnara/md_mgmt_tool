@@ -39,15 +39,16 @@ def test_month_grid_gives_projects_and_reports(client):
 
 def test_month_grid_keeps_a_project_reported_from_another_year(client):
     """지난해 번호인데 올해 보고한 과제. 빼면 표의 합이 위쪽 '보고 횟수' 와 어긋난다."""
-    old = _make(client, "작년 과제")
-    # 과제 번호는 2026 이지만, 보고일을 2027 로 두면 '2027년 표'에서 같은 상황이 된다.
-    _freeze_report(client, old["id"], "2027-02-03")
+    # 지난해(2025) 번호인데 올해(2026) 보고한 과제. 1주 넘게 남은 보고는 확정할 수 없어(TODO 214 D5) 지난해 번호로 만든다.
+    old = _make(client, "작년 과제", start_date="2025-11-03")
+    assert old["id"].startswith("2025-")
+    _freeze_report(client, old["id"], "2026-02-03")
 
-    grid = client.get("/api/report-month-grid", params={"year": "2027"}).json()
+    grid = client.get("/api/report-month-grid", params={"year": "2026"}).json()
     assert [item["id"] for item in grid["projects"]] == [old["id"]]
     # 위쪽 '보고 횟수' 와 표의 보고 수가 같아야 한다.
     assert len(grid["reports"]) == client.get(
-        "/api/home", params={"year": "2027"}
+        "/api/home", params={"year": "2026"}
     ).json()["team"]["reports"]
 
 

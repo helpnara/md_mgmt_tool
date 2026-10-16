@@ -102,7 +102,10 @@ def test_unreported_count_is_not_capped_by_any_date(client):
     """미보고 '분량'은 날짜를 자르지 않는다 — 앞으로 보고해야 할 양이 곧 그 수다."""
     project = make(client, "미보고 분량")
     add_entry(client, project, "2026-09-01")
-    add_entry(client, project, "2026-12-31")
+    # 미래 날짜의 진행일지는 받지 않는다 (TODO 214 D5) — 오늘 쓴 기록도 다음 보고일과 상관없이 센다
+    from datetime import date
+
+    add_entry(client, project, date.today().isoformat())
 
     candidates = client.get("/api/report-candidates").json()["items"]
     mine = next(item for item in candidates if item["id"] == project)

@@ -1108,3 +1108,9 @@ export interface ErrorListing {
   input_today?: number;
   inputs?: InputRejection[];
 }
+
+// TODO 214 D2 · D3 — 목록 줄이 실어 오는 "세는 금액"(효과 관리 안 함 · 완료 전 실증은 0). 합계 줄이 홈과 같은 수를 더하게
+export interface Project {
+  effect_counted_expected?: number | null;
+  effect_counted_verified?: number | null;
+}

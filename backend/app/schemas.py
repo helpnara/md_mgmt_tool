@@ -131,6 +131,10 @@ FIELD_LABELS: dict[str, str] = {
     "body": "본문",
     "predecessors": "선행 과제",
     "date": "날짜",
+    "entry_title": "진행일지 제목",
+    "report_date": "보고일",
+    "audience": "피보고자",
+    "created_by": "등록자",
     "end_date": "종료일",
     "next_date": "다음 면담일",
     "received_on": "접수일",
@@ -198,8 +202,14 @@ def _shown(value: object) -> str:
 _DAY_SHAPE = _re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
+# 받는 날짜의 연도 (TODO 214 D5) — `9999-12-31` 진행일지 하나가 "최근 갱신" 을 영영 고정했고, `0025-01-01` 은
+# 없는 연도의 번호를 만들 뻔했다. 모든 날짜 칸이 이 함수를 거치므로 한 곳에서 막는다.
+DAY_MIN_YEAR = 2000
+DAY_MAX_YEAR = 2100
+
+
 def strict_day(value: object, field: str, *, default: str | None = None) -> str | None:
-    """`YYYY-MM-DD` 의 **실제 있는 날**만 (TODO 205 ⑯).
+    """`YYYY-MM-DD` 의 **실제 있는 날**만 (TODO 205 ⑯), 연도는 2000~2100 (TODO 214 D5).
 
     `2026-13-01` · `2026/01/01` · `2026-02-30` · `2026-1-1` · `2026-01-01T00:00:00` 은 400 — 파일에 원문을 적지 않는다.
     비우면(None · "" · 공백) `default` — 비울 수 있는 칸은 None, 진행일지처럼 오늘이 기본인 칸은 오늘.
@@ -207,16 +217,26 @@ def strict_day(value: object, field: str, *, default: str | None = None) -> str 
     if value is None:
         return default
     if isinstance(value, _date) and not hasattr(value, "hour"):
-        return value.isoformat()
+        return _in_range(value, field, value.isoformat())
     text = str(value).strip()
     if not text:
         return default
     if _DAY_SHAPE.fullmatch(text):
         try:
-            return _date.fromisoformat(text).isoformat()
+            day = _date.fromisoformat(text)
         except ValueError:
             pass
+        else:
+            return _in_range(day, field, text)
     raise InvalidDateError(f"{josa(field_label(field))} 2026-03-01 처럼 적어 주세요 (받은 값: {_shown(text)})")
+
+
+def _in_range(day: _date, field: str, text: str) -> str:
+    if not DAY_MIN_YEAR <= day.year <= DAY_MAX_YEAR:
+        raise InvalidDateError(
+            f"{josa(field_label(field))} {DAY_MIN_YEAR}~{DAY_MAX_YEAR}년 사이여야 합니다 (받은 값: {_shown(text)})"
+        )
+    return day.isoformat()
 
 
 def check_period(start: object, end: object, start_field: str, end_field: str) -> None:
@@ -238,6 +258,50 @@ def require_title(value: object, message: str = "과제명을 입력하세요.")
     if not title:
         raise ValueError(message)
     return title
+
+
+# ── 길이 · 한 줄 (TODO 214 D14) ─────────────────────────────────────────────
+# 과제명은 제한이 없고 접수는 200자에서 말없이 잘랐다 — 화면마다 달랐다. 같은 상한을 둔다.
+# 이미 있는 긴 값은 **그 칸을 고칠 때만** 따진다(다른 칸을 저장하다 막히지 않게) — 부르는 쪽이 정한다.
+TITLE_MAX = 100
+GROUP_MAX = 40
+BODY_MAX = 2_000_000
+
+# 제어문자 — 제목 · 그룹은 줄바꿈 · 탭도 받지 않는다. 본문은 줄바꿈 · 탭(과 \r \v \f)만 받는다.
+_CONTROL = _re.compile(r"[\x00-\x1f\x7f]")
+_BODY_CONTROL = _re.compile(r"[\x00-\x08\x0e-\x1f\x7f]")
+
+
+def one_line(value: object, field: str, maximum: int) -> str:
+    """한 줄 글 — 앞뒤 공백을 걷고, 줄바꿈 · 제어문자는 400, `maximum` 자를 넘으면 400 (TODO 214 D14)."""
+    text = clean_text(value)
+    if _CONTROL.search(text):
+        raise ValueError(f"{field_label(field)}에는 줄바꿈 · 제어문자를 넣을 수 없습니다.")
+    if len(text) > maximum:
+        raise ValueError(f"{josa(field_label(field))} {maximum}자까지입니다 (지금 {len(text)}자).")
+    return text
+
+
+def check_body(value: object, field: str = "body") -> str | None:
+    """본문 — 2,000,000자까지, 줄바꿈 · 탭 밖의 제어문자(NUL 등)는 400 (TODO 214 D14). None 은 그대로."""
+    if value is None:
+        return None
+    text = str(value)
+    if len(text) > BODY_MAX:
+        raise ValueError(f"{josa(field_label(field))} {BODY_MAX:,}자까지입니다 (지금 {len(text):,}자).")
+    if _BODY_CONTROL.search(text):
+        raise ValueError(f"{field_label(field)}에 쓸 수 없는 제어문자가 들어 있습니다.")
+    return text
+
+
+def clean_tag(value: object) -> str:
+    """태그 하나의 표기 (TODO 214 D12) — 앞의 `#` 를 떼고 겹친 공백을 하나로."""
+    return " ".join(str(value or "").strip().lstrip("#").split())
+
+
+def tag_key(value: object) -> str:
+    """같은 태그인가를 가르는 열쇠 (TODO 214 D12) — 대소문자 · 띄어쓰기 · 앞의 `#` 를 무시한다."""
+    return "".join(clean_tag(value).split()).casefold()
 
 
 # 효과 금액의 위쪽 한계 (억원/년). 100조 원/년 — 이보다 크면 단위를 잘못 적은 것이다. 합계가 무한대로

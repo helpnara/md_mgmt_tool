@@ -581,8 +581,9 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               {
                 // 연도를 골랐으면 그 해에 세는 효과만 — 홈의 금액과 같게 (TODO 181)
                 text: effectTotal(
-                  sumBy(effectRows, (p) => p.effect_expected),
-                  sumBy(effectRows, (p) => p.effect_verified),
+                  // 효과 관리 안 함 · 완료 전 실증은 세지 않는다 — 서버가 계산한 "세는 금액" 으로 (TODO 214 D2 · D3)
+                  sumBy(effectRows, (p) => p.effect_counted_expected ?? p.effect_expected),
+                  sumBy(effectRows, (p) => p.effect_counted_verified ?? p.effect_verified),
                 ),
                 className: "num",
                 title: `기대효과 합계 → 실증효과 합계 (${EFFECT_UNIT})`,

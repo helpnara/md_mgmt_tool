@@ -16,7 +16,7 @@ from ..vault import paths
 from ..vault.indexer import index_project
 from . import trash as trash_service
 from . import settings as settings_service
-from .projects import now_iso, project_dir
+from .projects import normalize_tags, now_iso, project_dir
 
 META_ORDER = ["date", "title", "author", "tags", "attachments", "created_at", "updated_at"]
 
@@ -46,8 +46,10 @@ def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     # 날짜는 엄격히, 비우면 오늘 (TODO 205) — `20260101` · `2026-W01` 같은 값이 파일명에 들어가지 않게
-    entry_date = rules.strict_day(data.get("date"), "date", default=date_cls.today().isoformat())
-    title = rules.clean_text(data.get("title")) or DEFAULT_TITLE
+    entry_date = check_entry_date(data.get("date"), default=date_cls.today().isoformat())
+    # 제목 100자 · 한 줄, 본문 2,000,000자 (TODO 214 D14)
+    title = rules.one_line(data.get("title"), "entry_title", rules.TITLE_MAX) or DEFAULT_TITLE
+    rules.check_body(data.get("body"))
     # 파일명 전체를 슬러그로 만들어 경로 구분자가 섞일 여지를 없앤다.
     stem = entry_stem(entry_date, title)
     target = paths.unique_path(logs_dir, stem, ".md")
@@ -56,12 +58,13 @@ def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]
     stamp = now_iso()
     # 작성자는 설정에 정해 둔 사용자를 쓴다. 나중에 로그인이 생기면
     # data["author"] 자리에 로그인 사용자가 들어온다.
-    author = settings_service.current_author(data.get("author"))
+    # 작성자 규칙(40자 · 한 줄)을 거친다 (TODO 214 F13)
+    author = settings_service.current_author(rules.clean_author(data.get("author")))
     meta = {
         "date": entry_date,
         "title": title,
         "author": author or None,
-        "tags": rules.split_list(data.get("tags")),  # 담당자와 같은 쉼표 규칙 (TODO 205)
+        "tags": normalize_tags(conn, data.get("tags")),  # 쉼표 규칙 + 표기 맞추기 (TODO 205 · 214 D12)
         "attachments": [],
         "created_at": stamp,
         "updated_at": stamp,
@@ -76,6 +79,36 @@ def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]
     if row is None:  # 인덱싱이 실패했다면 조용히 넘어가지 않는다
         raise RuntimeError(f"진행일지를 인덱싱하지 못했습니다: {target.name}")
     return int(row["id"])
+
+
+def check_entry_date(value: object, default: str) -> str:
+    """진행일지 날짜 (TODO 214 D5) — 형식 · 2000~2100 년은 `strict_day`, 그리고 **오늘보다 뒤는 안 된다**.
+
+    진행일지는 한 일의 기록이다. `9999-12-31` 하나가 그 과제의 "최근 갱신" 을 영영 고정해 정렬 · 묵힘이 깨졌다.
+    """
+    day = rules.strict_day(value, "date", default=default)
+    if day > date_cls.today().isoformat():
+        raise paths.InvalidDateError(f"진행일지 날짜가 오늘보다 뒤입니다 ({day}).")
+    return day
+
+
+def period_warnings(conn: sqlite3.Connection, project_id: str, entry_date: str | None) -> list[str]:
+    """과제 기간 밖의 날짜면 알린다 — 막지는 않는다 (TODO 214 D5). 착수 전 준비 · 끝난 뒤 정리 기록도 있다.
+
+    기간의 끝은 완료한 과제면 완료일, 아니면 마감일.
+    """
+    if not entry_date:
+        return []
+    row = conn.execute(
+        "SELECT status, start_date, due_date, completed_at FROM project WHERE id = ?", (project_id,)
+    ).fetchone()
+    if row is None:
+        return []
+    start = row["start_date"]
+    end = row["completed_at"] if row["status"] == "done" and row["completed_at"] else row["due_date"]
+    if (start and entry_date < start) or (end and entry_date > end):
+        return [f"과제 기간({start or ''}~{end or ''}) 밖의 날짜입니다."]
+    return []
 
 
 def require_project_folder(directory: Path) -> None:
@@ -95,14 +128,22 @@ def update_entry(conn: sqlite3.Connection, entry_id: int, updates: dict[str, Any
     md.ensure_unchanged(path, row["file_mtime"])
     doc = md.load(path)
     body = updates.pop("body", None)
+    if body is not None and body != doc.body:
+        rules.check_body(body)  # TODO 214 D14 — 고칠 때만
     if "date" in updates:
         # 비우면 지금 날짜를 그대로 둔다 — 진행일지는 날짜 없이 있을 수 없다 (TODO 205)
-        updates["date"] = rules.strict_day(updates["date"], "date", default=str(doc.meta.get("date") or row["date"]))
+        kept = str(doc.meta.get("date") or row["date"])
+        raw = rules.clean_text(updates["date"])
+        # 날짜를 **바꿀 때만** 미래 · 범위를 따진다 — 손으로 적어 둔 날짜 때문에 본문 저장이 막히지 않게 (TODO 214 D5)
+        updates["date"] = kept if not raw or raw == kept else check_entry_date(raw, default=kept)
     if "title" in updates:
-        # 비우거나 공백뿐이면 생성 때와 같은 이름 (TODO 205 ⑰)
-        updates["title"] = rules.clean_text(updates["title"]) or DEFAULT_TITLE
+        # 비우거나 공백뿐이면 생성 때와 같은 이름 (TODO 205 ⑰). 길이 · 한 줄은 바꿀 때만 (TODO 214 D14)
+        title = rules.clean_text(updates["title"])
+        if title != rules.clean_text(doc.meta.get("title")):
+            title = rules.one_line(title, "entry_title", rules.TITLE_MAX)
+        updates["title"] = title or DEFAULT_TITLE
     if "tags" in updates:
-        updates["tags"] = rules.split_list(updates["tags"])
+        updates["tags"] = normalize_tags(conn, updates["tags"])  # TODO 214 D12
     meta = md.merge_meta(doc.meta, {k: v for k, v in updates.items() if k in META_ORDER})
     meta["updated_at"] = now_iso()
     md.save(path, md.MarkdownDoc(meta, body if body is not None else doc.body))

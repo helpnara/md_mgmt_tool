@@ -11,7 +11,7 @@ from ..vault.markdown import ExternalChangeError
 from ..services import attachments as attach_svc
 from ..services import reports as svc
 from ..vault import paths
-from ..vault.paths import FileInUseError, InvalidDateError
+from ..vault.paths import FileInUseError
 
 router = APIRouter(tags=["reports"])
 
@@ -145,11 +145,11 @@ def update_report(
         raise HTTPException(status_code=404, detail="보고 문서를 찾을 수 없습니다.") from exc
     except (PermissionError, ExternalChangeError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except InvalidDateError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileInUseError as exc:
         # 파일 잠김은 어디서나 423 (TODO 200) — 과제 · 진행일지 · 삭제와 같은 코드
         raise HTTPException(status_code=423, detail=str(exc)) from exc
+    except ValueError as exc:  # 날짜(InvalidDateError) · 본문 길이 · 제어문자 (TODO 214)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _serialize(conn, svc.report_row(conn, report_id))
 
 
@@ -168,6 +168,8 @@ def freeze_report(report_id: RowId, conn: sqlite3.Connection = Depends(get_db)) 
         svc.freeze_report(conn, report_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="보고 문서를 찾을 수 없습니다.") from exc
+    except ValueError as exc:  # 보고일이 1주 넘게 남았다 (TODO 214 D5)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _serialize(conn, svc.report_row(conn, report_id))
 
 

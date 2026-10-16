@@ -65,11 +65,22 @@ def effect_year(a: str = "p") -> str:
     )
 
 
+def counted_expected(a: str = "p") -> str:
+    """합계에 드는 기대효과 (TODO 214 D2) — "효과 관리 안 함" 과제는 금액이 적혀 있어도 세지 않는다(파일은 그대로)."""
+    return f"(CASE WHEN COALESCE({a}.no_effect, 0) = 0 THEN {a}.effect_expected END)"
+
+
+def counted_verified(a: str = "p") -> str:
+    """합계에 드는 실증효과 (TODO 214 D2 · D3) — 효과 관리 대상이고 **완료한** 과제만. 진행중에 적어 둔 값은 남겨 두되 세지 않는다."""
+    return f"(CASE WHEN COALESCE({a}.no_effect, 0) = 0 AND {a}.status = 'done' THEN {a}.effect_verified END)"
+
+
 def scope(year: str | None, alias: str = "p") -> tuple[str, list]:
     """FROM 에 그대로 넣는 "그 해의 과제" — `project` 의 칸 전부에 넷을 더한다.
 
     * `y_status` — 그 해의 상태(그 해 뒤에 끝났으면 진행중)
-    * `y_ee` · `y_ev` — 그 해에 세는 기대 · 실증효과(끝나는 해가 아니면 NULL)
+    * `y_ee` · `y_ev` — 그 해에 세는 기대 · 실증효과(끝나는 해가 아니면 NULL). 효과 관리 안 함은 NULL,
+      실증은 완료한 과제만 (TODO 214 D2 · D3 — `counted_*`)
     * `y_new` — 그 해에 착수했는가(번호의 연도)
     * `y_effect_year` — 효과 금액을 세는 해(과제목록의 합계 줄이 그 해 것만 더한다)
 
@@ -77,15 +88,15 @@ def scope(year: str | None, alias: str = "p") -> tuple[str, list]:
     """
     if not year:
         return (
-            "(SELECT q.*, q.status AS y_status, q.effect_expected AS y_ee, q.effect_verified AS y_ev,"
+            f"(SELECT q.*, q.status AS y_status, {counted_expected('q')} AS y_ee, {counted_verified('q')} AS y_ev,"
             f" 0 AS y_new, {effect_year('q')} AS y_effect_year FROM project q) {alias}",
             [],
         )
     sql = (
         "(SELECT q.*,"
         f" CASE WHEN q.status IN ('done', 'dropped') AND {end_year('q')} > ? THEN 'in_progress' ELSE q.status END AS y_status,"
-        f" CASE WHEN {effect_year('q')} = ? THEN q.effect_expected END AS y_ee,"
-        f" CASE WHEN {effect_year('q')} = ? THEN q.effect_verified END AS y_ev,"
+        f" CASE WHEN {effect_year('q')} = ? THEN {counted_expected('q')} END AS y_ee,"
+        f" CASE WHEN {effect_year('q')} = ? THEN {counted_verified('q')} END AS y_ev,"
         " (SUBSTR(q.id, 1, 4) = ?) AS y_new,"
         f" {effect_year('q')} AS y_effect_year"
         f" FROM project q WHERE {start_year('q')} <= ? AND {end_year('q')} >= ?) {alias}"

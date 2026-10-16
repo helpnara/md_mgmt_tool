@@ -49,15 +49,17 @@ def test_reports_are_counted_by_the_date_they_were_reported(client):
     2026년 과제를 2027년에 보고했다면 그것은 2027년의 보고다.
     "올해 몇 번 보고했나"에 답하려면 이 기준이어야 한다.
     """
-    project = _make(client, "해를 넘긴 과제", owners=["권경락"])
-    _freeze_report(client, project["id"], "2026-12-29")
-    _freeze_report(client, project["id"], "2027-01-05")
+    # 1주 넘게 남은 보고는 확정할 수 없으므로(TODO 214 D5) 지난 해 → 올해로 넘긴 보고로 본다
+    project = _make(client, "해를 넘긴 과제", owners=["권경락"], start_date="2026-01-02", due_date="2026-06-30",
+                    status="done", completed_at="2026-06-30")
+    _freeze_report(client, project["id"], "2026-06-29")
+    _freeze_report(client, project["id"], "2026-07-05")
 
-    assert client.get("/api/home", params={"year": "2026"}).json()["team"]["reports"] == 1
-    assert client.get("/api/home", params={"year": "2027"}).json()["team"]["reports"] == 1
-    # 과제 자체는 2026년 번호이므로 과제 수는 2026년에만 잡힌다.
+    assert client.get("/api/home", params={"year": "2026", "period": "H1"}).json()["team"]["reports"] == 1
+    assert client.get("/api/home", params={"year": "2026", "period": "H2"}).json()["team"]["reports"] == 1
+    # 과제 자체는 2026년에 끝났으므로 과제 수는 2026년에만 잡힌다.
     assert client.get("/api/home", params={"year": "2026"}).json()["team"]["total"] == 1
-    assert client.get("/api/home", params={"year": "2027"}).json()["team"]["total"] == 0
+    assert client.get("/api/home", params={"year": "2025"}).json()["team"]["total"] == 0
 
 
 def test_draft_reports_are_not_counted(client):
@@ -70,7 +72,8 @@ def test_draft_reports_are_not_counted(client):
 
 def test_types_carry_the_effect_money(client):
     """속성별 절단면은 과제 수만으로는 부족하다 — 상부는 금액을 묻는다."""
-    _make(client, "스마트 과제", type="smart", effect_expected=4.0, effect_verified=1.5)
+    # 실증효과는 완료한 과제만 합계에 든다 (TODO 214 D3)
+    _make(client, "스마트 과제", type="smart", effect_expected=4.0, effect_verified=1.5, status="done")
     _make(client, "R&D 과제", type="rnd", effect_expected=2.0)
 
     types = {item["key"]: item for item in client.get("/api/home").json()["types"]}

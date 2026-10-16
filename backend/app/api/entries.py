@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..deps import get_db, RowId
 from ..vault.markdown import ExternalChangeError
-from ..vault.paths import FileInUseError, InvalidDateError
+from ..vault.paths import FileInUseError
 from ..schemas import EntryCreate, EntryUpdate
 from ..services import entries as svc
 
@@ -70,10 +70,13 @@ def create_entry(
         entry_id = svc.create_entry(conn, project_id, payload.model_dump())
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
-    except InvalidDateError as exc:
+    except ValueError as exc:  # 날짜(InvalidDateError) · 길이 · 제어문자 · 작성자 (TODO 214)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = conn.execute("SELECT * FROM entry WHERE id = ?", (entry_id,)).fetchone()
-    return _serialize(conn, row)
+    data = _serialize(conn, row)
+    # 과제 기간 밖이면 막지 않고 알린다 (TODO 214 D5)
+    data["warnings"] = svc.period_warnings(conn, project_id, row["date"])
+    return data
 
 
 @router.get("/api/entries/{entry_id}")
@@ -88,19 +91,23 @@ def get_entry(entry_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> di
 def update_entry(
     entry_id: RowId, payload: EntryUpdate, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
+    changes = payload.changes()
     try:
-        svc.update_entry(conn, entry_id, payload.changes())
+        svc.update_entry(conn, entry_id, changes)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="진행일지를 찾을 수 없습니다.") from exc
     except ExternalChangeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except InvalidDateError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileInUseError as exc:
         # 제목 · 날짜 변경의 파일 이름 바꾸기가 잠겨 실패 — 500 이 아니라 423 (TODO 200)
         raise HTTPException(status_code=423, detail=str(exc)) from exc
+    except ValueError as exc:  # 날짜(InvalidDateError) · 길이 · 제어문자 (TODO 214)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = conn.execute("SELECT * FROM entry WHERE id = ?", (entry_id,)).fetchone()
-    return _serialize(conn, row)
+    data = _serialize(conn, row)
+    # 날짜를 바꿨을 때만 과제 기간 밖인지 알린다 (TODO 214 D5)
+    data["warnings"] = svc.period_warnings(conn, row["project_id"], row["date"]) if "date" in changes else []
+    return data
 
 
 @router.delete("/api/entries/{entry_id}", status_code=204)

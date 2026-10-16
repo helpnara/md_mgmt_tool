@@ -6,12 +6,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Any
 
-from ..config import CLASSIFICATION_KEYS, DEFAULT_STATUS, STATUS_KEYS, get_settings
+from ..config import CLASSIFICATION_KEYS, DEFAULT_STATUS, STATUS_KEYS, LEGACY_STATUS_MAP, get_settings, normalize_status
 from .. import schemas as rules
 from ..vault import markdown as md
 from ..vault import versions
 from ..vault import paths
-from ..vault.indexer import index_project
+from ..vault.indexer import index_project, refresh_problems
 from . import activities as activities_service
 from . import settings as settings_service
 from . import trash as trash_service
@@ -145,15 +145,50 @@ def normalize_owners(value: object) -> list[str]:
     return rules.split_list(value)
 
 
+def normalize_tags(conn: sqlite3.Connection, value: object) -> list[str]:
+    """태그 — 쉼표 규칙(`split_list`) 위에 표기 맞추기 (TODO 214 D12).
+
+    앞의 `#` 를 떼고 겹친 공백을 하나로. 대소문자 · 띄어쓰기만 다른 태그가 **이미 쓰이고 있으면 그 표기**를 쓴다
+    ("AI" 가 있으면 "ai" · "#AI" · " A I " 는 "AI"). 같은 요청 안에서 겹친 것은 하나로.
+    """
+    known: dict[str, str] = {}
+    for row in conn.execute(
+        "SELECT t.name FROM tag t WHERE EXISTS (SELECT 1 FROM project_tag pt WHERE pt.tag_id = t.id)"
+        " OR EXISTS (SELECT 1 FROM entry_tag et WHERE et.tag_id = t.id) ORDER BY t.id"
+    ):
+        known.setdefault(rules.tag_key(row["name"]), row["name"])
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in rules.split_list(value):
+        text = rules.clean_tag(item)
+        key = rules.tag_key(text)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(known.get(key, text))
+    return out
+
+
 def same_title_ids(conn: sqlite3.Connection, title: str, exclude: str | None = None) -> list[str]:
     """이름이 같은 과제의 번호들 (TODO 205 ㉞) — 막지는 않고 알린다. 대소문자 · 앞뒤 공백은 같은 것으로 본다."""
     wanted = " ".join(str(title or "").split()).casefold()
     if not wanted:
         return []
+    return [item["id"] for item in same_title_projects(conn, title, exclude)]
+
+
+def same_title_projects(conn: sqlite3.Connection, title: str, exclude_id: str | None = None) -> list[dict]:
+    """이름이 같은 과제들 `[{"id", "title"}]` (TODO 214 D11) — 저장 **전에** 묻는 자리(제목 수정 · 승격 · 새 과제)가 함께 쓴다.
+
+    앞뒤 · 겹친 공백과 대소문자는 같은 것으로 본다. `exclude_id` 는 지금 고치는 그 과제.
+    """
+    wanted = " ".join(str(title or "").split()).casefold()
+    if not wanted:
+        return []
     return [
-        row["id"]
+        {"id": row["id"], "title": row["title"]}
         for row in conn.execute("SELECT id, title FROM project ORDER BY id")
-        if row["id"] != exclude and " ".join(str(row["title"] or "").split()).casefold() == wanted
+        if row["id"] != exclude_id and " ".join(str(row["title"] or "").split()).casefold() == wanted
     ]
 
 
@@ -271,10 +306,14 @@ def project_dir(conn: sqlite3.Connection, project_id: str) -> Path:
     return paths.safe_join(get_settings().projects_dir, row["dir_name"])
 
 
-def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
+def create_project(conn: sqlite3.Connection, data: dict[str, Any], warnings: list[str] | None = None) -> str:
+    """과제를 만든다. `warnings` 를 주면 막지는 않고 알릴 것(선행 연도 · 효과)을 거기 담는다 (TODO 214)."""
     settings = get_settings()
     settings.ensure_dirs()
     title = rules.require_title(data.get("title"))
+    title = rules.one_line(title, "title", rules.TITLE_MAX)  # 100자 · 한 줄 (TODO 214 D14)
+    group = rules.one_line(data.get("group"), "group", rules.GROUP_MAX) or None
+    body = rules.check_body(data.get("body"))
 
     status = data.get("status") or DEFAULT_STATUS
     if status not in STATUS_KEYS:
@@ -290,6 +329,12 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     start_date = rules.strict_day(data.get("start_date"), "start_date")
     due_date = rules.strict_day(data.get("due_date"), "due_date")
     rules.check_period(start_date, due_date, "start_date", "due_date")
+    # 완료일 (TODO 214 D1) — 완료면 비울 때 오늘 · 시작일 ≤ 완료일 ≤ 오늘, 완료가 아니면 서버가 비운다.
+    completed_at = settle_completed_at(status, normalize_day(data.get("completed_at")), start_date)
+    effect_expected = normalize_effect_field(data.get("effect_expected"), "effect_expected")
+    effect_verified = normalize_effect_field(data.get("effect_verified"), "effect_verified")
+    no_effect = bool(data.get("no_effect"))
+    created_by = settings_service.current_author(rules.clean_author(data.get("created_by"))) or None  # F13
 
     # TODO 201 — **모든 검증을 폴더 만들기 앞에.** 효과 금액 · 완료일 · 담당자 · 유관부서 … 가 400 으로
     # 거절돼도 `projects/2026-031-…/{logs,assets,reports}` 가 이미 만들어져 남고 번호가 소모됐다
@@ -300,8 +345,8 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "title": title,
         "status": status,
         "type": project_type,
-        "group": data.get("group") or None,
-        "tags": rules.split_list(data.get("tags")),  # 담당자와 같은 쉼표 규칙 (TODO 205)
+        "group": group,
+        "tags": normalize_tags(conn, data.get("tags")),  # 쉼표 규칙 + 표기 맞추기 (TODO 205 · 214 D12)
         "owners": normalize_owners(data.get("owners") or data.get("owner")),
         # 유관부서와 그 담당자. 팀 하나에 사람 여럿, 팀도 여럿일 수 있다 (TODO 92).
         "partners": normalize_partners(data.get("partners")),
@@ -309,10 +354,9 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         "due_date": due_date,
         # 완료 상태로 등록하면 완료일이 곧 등록일이다 — 지난 과제를 뒤늦게 넣을 때는
         # 폼에서 손으로 고친다 (TODO 104).
-        "completed_at": normalize_day(data.get("completed_at"))
-        or (date_today() if status == DONE_STATUS else None),
-        "effect_expected": normalize_effect_field(data.get("effect_expected"), "effect_expected"),
-        "effect_verified": normalize_effect_field(data.get("effect_verified"), "effect_verified"),
+        "completed_at": completed_at,
+        "effect_expected": effect_expected,
+        "effect_verified": effect_verified,
         # 과제 분류 넷 (TODO 136). 주로 스마트과제에서 쓴다 — 다른 과제는 비어 있어도 된다.
         **{key: normalize_label(data.get(key)) for key in CLASSIFICATION_KEYS},
         # 접수에서 승격된 과제면 그 접수 번호 (TODO 136)
@@ -322,10 +366,10 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
         # — 매주 "이건 보고 안 해도 되는데" 를 눈으로 걸러 내지 않아도 되게 (TODO 80).
         "no_report": bool(data.get("no_report")),
         # 효과 금액으로 관리하지 않는 과제 (TODO 125)
-        "no_effect": bool(data.get("no_effect")),
+        "no_effect": no_effect,
         # 담당자(누가 하는가)와 다른, "누가 등록했는가". 소급이 안 되므로 지금부터 남긴다.
         # 로그인이 생기면 이 자리에 로그인 사용자가 들어온다.
-        "created_by": settings_service.current_author(data.get("created_by")) or None,
+        "created_by": created_by,
         "created_at": stamp,
         "updated_at": stamp,
     }
@@ -333,15 +377,66 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
     # 번호의 연도는 **등록한 날이 아니라 착수년도**다 (TODO 95). 여기부터는 거절할 것이 없다.
     project_id = next_project_id(project_year(start_date))
     meta["id"] = project_id
+    if warnings is not None:
+        warnings.extend(predecessor_year_warnings(conn, start_date or project_id, predecessors))
+        warnings.extend(effect_warnings(status, effect_expected, effect_verified, no_effect))
     dir_name = paths.project_dir_name(project_id, title)
     directory = paths.safe_join(settings.projects_dir, dir_name)
     (directory / "logs").mkdir(parents=True, exist_ok=True)
     (directory / "assets").mkdir(parents=True, exist_ok=True)
     (directory / "reports").mkdir(parents=True, exist_ok=True)
-    md.save(directory / "index.md", md.MarkdownDoc(meta, data.get("body") or INDEX_TEMPLATE))
+    md.save(directory / "index.md", md.MarkdownDoc(meta, body or INDEX_TEMPLATE))
     index_project(conn, directory)
     conn.commit()
     return project_id
+
+
+def settle_completed_at(status: str, completed_at: str | None, start_date: str | None, *, check: bool = True) -> str | None:
+    """완료일의 규칙 한 곳 (TODO 214 D1 · F10).
+
+    * 완료가 아니면 **비운다** — 진행중일 때 받아 둔 옛 완료일이 나중에 완료로 바꿀 때 되살아났다.
+    * 완료인데 비었으면 오늘 — 화면의 안내 "비워 두면 오늘" 과 같다(F10).
+    * 완료일은 시작일보다 앞설 수 없고, 오늘보다 뒤일 수 없다 — 미래 완료일 과제는 그 해까지 "진행중" 으로 셌다.
+    """
+    if status != DONE_STATUS:
+        return None
+    value = completed_at or date_today()
+    if check:
+        if start_date and value < start_date:
+            raise ValueError(f"완료일이 시작일보다 빠릅니다 ({start_date} → {value}).")
+        if value > date_today():
+            raise ValueError(f"완료일이 오늘보다 뒤입니다 ({value}).")
+    return value
+
+
+def effect_warnings(status: str, expected: float | None, verified: float | None, no_effect: bool) -> list[str]:
+    """효과 금액 — 막지 않고 알린다 (TODO 214 D2 · D3). 합계에서 빠지는 값이 왜 빠지는지 저장할 때 보이게."""
+    if no_effect:
+        if expected or verified:
+            return ["효과 관리 안 함 과제라 적힌 효과 금액은 합계에 들지 않습니다."]
+        return []
+    out = []
+    if verified and not expected:
+        out.append("기대효과 없이 실증효과만 적혀 있습니다.")
+    if verified and status != DONE_STATUS:
+        out.append("실증효과는 완료한 과제만 합계에 듭니다 — 완료 전까지는 적어 두기만 합니다.")
+    return out
+
+
+def predecessor_year_warnings(conn: sqlite3.Connection, start_or_id: str | None, predecessors: Iterable[str]) -> list[str]:
+    """선행 과제가 이 과제보다 늦게 착수했으면 알린다 (TODO 214 D15) — 막지는 않는다(다년도 과제를 늦게 이은 경우도 있다)."""
+    mine = str(start_or_id or "")[:4]
+    if not mine.isdigit():
+        return []
+    out = []
+    for pred in predecessors:
+        row = conn.execute("SELECT id, start_date FROM project WHERE id = ?", (pred,)).fetchone()
+        if row is None:
+            continue
+        theirs = str(row["start_date"] or row["id"])[:4]
+        if theirs.isdigit() and theirs > mine:
+            out.append(f"선행 과제 {pred} 의 착수년도({theirs})가 이 과제({mine})보다 늦습니다 — 순서를 확인하세요.")
+    return out
 
 
 def overview_is_blank(body: str | None) -> bool:
@@ -419,21 +514,29 @@ def log_system_line(directory: Path, title: str, body: str) -> None:
         pass
 
 
-def check_predecessors(conn: sqlite3.Connection, project_id: str | None, value: object) -> list[str]:
+def check_predecessors(
+    conn: sqlite3.Connection, project_id: str | None, value: object, keep: Iterable[str] = ()
+) -> list[str]:
     """선행 과제 번호들을 받는다 (TODO 172). 비우면 [].
 
     * 여럿일 수 있다 — 앞 단계의 과제 둘을 이어받는 과제가 있다.
     * 있는 과제여야 한다 — 없는 번호를 적어 두면 위쪽 줄이 늘 "찾을 수 없음" 이 된다.
     * 자기 자신이나 **자기의 후속 과제**를 선행으로 둘 수 없다 — 고리가 생기면 단계를 셀 수 없다.
+    * `keep` — 파일에 **이미 적혀 있던** 번호는 따지지 않고 둔다 (TODO 214 D15). 선행이 보관함으로 가면
+      그 과제의 다른 칸을 저장할 때마다 400 이었다. 새로 넣는 번호만 검사한다.
     """
     if value is None or value == "":
         return []
+    kept = {str(item).strip() for item in keep if str(item or "").strip()}
     items = value if isinstance(value, list) else str(value).split(",")
     out: list[str] = []
     for item in items:
         # 화면이 "2025-003 고강도 소재" 처럼 이름까지 보내도 번호만 쓴다
         text = str(item or "").strip().split()[0] if str(item or "").strip() else ""
         if not text or text in out:
+            continue
+        if text in kept and text != project_id:
+            out.append(text)
             continue
         if project_id is not None and text == project_id:
             raise ValueError("자기 자신을 선행 과제로 둘 수 없습니다.")
@@ -629,12 +732,14 @@ def rewrite_project_refs(conn: sqlite3.Connection, mapping: dict[str, str]) -> i
     return changed
 
 
-def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str, Any]) -> None:
+def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str, Any]) -> list[str]:
+    """과제를 고친다. 막지 않고 알릴 것(선행 연도 · 효과)을 돌려준다 (TODO 214)."""
     directory = project_dir(conn, project_id)
     index_md = directory / "index.md"
     known = conn.execute("SELECT file_mtime FROM project WHERE id = ?", (project_id,)).fetchone()
     md.ensure_unchanged(index_md, known["file_mtime"] if known else None)
     doc = md.load(index_md)
+    warnings: list[str] = []
 
     if "status" in updates and updates["status"] not in STATUS_KEYS:
         raise ValueError(f"알 수 없는 상태: {updates['status']}")
@@ -642,9 +747,19 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         raise ValueError(f"알 수 없는 속성: {updates['type']}")
 
     body = updates.pop("body", None)
+    if body is not None and body != doc.body:
+        rules.check_body(body)  # 2,000,000자 · 제어문자 (TODO 214 D14) — 고칠 때만
     # 제목 — 생성과 같은 규칙 (TODO 205 ⑱). `""` 이면 목록에 폴더명이, `"   "` 이면 폴더가 `untitled` 가 됐다.
+    # 길이 · 한 줄 (TODO 214 D14) 은 **제목을 바꿀 때만** — 예전의 긴 제목 때문에 다른 칸 저장이 막히지 않게.
     if "title" in updates:
         updates["title"] = rules.require_title(updates["title"])
+        if updates["title"] != rules.clean_text(doc.meta.get("title")):
+            rules.one_line(updates["title"], "title", rules.TITLE_MAX)
+    if "group" in updates:
+        group = rules.clean_text(updates["group"])
+        if group != rules.clean_text(doc.meta.get("group")):
+            group = rules.one_line(group, "group", rules.GROUP_MAX)
+        updates["group"] = group or None
     # 날짜 — 생성과 같은 규칙 (TODO 205 ⑯). `""` · null 은 비운다.
     for field in ("start_date", "due_date"):
         if field in updates:
@@ -653,7 +768,7 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         if field in updates:
             updates[field] = normalize_effect_field(updates[field], field)
     if "tags" in updates:
-        updates["tags"] = rules.split_list(updates["tags"])
+        updates["tags"] = normalize_tags(conn, updates["tags"])  # TODO 214 D12
     if "no_report" in updates:
         updates["no_report"] = bool(updates["no_report"])
     if "no_effect" in updates:
@@ -666,30 +781,63 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
     # 승격으로 붙은 접수 번호는 화면에서 고치지 않는다 — 양쪽 링크가 어긋난다.
     updates.pop("intake_id", None)
     if "predecessors" in updates:
-        updates["predecessors"] = check_predecessors(conn, project_id, updates["predecessors"])
+        # 파일에 이미 있던 번호는 그대로 둔다 — 보관함에 간 선행 때문에 저장이 막히지 않게 (TODO 214 D15)
+        stored = doc.meta.get("predecessors")
+        stored_ids = stored if isinstance(stored, list) else str(stored or "").split(",")
+        updates["predecessors"] = check_predecessors(conn, project_id, updates["predecessors"], keep=stored_ids)
     if "owners" in updates or "owner" in updates:
         updates["owners"] = normalize_owners(updates.pop("owners", None) or updates.pop("owner", None))
     if "completed_at" in updates:
         updates["completed_at"] = normalize_day(updates["completed_at"])
     changes = {k: v for k, v in updates.items() if k in META_ORDER or k == "group"}
-    # 기간 — 보낸 쪽과 파일에 있던 쪽을 합쳐서 본다 (TODO 205 ㉞). 파일의 값이 틀린 손 편집이면 따지지 않는다.
-    rules.check_period(
-        _day_or_none(changes["start_date"] if "start_date" in changes else doc.meta.get("start_date")),
-        _day_or_none(changes["due_date"] if "due_date" in changes else doc.meta.get("due_date")),
-        "start_date", "due_date",
-    )
+    start_now = _day_or_none(changes["start_date"] if "start_date" in changes else doc.meta.get("start_date"))
+    # 기간 — 보낸 쪽과 파일에 있던 쪽을 합쳐서 본다 (TODO 205 ㉞). **시작일 · 마감일을 보낼 때만** 따진다 —
+    # 손으로 거꾸로 적은 파일이 다른 칸 저장까지 막지 않게 (TODO 214 D18). 그 파일은 문제 목록에 뜬다.
+    if "start_date" in changes or "due_date" in changes:
+        rules.check_period(
+            start_now,
+            _day_or_none(changes["due_date"] if "due_date" in changes else doc.meta.get("due_date")),
+            "start_date", "due_date",
+        )
     # 예전 문서의 owner(단수) 키가 남아 있으면 owners로 옮겨 적는다.
     if "owners" in changes and "owner" in doc.meta:
         doc.meta.pop("owner")
 
-    # ── 완료일 (TODO 104) ── 상태가 완료가 되는 순간 남기고, 완료에서 벗어나면 비운다.
-    # 손으로 적은 완료일이 함께 오면 그것이 이긴다.
-    old_status = str(doc.meta.get("status") or "")
+    # ── 완료일 (TODO 104 · 214 D1 · F10) ── 완료가 아니면 비운다(옛 완료일이 되살아나지 않게).
+    # 완료로 **바뀌는** 순간에는 보낸 값, 없으면 오늘 — 파일에 남아 있던 옛 값을 쓰지 않는다.
+    # 완료인 채로 완료일을 비우면 오늘("비워 두면 오늘"). 따지는 것(시작일 ≤ 완료일 ≤ 오늘)은
+    # 상태 · 완료일 · 시작일을 보낼 때만 — 손으로 고친 파일이 다른 칸 저장을 막지 않게.
+    raw_status = str(doc.meta.get("status") or "").strip()
+    old_status = normalize_status(raw_status)[0] if raw_status else ""
+    # 손으로 적은 모르는 상태값(문제 목록에 뜬다)이면, 상태를 보내지 않는 저장은 완료일을 건드리지 않는다
+    unknown_status = bool(raw_status) and raw_status not in STATUS_KEYS and raw_status not in LEGACY_STATUS_MAP
     new_status = str(changes.get("status") or old_status)
-    if new_status == DONE_STATUS and old_status != DONE_STATUS and not changes.get("completed_at"):
-        changes["completed_at"] = doc.meta.get("completed_at") or date_today()
-    if new_status != DONE_STATUS and old_status == DONE_STATUS and "completed_at" not in changes:
+    if unknown_status and "status" not in changes:
+        pass
+    elif new_status == DONE_STATUS:
+        if "completed_at" in changes:
+            wanted = changes["completed_at"]
+        elif old_status != DONE_STATUS:
+            wanted = None
+        else:
+            wanted = _day_or_none(doc.meta.get("completed_at"))
+        check = bool({"status", "completed_at", "start_date"} & set(changes))
+        settled = settle_completed_at(DONE_STATUS, wanted, start_now, check=check)
+        if settled != doc.meta.get("completed_at") or "completed_at" in changes:
+            changes["completed_at"] = settled
+    elif doc.meta.get("completed_at") or "completed_at" in changes:
         changes["completed_at"] = None
+
+    if "predecessors" in changes or "start_date" in changes:
+        warnings.extend(predecessor_year_warnings(conn, start_now or project_id, changes.get(
+            "predecessors", _as_ids(doc.meta.get("predecessors")))))
+    if {"effect_expected", "effect_verified", "no_effect", "status"} & set(changes):
+        def now(key: str) -> Any:
+            return changes[key] if key in changes else doc.meta.get(key)
+        warnings.extend(effect_warnings(
+            new_status, _number_or_none(now("effect_expected")), _number_or_none(now("effect_verified")),
+            _truthy(now("no_effect")),
+        ))
 
     meta = md.merge_meta(doc.meta, changes)
     meta["updated_at"] = now_iso()
@@ -720,10 +868,33 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
             # 보관함 기록의 되돌아갈 자리도 새 폴더로 (TODO 203) — 아니면 지운 진행일지를 되돌릴 때 옛 폴더를 되살렸다.
             # 번호 변경(renumber)과 같은 길이다.
             trash_service.rewrite_origins({directory.name: target.name})
+            # 옛 폴더 이름으로 적혀 있던 문제는 걷는다 — 새 폴더로 다시 읽으며 남은 것만 다시 선다 (TODO 214 D18)
+            refresh_problems(f"projects/{directory.name}/", [])
             directory = target
 
     index_project(conn, directory)
     conn.commit()
+    return warnings
+
+
+def _as_ids(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item or "").strip()]
+    return [part.strip() for part in str(value or "").split(",") if part.strip()]
+
+
+def _truthy(value: object) -> bool:
+    """색인(`indexer._as_bool`)과 같은 읽기 — 손으로 적은 `"예"` · `1` 도 참."""
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"true", "yes", "y", "1", "예"}
+
+
+def _number_or_none(value: object) -> float | None:
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _day_or_none(value: object) -> str | None:
