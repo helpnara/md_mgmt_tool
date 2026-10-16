@@ -21,7 +21,8 @@ import Toast from "./components/Toast";
 
 type Route =
   // 홈이 `#/` 를 쓰고, 과제 목록은 `#/projects` 로 내려간다 (TODO 56).
-  | { name: "home" }
+  // 기준 연도 · 기간은 주소에 (TODO 210 ④)
+  | { name: "home"; query: string }
   // 목록 화면은 거른 조건을 주소에 두고 그대로 돌려받는다 (nav.ts).
   | { name: "list"; query: string }
   | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null; edit?: boolean; draft?: string | null }
@@ -86,7 +87,7 @@ function readRoute(): Route {
   if (path.replace(/\/$/, "") === "intakes") return { name: "intakes", query: queryString ?? "" };
   if (path.replace(/\/$/, "") === "projects") return { name: "list", query: queryString ?? "" };
   // 아는 주소가 아니면 홈으로. 손으로 고친 주소에서 빈 화면을 만나는 것보다 낫다.
-  return { name: "home" };
+  return { name: "home", query: path.replace(/\/$/, "") === "" ? queryString ?? "" : "" };
 }
 
 export default function App() {
@@ -141,8 +142,18 @@ export default function App() {
   }, [screenKey]);
 
   // 편집 중에 떠나면 묻는다 (TODO 162). 화면 안 이동은 주소가 이미 바뀐 뒤에 알 수 있으므로,
-  // 머물기로 하면 **바뀐 주소를 되돌린다**(history 를 쌓지 않게 replaceState — hashchange 가 다시 나지 않는다).
-  // 되돌릴 주소는 이벤트의 oldURL — 조건을 바꿀 때 쓰는 replaceState 까지 반영된 직전 주소다.
+  // 머물기로 하면 **바뀐 주소를 되돌린다.**
+  //
+  // 예전에는 replaceState(직전 주소) 로 덮었다 — 뒤로가기로 왔으면 **앞 칸이 지금 화면으로 덮여** 다음 뒤로가기가
+  // 한 단계 건너뛰고, 링크로 왔으면 같은 칸이 둘 쌓여 뒤로가기가 한 번 헛돌았다 (TODO 210 ⑥). 이제 칸마다 차례
+  // 번호(history.state.idx)를 달아 두고, 머물면 **그만큼 되짚어 간다**(history.go) — 쌓인 기록이 그대로다.
+  const position = useRef(0);
+  const restoring = useRef<string | null>(null);
+  useEffect(() => {
+    const state = window.history.state as { idx?: unknown } | null;
+    if (typeof state?.idx === "number") position.current = state.idx;
+    else window.history.replaceState({ ...(state ?? {}), idx: 0 }, "");
+  }, []);
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!hasUnsaved()) return;
@@ -155,10 +166,34 @@ export default function App() {
 
   useEffect(() => {
     const onHashChange = (event: HashChangeEvent) => {
+      // "머물기" 로 되짚어 온 것 — 묻지도, 화면을 바꾸지도 않는다
+      if (restoring.current !== null && window.location.href === restoring.current) {
+        restoring.current = null;
+        return;
+      }
+      const state = window.history.state as { idx?: unknown } | null;
+      const idx = typeof state?.idx === "number" ? state.idx : null;
       if (!confirmLeave()) {
         const before = event.oldURL.includes("#") ? event.oldURL.slice(event.oldURL.indexOf("#")) : "#/";
-        window.history.replaceState(null, "", before);
+        // idx 가 없으면 방금 새로 쌓인 칸(링크 · 메뉴) — 한 칸 뒤로. 있으면 뒤로/앞으로 온 만큼 되돌아간다
+        const delta = idx === null ? -1 : position.current - idx;
+        if (delta !== 0) {
+          restoring.current = event.oldURL;
+          // 되짚기가 hashchange 를 못 내는 일(같은 주소 칸)이 있어도 표시가 남아 다음 이동을 삼키지 않게
+          window.setTimeout(() => {
+            if (restoring.current === event.oldURL) restoring.current = null;
+          }, 1500);
+          window.history.go(delta);
+        } else {
+          window.history.replaceState(state, "", before);
+        }
         return;
+      }
+      if (idx === null) {
+        position.current += 1;
+        window.history.replaceState({ ...(state ?? {}), idx: position.current }, "");
+      } else {
+        position.current = idx;
       }
       const next = readRoute();
       setRoute(next);
@@ -330,7 +365,7 @@ export default function App() {
         )}
         {route.name === "search" && <SearchResults query={route.query} meta={meta} back={route.back} />}
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
-        {route.name === "home" && <Home meta={meta} onMetaChange={loadMeta} />}
+        {route.name === "home" && <Home meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}
         {route.name === "help" && <Help />}
         {route.name === "intakes" && <IntakePool meta={meta} query={route.query} />}

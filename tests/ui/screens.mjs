@@ -2860,8 +2860,13 @@ async function main() {
       const remove = row.getByRole("button", { name: "삭제" });
       equal(await remove.count(), 1, "삭제 단추");
       await remove.click();
+      await page.waitForTimeout(800);
+      // 편집기 안의 삭제는 [저장] 때 반영된다 (TODO 213) — 그 전에는 "지울 예정" 이고 서버에 남아 있다
+      expect((await row.innerText()).includes("지울 예정"), "지울 예정 표시");
+      equal((await api.get(`/api/reports/${made.id}/attachments`)).length, 1, "[저장] 전에는 서버에 남는다");
+      await page.locator(".report-editor .editor-footer").getByRole("button", { name: "저장", exact: true }).click();
       await page.waitForTimeout(1200);
-      equal((await api.get(`/api/reports/${made.id}/attachments`)).length, 0, "서버에서도 빠진다");
+      equal((await api.get(`/api/reports/${made.id}/attachments`)).length, 0, "[저장] 하면 서버에서도 빠진다");
     } finally {
       await api.delete(`/api/reports/${made.id}`);
     }
@@ -3164,10 +3169,21 @@ async function main() {
     const value = await page.locator(".body-editor textarea").first().inputValue();
     expect(value.includes("![image.png]("), `그림 링크가 없다: ${value.slice(-120)}`);
     equal((await api.get(`/api/intakes/${encodeURIComponent(pasteIntake.id)}`)).attachments.length, 1, "올라간 첨부");
+    // 이 편집에서 올린 첨부는 [취소] → 확인이면 함께 지워진다 (TODO 213) — 버리면 아무것도 남지 않는다. 확인 창은 위의 page.on("dialog") 가 받는다
     await page.locator(".body-editor").getByRole("button", { name: "취소" }).click();
+    await page.waitForTimeout(800);
+    equal((await api.get(`/api/intakes/${encodeURIComponent(pasteIntake.id)}`)).attachments.length, 0, "버린 편집의 첨부는 남지 않는다 (213)");
   });
 
   await check("접수의 편집기 둘과 첨부 카드에 📎 · [본문에 삽입] 이 있다 (TODO 138)", async () => {
+    // 첨부 카드로 하나 올려 둔다 — 편집기 밖에서 올린 것은 편집을 버려도 남는다 (213)
+    {
+      const form = new FormData();
+      const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+      form.append("file", new Blob([png], { type: "image/png" }), "카드첨부.png");
+      const up = await fetch(`${BASE}/api/intakes/${encodeURIComponent(pasteIntake.id)}/attachments`, { method: "POST", body: form });
+      expect(up.status === 201, `카드 첨부 업로드 ${up.status}`);
+    }
     await go(pasteIntakeHash);
     equal(await page.locator(".intake-files .attach-button").count(), 1, "첨부 카드의 📎");
     await page.locator(".intake-body").getByRole("button", { name: "수정" }).click();
@@ -4482,6 +4498,341 @@ async function main() {
   });
 
   await fetch(`${BASE}/api/projects/${shareProject.id}/archive`, { method: "POST" });
+
+  console.log("\n[41] 닫으면 아무것도 바뀌지 않는다 — 편집기 안에서 먼저 서버에 쓴 것 · 보고 편집기 [닫기] (TODO 213 · 211 · 210 ⑥)");
+
+  {
+    const f1Project = await api.post("/api/projects", { title: "닫기 확인 과제", body: "## 과제 개요\n\n닫기 확인용\n" });
+    // 이름 · 내용을 매번 다르게 — 같은 과제에 같은 파일이 있으면 서버가 있던 첨부를 돌려준다(deduplicated)
+    const f1Stamp = Date.now();
+    const pickFile = (name) => ({ name, mimeType: "text/plain", buffer: Buffer.from(`${name} ${f1Stamp} ${Math.random()}`) });
+    const trashLabels = async () => (await api.get("/api/trash")).map((item) => item.label);
+    /** 다음 확인 창의 말을 받아 두고 [확인] (또는 [취소]) 한다 — 그 뒤는 전역 handler(accept) */
+    const askNext = (accept = true) => {
+      const seen = { message: null };
+      nextDialog(async (dialog) => {
+        seen.message = dialog.message();
+        await (accept ? dialog.accept() : dialog.dismiss());
+      });
+      return seen;
+    };
+
+    await check("새 기록 → 첨부 → 첨부 삭제 → [닫기] → 버리기: 수행 이력에 안 남고, 기록과 첨부는 보관함으로 (213 ① 사용자 제보 그대로)", async () => {
+      await go(`#/projects/${f1Project.id}`);
+      const before = (await api.get(`/api/projects/${f1Project.id}/entries`)).length;
+      await page.locator(".timeline-head").getByRole("button", { name: "기록 추가" }).click();
+      const editor = page.locator(".entry-editor");
+      const title = `버릴 기록 ${f1Stamp}`;
+      await editor.locator("label", { hasText: "제목" }).locator("input").fill(title);
+      const fileName = `닫기확인-${f1Stamp}.txt`;
+      await editor.locator('input[type="file"]').setInputFiles(pickFile(fileName));
+      await page.waitForTimeout(1500);
+      // 첨부를 올리느라 기록이 먼저 생긴다 — 여기까지는 예전과 같다(번호가 있어야 첨부가 붙는다)
+      equal((await api.get(`/api/projects/${f1Project.id}/entries`)).length, before + 1, "첨부 때문에 먼저 만든 기록");
+      expect((await editor.innerText()).includes("기록을 먼저 만들었습니다"), "임시 기록이라는 안내");
+      // 편집기 안의 [삭제] 는 지울 예정으로만
+      const row = editor.locator(".attachments li", { hasText: fileName });
+      equal(await row.count(), 1, "첨부 줄");
+      await row.getByRole("button", { name: "삭제", exact: true }).click();
+      await page.waitForTimeout(300);
+      equal(await editor.locator(".attachments li.pending-delete").count(), 1, "지울 예정 줄");
+      expect((await row.innerText()).includes("지울 예정"), "지울 예정 딱지");
+      equal(await row.getByRole("button", { name: "되살리기", exact: true }).count(), 1, "[되살리기]");
+      // [닫기] → 사실대로 묻는다 → 확인
+      const asked = askNext(true);
+      await editor.getByRole("button", { name: "닫기", exact: true }).click();
+      await page.waitForTimeout(1800);
+      expect(asked.message?.includes("저장하지 않은 기록을 버릴까요?"), `묻는 말: ${asked.message}`);
+      expect(asked.message?.includes("먼저 만든 기록과 이번에 올린 첨부 1건"), `먼저 만든 기록 · 첨부를 말한다: ${asked.message}`);
+      equal(await page.locator(".entry-editor").count(), 0, "편집기가 닫힌다");
+      const after = await api.get(`/api/projects/${f1Project.id}/entries`);
+      equal(after.length, before, "수행 이력에 기록이 남았다");
+      equal(await page.locator(".timeline .entry", { hasText: title }).count(), 0, "화면의 수행 이력에 남았다");
+      const files = (await api.get(`/api/projects/${f1Project.id}/attachments`)).items ?? [];
+      equal(files.filter((item) => item.orig_name === fileName).length, 0, "첨부가 과제에 남았다");
+      const labels = await trashLabels();
+      expect(labels.some((label) => label.includes(title)), "보관함에 기록");
+      expect(labels.some((label) => label.includes(fileName)), "보관함에 첨부");
+    });
+
+    const kept = await api.post(`/api/projects/${f1Project.id}/entries`, { date: dayFromToday(-1), title: "있는 기록", body: "## 내용\n\n원래 본문\n" });
+    const openKept = async () => {
+      await go(`#/projects/${f1Project.id}`);
+      await page.locator("li.entry", { hasText: "있는 기록" }).getByRole("button", { name: "수정", exact: true }).click();
+      await page.waitForTimeout(700);
+      return page.locator(".entry-editor");
+    };
+
+    await check("있는 기록 — 첨부를 올리고 [닫기] → 버리기면 올린 첨부가 지워진다 (213 ②)", async () => {
+      const editor = await openKept();
+      const fileName = `올렸다버림-${f1Stamp}.txt`;
+      await editor.locator('input[type="file"]').setInputFiles(pickFile(fileName));
+      await page.waitForTimeout(1500);
+      equal((await api.get(`/api/entries/${kept.id}/attachments`)).length, 1, "올라간 첨부");
+      const asked = askNext(true);
+      await editor.getByRole("button", { name: "닫기", exact: true }).click();
+      await page.waitForTimeout(1500);
+      expect(asked.message?.includes("이번에 올린 첨부 1건도 함께 지웁니다"), `묻는 말: ${asked.message}`);
+      equal((await api.get(`/api/entries/${kept.id}/attachments`)).length, 0, "버렸는데 첨부가 남았다");
+      expect((await api.get(`/api/projects/${f1Project.id}/entries`)).some((item) => item.id === kept.id), "기록은 그대로");
+      expect((await trashLabels()).some((label) => label.includes(fileName)), "보관함에 첨부");
+    });
+
+    await check("있는 첨부의 [삭제] 는 지울 예정 — 버리면 그대로, [저장] 하면 지운다 (213 ③)", async () => {
+      const fileName = `원래첨부-${f1Stamp}.txt`;
+      const form = new FormData();
+      form.append("file", new Blob([`원래 첨부 ${f1Stamp}`], { type: "text/plain" }), fileName);
+      const uploaded = await fetch(`${BASE}/api/entries/${kept.id}/attachments`, { method: "POST", body: form });
+      expect(uploaded.status === 201, `첨부 업로드 ${uploaded.status}`);
+      let editor = await openKept();
+      let row = editor.locator(".attachments li", { hasText: fileName });
+      await row.getByRole("button", { name: "삭제", exact: true }).click();
+      await page.waitForTimeout(300);
+      expect((await row.innerText()).includes("지울 예정"), "지울 예정");
+      equal((await api.get(`/api/entries/${kept.id}/attachments`)).length, 1, "누르자마자 지웠다");
+      // [되살리기] → 원래대로, 다시 [삭제]
+      await row.getByRole("button", { name: "되살리기", exact: true }).click();
+      await page.waitForTimeout(200);
+      equal(await editor.locator(".attachments li.pending-delete").count(), 0, "되살린 뒤에도 지울 예정");
+      await row.getByRole("button", { name: "삭제", exact: true }).click();
+      await page.waitForTimeout(200);
+      const asked = askNext(true);
+      await editor.getByRole("button", { name: "닫기", exact: true }).click();
+      await page.waitForTimeout(1200);
+      expect(asked.message?.includes("그대로 둡니다"), `지울 예정은 그대로라고 말한다: ${asked.message}`);
+      equal((await api.get(`/api/entries/${kept.id}/attachments`)).length, 1, "버렸는데 첨부가 지워졌다");
+      // 이번에는 [저장] — 그때 지운다
+      editor = await openKept();
+      row = editor.locator(".attachments li", { hasText: fileName });
+      await row.getByRole("button", { name: "삭제", exact: true }).click();
+      await page.waitForTimeout(200);
+      await editor.locator(".editor-footer").getByRole("button", { name: "저장", exact: true }).click();
+      await page.waitForTimeout(1500);
+      equal((await api.get(`/api/entries/${kept.id}/attachments`)).length, 0, "[저장] 했는데 첨부가 남았다");
+    });
+
+    await check("보고 편집기 [닫기] · 다른 보고 누르기 — 고친 것이 있으면 묻고, 닫으면 주소의 ?report= 도 뗀다 (211 ④ · 210 ⑥)", async () => {
+      const first = await api.post(`/api/projects/${f1Project.id}/reports/draft`, { report_date: dayFromToday(3), audience: "팀장" });
+      const second = await api.post(`/api/projects/${f1Project.id}/reports/draft`, { report_date: dayFromToday(10), audience: "팀장" });
+      await go(`#/projects/${f1Project.id}?report=${first.id}`);
+      await page.waitForTimeout(600);
+      const editor = page.locator(".report-editor");
+      equal(await editor.count(), 1, "보고 편집기");
+      // 아무것도 안 고쳤으면 묻지 않고 닫힌다
+      let dialogs = 0;
+      const countDialog = () => { dialogs += 1; };
+      page.on("dialog", countDialog);
+      await editor.getByRole("button", { name: "닫기", exact: true }).click();
+      await page.waitForTimeout(500);
+      page.off("dialog", countDialog);
+      equal(dialogs, 0, "고친 것이 없는데 물었다");
+      equal(await page.locator(".report-editor").count(), 0, "닫힌다");
+      expect(!page.url().includes("report="), `닫았는데 주소에 report 가 남았다: ${page.url()}`);
+      // 다시 열고 고친 뒤 [닫기] → [취소] 하면 그대로, 다른 보고를 눌러도 묻는다
+      await page.locator(".report-open").filter({ hasText: first.report_date }).click();
+      await page.waitForTimeout(800);
+      expect(page.url().includes(`report=${first.id}`), `열었는데 주소에 report 가 없다: ${page.url()}`);
+      await page.locator(".report-editor textarea").first().click();
+      await page.keyboard.type(" 고친 글");
+      let asked = askNext(false);
+      await page.locator(".report-editor").getByRole("button", { name: "닫기", exact: true }).click();
+      await page.waitForTimeout(500);
+      expect(asked.message?.includes("저장하지 않은 보고를 버릴까요?"), `묻는 말: ${asked.message}`);
+      equal(await page.locator(".report-editor").count(), 1, "[취소] 했는데 닫혔다");
+      asked = askNext(false);
+      await page.locator(".report-open").filter({ hasText: second.report_date }).click();
+      await page.waitForTimeout(600);
+      expect(asked.message?.includes("버릴까요?"), `다른 보고를 누를 때 묻는다: ${asked.message}`);
+      expect((await page.locator(".report-editor textarea").first().inputValue()).includes("고친 글"), "[취소] 했는데 고친 글이 사라졌다");
+      // [확인] 하면 닫히고, 서버의 본문은 그대로
+      asked = askNext(true);
+      await page.locator(".report-editor").getByRole("button", { name: "닫기", exact: true }).click();
+      await page.waitForTimeout(800);
+      equal(await page.locator(".report-editor").count(), 0, "버리고 닫힌다");
+      expect(!(await api.get(`/api/reports/${first.id}`)).body.includes("고친 글"), "버렸는데 서버에 들어갔다");
+      await api.delete(`/api/reports/${first.id}`);
+      await api.delete(`/api/reports/${second.id}`);
+    });
+
+    await check("접수 검토 기록도 임시 보관된다 — 쓰다 만 글이 데이터 폴더에, [취소] 로 버리면 지운다 (211 ③)", async () => {
+      const intake = await api.post("/api/intakes", { title: "검토 기록 보관 확인", received_on: dayFromToday(-1) });
+      try {
+        await go(`#/intakes/${encodeURIComponent(intake.id)}`);
+        await page.locator(".intake-logs").getByRole("button", { name: "기록 추가", exact: true }).click();
+        await page.waitForTimeout(300);
+        const editor = page.locator(".log-editor");
+        await editor.locator("textarea").first().fill("인터뷰 메모 — 길게 쓰던 중");
+        await page.waitForTimeout(1300);
+        const key = `intake:${intake.id}--log-new`;
+        expect((await api.get("/api/drafts")).items.some((item) => item.key === key), "검토 기록 임시 보관");
+        const asked = askNext(true);
+        await editor.getByRole("button", { name: "취소", exact: true }).click();
+        await page.waitForTimeout(800);
+        expect(asked.message?.includes("저장하지 않은 기록을 버릴까요?"), `묻는 말: ${asked.message}`);
+        expect(!(await api.get("/api/drafts")).items.some((item) => item.key === key), "버렸는데 임시 보관이 남았다");
+      } finally {
+        await fetch(`${BASE}/api/intakes/${encodeURIComponent(intake.id)}/archive`, { method: "POST" });
+      }
+    });
+
+    await check("첨부 자료 카드의 [정리] — 본문에서 쓰지 않는 파일을 보관함으로 (TODO 204 · 197)", async () => {
+      const fileName = `안쓰는파일-${f1Stamp}.txt`;
+      const form = new FormData();
+      form.append("file", new Blob([`안 쓰는 파일 ${f1Stamp}`], { type: "text/plain" }), fileName);
+      const uploaded = await fetch(`${BASE}/api/projects/${f1Project.id}/attachments`, { method: "POST", body: form });
+      expect(uploaded.status === 201, `첨부 업로드 ${uploaded.status}`);
+      expect(((await api.get(`/api/projects/${f1Project.id}/attachments`)).orphan_count ?? 0) >= 1, "본문에서 안 쓰는 파일");
+      await go(`#/projects/${f1Project.id}`);
+      const card = page.locator(".card").filter({ hasText: "첨부 자료" });
+      const asked = askNext(true);
+      await card.getByRole("button", { name: "정리", exact: true }).click();
+      await page.waitForTimeout(1500);
+      expect(asked.message?.includes("본문에서 쓰지 않는 파일"), `묻는 말: ${asked.message}`);
+      expect((await card.innerText()).includes("보관함으로 옮겼습니다"), "옮긴 건수 안내");
+      equal((await api.get(`/api/projects/${f1Project.id}/attachments`)).orphan_count, 0, "정리 뒤에도 남았다");
+      expect(!((await api.get(`/api/projects/${f1Project.id}/attachments`)).items ?? []).some((item) => item.orig_name === fileName), "파일이 남았다");
+    });
+
+    await fetch(`${BASE}/api/projects/${f1Project.id}/archive`, { method: "POST" });
+  }
+
+  console.log("\n[42] 목록 · 폼 — 홈 연도 주소 · 제목 링크 · 취소 확인 · 설정 카드 떠남 경고 · 검색 오류 회복 (TODO 209 ~ 212)");
+
+  await check("홈의 기준 연도가 주소에 남아, 목록에 갔다 [← 홈] 으로 오면 그대로다 (210 ④)", async () => {
+    await go("#/");
+    await page.locator(".home-year select").selectOption("all");
+    await page.waitForTimeout(800);
+    expect(page.url().includes("year=all"), `주소에 연도가 없다: ${page.url()}`);
+    await page.locator(".home-team a.home-stat").first().click();
+    await page.waitForTimeout(800);
+    expect(page.url().includes("#/projects") && page.url().includes("back=home"), `목록으로 가지 않았다: ${page.url()}`);
+    const backHref = await page.locator(".project-list a.back").getAttribute("href");
+    expect(backHref && backHref.includes("year=all"), `[← 홈] 이 연도를 잃었다: ${backHref}`);
+    await page.locator(".project-list a.back").click();
+    await page.waitForTimeout(900);
+    expect(page.url().includes("year=all"), `돌아온 주소: ${page.url()}`);
+    equal(await page.locator(".home-year select").inputValue(), "all", "돌아온 홈의 기준 연도");
+    // 메뉴의 [홈] 은 올해로 — 주소가 화면을 속이지 않는다
+    await page.locator("header .nav a", { hasText: "홈" }).first().click();
+    await page.waitForTimeout(800);
+    equal(await page.locator(".home-year select").inputValue(), String(new Date().getFullYear()), "메뉴로 온 홈은 올해");
+  });
+
+  await check("과제목록 · 보드의 제목은 과제 주소를 가진 진짜 링크이고, Ctrl+클릭은 지금 탭을 옮기지 않는다 (210 ⑤)", async () => {
+    await go("#/projects?year=all");
+    const link = page.locator(`.project-table tbody a.row-link[href^="#/projects/${seeded.projectA}"]`);
+    equal(await link.count(), 1, "제목 링크");
+    const before = page.url();
+    const popup = page.context().waitForEvent("page", { timeout: 3000 }).catch(() => null);
+    await link.click({ modifiers: ["Control"] });
+    const opened = await popup;
+    await page.waitForTimeout(500);
+    equal(page.url(), before, "Ctrl+클릭이 지금 탭을 옮겼다");
+    if (opened) await opened.close();
+    // 그냥 누르면 연다
+    await link.click();
+    await page.waitForTimeout(800);
+    expect(page.url().includes(`#/projects/${seeded.projectA}`), `열리지 않았다: ${page.url()}`);
+    // 보드 카드도 같다
+    await go("#/projects?year=all");
+    await page.locator(".view-switch button", { hasText: "보드" }).click();
+    await page.waitForTimeout(400);
+    expect(await page.locator(`.board-card a.row-link[href^="#/projects/${seeded.projectA}"]`).count() === 1, "보드 카드 제목 링크");
+    await page.locator(".view-switch button", { hasText: "표" }).click();
+  });
+
+  await check("새 과제 폼 — 친 것이 있으면 [취소] · Esc 가 버릴지 묻고, 머물면 그대로 열려 있다 (211 ①)", async () => {
+    await go("#/projects");
+    await page.getByRole("button", { name: "과제 추가", exact: true }).click();
+    const form = page.locator(".project-form");
+    equal(await form.count(), 1, "폼이 열렸다");
+    // 아무것도 안 쳤으면 묻지 않고 닫힌다
+    let quiet = true;
+    nextDialog((d) => { quiet = false; d.dismiss(); });
+    await form.getByRole("button", { name: "취소", exact: true }).click();
+    await page.waitForTimeout(300);
+    expect(quiet, "빈 폼인데 물었다");
+    equal(await page.locator(".project-form").count(), 0, "빈 폼은 바로 닫힌다");
+    await page.getByRole("button", { name: "과제 추가", exact: true }).click();
+    await page.locator(".project-form input").first().fill("버릴지 묻는 과제");
+    let asked = "";
+    nextDialog((d) => { asked = d.message(); d.dismiss(); });
+    await page.locator(".project-form").getByRole("button", { name: "취소", exact: true }).click();
+    await page.waitForTimeout(300);
+    expect(asked.includes("버릴까요"), `묻지 않았다: ${asked}`);
+    equal(await page.locator(".project-form").count(), 1, "머물렀는데 폼이 닫혔다");
+    equal(await page.locator(".project-form input").first().inputValue(), "버릴지 묻는 과제", "쓰던 글");
+    // 시작 > 마감 — 화면에서 막는다 (212)
+    const dates = page.locator('.project-form input[type="date"]');
+    await dates.nth(0).fill("2026-05-01");
+    await dates.nth(1).fill("2026-04-01");
+    await page.waitForTimeout(200);
+    expect(await page.locator(".project-form .date-warn").count() >= 1, "날짜 경고");
+    expect(await page.locator(".project-form").getByRole("button", { name: "만들기" }).isDisabled(), "만들기가 막히지 않았다");
+    // Esc — 이번에는 버린다
+    nextDialog((d) => d.accept());
+    await page.locator(".project-form input").first().press("Escape");
+    await page.waitForTimeout(300);
+    equal(await page.locator(".project-form").count(), 0, "버리면 닫힌다");
+  });
+
+  await check("설정 카드를 고친 채 메뉴를 누르면 묻고, 머물면 고친 값이 그대로다 (211 ②)", async () => {
+    await go("#/settings");
+    const cycle = page.locator('.meeting-settings input[type="number"]');
+    const original = await cycle.inputValue();
+    await cycle.fill(String(Number(original || "30") + 7));
+    let asked = "";
+    nextDialog((d) => { asked = d.message(); d.dismiss(); });
+    await page.locator("header .nav a", { hasText: "도움말" }).click();
+    await page.waitForTimeout(500);
+    expect(asked.includes("저장하지 않은 내용"), `묻지 않았다: ${asked}`);
+    expect(page.url().includes("#/settings"), `떠났다: ${page.url()}`);
+    equal(await cycle.inputValue(), String(Number(original || "30") + 7), "고친 값");
+    // 떠나기로 하면 떠난다 — 저장하지 않았으니 서버 값은 그대로
+    nextDialog((d) => d.accept());
+    await page.locator("header .nav a", { hasText: "도움말" }).click();
+    await page.waitForTimeout(500);
+    expect(page.url().includes("#/help"), `못 떠났다: ${page.url()}`);
+    // 손대지 않았으면 묻지 않는다 — 불러온 값과 견준다(빈 값으로 선 뒤 서버 값이 와도 "고쳤다" 가 아니다)
+    await go("#/settings");
+    await page.waitForTimeout(400);
+    let again = false;
+    nextDialog((d) => { again = true; d.dismiss(); });
+    await page.locator("header .nav a", { hasText: "도움말" }).click();
+    await page.waitForTimeout(500);
+    expect(!again && page.url().includes("#/help"), "고친 것이 없는데 물었다");
+  });
+
+  await expectingFailures(["/api/search"], async () => {
+    await check("검색이 한 번 실패해도 다음 검색어 · [다시 시도] 로 살아난다 (209 ③)", async () => {
+      const failSearch = () =>
+        page.route("**/api/search**", (route) =>
+          route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "시험용 검색 실패" }) }));
+      await failSearch();
+      await go(`#/search?q=${encodeURIComponent("시제품")}`);
+      await page.waitForTimeout(500);
+      equal(await page.locator(".search-results .load-error").count(), 1, "실패는 [다시 시도] 가 있는 판");
+      expect((await page.locator(".load-error").innerText()).includes("시험용 검색 실패"), "사유");
+      await page.unroute("**/api/search**");
+      // 다음 검색어 — 지난 오류가 남지 않는다
+      await page.locator(".search-box input").fill("측정");
+      await page.locator(".search-box input").press("Enter");
+      await page.waitForTimeout(800);
+      equal(await page.locator(".load-error").count(), 0, "다음 검색에도 오류가 남았다");
+      equal(await page.locator(".search-title").count(), 1, "결과 제목");
+      // [다시 시도]
+      await failSearch();
+      await page.locator(".search-box input").fill("시제품");
+      await page.locator(".search-box input").press("Enter");
+      await page.waitForTimeout(600);
+      equal(await page.locator(".load-error").count(), 1, "다시 실패");
+      await page.unroute("**/api/search**");
+      await page.locator(".load-error").getByRole("button", { name: "다시 시도" }).click();
+      await page.waitForTimeout(800);
+      equal(await page.locator(".load-error").count(), 0, "[다시 시도] 로 살아난다");
+      equal(await page.locator(".search-title").count(), 1, "결과 제목");
+    });
+  });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {

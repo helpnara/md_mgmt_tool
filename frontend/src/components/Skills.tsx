@@ -9,7 +9,7 @@ import LoadError from "./LoadError";
 import ActivityForm from "./ActivityForm";
 import MeetingPanel from "./MeetingPanel";
 import TotalRow from "./TotalRow";
-import { cellCount, DASH, sumBy } from "../util";
+import { cellCount, DASH, sumBy, useLatest } from "../util";
 
 /**
  * 팀원 역량 이력 (TODO 72).
@@ -55,19 +55,29 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   };
 
   const yearParam = year === ALL_YEARS ? "" : year;
+  // 찾기 칸은 글자마다 묻지 않는다 — 250ms 쉬면 묻는다 (TODO 210 ①)
+  const [findQuery, setFindQuery] = useState(() => find.trim());
+  useEffect(() => {
+    const timer = window.setTimeout(() => setFindQuery(find.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [find]);
+  // 조건을 빨리 바꾸면 앞 요청이 늦게 와 다른 해 숫자가 남을 수 있다 — 마지막 요청만 받는다 (TODO 210 ①)
+  const latest = useLatest();
 
   const load = useCallback(() => {
+    const mine = latest();
     Promise.all([
       api.activitySummary(yearParam),
-      api.activities({ year: yearParam, person, kind, q: find.trim() }),
+      api.activities({ year: yearParam, person, kind, q: findQuery }),
     ])
       .then(([nextSummary, nextRows]) => {
+        if (!mine()) return;
         setSummary(nextSummary);
         setRows(nextRows);
         setError(null);
       })
-      .catch((err: Error) => setError(err.message));
-  }, [yearParam, person, kind, find]);
+      .catch((err: Error) => mine() && setError(err.message));
+  }, [yearParam, person, kind, findQuery, latest]);
 
   useEffect(load, [load]);
 

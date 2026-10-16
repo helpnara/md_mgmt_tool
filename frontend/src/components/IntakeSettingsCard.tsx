@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { ClassificationKey, Meta, PrecheckItemDef } from "../types";
+import { useEditedUnsaved } from "../util";
 
 /** 사전점검 항목을 설정 칸의 글로 — 한 줄에 하나: `분류 | 항목 | 단계=점수, …` (TODO 155) */
 function toLines(items: PrecheckItemDef[]): string {
@@ -33,8 +34,19 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 마지막으로 불러온 값 — 이것과 다르면 "저장 안 함" (TODO 211 ②). 목록(meta)과 서식(settings)이 따로 온다
+  const [savedMeta, setSavedMeta] = useState<Record<string, unknown> | null>(null);
+  const [savedTemplate, setSavedTemplate] = useState<string | null>(null);
 
   useEffect(() => {
+    const nextLists = Object.fromEntries(meta.classifications.map((info) => [info.key, info.items.join("\n")]));
+    setSavedMeta({
+      lists: nextLists,
+      staleDays: String(meta.intake_stale_days),
+      precheckText: toLines(meta.precheck.items),
+      high: String(meta.precheck.thresholds[0]),
+      low: String(meta.precheck.thresholds[1]),
+    });
     setLists(
       Object.fromEntries(meta.classifications.map((info) => [info.key, info.items.join("\n")])) as Record<
         ClassificationKey,
@@ -48,7 +60,13 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
   }, [meta.classifications, meta.intake_stale_days, meta.precheck]);
 
   useEffect(() => {
-    api.settings().then((s) => setTemplate(s.intake_template ?? "")).catch(() => undefined);
+    api
+      .settings()
+      .then((s) => {
+        setTemplate(s.intake_template ?? "");
+        setSavedTemplate(s.intake_template ?? "");
+      })
+      .catch(() => undefined);
     api
       .settingsDefaults()
       .then((d) => {
@@ -57,6 +75,13 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
       })
       .catch(() => undefined);
   }, []);
+
+  useEditedUnsaved(
+    "settings:intake",
+    { lists, staleDays, precheckText, high, low, template },
+    savedMeta && savedTemplate !== null ? { ...savedMeta, template: savedTemplate } : null,
+    busy,
+  );
 
   async function save() {
     setBusy(true);
@@ -70,6 +95,9 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
         precheck_items: precheckText.trim() === precheckDefault.trim() ? "" : precheckText,
         precheck_thresholds: [Number(high), Number(low)],
       });
+      // 저장한 값이 곧 "불러온 값" — 메타를 다시 읽으면 서버가 다듬은 값으로 한 번 더 맞춰진다
+      setSavedMeta({ lists, staleDays, precheckText, high, low });
+      setSavedTemplate(template);
       onSaved();
       setNotice("저장했습니다.");
       window.setTimeout(() => setNotice(null), 3000);

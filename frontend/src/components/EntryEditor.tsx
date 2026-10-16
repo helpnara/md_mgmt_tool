@@ -1,3 +1,4 @@
+import { storageGet, storageSet } from "../storage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { attempt, notifyError } from "../notify";
@@ -63,7 +64,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploads, setUploads] = useState<UploadState[]>([]);
   const [autosave, setAutosave] = useState(
-    () => localStorage.getItem(AUTOSAVE_PREF_KEY) === "on",
+    () => storageGet(AUTOSAVE_PREF_KEY) === "on", // 사이트 데이터가 막힌 PC 에서도 (TODO 212)
   );
   const [dirty, setDirty] = useState(false);
   // 편집 한 번의 장부 (TODO 213) — 이번에 올린 첨부 · 지우기로 한 첨부(첨부 번호)
@@ -532,7 +533,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
             checked={autosave}
             onChange={(event) => {
               setAutosave(event.target.checked);
-              localStorage.setItem(AUTOSAVE_PREF_KEY, event.target.checked ? "on" : "off");
+              storageSet(AUTOSAVE_PREF_KEY, event.target.checked ? "on" : "off");
             }}
           />
           자동 저장 (입력이 멈추면 10초 뒤)

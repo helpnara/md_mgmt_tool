@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Dashboard as DashboardData, OpenDraft } from "../types";
 import { projectLink } from "../nav";
-import { todayIso } from "../util";
+import { todayIso, useLatest } from "../util";
+import { storageGet, storageSet } from "../storage";
 
 const OPEN_KEY = "md-mgmt:dashboard";
 /** 리마인더를 닫은 날. 같은 날 다시 띄우지 않는다. */
@@ -109,17 +110,42 @@ function today(): string {
 
 export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) !== "off");
+  const [open, setOpen] = useState(() => storageGet(OPEN_KEY) !== "off");
   const [allOwners, setAllOwners] = useState(false);
-  const [reminderClosed, setReminderClosed] = useState(() => localStorage.getItem(REMINDER_KEY));
+  const [reminderClosed, setReminderClosed] = useState(() => storageGet(REMINDER_KEY));
+  // 못 불러오면 조용히 사라지지 않고 한 줄 + [다시 시도] (TODO 209 ③)
+  const [error, setError] = useState<string | null>(null);
+  // 연도를 빨리 바꾸면 앞 요청이 늦게 와 표와 다른 해를 보일 수 있다 — 마지막 것만 (TODO 210 ①)
+  const latest = useLatest();
 
   const load = useCallback(() => {
+    const mine = latest();
     // "all" 은 조건이 없는 것이다 (ProjectList 의 ALL_YEARS 와 같은 규칙).
-    api.dashboard(filters.year === "all" ? "" : filters.year).then(setData).catch(() => setData(null));
-  }, [filters.year]);
+    api
+      .dashboard(filters.year === "all" ? "" : filters.year)
+      .then((next) => {
+        if (!mine()) return;
+        setData(next);
+        setError(null);
+      })
+      .catch((err: Error) => {
+        if (!mine()) return;
+        setData(null);
+        setError(err.message);
+      });
+  }, [filters.year, latest]);
 
   useEffect(load, [load, refreshKey]);
 
+  if (error)
+    return (
+      <p className="inline-load-error dash-error" role="alert">
+        대시보드를 불러오지 못했습니다 — {error}{" "}
+        <button className="ghost small" onClick={load}>
+          다시 시도
+        </button>
+      </p>
+    );
   if (!data || data.total === 0) return null;
 
   const toggle = (key: "status" | "type" | "owner" | "due", value: string) =>
@@ -166,7 +192,7 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
             className="ghost small"
             title="오늘은 다시 띄우지 않습니다."
             onClick={() => {
-              localStorage.setItem(REMINDER_KEY, today());
+              storageSet(REMINDER_KEY, today());
               setReminderClosed(today());
             }}
           >
@@ -183,7 +209,7 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
           onClick={() => {
             const next = !open;
             setOpen(next);
-            localStorage.setItem(OPEN_KEY, next ? "on" : "off");
+            storageSet(OPEN_KEY, next ? "on" : "off");
           }}
           title={open ? "대시보드 접기" : "대시보드 펼치기"}
         >

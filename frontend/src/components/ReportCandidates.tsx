@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, OpenDraft, ReportCandidate } from "../types";
-import { cellCount, DASH, formatDate, sumBy } from "../util";
+import { cellCount, DASH, formatDate, sumBy, useLatest } from "../util";
+import { notifyError } from "../notify";
+import { storageGetJson, storageRemove, storageSet, useScrollMemory } from "../storage";
 import TotalRow from "./TotalRow";
 import { backTarget, projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
@@ -17,11 +19,25 @@ const LATE_DAYS = 14;
 
 /** 이번 주 보고 묶음. 월요일에 고른 과제를 화요일 보고까지 들고 간다. */
 function loadPicks(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(PICKS_KEY) ?? "[]");
-  } catch {
-    return [];
-  }
+  // 막힌 PC · 깨진 값이어도 넘어지지 않게 (TODO 212)
+  const picks = storageGetJson<unknown>(PICKS_KEY, []);
+  return Array.isArray(picks) ? picks.filter((item): item is string => typeof item === "string") : [];
+}
+
+/**
+ * "보고 경과" 정렬 (TODO 212) — 예전에는 "마지막 보고" 와 **같은 열쇠**(last_reported_at)라 둘 중 무엇을 눌러도
+ * 두 머리글이 함께 눌린 것처럼 보였다. 경과는 화면에서 따로 센다: 서버의 정렬 열쇠가 아니므로 기본 순서로 받아
+ * 여기서 일수로 줄 세운다. 착수 전 · 일수 없음은 방향과 무관하게 맨 뒤.
+ */
+const ELAPSED_SORT = "elapsed";
+function sortByElapsed(items: ReportCandidate[], order: string): ReportCandidate[] {
+  const descending = order !== "asc";
+  const value = (item: ReportCandidate) => (item.not_started || item.days_since_report == null ? null : item.days_since_report);
+  return [...items].sort((a, b) => {
+    const [x, y] = [value(a), value(b)];
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+    return descending ? y - x : x - y;
+  });
 }
 
 interface Props {
@@ -37,7 +53,8 @@ export default function ReportCandidates({ meta, query }: Props) {
   // 어디서 왔는지 (TODO 128). 거르는 조건이 아니라 **돌아갈 곳**이라 서버로 보내지 않고,
   // 조건을 바꿔도 주소에 남아 있어야 한다.
   const [back] = useState(() => initial.get("back") ?? "");
-  const [items, setItems] = useState<ReportCandidate[]>([]);
+  // 처음에는 null — 받기 전에 "보고 후보가 없습니다" 가 깜빡이지 않게 (TODO 210 ②)
+  const [loaded, setLoaded] = useState<ReportCandidate[] | null>(null);
   // 확정을 기다리는 초안 (TODO 91). 후보를 고르는 일보다 **먼저 끝내야 하는 일**이라
   // 화면 맨 위에 세운다. 배너에서 "초안 N건 확정하기" 로 오면 여기에 닿는다.
   const [drafts, setDrafts] = useState<OpenDraft[]>([]);
@@ -57,20 +74,30 @@ export default function ReportCandidates({ meta, query }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 조건을 빨리 바꾸면 앞 요청이 늦게 올 수 있다 — 마지막 것만 (TODO 210 ①)
+  const latest = useLatest();
+  // 경과 정렬은 화면에서만 한다 — 서버에는 기본 순서로 묻는다
+  const serverSort = sort === ELAPSED_SORT ? "" : sort;
+  const serverOrder = serverSort ? order : "";
   const load = useCallback(() => {
+    const mine = latest();
     api
-      .reportCandidates({ includeInactive, status, type, owner, sort, order })
+      .reportCandidates({ includeInactive, status, type, owner, sort: serverSort, order: serverOrder })
       .then((data) => {
-        setItems(data.items);
+        if (!mine()) return;
+        setLoaded(data.items);
         setDrafts(data.drafts ?? []);
         setDefaultDate(data.default_report_date);
         setReportDate((prev) => prev || data.default_report_date);
         setError(null);
       })
-      .catch((err: Error) => setError(err.message));
-  }, [includeInactive, status, type, owner, sort, order]);
+      .catch((err: Error) => mine() && setError(err.message));
+  }, [includeInactive, status, type, owner, serverSort, serverOrder, latest]);
 
   useEffect(load, [load]);
+  // 과제를 열었다 돌아오면 보던 자리로 (TODO 210 ③)
+  useScrollMemory(loaded !== null);
+  const items = loaded === null ? [] : sort === ELAPSED_SORT ? sortByElapsed(loaded, order) : loaded;
 
   // 고른 조건과 주소를 맞춘다. 과제를 열어 보고 돌아와도 그대로다.
   useAddressBar(
@@ -99,19 +126,19 @@ export default function ReportCandidates({ meta, query }: Props) {
   function togglePick(id: string) {
     setPicks((prev) => {
       const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
-      localStorage.setItem(PICKS_KEY, JSON.stringify(next));
+      storageSet(PICKS_KEY, JSON.stringify(next));
       return next;
     });
   }
 
   async function makeDraft(projectId: string) {
     setBusy(true);
-    setError(null);
     try {
       const report = await api.createDraft(projectId, reportDate);
       window.location.hash = projectLink(projectId, { report: report.id });
     } catch (err) {
-      setError((err as Error).message);
+      // 동작 실패는 아래 알림으로 — "내용을 불러오지 못했습니다" 로 목록 자리를 덮지 않는다 (TODO 209 ③)
+      notifyError(`보고 초안을 만들지 못했습니다 — ${(err as Error).message}`);
     } finally {
       setBusy(false);
     }
@@ -282,7 +309,7 @@ export default function ReportCandidates({ meta, query }: Props) {
               className="ghost"
               onClick={() => {
                 setPicks([]);
-                localStorage.removeItem(PICKS_KEY);
+                storageRemove(PICKS_KEY);
               }}
             >
               묶음 비우기
@@ -310,6 +337,9 @@ export default function ReportCandidates({ meta, query }: Props) {
 
       {error && <LoadError message={error} onRetry={load} />}
 
+      {loaded === null && !error && <p className="hint list-loading">불러오는 중…</p>}
+
+      {loaded !== null && (
       <table className="grid">
         <thead>
           <tr>
@@ -320,7 +350,8 @@ export default function ReportCandidates({ meta, query }: Props) {
               마지막 보고
             </SortHeader>
             <SortHeader sortKey="audience" current={sortState} onSort={onSort}>보고처</SortHeader>
-            <SortHeader sortKey="last_reported_at" current={sortState} onSort={onSort}>
+            {/* "마지막 보고" 와 다른 열쇠 — 오래 지난 것부터 (TODO 212) */}
+            <SortHeader sortKey={ELAPSED_SORT} current={sortState} onSort={onSort} first="desc">
               보고 경과
             </SortHeader>
             <SortHeader sortKey="unreported" current={sortState} onSort={onSort} first="desc">
@@ -421,6 +452,7 @@ export default function ReportCandidates({ meta, query }: Props) {
           />
         )}
       </table>
+      )}
     </section>
   );
 }

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { projectLink, backTarget, screenLink } from "../nav";
 import type { Meta, SearchResults as Results } from "../types";
 import { formatBytes } from "../upload";
 import StatusBadge from "./StatusBadge";
 import StageBand from "./StageBand";
+import LoadError from "./LoadError";
 
 /** 검색어와 일치하는 부분을 강조한다. */
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -26,12 +27,32 @@ export default function SearchResults({ query, meta, back }: { query: string; me
   const [results, setResults] = useState<Results | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 새 검색어마다 지난 오류를 비운다 — 한 번 실패하면 다음 검색어도 같은 오류가 남아 있었다 (TODO 209 ③).
+  // 검색어를 빨리 바꾸면 앞 검색이 늦게 와 덮을 수 있다 — 지금 검색어의 것만 받는다(alive)
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    let alive = true;
     setResults(null);
-    api.search(query).then(setResults).catch((err: Error) => setError(err.message));
-  }, [query]);
+    setError(null);
+    api
+      .search(query)
+      .then((next) => alive && setResults(next))
+      .catch((err: Error) => alive && setError(err.message));
+    return () => {
+      alive = false;
+    };
+  }, [query, attempt]);
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
-  if (error) return <p className="form-error">{error}</p>;
+  if (error)
+    return (
+      <section className="search-results">
+        <a className="back" href={backTarget(back).href}>
+          ← {backTarget(back).label}
+        </a>
+        <LoadError message={error} onRetry={retry} />
+      </section>
+    );
   if (!results) return <div className="app-loading">검색 중…</div>;
 
   const cut = Object.values(results.truncated ?? {}).some(Boolean);

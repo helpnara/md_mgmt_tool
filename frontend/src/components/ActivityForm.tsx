@@ -3,7 +3,7 @@ import { api } from "../api";
 import type { Activity, Meta } from "../types";
 import { splitPeople } from "../people";
 import { useFormUnsaved } from "../unsaved";
-import { todayIso } from "../util";
+import { confirmDiscard, dateOrderProblem, isPlainEnter, todayIso } from "../util";
 
 /**
  * 역량 이력 한 건을 쓰는 자리 (TODO 72 · 74).
@@ -43,11 +43,18 @@ export default function ActivityForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 쓰다가 떠나면 묻는다 (TODO 162)
-  useFormUnsaved(
-    `activity-form:${activity?.id ?? "new"}`,
-    { person, date, endDate, kind, title, host, place, hours, cost, takeaway, link },
-    busy,
-  );
+  const snapshot = { person, date, endDate, kind, title, host, place, hours, cost, takeaway, link };
+  useFormUnsaved(`activity-form:${activity?.id ?? "new"}`, snapshot, busy);
+  const [initialSnapshot] = useState(() => JSON.stringify(snapshot));
+  const dirty = JSON.stringify(snapshot) !== initialSnapshot;
+  // [취소] · [닫기] · Esc — 고친 것이 있으면 버릴지 묻는다 (TODO 211 ①)
+  const close = () => {
+    if (busy) return;
+    if (confirmDiscard(dirty)) onClose();
+  };
+  // 날짜 화면 검사 (TODO 212) — 언제는 필수 · 종료일이 앞서면 안 된다(서버 422)
+  const missingDate = !date;
+  const dateProblem = dateOrderProblem(date, endDate, "시작일", "종료일");
 
   const picked = splitPeople(person);
   // 예전에 한 칸에 여러 이름이 들어간 줄은 칩으로 내주지 않는다 —
@@ -67,7 +74,10 @@ export default function ActivityForm({
     );
   }
 
+  const canSave = !busy && picked.length > 0 && Boolean(title.trim()) && !missingDate && !dateProblem;
+
   async function save() {
+    if (!canSave) return;
     setBusy(true);
     setError(null);
     // 빈 칸은 null 로 보낸다. "" 를 보내면 0 으로 굳어 "안 적었다"와 구분되지 않는다.
@@ -104,10 +114,22 @@ export default function ActivityForm({
   }
 
   return (
-    <div className="card activity-form">
+    <div
+      className="card activity-form"
+      onKeyDown={(event) => {
+        // Enter 규칙 (TODO 211 ⑥) — 한 줄 칸에서 Enter = 저장(필수 칸이 차 있을 때). Esc = 닫기(고쳤으면 묻는다)
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          event.preventDefault();
+          close();
+        } else if (isPlainEnter(event)) {
+          event.preventDefault();
+          void save();
+        }
+      }}
+    >
       <div className="card-head">
         <h2>{editing ? "기록 수정" : "기록 추가"}</h2>
-        <button className="ghost small" onClick={onClose}>
+        <button className="ghost small" onClick={close}>
           닫기
         </button>
       </div>
@@ -155,7 +177,14 @@ export default function ActivityForm({
       <div className="form-row">
         <label>
           언제 *
-          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          <input
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            required
+            aria-invalid={missingDate ? true : undefined}
+          />
+          {missingDate && <span className="form-warn date-warn">날짜를 적어 주세요.</span>}
         </label>
         <label>
           종료일 (여러 날이면)
@@ -164,7 +193,9 @@ export default function ActivityForm({
             value={endDate}
             min={date}
             onChange={(event) => setEndDate(event.target.value)}
+            aria-invalid={dateProblem ? true : undefined}
           />
+          {dateProblem && <span className="form-warn date-warn">{dateProblem}</span>}
         </label>
         <label>
           구분
@@ -245,12 +276,13 @@ export default function ActivityForm({
         {!editing && picked.length > 1 && " 여러 명으로 나뉜 기록에는 이 내용이 똑같이 들어갑니다."}
       </p>
 
-      {error && <p className="form-error">{error}</p>}
+      {/* 서버가 거절한 사유는 단추 바로 위에 (TODO 205) */}
+      {error && <p className="form-error" role="alert">{error}</p>}
       <div className="form-actions">
-        <button className="ghost" onClick={onClose}>
+        <button className="ghost" onClick={close}>
           취소
         </button>
-        <button disabled={busy || picked.length === 0 || !title.trim()} onClick={() => void save()}>
+        <button disabled={!canSave} onClick={() => void save()}>
           {busy
             ? "저장 중…"
             : !editing && picked.length > 1

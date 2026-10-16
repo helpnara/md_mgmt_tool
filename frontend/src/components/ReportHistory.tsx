@@ -4,6 +4,7 @@ import type { Meta, ReportHistoryItem } from "../types";
 import { backTarget, projectLink, useAddressBar } from "../nav";
 import LoadError from "./LoadError";
 import MonthGrid from "./MonthGrid";
+import { useLatest } from "../util";
 
 /**
  * 보고 이력 찾기.
@@ -35,15 +36,19 @@ export default function ReportHistory({ meta, query }: Props) {
   const [items, setItems] = useState<ReportHistoryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 조건 · 검색어를 빨리 바꾸면 앞 요청이 늦게 올 수 있다 — 마지막 것만 (TODO 210 ①)
+  const latest = useLatest();
   const load = useCallback(() => {
+    const mine = latest();
     api
       .searchReports({ audience, from, to, q, state, feedback })
       .then((rows) => {
+        if (!mine()) return;
         setItems(rows);
         setError(null);
       })
-      .catch((err: Error) => setError(err.message));
-  }, [audience, from, to, q, state, feedback]);
+      .catch((err: Error) => mine() && setError(err.message));
+  }, [audience, from, to, q, state, feedback, latest]);
 
   // 조건을 고르는 대로 바로 반영한다. 다만 검색어는 타자를 멈춘 뒤에 — 글자마다 부르면 낭비다.
   useEffect(() => {

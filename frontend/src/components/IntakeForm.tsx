@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { ClassificationKey, Intake, Meta } from "../types";
 import { useFormUnsaved } from "../unsaved";
-import { todayIso } from "../util";
+import { confirmDiscard, dateOrderProblem, todayIso } from "../util";
 
 /**
  * 접수의 칸 (TODO 136) — 등록할 때와 고칠 때 같은 폼이다.
@@ -46,8 +46,19 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
   const [error, setError] = useState<string | null>(null);
   // 받은 과제정의서·부연 설명을 들고 **한 번에** 등록한다. 예전에는 등록한 뒤 상세에 다시 들어가야 했다.
   const [files, setFiles] = useState<File[]>([]);
-  // 쓰다가 떠나면 묻는다 (TODO 162)
-  useFormUnsaved(`intake-form:${initial?.id ?? "new"}`, { form, files: files.map((file) => file.name) }, busy);
+  // 쓰다가 떠나면 묻는다 (TODO 162). 분류 넷까지 (TODO 211 ①)
+  const snapshot = { form, classes, files: files.map((file) => file.name) };
+  useFormUnsaved(`intake-form:${initial?.id ?? "new"}`, snapshot, busy);
+  const [initialSnapshot] = useState(() => JSON.stringify(snapshot));
+  const dirty = JSON.stringify(snapshot) !== initialSnapshot;
+  // [취소] · Esc — 고친 것이 있으면 버릴지 묻는다 (TODO 211 ①)
+  const cancel = () => {
+    if (busy) return;
+    if (confirmDiscard(dirty)) onCancel();
+  };
+  // 날짜 화면 검사 (TODO 212) — 접수일은 번호의 연도라 비울 수 없다 · 시작 > 종료
+  const missingReceived = !form.received_on;
+  const dateProblem = dateOrderProblem(form.start_date, form.due_date, "추진 시작", "추진 종료");
   // FileList 는 **살아 있는 목록**이다 — 입력 칸을 비우거나 끌어다 놓기가 끝나면 비워진다.
   // 상태 갱신 함수 안에서 읽으면 그때는 이미 비어 있으므로 여기서 바로 배열로 떠 둔다.
   const addFiles = (list: FileList | File[] | null) => {
@@ -75,6 +86,7 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (missingReceived || dateProblem) return;
     setBusy(true);
     setError(null);
     try {
@@ -102,7 +114,17 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
   }
 
   return (
-    <form className="project-form intake-form" onSubmit={submit}>
+    <form
+      className="project-form intake-form"
+      onSubmit={submit}
+      onKeyDown={(event) => {
+        // Esc = [취소] (TODO 211 ①)
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          event.preventDefault();
+          cancel();
+        }
+      }}
+    >
       <label>
         과제명 <span className="hint">예: 00을 위한 00 구축/개발</span>
         <input value={form.title} onChange={(e) => update("title", e.target.value)} required autoFocus />
@@ -138,7 +160,14 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
         </label>
         <label>
           접수일
-          <input type="date" value={form.received_on} onChange={(e) => update("received_on", e.target.value)} />
+          <input
+            type="date"
+            value={form.received_on}
+            onChange={(e) => update("received_on", e.target.value)}
+            required
+            aria-invalid={missingReceived ? true : undefined}
+          />
+          {missingReceived && <span className="form-warn date-warn">접수일을 적어 주세요 — 접수 번호의 연도입니다.</span>}
         </label>
       </div>
       <p className="hint">
@@ -170,7 +199,13 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
         </label>
         <label>
           추진 종료
-          <input type="date" value={form.due_date} onChange={(e) => update("due_date", e.target.value)} />
+          <input
+            type="date"
+            value={form.due_date}
+            onChange={(e) => update("due_date", e.target.value)}
+            aria-invalid={dateProblem ? true : undefined}
+          />
+          {dateProblem && <span className="form-warn date-warn">{dateProblem}</span>}
         </label>
         <label>
           요청 기대효과 (억원/년)
@@ -259,12 +294,14 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
           과제 번호는 <b>착수할 때</b> 붙습니다.
         </p>
       )}
-      {error && <p className="error">{error}</p>}
+      {/* 서버가 거절한 사유는 단추 바로 위에 (TODO 205) */}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {(missingReceived || dateProblem) && <p className="hint warn-text">날짜를 고쳐야 저장할 수 있습니다.</p>}
       <div className="form-actions">
-        <button type="button" className="ghost" onClick={onCancel} disabled={busy}>
+        <button type="button" className="ghost" onClick={cancel} disabled={busy}>
           취소
         </button>
-        <button type="submit" disabled={busy}>
+        <button type="submit" disabled={busy || missingReceived || Boolean(dateProblem)}>
           {busy ? "저장 중…" : submitLabel}
         </button>
       </div>

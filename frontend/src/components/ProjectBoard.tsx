@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { projectLink } from "../nav";
 import type { Meta, Project } from "../types";
-import { dueLabel, formatDate } from "../util";
+import { dueLabel, formatDate, openRowClick } from "../util";
 import { TypeBadge, shownStatus } from "./StatusBadge";
 import StageBand from "./StageBand";
 
@@ -46,12 +46,10 @@ export default function ProjectBoard({ meta, projects, year }: Props) {
               <div className="board-cards">
                 {items.map((project) => {
                   const due = dueLabel(project.due_date, project.status);
+                  const href = projectLink(project.id);
                   return (
-                    <article
-                      key={project.id}
-                      className="board-card"
-                      onClick={() => (window.location.hash = projectLink(project.id))}
-                    >
+                    // 카드 아무 데나 눌러도 열리지만 제목은 진짜 링크 — 새 탭 · 키보드 (TODO 210 ⑤)
+                    <article key={project.id} className="board-card" onClick={(event) => openRowClick(event, href)}>
                       <div className="board-card-top">
                       <span className="project-id">{project.id}</span>
                       {shownStatus(project) !== project.status && (
@@ -64,7 +62,10 @@ export default function ProjectBoard({ meta, projects, year }: Props) {
                       )}
                       </div>
                       <h3>
-                        {project.title} <StageBand stage={project.stage} />
+                        <a className="row-link" href={href}>
+                          {project.title}
+                        </a>{" "}
+                        <StageBand stage={project.stage} />
                       </h3>
                       <div className="board-meta">
                         {project.type && <TypeBadge type={project.type} meta={meta} />}

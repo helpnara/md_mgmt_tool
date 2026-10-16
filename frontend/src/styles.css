@@ -1986,3 +1986,42 @@ body.readonly .decision-bar, body.readonly .intake-new { display: none !importan
 /* 떠난 사람의 줄 (TODO 194) — 이력은 남기되 흐리게, 표 맨 아래 */
 .skills-table tr.left-row td, .skills-table tr.left-row .linkish { color: var(--muted); }
 .skills-table tr.left-row .left-tag { margin-left: 6px; }
+
+/* TODO 213 · 211 편집기 (F1) ─────────────────────────────────────────────
+   편집기 안의 첨부 [삭제] 는 "지울 예정" 으로만 남는다 — 실제 삭제는 [저장] 때. 줄을 흐리게, 이름에 취소선, 옆에 딱지와 [되살리기].
+   첨부를 올리려고 먼저 만든 기록(임시)이라는 안내 한 줄. 기록 접기 단추(제목)는 글자 그대로 보이게 (TODO 212). */
+.attachments li.pending-delete { background: #fdf2f2; border-style: dashed; border-color: #f3b4b4; }
+.attachments li.pending-delete img { opacity: 0.45; }
+.attachments li.pending-delete .attachment-info a { text-decoration: line-through; color: var(--muted); }
+.pending-tag { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: #fde2e2; color: #9b1c1c; font-size: 11px; }
+.pending-note, .provisional-note { margin: 6px 0 0; }
+.provisional-note { color: #7a4b00; }
+.entry-head h3 .entry-fold {
+  display: inline; padding: 0; margin: 0; border: 0; background: none; color: inherit;
+  font: inherit; font-weight: inherit; text-align: left; cursor: pointer; line-height: inherit;
+}
+.entry-head h3 .entry-fold:hover { filter: none; text-decoration: underline; }
+.entry-head h3 .entry-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+/* 본문에서 쓰지 않는 파일 [정리] (TODO 204 · 197) — 딱지 옆 작은 단추와 결과 한 줄 */
+.card-head h2 .orphan-cleanup { margin-left: 6px; vertical-align: middle; font-size: 12px; font-weight: 500; }
+.card-head h2 .clean-note { margin-left: 8px; font-size: 12px; font-weight: 400; }
+
+/* TODO 209~212 목록 · 폼 (F2) ─────────────────────────────────────────────
+   목록 제목은 진짜 링크(새 탭 · 키보드)지만 모양은 예전 그대로 · 받는 중 안내 · 홈의 다시 읽는 중 흐림 ·
+   대시보드/월별 표의 작은 실패 줄 · 날짜 칸 경고 · ★ 누를 자리 24px · 첨부 빼고 내려받기 · 점검 줄. */
+.grid a.row-link, .board-card a.row-link { color: inherit; text-decoration: none; }
+.grid a.row-link:hover, .board-card a.row-link:hover { text-decoration: underline; }
+.grid a.row-link:focus-visible, .board-card a.row-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.list-loading { padding: 24px 4px; }
+.home.busy > :not(.home-head) { opacity: 0.55; transition: opacity 0.15s; pointer-events: none; }
+.home-reloading { align-self: flex-end; margin-bottom: 6px; }
+.inline-load-error { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; padding: 6px 10px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: var(--danger); font-size: 13px; }
+.form-warn { color: var(--warn); font-size: 12px; }
+input[aria-invalid="true"] { border-color: var(--warn); }
+.intake-table button.star { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; padding: 2px; border-radius: 4px; }
+.intake-table button.star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.button-like.ghost { background: transparent; color: var(--muted-strong); }
+.backup-skip-assets { margin: 10px 0 4px; }
+.health-line { margin: 4px 0 8px; }
+.keep-failures ul { margin: 6px 0 2px; padding-left: 18px; }
+.keep-failures code { font-size: 12px; word-break: break-all; }

@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Meeting, MeetingFollowup, MeetingListing, Meta } from "../types";
 import { attempt, notifyError } from "../notify";
 import { useFormUnsaved } from "../unsaved";
-import { todayIso } from "../util";
+import { confirmDiscard, todayIso } from "../util";
 
 /**
  * 팀원 면담 (TODO 182) — 팀원역량 화면 안.
@@ -28,6 +28,13 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [opened, setOpened] = useState<Set<number>>(new Set());
+  // 열린 면담 폼이 고쳐졌는가 — [면담 추가] · [수정] 을 다시 눌러 닫을 때도 묻는다 (TODO 211 ①)
+  const formDirty = useRef(false);
+  const closeFormOk = () => {
+    if (!confirmDiscard(formDirty.current)) return false;
+    formDirty.current = false;
+    return true;
+  };
 
   const load = () =>
     api
@@ -73,7 +80,14 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
           면담 기록
           {person ? <span className="hint"> · {person} · {items.length}건</span> : <span className="hint"> · 팀 전체의 하기로 한 것</span>}
         </h2>
-        <button onClick={() => { setAdding((value) => !value); setEditing(null); }} className={adding ? "ghost on" : undefined}>
+        <button
+          onClick={() => {
+            if ((adding || editing !== null) && !closeFormOk()) return;
+            setAdding((value) => !value);
+            setEditing(null);
+          }}
+          className={adding ? "ghost on" : undefined}
+        >
           면담 추가
         </button>
       </div>
@@ -87,6 +101,7 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
           meta={meta}
           people={people}
           initial={{ person, date: today() }}
+          dirtyRef={formDirty}
           onClose={() => setAdding(false)}
           onSaved={() => { setAdding(false); changed(); }}
         />
@@ -145,7 +160,11 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
                 )}
                 <button data-write
                   className={editing === meeting.id ? "ghost small on" : "ghost small"}
-                  onClick={() => { setEditing(editing === meeting.id ? null : meeting.id); setAdding(false); }}
+                  onClick={() => {
+                    if ((adding || editing !== null) && !closeFormOk()) return;
+                    setEditing(editing === meeting.id ? null : meeting.id);
+                    setAdding(false);
+                  }}
                 >
                   수정
                 </button>
@@ -172,6 +191,7 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
                   meta={meta}
                   people={people}
                   initial={meeting}
+                  dirtyRef={formDirty}
                   onClose={() => setEditing(null)}
                   onSaved={() => { setEditing(null); changed(); }}
                 />
@@ -188,12 +208,15 @@ function MeetingForm({
   meta,
   people,
   initial,
+  dirtyRef,
   onClose,
   onSaved,
 }: {
   meta: Meta;
   people: string[];
   initial: Partial<Meeting>;
+  /** 고쳤는가를 바깥(패널의 [면담 추가] · [수정] 토글)에 알린다 */
+  dirtyRef?: { current: boolean };
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -211,6 +234,28 @@ function MeetingForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useFormUnsaved(`meeting-form:${initial.id ?? "new"}`, { form, followups }, busy);
+  // [취소] · Esc — 고친 것이 있으면 버릴지 묻는다 (TODO 211 ①)
+  const [initialSnapshot] = useState(() => JSON.stringify({ form, followups }));
+  const dirty = JSON.stringify({ form, followups }) !== initialSnapshot;
+  if (dirtyRef) dirtyRef.current = dirty && !busy;
+  useEffect(
+    () => () => {
+      if (dirtyRef) dirtyRef.current = false; // 닫히면 바깥 표시도 지운다
+    },
+    [dirtyRef],
+  );
+  const cancel = () => {
+    if (busy) return;
+    if (confirmDiscard(dirty)) onClose();
+  };
+  const listRef = useRef<HTMLDivElement>(null);
+  /** "하기로 한 것" 칸에서 Enter — 저장하지 않고 **아래에 줄을 하나 더해** 그리로 간다 (TODO 211 ⑥) */
+  const addLineAfter = (index: number) => {
+    setFollowups((prev) => [...prev.slice(0, index + 1), { text: "", done: null }, ...prev.slice(index + 1)]);
+    window.requestAnimationFrame(() =>
+      listRef.current?.querySelectorAll<HTMLInputElement>('input[data-enter="add"]')[index + 1]?.focus(),
+    );
+  };
   const set = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
   const kinds = form.kind && !meta.meeting_kinds.includes(form.kind) ? [...meta.meeting_kinds, form.kind] : meta.meeting_kinds;
 
@@ -236,7 +281,16 @@ function MeetingForm({
   }
 
   return (
-    <form className="meeting-form" onSubmit={submit}>
+    <form
+      className="meeting-form"
+      onSubmit={submit}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          event.preventDefault();
+          cancel();
+        }
+      }}
+    >
       <div className="form-row">
         <label>
           누구와
@@ -275,7 +329,7 @@ function MeetingForm({
           required
         />
       </label>
-      <div className="label-like meeting-followup-edit">
+      <div className="label-like meeting-followup-edit" ref={listRef}>
         <span>하기로 한 것 — 다음 면담에서 확인할 것 (줄마다 하나)</span>
         {followups.map((item, index) => (
           <div key={index} className="meeting-followup-row">
@@ -292,6 +346,13 @@ function MeetingForm({
               onChange={(e) => setFollowups((prev) => prev.map((row, i) => (i === index ? { ...row, text: e.target.value } : row)))}
               placeholder="예: 열처리 심화 과정 신청"
               aria-label={`하기로 한 것 ${index + 1}`}
+              data-enter="add"
+              onKeyDown={(event) => {
+                // 목록에 줄을 더하는 칸 — Enter 는 제출이 아니라 다음 줄 (TODO 211 ⑥). 한글 조합 중 Enter 는 그대로 둔다
+                if (event.key !== "Enter" || event.nativeEvent.isComposing || event.keyCode === 229) return;
+                event.preventDefault();
+                addLineAfter(index);
+              }}
             />
             <button type="button" className="ghost small" onClick={() => setFollowups((prev) => prev.filter((_, i) => i !== index))}>
               ×
@@ -311,7 +372,7 @@ function MeetingForm({
         <button type="submit" disabled={busy}>
           {busy ? "저장 중…" : "저장"}
         </button>
-        <button type="button" className="ghost" onClick={onClose}>
+        <button type="button" className="ghost" onClick={cancel}>
           취소
         </button>
       </div>

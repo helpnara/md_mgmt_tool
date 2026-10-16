@@ -56,7 +56,12 @@ export function backValue(): string {
   if (here.split("?")[0].startsWith("projects/")) {
     return queryOf(here).get(BACK_PARAM) ?? "";
   }
-  return here || HOME_BACK;
+  // 홈의 기준 연도 · 기간도 주소에 있다 (TODO 210 ④) — `?year=2025` 만 실으면 "온 곳 모름" 과 섞이므로 `home?…` 으로
+  if (here.split("?")[0].replace(/\/$/, "") === "") {
+    const query = here.split("?")[1] ?? "";
+    return query ? `${HOME_BACK}?${query}` : HOME_BACK;
+  }
+  return here;
 }
 
 /** 주소의 물음표 뒷부분. */
@@ -134,8 +139,11 @@ export function backTarget(back: string | null | undefined): { href: string; lab
   // 과제 상세를 여는 길이 대부분 목록이기 때문이다.
   if (!back) return { href: "#/projects", label: "과제 목록" };
   const path = back.split("?")[0].replace(/\/$/, "");
-  // 홈은 주소가 `#/` 라 이름을 따로 쓴다 (TODO 127).
-  if (path === HOME_BACK || path === "") return { href: "#/", label: "홈" };
+  // 홈은 주소가 `#/` 라 이름을 따로 쓴다 (TODO 127). 연도 · 기간이 실려 있으면 그대로 되살린다 (TODO 210 ④)
+  if (path === HOME_BACK || path === "") {
+    const query = back.split("?")[1] ?? "";
+    return { href: query ? `#/?${query}` : "#/", label: "홈" };
+  }
   // 과제 상세에서 온 경우 — 유관부서 링크처럼 상세에서 목록으로 가는 길이 있다.
   if (path.startsWith("projects/")) return { href: `#/${back}`, label: "과제" };
   // 접수 상세에서 온 경우 (TODO 136) — 승격된 과제나 병합 대상 과제를 열었다가 돌아간다.
@@ -165,7 +173,8 @@ export function syncQuery(screen: string, values: Record<string, string>): void 
   const query = buildQuery(values);
   const next = `#/${screen}${query ? `?${query}` : ""}`;
   if (window.location.hash !== next) {
-    window.history.replaceState(null, "", next);
+    // 기록 칸의 차례 번호(App 의 history.state.idx)는 그대로 둔다 — 지우면 "머물기" 가 방향을 잃는다 (TODO 210 ⑥)
+    window.history.replaceState(window.history.state, "", next);
   }
 }
 

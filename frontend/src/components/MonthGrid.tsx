@@ -3,6 +3,8 @@ import { api } from "../api";
 import type { MonthGrid as GridData } from "../types";
 import { projectLink } from "../nav";
 import TotalRow from "./TotalRow";
+import { useLatest } from "../util";
+import { storageGet, storageSet } from "../storage";
 
 /**
  * 과제 × 월 보고 표 (TODO 77).
@@ -35,20 +37,33 @@ interface Props {
 
 export default function MonthGrid({ year, from = "", to = "" }: Props) {
   const [grid, setGrid] = useState<GridData | null>(null);
-  const [gridOpen, setGridOpen] = useState(() => localStorage.getItem(OPEN_KEY) !== "off");
+  const [gridOpen, setGridOpen] = useState(() => storageGet(OPEN_KEY) !== "off");
   const scroller = useRef<HTMLDivElement>(null);
+  // 못 불러오면 조용히 사라지지 않고 한 줄 + [다시 시도] (TODO 209 ③)
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(OPEN_KEY, gridOpen ? "on" : "off");
-    } catch {
-      /* 사생활 보호 모드 등 — 접힘 상태를 기억 못 할 뿐이다 */
-    }
+    // 사생활 보호 모드 등 — 접힘 상태를 기억 못 할 뿐이다 (storage.ts, TODO 212)
+    storageSet(OPEN_KEY, gridOpen ? "on" : "off");
   }, [gridOpen]);
 
+  // 연도를 빨리 바꾸면 앞 요청이 늦게 올 수 있다 — 마지막 것만 (TODO 210 ①)
+  const latest = useLatest();
   const load = useCallback(() => {
-    api.monthGrid(year).then(setGrid).catch(() => setGrid(null));
-  }, [year]);
+    const mine = latest();
+    api
+      .monthGrid(year)
+      .then((next) => {
+        if (!mine()) return;
+        setGrid(next);
+        setError(null);
+      })
+      .catch((err: Error) => {
+        if (!mine()) return;
+        setGrid(null);
+        setError(err.message);
+      });
+  }, [year, latest]);
 
   useEffect(load, [load]);
 
@@ -87,6 +102,15 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
     return [...reports.filter((r) => inRange(r.date)), ...reports.filter((r) => !inRange(r.date))];
   }
 
+  if (error)
+    return (
+      <p className="inline-load-error month-grid-error" role="alert">
+        월별 보고 표를 불러오지 못했습니다 — {error}{" "}
+        <button className="ghost small" onClick={load}>
+          다시 시도
+        </button>
+      </p>
+    );
   if (!grid || grid.projects.length === 0) return null;
 
   // 과제 → 달 → 그 달의 보고들. 열두 칸으로 나누는 일은 화면 몫이다 (서버는 목록만 준다).

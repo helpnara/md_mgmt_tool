@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { isReadonly } from "../readonly";
 import LoadError from "./LoadError";
-import { attempt } from "../notify";
+import { attempt, notifyError } from "../notify";
+import { useScrollMemory } from "../storage";
 import { uploadAttachment } from "../upload";
 import { backTarget, screenLink, useAddressBar } from "../nav";
 import type { Intake, IntakeListing, Meta } from "../types";
-import { cellCount, cellEffect, DASH, sumBy } from "../util";
+import { cellCount, cellEffect, DASH, sumBy, useLatest } from "../util";
 import TotalRow from "./TotalRow";
 import IntakeForm from "./IntakeForm";
 import SortHeader, { type SortState } from "./SortHeader";
@@ -57,17 +58,23 @@ export default function IntakePool({ meta, query }: Props) {
   const [creating, setCreating] = useState(() => new URLSearchParams(query).get("new") === "1");
   const [term, setTerm] = useState(filters.q);
 
+  // 조건 · 찾기를 빨리 바꾸면 앞 요청이 늦게 올 수 있다 — 마지막 것만 (TODO 210 ①)
+  const latest = useLatest();
   const load = useCallback(() => {
+    const mine = latest();
     const { back: _back, ...rest } = filters;
     api
       .intakes(rest)
       .then((result) => {
+        if (!mine()) return;
         setData(result);
         setError(null);
       })
-      .catch((err: Error) => setError(err.message));
-  }, [filters]);
+      .catch((err: Error) => mine() && setError(err.message));
+  }, [filters, latest]);
   useEffect(load, [load]);
+  // 접수를 열었다 돌아오면 보던 자리로 (TODO 210 ③)
+  useScrollMemory(data !== null);
 
   useAddressBar(
     "intakes",
@@ -146,7 +153,9 @@ export default function IntakePool({ meta, query }: Props) {
                   failed.push(`${file.name} — ${(err as Error).message}`);
                 }
               }
-              if (failed.length > 0) window.alert(`접수는 등록했지만 첨부 ${failed.length}건을 올리지 못했습니다:\n\n${failed.join("\n")}`);
+              // 막는 창(window.alert) 대신 아래 알림으로 — 상세로 넘어간 뒤에도 남아 있다 (TODO 209 ③)
+              if (failed.length > 0)
+                notifyError(`접수는 등록했지만 첨부 ${failed.length}건을 올리지 못했습니다 — 상세에서 다시 올려 주세요: ${failed.join(" · ")}`);
               setCreating(false);
               window.location.hash = screenLink(`intakes/${made.id}`);
             }}
@@ -303,6 +312,8 @@ export default function IntakePool({ meta, query }: Props) {
 
       {/* 불러오기 실패는 모든 화면이 같은 판 (TODO 165) */}
       {error && <LoadError message={error} onRetry={load} />}
+      {/* 받기 전에는 빈 안내 대신 (TODO 210 ②) */}
+      {!data && !error && <p className="hint list-loading">불러오는 중…</p>}
 
       {data && data.items.length === 0 && (
         <div className="card empty-card">

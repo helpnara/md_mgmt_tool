@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
 import type { BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
-import { listLink, projectLink, screenLink } from "../nav";
-import { cellEffect, DASH, effectNumber, sumBy } from "../util";
+import { listLink, projectLink, screenLink, useAddressBar } from "../nav";
+import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
 import CopyTableButton from "./CopyTableButton";
 import TotalRow from "./TotalRow";
@@ -229,11 +229,22 @@ function backupWarning(status: BackupStatus | null): string | null {
 /** 팀원이 늘면 표가 계속 길어진다. 속성별·그룹별과 같은 규칙으로 접는다 (TODO 123). */
 const MEMBER_LIMIT = 10;
 
-export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?: () => void }) {
+export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; onMetaChange?: () => void; query?: string }) {
   const thisYear = String(new Date().getFullYear());
-  const [year, setYear] = useState(thisYear);
+  // 기준 연도 · 기간은 주소에 (TODO 210 ④) — 지난해를 보다 숫자를 눌러 목록에 갔다 "← 홈" 하면 올해로 돌아왔다
+  const [year, setYear] = useState(() => new URLSearchParams(query).get("year") || thisYear);
   // 반기·분기 (TODO 110). 연도 전체를 볼 때는 뜻이 없으므로 그때는 보내지 않는다.
-  const [period, setPeriod] = useState("");
+  const [period, setPeriod] = useState(() => new URLSearchParams(query).get("period") ?? "");
+  useAddressBar(
+    "",
+    Object.fromEntries(
+      Object.entries({ year: year === thisYear ? "" : year, period: year === ALL_YEARS ? "" : period }).filter(([, value]) => value),
+    ) as Record<string, string>,
+    (params) => {
+      setYear(params.get("year") || thisYear);
+      setPeriod(params.get("period") ?? "");
+    },
+  );
   const [allMembers, setAllMembers] = useState(false);
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -247,15 +258,23 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
     api.backupStatus().then(setBackup).catch(() => setBackup(null));
   }, []);
 
+  // 연도를 빨리 두 번 바꾸면 앞 요청이 늦게 와 다른 해 숫자가 남을 수 있다 — 마지막 것만 받는다 (TODO 210 ①).
+  // 새 값이 올 때까지는 옛 숫자를 흐리게 둔다(aria-busy) — 바뀐 줄 알고 읽지 않게 (TODO 210 ②)
+  const latest = useLatest();
+  const [reloading, setReloading] = useState(false);
   const load = useCallback(() => {
+    const mine = latest();
+    setReloading(true);
     api
       .home(year === ALL_YEARS ? "" : year, year === ALL_YEARS ? "" : period)
       .then((next) => {
+        if (!mine()) return;
         setData(next);
         setError(null);
       })
-      .catch((err: Error) => setError(err.message));
-  }, [year, period]);
+      .catch((err: Error) => mine() && setError(err.message))
+      .finally(() => mine() && setReloading(false));
+  }, [year, period, latest]);
 
   useEffect(load, [load]);
 
@@ -316,7 +335,7 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
   const memberSum = data.members.reduce((sum, item) => sum + item.total, 0);
   const maxCompare = Math.max(1, ...data.compare.map((item) => item.total));
   return (
-    <section className="home">
+    <section className={reloading ? "home busy" : "home"} aria-busy={reloading || undefined}>
       {/* 읽지 못한 파일 · 값 — 백업 경고처럼 문제가 있을 때만 선다 (TODO 164) */}
       <ProblemsBanner
         problems={meta.problems ?? []}
@@ -361,6 +380,7 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
             </select>
           </label>
         )}
+        {reloading && <span className="hint home-reloading" role="status">불러오는 중…</span>}
       </div>
       {data.period && (
         <p className="hint home-period-note">
@@ -596,7 +616,7 @@ export default function Home({ meta, onMetaChange }: { meta: Meta; onMetaChange?
           {/* 완료 = **그 해에 끝낸 과제** 하나 (TODO 181 — 예전에는 번호 연도의 "완료" 와 완료일의 "그해 끝낸 과제" 둘이었다).
               반기 · 분기를 고르면 그 기간에 끝낸 것만(완료일). */}
           {data.period ? (
-            <a className="home-stat" href={`#/projects?done_year=${yearParam}&year=all`} title="이 기간에 완료일이 든 과제">
+            <a className="home-stat" href={listLink({ done_year: yearParam, year: "all" })} title="이 기간에 완료일이 든 과제">
               <span className="home-stat-label">완료</span>
               <strong>{team.done_in_year ?? 0}건</strong>
             </a>

@@ -4,6 +4,7 @@ import type { ClassificationInfo, ClassificationKey, Meta, Partner, Project } fr
 import TagSuggestions from "./TagSuggestions";
 import UnknownOwners from "./UnknownOwners";
 import { useFormUnsaved } from "../unsaved";
+import { confirmDiscard, dateOrderProblem } from "../util";
 
 interface Props {
   meta: Meta;
@@ -25,12 +26,17 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
     ...meta.owners.filter((name) => !meta.people.includes(name) && !left.has(name)),
   ];
   // 선행 과제 고르기 (TODO 172) — 번호와 이름을 함께 보여 고른다. 자기 자신은 뺀다.
+  // 폼을 열 때마다 전체 과제를 받지 않는다 — 창마다 한 번 받은 번호 · 제목을 쓴다 (TODO 212, api.projectOptions)
   const [projectOptions, setProjectOptions] = useState<{ id: string; title: string }[]>([]);
   useEffect(() => {
+    let alive = true;
     api
-      .listProjects({})
-      .then((rows) => setProjectOptions(rows.filter((row) => row.id !== initial?.id).map((row) => ({ id: row.id, title: row.title }))))
-      .catch(() => setProjectOptions([]));
+      .projectOptions()
+      .then((rows) => alive && setProjectOptions(rows.filter((row) => row.id !== initial?.id)))
+      .catch(() => alive && setProjectOptions([]));
+    return () => {
+      alive = false;
+    };
   }, [initial?.id]);
   // 선행 과제 — 여럿일 수 있다(앞 단계 과제 둘을 이어받는 과제). 칩으로 넣고 뺀다 (TODO 172)
   const [predecessors, setPredecessors] = useState<string[]>(initial?.predecessors ?? []);
@@ -113,11 +119,21 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   // 금액으로 재지 않는 과제 (TODO 125). 유지보수·기획보고처럼 효과 금액을 적지 않는 일이
   // "완료했는데 실증효과 미입력" 에 계속 남으면, 줄지 않는 그 숫자를 곧 안 보게 된다.
   const [noEffect, setNoEffect] = useState(Boolean(initial?.no_effect));
-  // 쓰다가 떠나면 묻는다 (TODO 162)
-  useFormUnsaved(`project-form:${initial?.id ?? "new"}`, { form, noReport, noEffect, predecessors }, busy);
+  // 쓰다가 떠나면 묻는다 (TODO 162). 유관부서 · 분류 · 적다 만 선행 과제 칸까지 (TODO 211 ①)
+  const snapshot = { form, noReport, noEffect, predecessors, predecessorInput, partners, classes };
+  useFormUnsaved(`project-form:${initial?.id ?? "new"}`, snapshot, busy);
+  const [initialSnapshot] = useState(() => JSON.stringify(snapshot));
+  const dirty = JSON.stringify(snapshot) !== initialSnapshot;
+  // [취소] · Esc — 고친 것이 있으면 버릴지 묻는다 (TODO 211 ①)
+  const cancel = () => {
+    if (busy || confirmDiscard(dirty)) onCancel();
+  };
+  // 시작 > 마감 — 서버 422 전에 화면에서 (TODO 212)
+  const dateProblem = dateOrderProblem(form.start_date, form.due_date, "시작일", "마감일");
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (dateProblem) return;
     setBusy(true);
     setError(null);
     try {
@@ -166,7 +182,17 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   }
 
   return (
-    <form className="project-form" onSubmit={handleSubmit}>
+    <form
+      className="project-form"
+      onSubmit={handleSubmit}
+      onKeyDown={(event) => {
+        // Esc = [취소] (TODO 211 ①). 자동완성 목록이 열려 있으면 브라우저가 먼저 닫는다
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          event.preventDefault();
+          cancel();
+        }
+      }}
+    >
       <label>
         과제명
         <input
@@ -368,7 +394,9 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             type="date"
             value={form.due_date ?? ""}
             onChange={(event) => update("due_date", event.target.value)}
+            aria-invalid={dateProblem ? true : undefined}
           />
+          {dateProblem && <span className="form-warn date-warn">{dateProblem}</span>}
         </label>
         {/* 완료일 (TODO 104) — 상태가 완료일 때만 선다. 비워 두면 오늘로 남는다.
             지난 과제를 뒤늦게 넣을 때는 여기서 실제 끝난 날을 적는다. */}
@@ -482,12 +510,14 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           </span>
         </label>
       </div>
-      {error && <p className="form-error">{error}</p>}
+      {/* 서버가 거절한 사유(항목 이름이 든 한국어)는 단추 바로 위에 — 아래 알림만으로는 어느 칸인지 놓친다 (TODO 205) */}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {dateProblem && <p className="hint warn-text">날짜를 고쳐야 저장할 수 있습니다.</p>}
       <div className="form-actions">
-        <button type="button" className="ghost" onClick={onCancel}>
+        <button type="button" className="ghost" onClick={cancel}>
           취소
         </button>
-        <button type="submit" disabled={busy}>
+        <button type="submit" disabled={busy || Boolean(dateProblem)}>
           {busy ? "저장 중…" : submitLabel}
         </button>
       </div>

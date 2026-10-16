@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useUnsaved } from "./unsaved";
 
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -153,4 +154,79 @@ export function useEscape(onEscape: () => void, active = true): void {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onEscape, active]);
+}
+
+/**
+ * 불러온 뒤 고치는 칸(설정 카드들)의 "저장 안 한 것" (TODO 211 ②).
+ *
+ * `useFormUnsaved` 는 **처음 그린 값**과 견준다 — 설정 카드는 빈 값으로 서고 서버 값이 뒤에 오므로, 그대로 쓰면
+ * 불러오자마자 "고쳤다" 가 된다. 여기서는 **마지막으로 불러오거나 저장한 값**(saved)과 견준다.
+ * saved 가 아직 없으면(불러오는 중 · 실패) 묻지 않는다. 고쳤는가를 돌려준다.
+ */
+export function useEditedUnsaved(key: string, current: unknown, saved: unknown, busy = false): boolean {
+  const edited = saved !== undefined && saved !== null && JSON.stringify(current) !== JSON.stringify(saved);
+  useUnsaved(key, edited && !busy);
+  return edited;
+}
+
+/** 입력 양식의 [취소] · [닫기] · Esc — 고친 것이 있으면 한 번 묻는다 (TODO 211 ①, 편집기와 같은 문구) */
+export const DISCARD_MESSAGE = "저장하지 않은 내용을 버릴까요?";
+
+export function confirmDiscard(dirty: boolean): boolean {
+  return !dirty || window.confirm(DISCARD_MESSAGE);
+}
+
+/**
+ * 날짜 칸 검사 (TODO 212) — 서버 422 를 받기 전에 화면에서.
+ * 시작이 끝보다 늦으면 문구를, 아니면 null. 한쪽이라도 비면 따지지 않는다.
+ */
+export function dateOrderProblem(start: string | null | undefined, end: string | null | undefined, startLabel: string, endLabel: string): string | null {
+  if (!start || !end) return null;
+  return start > end ? `${startLabel}(${start})이 ${endLabel}(${end})보다 늦습니다.` : null;
+}
+
+/**
+ * 같은 조건으로 다시 부를 때 **늦게 온 옛 응답**을 버린다 (TODO 210 ①).
+ * `const take = useLatest();` → 부를 때 `const mine = take();` → 응답에서 `if (!mine()) return;`
+ */
+export function useLatest(): () => () => boolean {
+  const counter = useRef(0);
+  useEffect(
+    () => () => {
+      counter.current += 1; // 떠난 화면에 늦게 온 응답도 버린다
+    },
+    [],
+  );
+  return useCallback(() => {
+    counter.current += 1;
+    const ticket = counter.current;
+    return () => ticket === counter.current;
+  }, []);
+}
+
+/**
+ * 입력 양식의 Enter 규칙 (TODO 211 ⑥) — **한 줄 칸에서 누른 Enter** 인가.
+ * 여러 줄 칸(textarea) · 단추 · 선택 상자 · 체크 · 한글 조합 중(IME) · Shift/Ctrl/Alt 와 함께면 아니다.
+ * 목록에 줄을 더하는 칸(하기로 한 것 · 선행 과제)은 `data-enter="add"` 로 표시해 따로 다룬다.
+ */
+export function isPlainEnter(event: React.KeyboardEvent): boolean {
+  if (event.key !== "Enter" || event.defaultPrevented) return false;
+  if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
+  if ((event.nativeEvent as KeyboardEvent).isComposing || event.keyCode === 229) return false;
+  const target = event.target as HTMLElement;
+  if (!(target instanceof HTMLInputElement)) return false;
+  if (target.dataset.enter === "add") return false;
+  return !["checkbox", "radio", "button", "submit", "file", "reset"].includes(target.type);
+}
+
+/**
+ * 줄을 눌러 여는 편의 — 단 **제목 링크 · 가운데 클릭 · Ctrl/Shift/⌘ 클릭은 브라우저에 맡긴다** (TODO 210 ⑤).
+ * 새 탭으로 열려는 클릭을 가로채 지금 탭을 옮기면 안 된다. 글자를 끌어 고르는 중이어도 옮기지 않는다.
+ */
+export function openRowClick(event: React.MouseEvent, href: string): void {
+  if (event.defaultPrevented || event.button !== 0) return;
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  if ((event.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
+  if (window.getSelection()?.toString()) return;
+  window.location.hash = href;
 }

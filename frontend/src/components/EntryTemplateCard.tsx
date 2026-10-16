@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta } from "../types";
+import { useEditedUnsaved } from "../util";
+
+/** 빈 서식은 "정한 적 없음" 과 같다 — [이 서식 비우기] 만으로 고친 것이 되지 않게 */
+function filled(templates: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(templates).filter(([, text]) => text));
+}
 
 /**
  * 진행일지 서식.
@@ -16,9 +22,18 @@ export default function EntryTemplateCard({ meta }: { meta: Meta }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 마지막으로 불러온 서식 (TODO 211 ②)
+  const [saved, setSaved] = useState<Record<string, string> | null>(null);
+  useEditedUnsaved("settings:entry-template", filled(templates), saved ? filled(saved) : null, busy);
 
   useEffect(() => {
-    api.settings().then((s) => setTemplates(s.entry_templates ?? {})).catch(() => undefined);
+    api
+      .settings()
+      .then((s) => {
+        setTemplates(s.entry_templates ?? {});
+        setSaved(s.entry_templates ?? {});
+      })
+      .catch(() => undefined);
     api.settingsDefaults().then((d) => setFallback(d.entry_template)).catch(() => undefined);
   }, []);
 
@@ -31,6 +46,7 @@ export default function EntryTemplateCard({ meta }: { meta: Meta }) {
     try {
       const saved = await api.saveSettings({ entry_templates: templates });
       setTemplates(saved.entry_templates ?? {});
+      setSaved(saved.entry_templates ?? {});
       setNotice("저장했습니다.");
       window.setTimeout(() => setNotice(null), 3000);
     } catch (err) {

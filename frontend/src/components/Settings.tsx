@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { backTarget } from "../nav";
-import type { Meta } from "../types";
+import type { Health, Meta } from "../types";
+import { formatBytes } from "../upload";
+import { useEditedUnsaved } from "../util";
 import AiPromptCard from "./AiPromptCard";
 import ReportTemplateCard from "./ReportTemplateCard";
 import IntakeSettingsCard from "./IntakeSettingsCard";
@@ -25,7 +27,8 @@ import LoadError from "./LoadError";
  */
 export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved: () => void; back?: string | null }) {
   const [author, setAuthor] = useState("");
-  const [savedAuthor, setSavedAuthor] = useState("");
+  // null = 아직 못 불러옴 — 그동안은 "고쳤다" 로 보지 않는다 (TODO 211 ②)
+  const [savedAuthor, setSavedAuthor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +48,22 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
       .catch((err: Error) => setLoadError(err.message));
   }, []);
   useEffect(load, [load]);
+  // 작성자를 고치다 메뉴를 누르면 묻는다 (TODO 211 ②)
+  useEditedUnsaved("settings:author", author.trim(), savedAuthor, busy);
+
+  // 점검 (TODO 204 · 206) — 첨부 전체 용량 · 이전 버전을 남기지 못한 문서. 못 받으면 그 줄만 뺀다
+  const [health, setHealth] = useState<Health | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api
+      .health()
+      .then((next) => alive && setHealth(next))
+      .catch(() => alive && setHealth(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const keepFailures = Array.isArray(health?.version_keep_failures) ? health.version_keep_failures : [];
 
   async function save() {
     setBusy(true);
@@ -120,7 +139,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
                 </datalist>
               </label>
             </div>
-            {!savedAuthor && (
+            {savedAuthor === "" && (
               <p className="hint warn-text">
                 아직 작성자가 정해지지 않았습니다. 지금 정해 두면 앞으로 쓰는 기록에 작성자가 남습니다.
                 (이미 쓴 기록에는 소급 적용되지 않습니다)
@@ -129,7 +148,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
             {notice && <p className="hint notice">{notice}</p>}
             {error && <p className="form-error">{error}</p>}
             <div className="form-actions">
-              <button disabled={busy || author.trim() === savedAuthor} onClick={() => void save()}>
+              <button disabled={busy || author.trim() === (savedAuthor ?? "")} onClick={() => void save()}>
                 {busy ? "저장 중…" : "저장"}
               </button>
             </div>
@@ -208,6 +227,10 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
               <a className="button-like" href="/api/backup">
                 전체 백업 내려받기
               </a>
+              {/* 첨부가 GB 단위면 문서만 먼저 받아 둔다 (TODO 202 · 197 ③) */}
+              <a className="button-like ghost" href="/api/backup?assets=none" title="진행일지 · 보고 · 개요 같은 문서만 — 첨부 파일은 빠집니다">
+                첨부 빼고 내려받기
+              </a>
             </div>
           </div>
 
@@ -247,6 +270,28 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
             <>팀원에게 읽기 전용으로 보여 주려면 <code>run.bat --share</code> 로 켜세요 (도움말 → "팀원에게 보여 주려면?").</>
           )}
         </p>
+        {/* 첨부 전체 용량 · 이전 버전 보관 실패 (TODO 204 · 206 ㉕) — 서버가 알려 줄 때만 선다 */}
+        {health && typeof health.attachments_total_bytes === "number" && (
+          <p className="hint health-line" data-testid="health-attachments">
+            첨부 전체 <b>{formatBytes(health.attachments_total_bytes)}</b>
+            {typeof health.attachments_count === "number" && <> · {health.attachments_count.toLocaleString("ko-KR")}개</>}
+            {" "}— 데이터 폴더의 첨부를 모두 더한 크기입니다. 백업 zip 이 커지면 [첨부 빼고 내려받기] 나 자동 백업의 "첨부 빼기" 를 쓰세요.
+          </p>
+        )}
+        {keepFailures.length > 0 && (
+          <div className="warn-banner keep-failures" data-testid="keep-failures">
+            <b>이전 버전을 남기지 못한 문서 {keepFailures.length}건</b> — 저장은 됐지만 되돌릴 보관본이 없습니다.
+            경로가 너무 길면(윈도우 260자) 생깁니다. 과제 폴더 이름을 줄이면 다음 저장부터 남습니다.
+            <ul>
+              {keepFailures.slice(0, 5).map((item, index) => (
+                <li key={`${item.path}-${index}`}>
+                  <code>{item.path}</code> <span className="muted">— {item.reason}</span>
+                </li>
+              ))}
+            </ul>
+            {keepFailures.length > 5 && <span className="muted">외 {keepFailures.length - 5}건</span>}
+          </div>
+        )}
         <div className="settings-grid">
           <ErrorLogCard />
           <LinkFixCard />

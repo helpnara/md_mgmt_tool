@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { useEditedUnsaved } from "../util";
 
 /**
  * 보고 초안 서식.
@@ -13,9 +14,18 @@ export default function ReportTemplateCard() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 마지막으로 불러온 서식 — 고치다 메뉴를 누르면 묻는다 (TODO 211 ②)
+  const [saved, setSaved] = useState<string | null>(null);
+  useEditedUnsaved("settings:report-template", template, saved, busy);
 
   useEffect(() => {
-    api.settings().then((s) => setTemplate(s.report_template ?? "")).catch(() => undefined);
+    api
+      .settings()
+      .then((s) => {
+        setTemplate(s.report_template ?? "");
+        setSaved(s.report_template ?? "");
+      })
+      .catch(() => undefined);
     api.settingsDefaults().then((d) => setFallback(d.report_template)).catch(() => undefined);
   }, []);
 
@@ -28,6 +38,7 @@ export default function ReportTemplateCard() {
     try {
       const saved = await api.saveSettings({ report_template: template });
       setTemplate(saved.report_template ?? "");
+      setSaved(saved.report_template ?? "");
       setNotice("저장했습니다.");
       window.setTimeout(() => setNotice(null), 3000);
     } catch (err) {

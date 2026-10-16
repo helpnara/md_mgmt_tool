@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { ProjectTypeRow } from "../types";
 import { typeClass } from "./StatusBadge";
+import { useEditedUnsaved } from "../util";
 
 /**
  * 과제 속성 더하고 빼고 고치기 (TODO 100).
@@ -35,6 +36,8 @@ export default function ProjectTypeCard({ onSaved }: { onSaved: () => void }) {
   }, []);
 
   useEffect(load, [load]);
+  // 고치다 메뉴를 누르면 묻는다 (TODO 211 ②)
+  useEditedUnsaved("settings:types", rows, rows ? saved : null, busy);
 
   if (!rows) return null;
 

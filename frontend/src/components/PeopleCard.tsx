@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Person } from "../types";
 import { splitPeople } from "../people";
+import { useEditedUnsaved } from "../util";
 
 /**
  * 담당자 명부.
@@ -15,6 +16,8 @@ import { splitPeople } from "../people";
  */
 export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
   const [people, setPeople] = useState<Person[]>([]);
+  // 마지막으로 불러온 명부 — 이것과 다르면 "저장 안 함" (TODO 211 ②). 여러 명의 떠난 날을 고치다 메뉴를 누르면 사라졌다
+  const [saved, setSaved] = useState<Person[] | null>(null);
   const [unregistered, setUnregistered] = useState<{ name: string; used: number }[]>([]);
   const [busy, setBusy] = useState(false);
   // 스무 명이 넘으면 스크롤보다 이름 한 글자가 빠르다 (TODO 121)
@@ -27,12 +30,14 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
       .people()
       .then((data) => {
         setPeople(data.people);
+        setSaved(data.people);
         setUnregistered(data.unregistered);
       })
       .catch((err: Error) => setError(err.message));
   }, []);
 
   useEffect(load, [load]);
+  useEditedUnsaved("settings:people", people, saved, busy);
 
   const say = (message: string) => {
     setNotice(message);

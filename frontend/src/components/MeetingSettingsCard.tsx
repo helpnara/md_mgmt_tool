@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta } from "../types";
+import { useEditedUnsaved } from "../util";
 
 /** 팀원 면담의 구분 목록 · 면담 주기 (TODO 182). 목록은 한 줄에 하나, 비우면 기본 목록. */
 export default function MeetingSettingsCard({ meta, onSaved }: { meta: Meta; onSaved: () => void }) {
@@ -9,10 +10,14 @@ export default function MeetingSettingsCard({ meta, onSaved }: { meta: Meta; onS
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 마지막으로 불러온 값 — 고치다 메뉴를 누르면 묻는다 (TODO 211 ②)
+  const [saved, setSaved] = useState(() => ({ kinds: meta.meeting_kinds.join("\n"), cycle: String(meta.meeting_cycle_days) }));
+  useEditedUnsaved("settings:meeting", { kinds, cycle }, saved, busy);
 
   useEffect(() => {
     setKinds(meta.meeting_kinds.join("\n"));
     setCycle(String(meta.meeting_cycle_days));
+    setSaved({ kinds: meta.meeting_kinds.join("\n"), cycle: String(meta.meeting_cycle_days) });
   }, [meta.meeting_kinds, meta.meeting_cycle_days]);
 
   async function save() {
@@ -20,6 +25,7 @@ export default function MeetingSettingsCard({ meta, onSaved }: { meta: Meta; onS
     setError(null);
     try {
       await api.saveSettings({ meeting_kinds: kinds, meeting_cycle_days: Number(cycle) });
+      setSaved({ kinds, cycle });
       onSaved();
       setNotice("저장했습니다.");
       window.setTimeout(() => setNotice(null), 3000);

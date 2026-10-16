@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { BackupStatus } from "../types";
 import { formatBytes } from "../upload";
 import FolderPicker from "./FolderPicker";
+import { useEditedUnsaved } from "../util";
 
 /**
  * 자동 백업 — 바깥쪽 안전망.
@@ -19,6 +20,10 @@ export default function BackupCard() {
   const [weekly, setWeekly] = useState(4);
   const [monthly, setMonthly] = useState(6);
   const [hours, setHours] = useState(24);
+  // 자동 백업에서 첨부를 빼고 문서만 (TODO 202 · 197 ③) — 첨부가 GB 면 한 벌이 너무 크다
+  const [skipAssets, setSkipAssets] = useState(false);
+  // 마지막으로 불러온 값 — 이것과 다르면 "저장 안 함" (TODO 211 ②)
+  const [saved, setSaved] = useState<Record<string, unknown> | null>(null);
   // 목록은 최근 세 줄만. 나머지는 눌러서 편다.
   const [showAll, setShowAll] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -28,20 +33,31 @@ export default function BackupCard() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api
-      .backupStatus()
-      .then((data) => {
+    Promise.all([api.backupStatus(), api.settings().catch(() => null)])
+      .then(([data, settings]) => {
+        const skip = Boolean(settings?.backup_skip_assets);
         setStatus(data);
         setDir(data.directory);
         setKeep(data.keep_daily ?? data.keep);
         setWeekly(data.keep_weekly ?? 0);
         setMonthly(data.keep_monthly ?? 0);
         setHours(data.every_hours);
+        setSkipAssets(skip);
+        setSaved({
+          dir: data.directory,
+          keep: data.keep_daily ?? data.keep,
+          weekly: data.keep_weekly ?? 0,
+          monthly: data.keep_monthly ?? 0,
+          hours: data.every_hours,
+          skipAssets: skip,
+        });
       })
       .catch((err: Error) => setError(err.message));
   }, []);
 
   useEffect(load, [load]);
+  // 고치다 메뉴를 누르면 묻는다 (TODO 211 ②)
+  useEditedUnsaved("settings:backup", { dir, keep, weekly, monthly, hours, skipAssets }, saved, busy);
 
   async function save() {
     setBusy(true);
@@ -54,6 +70,7 @@ export default function BackupCard() {
         backup_keep_weekly: weekly,
         backup_keep_monthly: monthly,
         backup_every_hours: hours,
+        backup_skip_assets: skipAssets,
       });
       setNotice(dir.trim() ? "저장했습니다. [지금 백업]으로 한 번 확인해 보세요." : "자동 백업을 껐습니다.");
       load();
@@ -130,6 +147,17 @@ export default function BackupCard() {
           />
         </label>
       </div>
+
+      <label className="check-label backup-skip-assets">
+        <input type="checkbox" checked={skipAssets} onChange={(event) => setSkipAssets(event.target.checked)} />
+        <span>
+          <b>자동 백업에서 첨부 빼기 (문서만)</b>
+          <span className="hint">
+            첨부(그림 · 엑셀 · PPT)가 많아 한 벌이 너무 크거나 오래 걸리면 켭니다. 진행일지 · 보고 · 개요 같은 문서만 남습니다 —
+            첨부는 따로 복사해 두세요.
+          </span>
+        </span>
+      </label>
 
       {picking && (
         <FolderPicker

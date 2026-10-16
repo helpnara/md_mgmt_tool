@@ -2,7 +2,8 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { notifyError } from "../notify";
 import type { Meta, Project } from "../types";
-import { cellCount, cellEffect, DASH, dueLabel, EFFECT_UNIT, sumBy } from "../util";
+import { cellCount, cellEffect, DASH, dueLabel, EFFECT_UNIT, openRowClick, sumBy, useLatest } from "../util";
+import { storageGet, storageSet, useScrollMemory } from "../storage";
 import TotalRow from "./TotalRow";
 import ProblemsBanner from "./ProblemsBanner";
 import { backTarget, projectLink, useAddressBar } from "../nav";
@@ -109,13 +110,14 @@ function readFilters(params: URLSearchParams): typeof DEFAULT_FILTERS {
 }
 
 export default function ProjectList({ meta, onMetaChange, query }: Props) {
-  const [projects, setProjects] = useState<Project[]>([]);
+  // 처음에는 null — 받기 전에 "과제가 없습니다" 가 깜빡이지 않게 (TODO 210 ②)
+  const [projects, setProjects] = useState<Project[] | null>(null);
   // 조건은 주소에서 시작한다. 처음 열 때든, 과제를 보고 돌아왔을 때든 같은 길이다.
   const [filters, setFilters] = useState(() => readFilters(new URLSearchParams(query)));
   const showClasses =
     filters.type === meta.classified_type || meta.classifications.some((info) => Boolean(filters[info.key]));
   const [view, setView] = useState<"table" | "board">(
-    () => (localStorage.getItem("md-mgmt:view") === "board" ? "board" : "table"),
+    () => (storageGet("md-mgmt:view") === "board" ? "board" : "table"), // 막힌 PC 에서도 넘어지지 않게 (TODO 212)
   );
   // 홈의 [첫 과제 만들기]가 `#/projects?new=1` 로 보낸다 (TODO 84).
   // 조건이 아니라 한 번 쓰고 마는 신호라 filters 에 넣지 않는다 — 주소에도 남기지 않는다.
@@ -125,18 +127,24 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
   // 과제가 늘거나 다시 읽었을 때 대시보드도 같이 갱신한다.
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // 조건을 빨리 바꾸면 앞 요청이 늦게 올 수 있다 — 마지막 요청만 받는다 (TODO 210 ①)
+  const latest = useLatest();
   const load = useCallback(() => {
+    const mine = latest();
     api
       .listProjects(toQuery(filters))
       .then((rows) => {
+        if (!mine()) return;
         setProjects(rows);
         // 성공하면 지난 오류는 지운다. 안 그러면 한 번의 실패가 화면에 계속 남는다.
         setError(null);
       })
-      .catch((err: Error) => setError(err.message));
-  }, [filters]);
+      .catch((err: Error) => mine() && setError(err.message));
+  }, [filters, latest]);
 
   useEffect(load, [load]);
+  // 과제를 열었다 [← 과제 목록] 으로 오면 보던 자리로 (TODO 210 ③)
+  useScrollMemory(projects !== null);
 
   // 고른 조건과 주소를 맞춘다. 기본값은 적지 않아 주소가 짧게 유지된다.
   useAddressBar(
@@ -165,8 +173,9 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
   };
 
   // 합계 줄이 더하는 효과 — 연도를 골랐으면 **그 해에 세는 것만**(끝나는 해가 그 해). 홈의 금액과 같다 (TODO 181)
+  const rows = projects ?? [];
   const effectRows =
-    filters.year === ALL_YEARS ? projects : projects.filter((p) => !p.effect_year || p.effect_year === filters.year);
+    filters.year === ALL_YEARS ? rows : rows.filter((p) => !p.effect_year || p.effect_year === filters.year);
 
   return (
     <section className="project-list">
@@ -346,7 +355,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                 className={view === option ? "active" : "ghost"}
                 onClick={() => {
                   setView(option);
-                  localStorage.setItem("md-mgmt:view", option);
+                  storageSet("md-mgmt:view", option);
                 }}
               >
                 {option === "table" ? "표" : "보드"}
@@ -357,7 +366,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           <CopyTableButton
             headers={["번호", "과제", "상태", "속성", "성격", "그룹", "담당자", "유관부서", "태그", "시작", "마감", `기대효과(${EFFECT_UNIT})`, `실증효과(${EFFECT_UNIT})`, "기록", "미보고"]}
             rows={() =>
-              projects.map((project) => [
+              rows.map((project) => [
                 project.id,
                 project.title,
                 meta.statuses.find((status) => status.key === shownStatus(project))?.label ?? shownStatus(project),
@@ -424,9 +433,11 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
       {/* 읽지 못한 파일 · 값 — [다시 읽기] 를 누르기 전에도 늘 보인다 (TODO 164) */}
       <ProblemsBanner problems={meta.problems ?? []} onReindexed={() => { load(); onMetaChange(); }} />
 
-      {view === "board" && <ProjectBoard meta={meta} projects={projects} year={filters.year === ALL_YEARS ? undefined : filters.year} />}
+      {projects === null && !error && <p className="hint list-loading">불러오는 중…</p>}
 
-      {view === "table" && (
+      {projects !== null && view === "board" && <ProjectBoard meta={meta} projects={rows} year={filters.year === ALL_YEARS ? undefined : filters.year} />}
+
+      {projects !== null && view === "table" && (
       /* 좁은 화면에서는 표만 가로로 민다 — 한 줄 칸을 다시 꺾지 않는다 (TODO 160) */
       <div className="table-scroll">
       <table className="grid project-table">
@@ -451,13 +462,17 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           </tr>
         </thead>
         <tbody>
-          {projects.map((project) => {
+          {rows.map((project) => {
             const due = dueLabel(project.due_date, project.status);
+            const href = projectLink(project.id);
             return (
-              <tr key={project.id} onClick={() => (window.location.hash = projectLink(project.id))}>
+              // 줄 아무 데나 눌러도 열리지만, **제목은 진짜 링크**다 — 가운데 클릭 · Ctrl+클릭으로 새 탭, Tab 으로 닿는다 (TODO 210 ⑤)
+              <tr key={project.id} onClick={(event) => openRowClick(event, href)}>
                 <td className="col-title">
                   <span className="project-id">{project.id}</span>
-                  <span className="project-title">{project.title}</span>
+                  <a className="project-title row-link" href={href}>
+                    {project.title}
+                  </a>
                   <StageBand stage={project.stage} />
                 </td>
                 <td className="one-line">
@@ -543,7 +558,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               </tr>
             );
           })}
-          {projects.length === 0 && (
+          {rows.length === 0 && (
             <tr>
               <td colSpan={11} className="empty">
                 과제가 없습니다. [과제 추가]로 시작하세요.
@@ -552,9 +567,9 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           )}
         </tbody>
         {/* 지금 걸러진 과제만 더한다 (TODO 157). 효과는 기대·실증을 **따로** 더한다 — 합치지 않는다 */}
-        {projects.length > 0 && (
+        {rows.length > 0 && (
           <TotalRow
-            label={`합계 (${projects.length}건)`}
+            label={`합계 (${rows.length}건)`}
             cells={[
               null,
               null,
@@ -572,7 +587,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                 className: "num",
                 title: `기대효과 합계 → 실증효과 합계 (${EFFECT_UNIT})`,
               },
-              { text: cellCount(sumBy(projects, (p) => p.entry_count), "건"), className: "num" },
+              { text: cellCount(sumBy(rows, (p) => p.entry_count), "건"), className: "num" },
               null,
             ]}
           />

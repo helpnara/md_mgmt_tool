@@ -1,5 +1,22 @@
 import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
+import type { Health } from "./types";
+import { notifyError } from "./notify";
+
+/**
+ * 선행 과제 고르기용 가벼운 목록 (TODO 212) — 과제 폼이 열릴 때마다 전체 과제(200+ 줄, 모든 칸)를 받던 것을
+ * **창마다 한 번** 받아 번호 · 제목만 들고 있는다. 과제를 만들거나 · 고치거나 · 지우거나 · 번호를 바꾸면 비운다.
+ */
+let projectOptionsCache: Promise<{ id: string; title: string }[]> | null = null;
+
+export function forgetProjectOptions(): void {
+  projectOptionsCache = null;
+}
+
+/** 쓰기 요청이 끝나면 목록 기억을 비운다 — 실패해도(일부만 바뀌었을 수 있다) */
+function invalidating<T>(work: Promise<T>): Promise<T> {
+  return work.finally(forgetProjectOptions);
+}
 
 /** 서버에 닿지 못했을 때 (TODO 165) — 브라우저의 영어 `Failed to fetch` 대신 */
 export const OFFLINE_MESSAGE =
@@ -12,9 +29,22 @@ export const OFFLINE_MESSAGE =
  * 가 됐다(140 의 병합 칸). 글이 아닌 500 은 `Internal Server Error` 대신 오류 기록 자리를 알려 준다.
  */
 export function errorText(status: number, body: unknown): string {
+  // 서버가 사람 말로 한 줄 정리해 주면 그것이 먼저 (TODO 205) — 422 의 `message` 는 "기대효과: 숫자로 적어 주세요" 처럼 항목 이름이 든다
+  const message = (body as { message?: unknown } | null)?.message;
+  if (typeof message === "string" && message.trim()) return message;
   const detail = (body as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string" && detail.trim()) return detail;
   if (Array.isArray(detail)) {
+    // 사유 목록의 msg 도 이제 한국어다 — 한글이 든 것만 이어 쓴다(영어 기본 문구 "Field required" 같은 것은
+    // 아래의 "항목: …" 안내가 낫다)
+    const messages = [
+      ...new Set(
+        detail
+          .map((item) => (typeof item?.msg === "string" ? item.msg.trim() : ""))
+          .filter((text): text is string => /[가-힣]/.test(text)),
+      ),
+    ];
+    if (messages.length > 0) return messages.join(" · ");
     const fields = detail
       .map((item) => (Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : null))
       .filter((field): field is string => typeof field === "string" && field !== "body");
@@ -72,10 +102,12 @@ export const api = {
     id: string,
     payload: Omit<Partial<PromotionPlan>, "partners"> & { partners?: Partner[]; effect_expected?: number | null; decision_note?: string },
   ) =>
-    request<{ project_id: string; intake: IntakeDetail }>(`/api/intakes/${encodeURIComponent(id)}/promote`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    invalidating(
+      request<{ project_id: string; intake: IntakeDetail }>(`/api/intakes/${encodeURIComponent(id)}/promote`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    ),
   /** 사전점검을 매긴다 (TODO 155) — 서버가 지금의 체크리스트로 채점한다 */
   savePrecheck: (id: string, items: { group: string; item: string; choice: string | null; note: string | null }[]) =>
     request<IntakeDetail>(`/api/intakes/${encodeURIComponent(id)}/precheck`, {
@@ -144,16 +176,37 @@ export const api = {
     );
     return request<Project[]>(`/api/projects?${query.toString()}`);
   },
+  /**
+   * 과제 만들기. 서버가 막지는 않지만 알릴 것(같은 이름 과제 등, `warnings`)을 주면 아래 알림으로 띄운다 (TODO 205 · 212) —
+   * 만드는 길이 여럿(새 과제 · 이 과제로 새 과제)이라 한 자리에서.
+   */
   createProject: (payload: Partial<Project>) =>
-    request<Project>("/api/projects", { method: "POST", body: JSON.stringify(payload) }),
+    invalidating(request<Project>("/api/projects", { method: "POST", body: JSON.stringify(payload) })).then((created) => {
+      for (const warning of Array.isArray(created?.warnings) ? created.warnings : []) {
+        if (typeof warning === "string" && warning.trim()) notifyError(`만들었습니다 — ${warning}`);
+      }
+      return created;
+    }),
+  /** 선행 과제 자동완성용 번호 · 제목 (TODO 212) — 창마다 한 번, 바뀌면 다시 */
+  projectOptions: () => {
+    if (!projectOptionsCache) {
+      projectOptionsCache = request<Project[]>("/api/projects")
+        .then((rows) => rows.map((row) => ({ id: row.id, title: row.title })))
+        .catch((err: unknown) => {
+          projectOptionsCache = null; // 실패는 기억하지 않는다 — 다음에 다시
+          throw err;
+        });
+    }
+    return projectOptionsCache;
+  },
   getProject: (id: string) => request<Project>(`/api/projects/${id}`),
   updateProject: (id: string, payload: Partial<Project>) =>
-    request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
-  archiveProject: (id: string) => request<void>(`/api/projects/${id}/archive`, { method: "POST" }),
+    invalidating(request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) })),
+  archiveProject: (id: string) => invalidating(request<void>(`/api/projects/${id}/archive`, { method: "POST" })),
   /** 접수로 되돌리기 (TODO 171) — 미리보기 · 실행 */
   toIntakePlan: (id: string) => request<DemotePlan>(`/api/projects/${encodeURIComponent(id)}/to-intake`),
   toIntake: (id: string) =>
-    request<{ intake_id: string }>(`/api/projects/${encodeURIComponent(id)}/to-intake`, { method: "POST" }),
+    invalidating(request<{ intake_id: string }>(`/api/projects/${encodeURIComponent(id)}/to-intake`, { method: "POST" })),
   /**
    * 이 시작일로 만들면 어떤 번호가 붙는지 (TODO 95).
    * 번호의 연도는 **등록한 날이 아니라 착수년도**다 — 적어 두기보다 실제 번호를 보여 준다.
@@ -165,7 +218,7 @@ export const api = {
   /** 번호의 연도가 시작일과 어긋났는지, 옮기면 몇 번이 되는지. 파일은 건드리지 않는다. */
   yearFixPlan: (id: string) => request<YearFix>(`/api/projects/${id}/year-fix`),
   /** 미리보기대로 이 과제 하나의 번호를 옮긴다. */
-  yearFixApply: (id: string) => request<YearFix>(`/api/projects/${id}/year-fix`, { method: "POST" }),
+  yearFixApply: (id: string) => invalidating(request<YearFix>(`/api/projects/${id}/year-fix`, { method: "POST" })),
   /** 끝난 과제를 바탕으로 새 과제를 만든다 (TODO 109). 개요·담당자·태그가 넘어오고 이력은 남지 않는다. */
   // 다년도 과제 로드맵 (TODO 174)
   roadmap: () => request<Roadmap>("/api/roadmap"),
@@ -219,9 +272,11 @@ export const api = {
     }),
   trash: () => request<TrashItem[]>("/api/trash"),
   restoreFromTrash: (name: string) =>
-    request<{ restored_to: string; label: string }>(
-      `/api/trash/${encodeURIComponent(name)}/restore`,
-      { method: "POST" },
+    invalidating(
+      request<{ restored_to: string; label: string }>(
+        `/api/trash/${encodeURIComponent(name)}/restore`,
+        { method: "POST" },
+      ),
     ),
   saveSettings: (payload: Partial<AppSettings>) =>
     request<AppSettings>("/api/settings", { method: "PUT", body: JSON.stringify(payload) }),
@@ -296,9 +351,11 @@ export const api = {
       body: JSON.stringify({ code }),
     }),
   renumberApply: (code: string) =>
-    request<{ code: string; changed: { id: string; new_id: string; title: string }[] }>(
-      "/api/settings/project-code/renumber",
-      { method: "POST", body: JSON.stringify({ code }) },
+    invalidating(
+      request<{ code: string; changed: { id: string; new_id: string; title: string }[] }>(
+        "/api/settings/project-code/renumber",
+        { method: "POST", body: JSON.stringify({ code }) },
+      ),
     ),
   reportCandidates: (options: {
     includeInactive?: boolean;
@@ -359,7 +416,11 @@ export const api = {
     }),
   clearErrors: () => request<{ removed_files: number }>("/api/errors", { method: "DELETE" }),
   reindex: () =>
-    request<{ indexed: number; problems: { path: string; reason: string }[] }>("/api/reindex", {
-      method: "POST",
-    }),
+    invalidating(
+      request<{ indexed: number; problems: { path: string; reason: string }[] }>("/api/reindex", {
+        method: "POST",
+      }),
+    ),
+  /** 점검 (TODO 204 · 206) — 첨부 전체 용량 · 이전 버전 보관 실패. 새 칸은 서버가 아직 안 줄 수도 있다 */
+  health: () => request<Health>("/api/health"),
 };

@@ -182,6 +182,8 @@ export interface Project {
   open_feedback?: OpenFeedback[];
   /** 최근 진행일지의 `## 계획` — 다음 할 일 (TODO 112). 없으면 null */
   next_plan?: NextPlan | null;
+  /** 만들 때만 — 같은 이름 과제가 있다 등 막지는 않는 알림 (TODO 205) */
+  warnings?: string[];
 }
 
 /** 진행일지 서식의 계획 칸에서 뽑은 다음 할 일 (TODO 112). */
@@ -372,6 +374,27 @@ export interface AppSettings {
   /** 팀원 면담 구분 — null 이면 기본 목록. 저장할 때는 한 줄에 하나인 글로도 (TODO 182) */
   meeting_kinds: string[] | string | null;
   meeting_cycle_days: number;
+  /** 자동 백업에서 첨부를 빼고 문서만 (TODO 202 · 197 ③) — 서버가 아직 모르면 없다 */
+  backup_skip_assets?: boolean;
+  /** 이전 버전을 남기지 못한 문서 (TODO 206 ㉕) — 읽을 때만 온다 */
+  version_keep_failures?: VersionKeepFailure[];
+}
+
+/** 이전 버전 보관에 실패한 문서 하나 (TODO 206 ㉕) */
+export interface VersionKeepFailure {
+  path: string;
+  reason: string;
+  at?: string;
+}
+
+/** `/api/health` — 설정 › 점검 (TODO 204 · 206). 새 칸은 서버가 아직 안 줄 수도 있어 모두 선택 */
+export interface Health {
+  status: string;
+  vault?: string;
+  /** 첨부 전체 용량 · 개수 (TODO 204 · 197 ③) */
+  attachments_total_bytes?: number;
+  attachments_count?: number;
+  version_keep_failures?: VersionKeepFailure[];
 }
 
 export interface TrashItem {

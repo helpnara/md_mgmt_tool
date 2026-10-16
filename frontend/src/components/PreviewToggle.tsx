@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { storageGet, storageSet } from "../storage";
 
 const KEY = "md-mgmt:preview";
 
@@ -10,11 +11,11 @@ const KEY = "md-mgmt:preview";
  * 브라우저에 기억해 둔다.
  */
 export function usePreview(): [boolean, () => void] {
-  const [on, setOn] = useState(() => localStorage.getItem(KEY) !== "off");
+  const [on, setOn] = useState(() => storageGet(KEY) !== "off"); // 막힌 PC 에서도 넘어지지 않게 (TODO 212)
   const toggle = () =>
     setOn((value) => {
       const next = !value;
-      localStorage.setItem(KEY, next ? "on" : "off");
+      storageSet(KEY, next ? "on" : "off");
       return next;
     });
   return [on, toggle];

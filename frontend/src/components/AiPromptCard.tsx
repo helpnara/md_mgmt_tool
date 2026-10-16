@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { useEditedUnsaved } from "../util";
 
 /**
  * AI 요약 프롬프트의 앞뒤에 붙일 글 (TODO 71).
@@ -15,6 +16,9 @@ export default function AiPromptCard() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 마지막으로 불러온 글 — 고치다 메뉴를 누르면 묻는다 (TODO 211 ②)
+  const [saved, setSaved] = useState<{ prefix: string; suffix: string } | null>(null);
+  useEditedUnsaved("settings:ai-prompt", { prefix, suffix }, saved, busy);
 
   useEffect(() => {
     api
@@ -22,6 +26,7 @@ export default function AiPromptCard() {
       .then((s) => {
         setPrefix(s.ai_prompt_prefix ?? "");
         setSuffix(s.ai_prompt_suffix ?? "");
+        setSaved({ prefix: s.ai_prompt_prefix ?? "", suffix: s.ai_prompt_suffix ?? "" });
       })
       .catch(() => undefined);
     api.settingsDefaults().then((d) => setFallback(d.ai_prompt_prefix)).catch(() => undefined);
@@ -34,6 +39,7 @@ export default function AiPromptCard() {
       const saved = await api.saveSettings({ ai_prompt_prefix: prefix, ai_prompt_suffix: suffix });
       setPrefix(saved.ai_prompt_prefix ?? "");
       setSuffix(saved.ai_prompt_suffix ?? "");
+      setSaved({ prefix: saved.ai_prompt_prefix ?? "", suffix: saved.ai_prompt_suffix ?? "" });
       setNotice("저장했습니다.");
       window.setTimeout(() => setNotice(null), 3000);
     } catch (err) {

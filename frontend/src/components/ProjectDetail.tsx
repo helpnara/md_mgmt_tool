@@ -216,7 +216,7 @@ export default function ProjectDetail({
     });
     if (openReport !== null) extra.report = String(openReport);
     const next = projectLink(projectId, extra);
-    if (decodeURIComponent(window.location.hash) !== decodeURIComponent(next)) window.history.replaceState(null, "", next);
+    if (decodeURIComponent(window.location.hash) !== decodeURIComponent(next)) window.history.replaceState(window.history.state, "", next);
   }, [openReport, projectId]);
   // 브라우저 탭 제목 (TODO 169)
   useEffect(() => {
@@ -1206,7 +1206,7 @@ export default function ProjectDetail({
             setOpenReport(null);
             // 주소에 지운 보고가 남아 있으면 새로고침했을 때 없는 문서를 열려 한다.
             // projectLink 가 온 곳(back)은 그대로 두고 report 만 뗀다.
-            window.history.replaceState(null, "", projectLink(project.id));
+            window.history.replaceState(window.history.state, "", projectLink(project.id));
             load();
           }}
         />
