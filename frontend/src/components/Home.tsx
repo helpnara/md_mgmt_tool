@@ -663,6 +663,12 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
                 실증 {team.effect_verified_projects ?? 0}건
               </a>
               에 입력됨{" "}
+              {/* 실증 합계에 진행중 과제의 중간 결산이 섞여 있으면 얼마인지 밝힌다 (TODO 217) */}
+              {(team.effect_verified_interim_projects ?? 0) > 0 && (
+                <span className="interim-note" title="분기 · 반기 결산으로 진행중 과제에 적은 실증효과 — 과제가 끝나면 최종 값으로 바뀝니다">
+                  (실증 중 진행중 과제의 중간 결산 {money(team.effect_verified_interim ?? 0)} · {team.effect_verified_interim_projects}건){" "}
+                </span>
+              )}
               {/* 비대상이 있으면 분모를 "전체" 라고 적을 수 없다 (TODO 125) */}
               {(team.effect_managed ?? team.total) < team.total ? (
                 <>

@@ -71,8 +71,13 @@ def counted_expected(a: str = "p") -> str:
 
 
 def counted_verified(a: str = "p") -> str:
-    """합계에 드는 실증효과 (TODO 214 D2 · D3) — 효과 관리 대상이고 **완료한** 과제만. 진행중에 적어 둔 값은 남겨 두되 세지 않는다."""
-    return f"(CASE WHEN COALESCE({a}.no_effect, 0) = 0 AND {a}.status = 'done' THEN {a}.effect_verified END)"
+    """합계에 드는 실증효과 (TODO 214 D2 · 217) — 효과 관리 대상이면 **상태와 상관없이** 센다.
+
+    진행중 과제도 분기 · 반기 결산으로 실증효과를 적는다 — 팀 효과 금액을 중간중간 보려면 그 값이 합계에 들어야 한다
+    (사용자, 2026-10-18 · 214 D3 의 "완료 과제만" 을 되돌림). 다만 홈은 그중 **진행중 과제의 중간 결산이 얼마인지**를 따로 보인다
+    (`home._team` 의 `effect_verified_interim`) — 완료 결산과 중간 결산이 한 숫자에 섞여도 무엇이 섞였는지는 읽히게.
+    효과 관리 안 함(no_effect) 과제는 금액이 적혀 있어도 세지 않는다(파일은 그대로)."""
+    return f"(CASE WHEN COALESCE({a}.no_effect, 0) = 0 THEN {a}.effect_verified END)"
 
 
 def scope(year: str | None, alias: str = "p") -> tuple[str, list]:
@@ -80,7 +85,7 @@ def scope(year: str | None, alias: str = "p") -> tuple[str, list]:
 
     * `y_status` — 그 해의 상태(그 해 뒤에 끝났으면 진행중)
     * `y_ee` · `y_ev` — 그 해에 세는 기대 · 실증효과(끝나는 해가 아니면 NULL). 효과 관리 안 함은 NULL,
-      실증은 완료한 과제만 (TODO 214 D2 · D3 — `counted_*`)
+      실증은 진행중 과제의 중간 결산도 센다 (TODO 214 D2 · 217 — `counted_*`)
     * `y_new` — 그 해에 착수했는가(번호의 연도)
     * `y_effect_year` — 효과 금액을 세는 해(과제목록의 합계 줄이 그 해 것만 더한다)
 

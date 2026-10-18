@@ -105,19 +105,52 @@ def test_no_effect_project_adds_nothing_to_the_totals(client):
     assert (row["effect_counted_expected"], row["effect_counted_verified"]) == (None, None)
 
 
-def test_verified_money_counts_only_for_done_projects(client):
-    make(client, "진행중", status="in_progress", effect_expected=10, effect_verified=7)
-    make(client, "완료", status="done", effect_expected=2, effect_verified=3)
-    for year in (None, date.today().strftime("%Y")):
-        team = client.get("/api/home", params={"year": year} if year else {}).json()["team"]
-        assert team["effect_expected"] == 12
-        assert team["effect_verified"] == 3
-        assert team["effect_verified_projects"] == 1
-        listed = client.get("/api/projects", params={"effect": "verified", **({"year": year} if year else {})}).json()
-        assert [item["title"] for item in listed] == ["완료"]
-    rows = {item["title"]: item for item in client.get("/api/projects").json()}
-    assert rows["진행중"]["effect_verified"] == 7  # 저장된 값은 그대로
-    assert rows["진행중"]["effect_counted_verified"] is None
+def test_interim_verified_money_of_in_progress_projects_counts_and_is_shown_apart(client):
+    """TODO 217 — 진행중 과제도 분기 · 반기 결산으로 실증효과를 적는다. 홈 합계에 들고, 그중 중간 결산이 얼마인지 따로 보인다."""
+    year = date.today().strftime("%Y")
+    make(client, "진행중", status="in_progress", start_date=f"{year}-01-01", due_date=f"{year}-12-31",
+         effect_expected=10, effect_verified=7)
+    make(client, "완료", status="done", start_date=f"{year}-01-01", completed_at=f"{year}-03-31",
+         effect_expected=2, effect_verified=3)
+    make(client, "비대상", status="in_progress", start_date=f"{year}-01-01", due_date=f"{year}-12-31",
+         no_effect=True, effect_expected=50, effect_verified=50)
+    for params in ({}, {"year": year}):
+        team = client.get("/api/home", params=params).json()["team"]
+        assert (team["effect_expected"], team["effect_verified"]) == (12, 10)
+        assert team["effect_verified_projects"] == 2
+        assert (team["effect_verified_interim"], team["effect_verified_interim_projects"]) == (7, 1)
+        # 정합성 — 홈의 합계 = 목록 "세는 금액" 의 합 = 눌렀을 때 나오는 목록 (5.8)
+        rows = client.get("/api/projects", params=params).json()
+        assert sum(item["effect_counted_verified"] or 0 for item in rows) == team["effect_verified"]
+        assert sum(item["effect_counted_expected"] or 0 for item in rows) == team["effect_expected"]
+        listed = client.get("/api/projects", params={"effect": "verified", **params}).json()
+        assert sorted(item["title"] for item in listed) == ["완료", "진행중"]
+
+
+def test_completing_a_project_moves_interim_money_to_final_without_changing_the_total(client):
+    """중간 결산 → 완료: 합계는 그대로, 중간 결산 몫만 0 으로 (같은 돈이 두 번 세어지지 않는다)."""
+    year = date.today().strftime("%Y")
+    project = make(client, "결산", status="in_progress", start_date=f"{year}-01-01", due_date=f"{year}-12-31",
+                   effect_expected=10, effect_verified=4)
+    before = client.get("/api/home", params={"year": year}).json()["team"]
+    assert (before["effect_verified"], before["effect_verified_interim"]) == (4, 4)
+    client.patch(f"/api/projects/{project['id']}", json={"effect_verified": 6})  # 반기 결산 — 누적값으로 고쳐 적음
+    mid = client.get("/api/home", params={"year": year}).json()["team"]
+    assert (mid["effect_verified"], mid["effect_verified_interim"]) == (6, 6)
+    client.patch(f"/api/projects/{project['id']}", json={"status": "done"})
+    after = client.get("/api/home", params={"year": year}).json()["team"]
+    assert (after["effect_verified"], after["effect_verified_interim"], after["effect_verified_interim_projects"]) == (6, 0, 0)
+
+
+def test_interim_money_of_a_multi_year_project_counts_in_the_year_it_ends(client):
+    """효과는 끝나는 해에 한 번만 센다(TODO 181) — 내년에 끝나는 과제의 중간 결산은 내년 홈에. 두 해에 두 번 세지 않는다."""
+    this = int(date.today().strftime("%Y"))
+    make(client, "다년도", status="in_progress", start_date=f"{this}-01-01", due_date=f"{this + 1}-06-30",
+         effect_expected=10, effect_verified=3)
+    now = client.get("/api/home", params={"year": str(this)}).json()["team"]
+    later = client.get("/api/home", params={"year": str(this + 1)}).json()["team"]
+    assert now["effect_verified"] == 0 and later["effect_verified"] == 3
+    assert later["effect_verified_interim"] == 3
 
 
 def test_done_unverified_count_matches_its_list(client):
@@ -131,7 +164,8 @@ def test_done_unverified_count_matches_its_list(client):
 def test_effect_warnings_on_save(client):
     project = client.post("/api/projects", json={"title": "실증만", "effect_verified": 5}).json()
     assert any("기대효과 없이" in text for text in project["warnings"])
-    assert any("완료한 과제만" in text for text in project["warnings"])
+    # 진행중 과제의 실증은 중간 결산으로 센다 — "완료한 과제만" 경고는 없어졌다 (TODO 217)
+    assert not any("완료한 과제만" in text for text in project["warnings"])
 
 
 def test_roadmap_lineage_sums_follow_the_same_rule(client):
@@ -143,7 +177,8 @@ def test_roadmap_lineage_sums_follow_the_same_rule(client):
          effect_expected=100, effect_verified=100, no_effect=True)
     lineage = client.get("/api/roadmap").json()["lineages"][0]
     assert lineage["effect_expected"] == 8
-    assert lineage["effect_verified"] == 4
+    # 진행중 2단계의 중간 결산 9 도 센다 — 비대상 100 은 뺀다 (TODO 214 D2 · 217)
+    assert lineage["effect_verified"] == 13
 
 
 # ── D5 · F15 날짜 ───────────────────────────────────────────────────────────

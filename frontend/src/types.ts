@@ -584,6 +584,9 @@ export interface HomeTeam {
   effect_managed?: number;
   effect_expected_projects?: number;
   effect_verified_projects?: number;
+  /** 실증 합계 가운데 진행중 과제의 중간 결산 — 금액 · 건수 (TODO 217) */
+  effect_verified_interim?: number;
+  effect_verified_interim_projects?: number;
   /** 완료일 기준으로 센 완료 수 (TODO 104). done 은 번호의 연도 기준이라 둘이 다르다. */
   done_in_year?: number;
   /** 그 해에 새로 착수한 과제 — 번호의 연도 (TODO 181) */
@@ -1109,7 +1112,7 @@ export interface ErrorListing {
   inputs?: InputRejection[];
 }
 
-// TODO 214 D2 · D3 — 목록 줄이 실어 오는 "세는 금액"(효과 관리 안 함 · 완료 전 실증은 0). 합계 줄이 홈과 같은 수를 더하게
+// TODO 214 D2 · 217 — 목록 줄이 실어 오는 "세는 금액"(효과 관리 안 함은 0, 진행중 과제의 중간 결산은 센다). 합계 줄이 홈과 같은 수를 더하게
 export interface Project {
   effect_counted_expected?: number | null;
   effect_counted_verified?: number | null;

@@ -157,13 +157,12 @@ def build(conn: sqlite3.Connection, today: date | None = None) -> dict[str, Any]
             "current_stage": max(live_stages) if live_stages else None,
             "start_date": min(starts) if starts else None,
             "end_date": max(ends) if ends else None,
-            # 홈과 같은 셈 (TODO 214 D2 · D3) — 효과 관리 안 함은 빼고, 실증은 완료한 과제만
+            # 홈과 같은 셈 (TODO 214 D2 · 217) — 효과 관리 안 함은 빼고, 실증은 진행중 과제의 중간 결산도 센다
             "effect_expected": sum(
                 item["effect_expected"] or 0 for item in present if not rows[item["id"]]["no_effect"]
             ),
             "effect_verified": sum(
-                item["effect_verified"] or 0 for item in present
-                if not rows[item["id"]]["no_effect"] and item["status"] == "done"
+                item["effect_verified"] or 0 for item in present if not rows[item["id"]]["no_effect"]
             ),
             "projects": projects,
             "warnings": warnings,

@@ -83,6 +83,9 @@ def _team(conn: sqlite3.Connection, year: str | None, period: str | None = None)
         "       COALESCE(SUM(y_ev), 0) AS effect_verified,"
         "       SUM(CASE WHEN COALESCE(y_ee, 0) > 0 THEN 1 ELSE 0 END) AS ee_n,"
         "       SUM(CASE WHEN COALESCE(y_ev, 0) > 0 THEN 1 ELSE 0 END) AS ev_n,"
+        # 실증 합계 가운데 진행중 과제의 중간 결산 (TODO 217) — 완료 결산과 섞여도 얼마가 중간 값인지 읽히게
+        f"       COALESCE(SUM(CASE WHEN y_status <> '{_DONE}' THEN y_ev END), 0) AS ev_interim,"
+        f"       SUM(CASE WHEN y_status <> '{_DONE}' AND COALESCE(y_ev, 0) > 0 THEN 1 ELSE 0 END) AS ev_interim_n,"
         # 완료했는데 실증효과를 안 적은 과제 (TODO 106-C). 홈이 세어 두어야 연말에 빈칸을 만난다.
         # **효과성 관리 비대상은 뺀다** (TODO 125) — 금액으로 재지 않는 과제가 여기 계속
         # 남으면 숫자가 줄지 않고, 줄지 않는 경고는 곧 안 보게 된다.
@@ -106,6 +109,9 @@ def _team(conn: sqlite3.Connection, year: str | None, period: str | None = None)
         # 성립하지 않는다. 몇 건에서 나온 값인지 밝히면 오해가 생기지 않는다.
         "effect_expected_projects": row["ee_n"] or 0,
         "effect_verified_projects": row["ev_n"] or 0,
+        # 그중 진행중(그 해의 상태) 과제의 중간 결산 — 금액과 건수 (TODO 217)
+        "effect_verified_interim": round(row["ev_interim"] or 0, 2),
+        "effect_verified_interim_projects": row["ev_interim_n"] or 0,
         "done_unverified": row["done_unverified"] or 0,
         # 효과 금액으로 관리하는 과제 수 (TODO 125). total 과 같으면 비대상이 없다는 뜻이다.
         "effect_managed": row["managed_n"] or 0,

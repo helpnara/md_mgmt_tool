@@ -899,7 +899,7 @@ export default function ProjectDetail({
             <dd>
               {(() => {
                 const effect = effectText(project.effect_expected, project.effect_verified);
-                // 비대상 과제 — 금액이 있어도 합계에서 빠진다(흐리게) · 완료 전 실증은 합계에 안 든다 (TODO 214 D2 · D3)
+                // 비대상 과제 — 금액이 있어도 합계에서 빠진다(흐리게) (TODO 214 D2). 진행중 과제의 실증은 중간 결산으로 합계에 든다 (217)
                 if (project.no_effect)
                   return (
                     <span className="effect-dim" title="효과성 관리 비대상 과제 — 적어 둔 금액은 합계에서 빠집니다">
@@ -913,8 +913,8 @@ export default function ProjectDetail({
                     {effect.text}
                     {!effect.verified && <span className="muted"> · 기대</span>}
                     {effect.verified && project.status !== "done" && (
-                      <span className="muted" title="실증효과는 완료한 과제만 합계에 들어갑니다">
-                        {" "}· 완료 전이라 실증은 합계 밖
+                      <span className="muted" title="진행중 과제의 실증효과 — 분기 · 반기 결산으로 적은 값이 홈 합계에 들어갑니다">
+                        {" "}· 중간 결산
                       </span>
                     )}
                   </span>

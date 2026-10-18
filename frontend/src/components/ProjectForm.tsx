@@ -648,9 +648,11 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
               완료 과제입니다. 실증효과를 적어 두면 홈의 실증 합계에 잡힙니다. (모르면 비워 두어도 됩니다)
             </span>
           )}
-          {/* 실증효과는 완료 과제만 합계에 (D3) · 기대효과 없이 실증만 있으면 알린다 */}
+          {/* 진행중 과제의 실증효과는 중간 결산으로 홈 합계에 바로 든다 (TODO 217 — 214 D3 를 되돌림) */}
           {!noEffect && verifiedFilled && form.status !== "done" && (
-            <span className="hint warn-text effect-note">완료 전에는 합계에 들어가지 않습니다.</span>
+            <span className="hint effect-note">
+              중간 결산으로 홈의 실증 합계에 들어갑니다 — 분기 · 반기 결산 때 지금까지 확인된 금액으로 고쳐 적으세요.
+            </span>
           )}
           {!noEffect && verifiedFilled && !expectedFilled && (
             <span className="hint warn-text effect-note">기대효과 없이 실증효과만 있습니다 — 기대효과도 적어 주세요.</span>

@@ -418,8 +418,6 @@ def effect_warnings(status: str, expected: float | None, verified: float | None,
     out = []
     if verified and not expected:
         out.append("기대효과 없이 실증효과만 적혀 있습니다.")
-    if verified and status != DONE_STATUS:
-        out.append("실증효과는 완료한 과제만 합계에 듭니다 — 완료 전까지는 적어 두기만 합니다.")
     return out
 
 

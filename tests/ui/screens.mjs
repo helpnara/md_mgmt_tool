@@ -5255,6 +5255,30 @@ async function main() {
     }
   });
 
+  console.log("\n[45] 진행중 과제의 실증효과는 중간 결산으로 홈 합계에 (TODO 217)");
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
+  await check("진행중 과제에 적은 실증효과가 홈 합계에 들고, 그중 중간 결산이 따로 보인다", async () => {
+    const year = String(new Date().getFullYear());
+    const before = (await api.get(`/api/home?year=${year}`)).team;
+    const made = await api.post("/api/projects", {
+      title: `중간 결산 확인 ${Date.now()}`, status: "in_progress",
+      start_date: `${year}-01-01`, due_date: `${year}-12-31`, effect_expected: 4, effect_verified: 2.5,
+    });
+    try {
+      const after = (await api.get(`/api/home?year=${year}`)).team;
+      equal(Math.round((after.effect_verified - before.effect_verified) * 100) / 100, 2.5, "실증 합계가 2.5 늘어난다");
+      expect((after.effect_verified_interim ?? 0) >= 2.5, `중간 결산 금액: ${after.effect_verified_interim}`);
+      await go(`#/?year=${year}`);
+      const tile = await page.locator(".home-stat.effect").innerText();
+      expect(tile.includes("중간 결산"), `홈 효과 칸에 중간 결산 표시가 없다: ${tile}`);
+      await go(`#/projects/${made.id}`);
+      expect((await page.locator(".project-detail, .detail-columns").first().innerText()).includes("중간 결산"), "과제 상세에 중간 결산 표시");
+    } finally {
+      await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
