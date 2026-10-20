@@ -407,6 +407,8 @@ export interface TrashItem {
   origin: string | null;
   restorable: boolean;
   is_folder: boolean;
+  /** 함께 옮긴 첨부의 이름 (TODO 218) — 기록을 지울 때 그 기록에만 쓰인 첨부. 되돌리면 함께 돌아온다 */
+  attachments?: string[];
 }
 
 export interface DashboardCount {

@@ -25,6 +25,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date as date_cls
 
+from .. import clock
 from ..config import CLASSIFICATION_KEYS, CLASSIFIED_TYPE, FINISHED_STATUSES, STATUS_KEYS, STATUSES
 from . import intakes as intakes_service
 from . import period as period_service
@@ -419,7 +420,7 @@ def _compare(conn: sqlite3.Connection) -> list[dict]:
     return [
         {"year": year, **{k: v for k, v in _team(conn, year).items()}}
         # 아직 오지 않은 해(다년도 과제의 마감년도)는 추이에 세우지 않는다 (TODO 181)
-        for year in [item for item in years(conn) if item <= str(date_cls.today().year)][:COMPARE_YEARS]
+        for year in [item for item in years(conn) if item <= str(clock.today().year)][:COMPARE_YEARS]
     ][::-1]  # 화면에는 왼쪽이 과거
 
 
@@ -545,7 +546,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
         "year": year,
         "period": period,
         "years": available,
-        "today": date_cls.today().isoformat(),
+        "today": clock.today().isoformat(),
         "this_week": {
             "report_date": reports_service.default_report_date(),
             "candidates": len(candidates),

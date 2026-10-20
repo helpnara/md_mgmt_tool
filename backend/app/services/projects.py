@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Any
 
+from .. import clock
 from ..config import CLASSIFICATION_KEYS, DEFAULT_STATUS, STATUS_KEYS, LEGACY_STATUS_MAP, get_settings, normalize_status
 from .. import schemas as rules
 from ..vault import markdown as md
@@ -240,7 +241,7 @@ def normalize_partners(value: object) -> list[dict]:
 
 
 def now_iso() -> str:
-    return datetime.now().astimezone().replace(microsecond=0).isoformat()
+    return clock.now().replace(microsecond=0).isoformat()
 
 
 def project_year(start_date: str | None = None) -> int:
@@ -259,7 +260,7 @@ def project_year(start_date: str | None = None) -> int:
         # 오타로 `0025-01-01` 같은 값이 들어오면 없는 연도의 번호가 생긴다. 그때는 올해로.
         if 1900 <= year <= 2999:
             return year
-    return datetime.now().year
+    return clock.today().year
 
 
 def next_project_id(year: int | None = None, code: str | None = None) -> str:
@@ -276,7 +277,7 @@ def next_project_id(year: int | None = None, code: str | None = None) -> str:
     """
     settings = get_settings()
     settings.ensure_dirs()
-    year = year or datetime.now().year
+    year = year or clock.today().year
     if code is None:
         code = settings_service.project_code()
     prefix = f"{year}-{code}-" if code else f"{year}-"
@@ -453,7 +454,7 @@ def overview_is_blank(body: str | None) -> bool:
 
 
 def date_today() -> str:
-    return datetime.now().date().isoformat()
+    return clock.today().isoformat()
 
 
 def normalize_day(value: object, field: str = "completed_at") -> str | None:

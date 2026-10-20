@@ -27,7 +27,14 @@ export default function TrashCard() {
     setError(null);
     try {
       const result = await api.restoreFromTrash(item.trash_name);
-      setNotice(`${result.label} 을(를) 되돌렸습니다.`);
+      const count = item.attachments?.length ?? 0;
+      const left = result.attachments_left ?? [];
+      // 함께 옮긴 첨부도 돌아온다 (TODO 218). 막혀 남은 것은 제 줄로 보관함에 남는다
+      setNotice(
+        `${result.label} 을(를) 되돌렸습니다.` +
+          (count > left.length ? ` 첨부 ${count - left.length}개도 함께 돌아왔습니다.` : "") +
+          (left.length > 0 ? ` 첨부 ${left.length}개(${left.join(", ")})는 다른 프로그램이 잡고 있어 보관함에 남았습니다 — 닫고 하나씩 되돌려 주세요.` : ""),
+      );
       window.setTimeout(() => setNotice(null), 4000);
       load();
     } catch (err) {
@@ -59,8 +66,14 @@ export default function TrashCard() {
           {items.map((item) => (
             <li key={item.trash_name}>
               <span className="trash-kind">{item.kind_label ?? "기록 없음"}</span>
-              <span className="trash-label" title={item.origin ?? item.trash_name}>
+              <span
+                className="trash-label"
+                title={[item.origin ?? item.trash_name, ...(item.attachments ?? []).map((name) => `· ${name}`)].join("\n")}
+              >
                 {item.label}
+                {(item.attachments?.length ?? 0) > 0 && (
+                  <span className="muted trash-with"> · 첨부 {item.attachments!.length}개 함께</span>
+                )}
               </span>
               <span className="muted trash-when">
                 {item.deleted_at ? formatDateTime(item.deleted_at) : "—"}

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from app import clock
 
 
 def make(client, title, **extra):
@@ -28,7 +29,7 @@ def week(client) -> dict:
 
 
 def day(offset: int) -> str:
-    return (date.today() + timedelta(days=offset)).isoformat()
+    return (clock.today() + timedelta(days=offset)).isoformat()
 
 
 def test_nothing_to_say_without_drafts(client):
@@ -154,6 +155,6 @@ def test_the_year_filter_does_not_hide_a_draft(client):
     assert project["id"].startswith("2025-")
     draft(client, project["id"], day(-2))
 
-    for year in ("", str(date.today().year), "2025"):
+    for year in ("", str(clock.today().year), "2025"):
         data = client.get("/api/home", params={"year": year} if year else {}).json()["this_week"]
         assert data["drafts"] == 1, year

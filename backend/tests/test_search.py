@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app import clock
+
 
 def seed(client):
     first = client.post(
@@ -75,7 +77,7 @@ def test_project_list_due_filters(client):
 
     first, second = seed(client)
     client.patch(f"/api/projects/{first['id']}", json={"due_date": "2020-01-01"})
-    soon_date = (date.today() + timedelta(days=10)).isoformat()
+    soon_date = (clock.today() + timedelta(days=10)).isoformat()
     third = client.post("/api/projects", json={"title": "곧 마감", "due_date": soon_date}).json()
 
     overdue = [item["id"] for item in client.get("/api/projects", params={"due": "overdue"}).json()]

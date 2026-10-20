@@ -1,6 +1,7 @@
 """진행일지 생성·수정·삭제."""
 from __future__ import annotations
 
+import posixpath
 import re
 import sqlite3
 from datetime import date as date_cls
@@ -8,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .. import clock
 from ..config import get_settings
 from .. import schemas as rules
 from ..vault import markdown as md
@@ -46,7 +48,7 @@ def create_entry(conn: sqlite3.Connection, project_id: str, data: dict[str, Any]
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     # 날짜는 엄격히, 비우면 오늘 (TODO 205) — `20260101` · `2026-W01` 같은 값이 파일명에 들어가지 않게
-    entry_date = check_entry_date(data.get("date"), default=date_cls.today().isoformat())
+    entry_date = check_entry_date(data.get("date"), default=clock.today().isoformat())
     # 제목 100자 · 한 줄, 본문 2,000,000자 (TODO 214 D14)
     title = rules.one_line(data.get("title"), "entry_title", rules.TITLE_MAX) or DEFAULT_TITLE
     rules.check_body(data.get("body"))
@@ -87,7 +89,7 @@ def check_entry_date(value: object, default: str) -> str:
     진행일지는 한 일의 기록이다. `9999-12-31` 하나가 그 과제의 "최근 갱신" 을 영영 고정해 정렬 · 묵힘이 깨졌다.
     """
     day = rules.strict_day(value, "date", default=default)
-    if day > date_cls.today().isoformat():
+    if day > clock.today().isoformat():
         raise paths.InvalidDateError(f"진행일지 날짜가 오늘보다 뒤입니다 ({day}).")
     return day
 
@@ -218,6 +220,7 @@ def delete_entry(conn: sqlite3.Connection, entry_id: int) -> None:
     trash = get_settings().trash_dir
     trash.mkdir(parents=True, exist_ok=True)
     target = paths.unique_path(trash, f"{row['project_id']}-{path.stem}-{datetime.now():%Y%m%d%H%M%S}", ".md")
+    owned = _owned_attachments(conn, row)
     paths.move(path, target)
     trash_service.record(
         "entry",
@@ -226,8 +229,68 @@ def delete_entry(conn: sqlite3.Connection, entry_id: int) -> None:
         origin=path,
         project_id=row["project_id"],
     )
-    index_project(conn, project_dir(conn, row["project_id"]))
+    # 이 기록에만 쓰인 첨부도 함께 보관함으로 (TODO 218) — 예전에는 `assets/` 에 남아 [정리] 를 눌러야 치워졌고,
+    # 기록을 되돌릴 때는 따로 하나씩 찾아야 했다. 하나가 잡혀 있으면(다른 프로그램) 그것만 제자리에 남는다.
+    directory = project_dir(conn, row["project_id"])
+    for attachment in owned:
+        source = directory / attachment["rel_path"]
+        if not source.is_file():
+            continue
+        moved = paths.unique_path(
+            trash, f"{row['project_id']}-{datetime.now():%Y%m%d%H%M%S}-{source.stem}", source.suffix
+        )
+        try:
+            paths.move(source, moved, retry=True)
+        except (OSError, paths.FileInUseError):
+            continue
+        trash_service.record(
+            "attachment",
+            label=attachment["orig_name"],
+            moved_to=moved,
+            origin=source,
+            project_id=row["project_id"],
+            parent=target.name,
+        )
+    index_project(conn, directory)
     conn.commit()
+
+
+def _owned_attachments(conn: sqlite3.Connection, row: sqlite3.Row) -> list[sqlite3.Row]:
+    """기록을 지울 때 함께 옮길 첨부 — 이 기록의 것이고 **다른 곳에서 쓰지 않는** 것 (TODO 218).
+
+    이 기록의 것: 이 기록에 올린 첨부(`entry_id`)이거나 이 기록 본문이 링크하는 `assets/` 파일.
+    다른 기록 · 과제 개요 · 보고 본문이 같은 파일을 링크하면 남긴다 — 옮기면 그쪽 링크가 끊긴다.
+    보고 자료(`report_id`)는 보고의 것이라 건드리지 않는다.
+    """
+    from .attachments import ENTRY_DOC_DIR, PROJECT_DOC_DIR, referenced_paths
+
+    project_id = row["project_id"]
+    mine = referenced_paths([(row["body"] or "", ENTRY_DOC_DIR)])
+    others: list[tuple[str, str]] = [
+        (other["body"] or "", ENTRY_DOC_DIR)
+        for other in conn.execute(
+            "SELECT body FROM entry WHERE project_id = ? AND id <> ?", (project_id, row["id"])
+        )
+    ]
+    others += [
+        (project["body"] or "", PROJECT_DOC_DIR)
+        for project in conn.execute("SELECT body FROM project WHERE id = ?", (project_id,))
+    ]
+    others += [
+        (report["body"] or "", posixpath.dirname(report["rel_path"]))
+        for report in conn.execute("SELECT body, rel_path FROM report WHERE project_id = ?", (project_id,))
+    ]
+    used_elsewhere = referenced_paths(others)
+    return [
+        attachment
+        for attachment in conn.execute(
+            "SELECT * FROM attachment WHERE project_id = ? AND report_id IS NULL ORDER BY rel_path",
+            (project_id,),
+        )
+        if (attachment["entry_id"] == row["id"] or attachment["rel_path"] in mine)
+        and attachment["rel_path"].startswith("assets/")
+        and attachment["rel_path"] not in used_elsewhere
+    ]
 
 
 # ── 다음 할 일 (TODO 112) ──────────────────────────────────────────────────

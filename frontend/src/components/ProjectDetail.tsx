@@ -1484,7 +1484,7 @@ export default function ProjectDetail({
                   <button
                     className="ghost danger"
                     onClick={async () => {
-                      if (!window.confirm("이 기록을 삭제 보관함으로 옮길까요?")) return;
+                      if (!window.confirm("이 기록을 삭제 보관함으로 옮길까요?\n이 기록에만 쓰인 첨부도 함께 옮기고, 되돌리면 함께 돌아옵니다.")) return;
                       if (!(await attempt(() => api.deleteEntry(entry.id)))) return;
                       load();
                     }}

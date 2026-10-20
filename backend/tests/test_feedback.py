@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from datetime import date
+from app import clock
 
 
 def make(client, title, **extra):
@@ -67,7 +68,7 @@ def test_marking_done_takes_it_out_of_the_next_draft(client):
     rid = frozen_report(client, project["id"], "2026-08-25")
     client.patch(f"/api/reports/{rid}", json={"feedback": "원가 다시 보고"})
     done = client.post(f"/api/reports/{rid}/feedback-done", json={"done": True}).json()
-    assert done["feedback_done"] == date.today().isoformat()
+    assert done["feedback_done"] == clock.today().isoformat()
     assert client.get(f"/api/projects/{project['id']}").json()["open_feedback"] == []
 
     nxt = client.post(f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-09-01"}).json()

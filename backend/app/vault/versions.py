@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from .. import clock
 from ..config import get_settings
 
 # 파일 이름에 쓸 시각. 윈도우가 콜론을 못 쓰므로 `_` 와 숫자만 쓴다.
@@ -248,7 +249,7 @@ def restore(conn, rel_path: str, stamp: str) -> dict[str, Any]:
     current = md.load(target)
     meta = dict(current.meta) if current.meta else dict(old.meta)
     if "updated_at" in meta:
-        meta["updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        meta["updated_at"] = clock.now().isoformat(timespec="seconds")
     md.save(target, md.MarkdownDoc(meta, old.body))
 
     # 과제 폴더 안이면 그 과제만, 아니면 통째로 다시 읽는다.

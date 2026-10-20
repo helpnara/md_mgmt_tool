@@ -9,9 +9,10 @@ import os
 import re
 from datetime import date, timedelta
 from pathlib import Path
+from app import clock
 
-TODAY = date.today().isoformat()
-TOMORROW = (date.today() + timedelta(days=1)).isoformat()
+TODAY = clock.today().isoformat()
+TOMORROW = (clock.today() + timedelta(days=1)).isoformat()
 
 
 def make(client, title="과제", **extra):
@@ -107,7 +108,7 @@ def test_no_effect_project_adds_nothing_to_the_totals(client):
 
 def test_interim_verified_money_of_in_progress_projects_counts_and_is_shown_apart(client):
     """TODO 217 — 진행중 과제도 분기 · 반기 결산으로 실증효과를 적는다. 홈 합계에 들고, 그중 중간 결산이 얼마인지 따로 보인다."""
-    year = date.today().strftime("%Y")
+    year = clock.today().strftime("%Y")
     make(client, "진행중", status="in_progress", start_date=f"{year}-01-01", due_date=f"{year}-12-31",
          effect_expected=10, effect_verified=7)
     make(client, "완료", status="done", start_date=f"{year}-01-01", completed_at=f"{year}-03-31",
@@ -129,7 +130,7 @@ def test_interim_verified_money_of_in_progress_projects_counts_and_is_shown_apar
 
 def test_completing_a_project_moves_interim_money_to_final_without_changing_the_total(client):
     """중간 결산 → 완료: 합계는 그대로, 중간 결산 몫만 0 으로 (같은 돈이 두 번 세어지지 않는다)."""
-    year = date.today().strftime("%Y")
+    year = clock.today().strftime("%Y")
     project = make(client, "결산", status="in_progress", start_date=f"{year}-01-01", due_date=f"{year}-12-31",
                    effect_expected=10, effect_verified=4)
     before = client.get("/api/home", params={"year": year}).json()["team"]
@@ -144,7 +145,7 @@ def test_completing_a_project_moves_interim_money_to_final_without_changing_the_
 
 def test_interim_money_of_a_multi_year_project_counts_in_the_year_it_ends(client):
     """효과는 끝나는 해에 한 번만 센다(TODO 181) — 내년에 끝나는 과제의 중간 결산은 내년 홈에. 두 해에 두 번 세지 않는다."""
-    this = int(date.today().strftime("%Y"))
+    this = int(clock.today().strftime("%Y"))
     make(client, "다년도", status="in_progress", start_date=f"{this}-01-01", due_date=f"{this + 1}-06-30",
          effect_expected=10, effect_verified=3)
     now = client.get("/api/home", params={"year": str(this)}).json()["team"]
@@ -217,8 +218,8 @@ def test_entry_outside_the_project_period_is_kept_with_a_warning(client):
 def test_report_dates_are_strict_and_near_today(client):
     project = make(client)
     url = f"/api/projects/{project['id']}/reports/draft"
-    for value in ("20260101", "2026-W02-1", "9999-12-31", (date.today() + timedelta(days=400)).isoformat(),
-                  (date.today() - timedelta(days=400)).isoformat()):
+    for value in ("20260101", "2026-W02-1", "9999-12-31", (clock.today() + timedelta(days=400)).isoformat(),
+                  (clock.today() - timedelta(days=400)).isoformat()):
         assert client.post(url, json={"report_date": value}).status_code == 400, value
     draft = client.post(url, json={"report_date": TODAY}).json()
     assert client.patch(f"/api/reports/{draft['id']}", json={"report_date": "20261001"}).status_code == 400
@@ -226,12 +227,12 @@ def test_report_dates_are_strict_and_near_today(client):
 
 def test_a_report_more_than_a_week_ahead_cannot_be_frozen(client):
     project = make(client)
-    ahead = (date.today() + timedelta(days=30)).isoformat()
+    ahead = (clock.today() + timedelta(days=30)).isoformat()
     draft = client.post(f"/api/projects/{project['id']}/reports/draft", json={"report_date": ahead}).json()
     frozen = client.post(f"/api/reports/{draft['id']}/freeze")
     assert frozen.status_code == 400 and "1주 넘게" in frozen.json()["detail"]
     assert client.get(f"/api/reports/{draft['id']}").json()["frozen"] is False
-    week = (date.today() + timedelta(days=7)).isoformat()
+    week = (clock.today() + timedelta(days=7)).isoformat()
     client.patch(f"/api/reports/{draft['id']}", json={"report_date": week})
     assert client.post(f"/api/reports/{draft['id']}/freeze").status_code == 200
 

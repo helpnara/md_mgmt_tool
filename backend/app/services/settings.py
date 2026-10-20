@@ -10,6 +10,7 @@ import json
 import os
 from typing import Any
 
+from .. import clock
 from .. import schemas as rules
 from ..config import get_settings
 
@@ -542,7 +543,7 @@ def has_left(person: dict[str, Any], today: str | None = None) -> bool:
         return False
     from datetime import date
 
-    return left_on <= (today or date.today().isoformat())
+    return left_on <= (today or clock.today().isoformat())
 
 
 def known_names(include_left: bool = True) -> list[str]:

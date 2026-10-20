@@ -1,5 +1,6 @@
 """팀원 면담 (TODO 182) — 역량 이력과 따로 · 하기로 한 것 · 면담 주기 · 검색에 안 걸림."""
 from datetime import date, timedelta
+from app import clock
 
 
 def _meeting(client, **extra):
@@ -35,10 +36,10 @@ def test_closing_a_followup_and_the_team_open_list(client):
 
 
 def test_meeting_due_by_cycle_or_planned_date(client):
-    old = (date.today() - timedelta(days=120)).isoformat()
+    old = (clock.today() - timedelta(days=120)).isoformat()
     _meeting(client, person="박지민", date=old)
-    recent = (date.today() - timedelta(days=10)).isoformat()
-    _meeting(client, person="이서연", date=recent, next_date=(date.today() + timedelta(days=30)).isoformat())
+    recent = (clock.today() - timedelta(days=10)).isoformat()
+    _meeting(client, person="이서연", date=recent, next_date=(clock.today() + timedelta(days=30)).isoformat())
     people = {p["name"]: p for p in client.get("/api/activities/summary", params={"year": ""}).json()["people"]}
     assert people["박지민"]["meeting_due"] is True       # 기본 주기 90일이 지났다
     assert people["이서연"]["meeting_due"] is False

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from app import clock
 
 
 def make(client, **kwargs):
@@ -17,7 +18,7 @@ def make(client, **kwargs):
 
 
 def day(offset: int) -> str:
-    return (date.today() + timedelta(days=offset)).isoformat()
+    return (clock.today() + timedelta(days=offset)).isoformat()
 
 
 def test_empty_vault_has_nothing_to_show(client):

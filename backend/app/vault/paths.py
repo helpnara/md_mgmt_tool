@@ -98,8 +98,10 @@ def validate_date(value: object, default: str | None = None) -> str:
     """
     from datetime import date as date_cls
 
+    from .. import clock
+
     if value is None or value == "":
-        return default or date_cls.today().isoformat()
+        return default or clock.today().isoformat()
     if isinstance(value, date_cls):
         return value.isoformat()
     text = str(value).strip()

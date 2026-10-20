@@ -1,9 +1,10 @@
 """다년도 과제 로드맵 (TODO 174) — 줄기 · 단계 · 기간 · 살펴볼 것."""
 from datetime import date
+from app import clock
 
 from app.services import roadmap
 
-THIS_YEAR = date.today().year
+THIS_YEAR = clock.today().year
 
 
 def _project(client, title, **extra):
@@ -36,7 +37,7 @@ def test_only_connected_projects_form_lineages(client):
 
 
 def test_warnings_for_managers(client):
-    today = date.today()
+    today = clock.today()
     past = f"{today.year - 1}-06-30"
     this_year_end = f"{today.year}-12-31"
     dropped = _project(client, "중단된 선행", status="dropped", start_date=f"{today.year - 2}-01-01", due_date=past)

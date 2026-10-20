@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+from app import clock
 
 
 def make(client, title, **extra):
@@ -9,7 +10,7 @@ def make(client, title, **extra):
 
 
 def today() -> str:
-    return date.today().isoformat()
+    return clock.today().isoformat()
 
 
 # ── 완료일 ───────────────────────────────────────────────────────────────────

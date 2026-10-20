@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from app import clock
 
 
 def make_project(client):
@@ -40,7 +41,7 @@ def test_empty_date_falls_back_to_today(client):
     entry = client.post(
         f"/api/projects/{project['id']}/entries", json={"date": "", "title": "오늘"}
     ).json()
-    assert entry["date"] == date.today().isoformat()
+    assert entry["date"] == clock.today().isoformat()
 
 
 def test_changing_an_entry_date_is_validated_too(client):

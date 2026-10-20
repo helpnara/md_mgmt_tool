@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .. import clock
 from .. import schemas as rules
 from ..config import ACTIVITY_KIND_KEYS, DEFAULT_ACTIVITY_KIND, get_settings
 from ..vault import markdown as md
@@ -64,7 +65,7 @@ def split_people(value: object) -> list[str]:
 
 
 def now_iso() -> str:
-    return datetime.now().astimezone().replace(microsecond=0).isoformat()
+    return clock.now().replace(microsecond=0).isoformat()
 
 
 def person_dir(name: str) -> Path:
@@ -109,7 +110,7 @@ def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dic
     if kind not in ACTIVITY_KIND_KEYS:
         raise ValueError(f"알 수 없는 구분: {kind}")
     # 날짜 — 엄격히, 시작은 비우면 오늘 · 끝은 비울 수 있다 (TODO 205)
-    start = rules.strict_day(data.get("date"), "date", default=date_cls.today().isoformat())
+    start = rules.strict_day(data.get("date"), "date", default=clock.today().isoformat())
     end = rules.strict_day(data.get("end_date"), "end_date")
     if end:
         if end < start:
@@ -119,7 +120,7 @@ def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dic
             end = None
     # TODO 214 D5 — "지나간 이력만" (모듈 머리 3번). 새로 적거나 바꾼 날짜가 오늘보다 뒤면 막는다.
     # 이미 파일에 있는 미래 날짜(예전 기록)는 다른 칸을 고칠 때 막지 않는다 — 경고는 손 편집 알림이 맡는다.
-    today = date_cls.today().isoformat()
+    today = clock.today().isoformat()
     for value, field in ((start, "date"), (end, "end_date")):
         if value and value > today and value != _day_quietly(stored.get(field)):
             raise ValueError(f"{FUTURE_REFUSED} ({rules.field_label(field)} {value}).")
@@ -344,7 +345,7 @@ TREND_YEARS = 4
 
 def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
     """사람별 요약. **면담 자료로 쓰는 것이 목적**이라 공백까지 함께 낸다."""
-    today = date_cls.today()
+    today = clock.today()
     available = years(conn)
     trend_years = available[:TREND_YEARS][::-1]
 

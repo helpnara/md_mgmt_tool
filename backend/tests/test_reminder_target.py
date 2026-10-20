@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import datetime
+from app import clock
 
 
 def make(client, title):
@@ -20,7 +21,7 @@ def make(client, title):
 
 def report_day(client):
     """오늘이 보고일이 되도록 요일을 맞춘다 — 그래야 배너가 뜬다."""
-    weekday = datetime.date.today().weekday()
+    weekday = clock.today().weekday()
     client.put("/api/settings", json={"report_weekday": weekday})
     return client.get("/api/dashboard").json()["reminder"]
 

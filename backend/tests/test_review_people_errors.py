@@ -12,10 +12,11 @@ import json
 import pathlib
 import shutil
 from datetime import date, timedelta
+from app import clock
 
 import pytest
 
-TODAY = date.today()
+TODAY = clock.today()
 YESTERDAY = (TODAY - timedelta(days=1)).isoformat()
 TOMORROW = (TODAY + timedelta(days=1)).isoformat()
 NEXT_MONTH = (TODAY + timedelta(days=30)).isoformat()

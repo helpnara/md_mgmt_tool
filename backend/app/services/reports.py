@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from .. import clock
 from ..config import get_settings
 from .. import schemas as rules
 from ..vault import markdown as md
@@ -45,7 +46,7 @@ def default_report_date(today: date_cls | None = None) -> str:
     리마인더도 **같은 값**을 본다 — 따로 두면 "내일 보고입니다" 안내가
     실제 보고 예정일과 어긋난다.
     """
-    today = today or date_cls.today()
+    today = today or clock.today()
     days_ahead = (settings_service.report_weekday() - today.weekday()) % 7
     return (today + timedelta(days=days_ahead)).isoformat()
 
@@ -170,7 +171,7 @@ FREEZE_AHEAD_DAYS = 7
 def check_report_date(value: object, default: str | None = None) -> str:
     """보고일 (TODO 214 D5 · F15) — `strict_day`(형식 · 2000~2100) 위에 오늘 ±1년."""
     day = rules.strict_day(value, "report_date", default=default)
-    today = date_cls.today()
+    today = clock.today()
     low = (today - timedelta(days=REPORT_DATE_SPAN_DAYS)).isoformat()
     high = (today + timedelta(days=REPORT_DATE_SPAN_DAYS)).isoformat()
     if not low <= day <= high:
@@ -204,7 +205,7 @@ def _feedback_head(pending: list[sqlite3.Row]) -> str:
 
 def mark_feedback_done(conn: sqlite3.Connection, report_id: int, done: bool) -> None:
     """지시에 답했다 / 아직이다. 답한 날을 남긴다 — 언제 닫았는지도 사실이다."""
-    update_report(conn, report_id, {"feedback_done": date_cls.today().isoformat() if done else None})
+    update_report(conn, report_id, {"feedback_done": clock.today().isoformat() if done else None})
 
 
 def report_row(conn: sqlite3.Connection, report_id: int) -> sqlite3.Row:
@@ -313,7 +314,7 @@ def freeze_report(conn: sqlite3.Connection, report_id: int) -> None:
     """보고 확정. 이 시점의 문서를 그대로 굳히고 포함된 진행일지를 기록한다."""
     row, path = report_path(conn, report_id)
     # 먼 미래의 보고일로 확정하면 그 과제는 보고 대상에서 영영 빠진다 (TODO 214 D5)
-    limit = (date_cls.today() + timedelta(days=FREEZE_AHEAD_DAYS)).isoformat()
+    limit = (clock.today() + timedelta(days=FREEZE_AHEAD_DAYS)).isoformat()
     if str(row["report_date"] or "") > limit:
         raise ValueError(f"보고일이 1주 넘게 남은 보고는 확정할 수 없습니다 (보고일 {row['report_date']}).")
     doc = md.load(path)
@@ -437,7 +438,7 @@ def candidates(
     from ..config import STATUSES
 
     active = {key for key, _, candidate in STATUSES if candidate}
-    today = date_cls.today()
+    today = clock.today()
 
     stages = stage_map(conn)  # 과제명 뒤 단계 띠 (TODO 175)
     # 과제마다 따로 묻지 않는다 (TODO 190) — 담당자 · 미보고 기록 · 마지막 확정 보고를 **각각 한 번**에 모아 둔다.
@@ -848,7 +849,7 @@ def reminder(conn: sqlite3.Connection, today: date_cls | None = None) -> dict | 
 
     보고 요일은 설정에서 읽고, 선정일은 그 **하루 전**이다.
     """
-    today = today or date_cls.today()
+    today = today or clock.today()
     report_weekday = settings_service.report_weekday()
     weekday = today.weekday()
     if weekday == report_weekday:
@@ -930,7 +931,7 @@ def unfinished_drafts(conn: sqlite3.Connection, limit: int = UNFINISHED_LIST_LIM
     보고일이 **이미 지난** 초안을 앞에 세운다 — 그것이 진짜 밀린 것이다.
     건수는 자르기 전 수를 따로 센다 (TODO 82 에서 같은 것을 고쳤다).
     """
-    today = date_cls.today().isoformat()
+    today = clock.today().isoformat()
     total = conn.execute(
         "SELECT COUNT(*) AS n FROM report WHERE frozen_at IS NULL"
     ).fetchone()["n"]
@@ -946,7 +947,7 @@ def unfinished_drafts(conn: sqlite3.Connection, limit: int = UNFINISHED_LIST_LIM
             "audience": row["audience"],
             "report_date": row["report_date"],
             # 보고일이 지났는데 아직 확정하지 않았다 — 며칠이나 지났는지 함께 준다.
-            "overdue_days": max(0, (date_cls.today() - _date(row["report_date"])).days)
+            "overdue_days": max(0, (clock.today() - _date(row["report_date"])).days)
             if row["report_date"] < today
             else 0,
         }
@@ -966,7 +967,7 @@ def _date(text: str) -> date_cls:
     try:
         return date_cls.fromisoformat(text)
     except (TypeError, ValueError):
-        return date_cls.today()
+        return clock.today()
 
 
 def month_grid(conn: sqlite3.Connection, year: str | None) -> dict:

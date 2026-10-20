@@ -46,8 +46,20 @@ def _manifest_path() -> Path:
     return get_settings().trash_dir / MANIFEST
 
 
-def record(kind: str, *, label: str, moved_to: Path, origin: Path, project_id: str | None) -> None:
-    """보관함으로 옮긴 사실을 남긴다. 실패해도 삭제 자체를 막지는 않는다."""
+def record(
+    kind: str,
+    *,
+    label: str,
+    moved_to: Path,
+    origin: Path,
+    project_id: str | None,
+    parent: str | None = None,
+) -> None:
+    """보관함으로 옮긴 사실을 남긴다. 실패해도 삭제 자체를 막지는 않는다.
+
+    `parent` 는 **함께 옮긴 주인**의 보관함 이름이다 (TODO 218 — 기록을 지울 때 그 기록의 첨부).
+    보관함 목록에는 주인 한 줄로 보이고, 주인을 되돌리면 함께 돌아온다.
+    """
     settings = get_settings()
     try:
         entry = {
@@ -59,6 +71,8 @@ def record(kind: str, *, label: str, moved_to: Path, origin: Path, project_id: s
             # vault 기준 상대경로로 적는다. vault 폴더를 통째로 옮겨도 되돌릴 수 있다.
             "origin": origin.relative_to(settings.vault_dir).as_posix(),
         }
+        if parent:
+            entry["parent"] = parent
         settings.trash_dir.mkdir(parents=True, exist_ok=True)
         with _lock:
             with _manifest_path().open("a", encoding="utf-8") as handle:
@@ -101,11 +115,22 @@ def list_items() -> list[dict[str, Any]]:
         return []
 
     recorded = {item.get("trash_name"): item for item in _read_manifest()}
+    present = {path.name for path in trash.iterdir()}
+    # 주인과 함께 옮긴 첨부 (TODO 218) — 주인이 보관함에 있으면 주인 줄에 묶어 보이고 따로 세지 않는다.
+    # 주인만 먼저 돌아갔으면(첨부를 되돌리다 막힘) 첨부는 제 줄로 남아 하나씩 되돌릴 수 있다.
+    children: dict[str, list[str]] = {}
+    for name in sorted(present):
+        info = recorded.get(name)
+        parent = info.get("parent") if info else None
+        if parent and parent in present:
+            children.setdefault(parent, []).append(str(info.get("label") or name))
     items = []
     for path in sorted(trash.iterdir(), key=lambda p: p.name, reverse=True):
         if path.name == MANIFEST or (path.name.startswith(".manifest-") and path.name.endswith(".tmp")):
             continue  # 기록 파일과 그것을 다시 쓰다 남은 조각 (TODO 202)
         info = recorded.get(path.name)
+        if info and info.get("parent") in present:
+            continue
         items.append(
             {
                 "trash_name": path.name,
@@ -118,6 +143,7 @@ def list_items() -> list[dict[str, Any]]:
                 # 기록이 없으면 어디로 되돌려야 할지 알 수 없다.
                 "restorable": info is not None,
                 "is_folder": path.is_dir(),
+                "attachments": children.get(path.name, []),
             }
         )
     # 기록이 있는 것은 지운 시각 순, 없는 것은 뒤로.
@@ -173,13 +199,18 @@ def restore(conn: sqlite3.Connection, trash_name: str) -> dict[str, Any]:
 
     _refuse_duplicate_number(conn, source, info)
 
-    target = settings.vault_dir / _current_origin(conn, info)
-    if target.exists():
-        # 같은 자리에 새 항목이 생겼을 수 있다. 덮어쓰지 않고 옆에 놓는다.
-        target = paths.unique_path(target.parent, f"{target.stem}-복구", target.suffix)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    # TODO 215 ④ — 파일 하나(기록 · 첨부)면 윈도우의 일시적 거부를 몇 번 다시. 폴더(과제)는 지금처럼 한 번
-    paths.move(source, target, retry=True)
+    target = _put_back(conn, source, info)
+    # 함께 옮긴 첨부도 돌려놓는다 (TODO 218) — 기록 본문의 링크가 다시 이어진다.
+    # 하나가 막혀도(다른 프로그램이 잡음) 기록은 이미 돌아왔다. 남은 첨부는 보관함에 제 줄로 보인다.
+    left: list[str] = []
+    for child in _children_of(trash_name):
+        child_source = settings.trash_dir / str(child["trash_name"])
+        if not child_source.exists() or not child.get("origin"):
+            continue
+        try:
+            _put_back(conn, child_source, child)
+        except (OSError, paths.FileInUseError):
+            left.append(str(child.get("label") or child["trash_name"]))
 
     # 파일이 제자리로 돌아왔으니 색인을 다시 만든다.
     from ..vault.indexer import reindex_all
@@ -195,7 +226,25 @@ def restore(conn: sqlite3.Connection, trash_name: str) -> dict[str, Any]:
         "restored_to": target.relative_to(settings.vault_dir).as_posix(),
         "kind": info.get("kind"),
         "label": info.get("label"),
+        "attachments_left": left,
     }
+
+
+def _put_back(conn: sqlite3.Connection, source: Path, info: dict[str, Any]) -> Path:
+    """보관함의 파일 하나(또는 과제 폴더)를 기록된 자리로 옮긴다. 옮긴 자리를 돌려준다."""
+    target = get_settings().vault_dir / _current_origin(conn, info)
+    if target.exists():
+        # 같은 자리에 새 항목이 생겼을 수 있다. 덮어쓰지 않고 옆에 놓는다.
+        target = paths.unique_path(target.parent, f"{target.stem}-복구", target.suffix)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # TODO 215 ④ — 파일 하나(기록 · 첨부)면 윈도우의 일시적 거부를 몇 번 다시. 폴더(과제)는 지금처럼 한 번
+    paths.move(source, target, retry=True)
+    return target
+
+
+def _children_of(trash_name: str) -> list[dict[str, Any]]:
+    """주인(`trash_name`)과 함께 보관함에 간 항목들 (TODO 218)."""
+    return [item for item in _read_manifest() if item.get("parent") == trash_name and item.get("trash_name")]
 
 
 def _current_origin(conn: sqlite3.Connection, info: dict[str, Any]) -> str:

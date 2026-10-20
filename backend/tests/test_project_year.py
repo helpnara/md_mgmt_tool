@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from datetime import date
+from app import clock
 
 
 def make(client, title, **extra):
@@ -20,7 +21,7 @@ def make(client, title, **extra):
 
 
 def this_year() -> str:
-    return str(date.today().year)
+    return str(clock.today().year)
 
 
 # ── 만들 때 ──────────────────────────────────────────────────────────────────
@@ -74,7 +75,7 @@ def test_the_form_can_ask_which_number_it_would_get(client):
 
 def test_next_id_without_a_start_date_is_this_year(client):
     preview = client.get("/api/projects/next-id").json()
-    assert preview["year"] == date.today().year
+    assert preview["year"] == clock.today().year
     assert preview["id"].startswith(f"{this_year()}-")
 
 

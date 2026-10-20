@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from app import clock
+
 
 def _make(client, title, **kwargs):
     payload = {"title": title, "status": "in_progress"}
@@ -92,7 +94,7 @@ def test_stale_list_skips_projects_that_have_not_started(client):
     """오래 방치된 과제 자리에 '아직 시작도 안 한 과제'가 오면 뜻이 흐려진다 (TODO 70)."""
     from datetime import date, timedelta
 
-    later = (date.today() + timedelta(days=30)).isoformat()
+    later = (clock.today() + timedelta(days=30)).isoformat()
     _make(client, "다음 달 착수", status="planned", start_date=later)
     running = _make(client, "오래된 과제", start_date="2026-01-02")
 

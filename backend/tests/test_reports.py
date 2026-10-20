@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from app import clock
 
 
 def make_project(client, title="리튬전지 수명평가", **kwargs):
@@ -171,7 +172,7 @@ def test_candidates_rank_by_elapsed_time_and_backlog(client):
     fresh = make_project(client, title="최근 보고한 과제", start_date="2026-08-25")
     add_entry(client, fresh["id"], "2026-08-26", "기록")
     report = client.post(
-        f"/api/projects/{fresh['id']}/reports/draft", json={"report_date": date.today().isoformat()}
+        f"/api/projects/{fresh['id']}/reports/draft", json={"report_date": clock.today().isoformat()}
     ).json()
     client.post(f"/api/reports/{report['id']}/freeze")
 
@@ -258,7 +259,7 @@ def test_a_project_that_has_not_started_says_so_instead_of_a_negative_day_count(
     숫자를 고치는 대신 **아직 시작 안 했다**는 사실을 따로 알려 준다.
     화면은 그 자리에 "착수 전" 이라고 적는다.
     """
-    later = (date.today() + timedelta(days=30)).isoformat()
+    later = (clock.today() + timedelta(days=30)).isoformat()
     coming = make_project(client, title="아직 시작 안 한 과제", status="planned", start_date=later)
 
     items = client.get("/api/report-candidates").json()["items"]
@@ -272,7 +273,7 @@ def test_a_project_that_has_not_started_goes_to_the_bottom(client):
 
     둘 다 보고 이력이 없지만, 착수 전 과제는 이미 진행 중인 과제보다 뒤에 서야 한다.
     """
-    later = (date.today() + timedelta(days=30)).isoformat()
+    later = (clock.today() + timedelta(days=30)).isoformat()
     coming = make_project(client, title="다음 달 착수", status="planned", start_date=later)
     running = make_project(client, title="진행 중", start_date="2026-01-02")
 

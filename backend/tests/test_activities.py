@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from app import clock
 
 
 def add(client, person="권경락", **kwargs):
@@ -72,7 +73,7 @@ def test_people_on_the_roster_show_up_even_with_no_record(client):
 
 def test_a_long_quiet_spell_is_flagged(client):
     """반년 넘게 아무것도 없으면 면담에서 가장 먼저 꺼낼 줄이다."""
-    long_ago = (date.today() - timedelta(days=400)).isoformat()
+    long_ago = (clock.today() - timedelta(days=400)).isoformat()
     add(client, person="김현우", date=long_ago, title="작년 세미나", kind="seminar")
 
     person = next(p for p in client.get("/api/activities/summary").json()["people"]

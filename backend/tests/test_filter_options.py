@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from datetime import date
+from app import clock
 
 
 def make(client, title, **extra):
@@ -29,7 +30,7 @@ def meta(client) -> dict:
 
 
 def this_year() -> str:
-    return str(date.today().year)
+    return str(clock.today().year)
 
 
 # ── 연도 ─────────────────────────────────────────────────────────────────────

@@ -28,6 +28,28 @@ const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const PORT = Number(process.env.UI_TEST_PORT || 8765);
 const BASE = `http://127.0.0.1:${PORT}`;
 
+// ── 오늘을 고정한다 (TODO 219) ──────────────────────────────────────────────
+// 보고 날짜 ±365일 · 확정은 1주 앞까지 같은 규칙이 '오늘' 에 기댄다. 실제 오늘을 쓰면 시험에 적은 2026년 날짜가
+// 해가 갈수록 규칙 밖으로 밀려 멀쩡한 시험이 깨진다. 서버(MD_MGMT_TODAY) · 브라우저 · 이 파일의 `Date` 가
+// 모두 같은 날을 오늘로 본다. 시각은 그날 09:00 에서 실제로 흐른 만큼 흐른다 — 기다림 · 타이머는 그대로.
+const FIXED_TODAY = process.env.UI_TODAY || "2026-10-20";
+const RealDate = Date;
+const CLOCK_SHIFT = new RealDate(`${FIXED_TODAY}T09:00:00`).getTime() - RealDate.now();
+function shiftClock(shift) {
+  const Real = Date;
+  class Shifted extends Real {
+    constructor(...args) {
+      if (args.length === 0) super(Real.now() + shift);
+      else super(...args);
+    }
+    static now() {
+      return Real.now() + shift;
+    }
+  }
+  globalThis.Date = Shifted;
+}
+shiftClock(CLOCK_SHIFT);
+
 /** playwright 는 이 저장소의 의존성이 아니다 (사용자 PC 에는 Node 자체가 없다). */
 function loadPlaywright() {
   const require = createRequire(import.meta.url);
@@ -80,7 +102,7 @@ async function startServer(vault, port = PORT, extra = {}) {
   const server = spawn(
     join(REPO, ".venv/bin/python"),
     ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", String(port), ...(extra.host ? ["--host", extra.host] : [])],
-    { cwd: REPO, env: { ...process.env, MD_MGMT_VAULT: vault, ...(extra.env || {}) }, stdio: "pipe" },
+    { cwd: REPO, env: { ...process.env, MD_MGMT_VAULT: vault, MD_MGMT_TODAY: FIXED_TODAY, ...(extra.env || {}) }, stdio: "pipe" },
   );
   const logs = [];
   server.stdout.on("data", (chunk) => logs.push(String(chunk)));
@@ -227,6 +249,13 @@ async function main() {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium",
   });
+  // 새 창마다 같은 '오늘' (TODO 219) — 창은 여기저기서 연다
+  const openPage = browser.newPage.bind(browser);
+  browser.newPage = async (options) => {
+    const opened = await openPage(options);
+    await opened.addInitScript(shiftClock, CLOCK_SHIFT);
+    return opened;
+  };
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
   // 화면에서 난 오류는 소리 없이 사라진다. 전부 모아 두었다가 시험 끝에 따진다.
@@ -5278,6 +5307,51 @@ async function main() {
       await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
     }
   });
+
+  console.log("\n[46] 기록을 지우면 그 기록의 첨부도 함께 보관함으로, 되돌리면 함께 (TODO 218)");
+  page.removeAllListeners("dialog");
+  {
+    const stamp = Date.now();
+    const made = await api.post("/api/projects", { title: `첨부 함께 지우기 ${stamp}` });
+    const entryTitle = `첨부 있는 기록 ${stamp}`;
+    const entry = await api.post(`/api/projects/${made.id}/entries`, { date: dayFromToday(-1), title: entryTitle });
+    const fileName = `함께-${stamp}.txt`;
+    const form = new FormData();
+    form.append("file", new Blob([`함께 지울 첨부 ${stamp}`], { type: "text/plain" }), fileName);
+    const saved = await (await fetch(`${BASE}/api/entries/${entry.id}/attachments`, { method: "POST", body: form })).json();
+    await fetch(`${BASE}/api/entries/${entry.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: `## 내용\n\n${saved.markdown}\n` }),
+    });
+    const filesOf = async () => ((await api.get(`/api/projects/${made.id}/attachments`)).items ?? []).map((item) => item.orig_name);
+    try {
+      await check("수행 이력의 [삭제] — 첨부도 함께 간다고 묻고, 과제 첨부 목록에서 사라진다", async () => {
+        await go(`#/projects/${made.id}`);
+        let asked = "";
+        page.once("dialog", async (dialog) => { asked = dialog.message(); await dialog.accept(); });
+        await page.locator("li.entry", { hasText: entryTitle }).getByRole("button", { name: "삭제", exact: true }).click();
+        await page.waitForTimeout(1200);
+        expect(asked.includes("첨부도 함께"), `묻는 말: ${asked}`);
+        equal((await filesOf()).includes(fileName), false, "첨부가 과제에 남았다");
+      });
+      await check("보관함에 기록 한 줄 · '첨부 1개 함께' — [되돌리기] 하면 첨부도 돌아온다", async () => {
+        await go("#/settings");
+        const card = page.locator(".card", { has: page.getByRole("heading", { name: /삭제 보관함/ }) });
+        const toggle = card.getByRole("button", { name: "펼치기" });
+        if (await toggle.count()) await toggle.click();
+        const row = card.locator(".trash-list li", { hasText: entryTitle });
+        equal(await row.count(), 1, "보관함의 기록 줄");
+        expect((await row.innerText()).includes("첨부 1개 함께"), `기록 줄: ${await row.innerText()}`);
+        equal(await card.locator(".trash-list li", { hasText: fileName }).count(), 0, "첨부가 따로 한 줄로 보인다");
+        await row.getByRole("button", { name: "되돌리기" }).click();
+        await page.waitForTimeout(1200);
+        expect((await card.innerText()).includes("첨부 1개도 함께 돌아왔습니다"), `안내: ${await card.innerText()}`);
+        expect((await filesOf()).includes(fileName), "첨부가 돌아오지 않았다");
+      });
+    } finally {
+      await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  }
+  page.on("dialog", (dialog) => dialog.accept());
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {

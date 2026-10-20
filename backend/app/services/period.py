@@ -29,9 +29,11 @@ from __future__ import annotations
 import sqlite3
 from datetime import date
 
+from .. import clock
+
 
 def _this_year() -> str:
-    return str(date.today().year)
+    return str(clock.today().year)
 
 
 def _y(column: str) -> str:

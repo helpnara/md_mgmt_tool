@@ -275,7 +275,7 @@ export const api = {
   trash: () => request<TrashItem[]>("/api/trash"),
   restoreFromTrash: (name: string) =>
     invalidating(
-      request<{ restored_to: string; label: string }>(
+      request<{ restored_to: string; label: string; attachments_left?: string[] }>(
         `/api/trash/${encodeURIComponent(name)}/restore`,
         { method: "POST" },
       ),

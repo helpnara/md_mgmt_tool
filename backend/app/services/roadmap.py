@@ -12,6 +12,7 @@ import sqlite3
 from datetime import date
 from typing import Any
 
+from .. import clock
 from ..config import STATUS_LABELS
 from .projects import assign_stages
 
@@ -37,7 +38,7 @@ def _end_of(row: dict[str, Any]) -> str | None:
 
 
 def build(conn: sqlite3.Connection, today: date | None = None) -> dict[str, Any]:
-    today = today or date.today()
+    today = today or clock.today()
     today_text = today.isoformat()
     rows = {
         row["id"]: dict(row)

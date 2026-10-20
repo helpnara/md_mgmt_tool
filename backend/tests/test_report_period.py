@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from app import clock
+
 
 def make(client, title="보고 기간 확인"):
     return client.post("/api/projects", json={"title": title}).json()["id"]
@@ -105,7 +107,7 @@ def test_unreported_count_is_not_capped_by_any_date(client):
     # 미래 날짜의 진행일지는 받지 않는다 (TODO 214 D5) — 오늘 쓴 기록도 다음 보고일과 상관없이 센다
     from datetime import date
 
-    add_entry(client, project, date.today().isoformat())
+    add_entry(client, project, clock.today().isoformat())
 
     candidates = client.get("/api/report-candidates").json()["items"]
     mine = next(item for item in candidates if item["id"] == project)

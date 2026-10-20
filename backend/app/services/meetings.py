@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .. import clock
 from .. import schemas as rules
 from ..config import get_settings
 from ..vault import markdown as md
@@ -88,7 +89,7 @@ def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dic
         person = settings_service.person_name(person)
     kind = _kind(data.get("kind"), (stored or {}).get("kind"))
     # 날짜 — 엄격히, 비우면 오늘 · 다음 면담은 비울 수 있다 (TODO 205)
-    meeting_date = rules.strict_day(data.get("date"), "date", default=date_cls.today().isoformat())
+    meeting_date = rules.strict_day(data.get("date"), "date", default=clock.today().isoformat())
     next_date = rules.strict_day(data.get("next_date"), "next_date")
     # 같은 날도 거절 — 화면도 같은 규칙으로 저장 전에 막는다 (TODO 216)
     if next_date and next_date <= meeting_date:
@@ -126,7 +127,7 @@ def _wanted_name(fields: dict[str, Any]) -> str:
 def warnings(fields: dict[str, Any]) -> list[str]:
     """막지 않는 안내 (TODO 214) — 명부에 없는 이름 · 떠난 사람(D6 · D7), 면담일이 오늘보다 뒤(D5)."""
     out = settings_service.roster_warnings([fields["person"]])
-    if fields["date"] > date_cls.today().isoformat():
+    if fields["date"] > clock.today().isoformat():
         out.append(f"면담일이 오늘보다 뒤입니다 ({fields['date']}) — 예정이면 '다음 면담' 칸에 적어 두는 편이 맞습니다.")
     return out
 
@@ -256,7 +257,7 @@ def open_followups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def by_person(conn: sqlite3.Connection, year: str | None = None) -> dict[str, dict[str, Any]]:
     """사람별 — 마지막 면담 · 그 해 면담 수 · 열린 후속 조치 · 다음 면담 · 면담할 때가 지났는가."""
-    today = date_cls.today()
+    today = clock.today()
     cycle = settings_service.meeting_cycle_days()
     out: dict[str, dict[str, Any]] = {}
     for row in conn.execute(

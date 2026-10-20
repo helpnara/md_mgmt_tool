@@ -33,6 +33,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from .. import clock
 from ..config import (
     CLASSIFICATION_KEYS,
     CLASSIFIED_TYPE,
@@ -114,18 +115,18 @@ class IntakeClosedError(ValueError):
 # ── 번호 · 폴더 ─────────────────────────────────────────────────────────────
 
 def now_iso() -> str:
-    return datetime.now().astimezone().replace(microsecond=0).isoformat()
+    return clock.now().replace(microsecond=0).isoformat()
 
 
 def today() -> str:
-    return date_cls.today().isoformat()
+    return clock.today().isoformat()
 
 
 def intake_year(received_on: str | None) -> int:
     text = (received_on or "").strip()
     if len(text) >= 4 and text[:4].isdigit() and 1900 <= int(text[:4]) <= 2999:
         return int(text[:4])
-    return date_cls.today().year
+    return clock.today().year
 
 
 def next_intake_id(year: int | None = None, code: str | None = None) -> str:
@@ -136,7 +137,7 @@ def next_intake_id(year: int | None = None, code: str | None = None) -> str:
     """
     settings = get_settings()
     settings.ensure_dirs()
-    year = year or date_cls.today().year
+    year = year or clock.today().year
     if code is None:
         code = settings_service.project_code()
     prefix = f"R{year}-{code}-" if code else f"R{year}-"
@@ -1407,7 +1408,7 @@ def reindex_intakes(conn: sqlite3.Connection, problems: list | None = None) -> i
 
 def age_days(received_on: str | None) -> int | None:
     try:
-        return (date_cls.today() - date_cls.fromisoformat(str(received_on)[:10])).days
+        return (clock.today() - date_cls.fromisoformat(str(received_on)[:10])).days
     except (TypeError, ValueError):
         return None
 
@@ -1423,7 +1424,7 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict[str, Any]
     """풀의 요약 — 대기 · 검토중 · 보류 · 묵힘, 그리고 그 해의 판정 수(참고)."""
     stale_days = settings_service.intake_stale_days()
     rows = conn.execute("SELECT status, received_on, decided_on FROM intake").fetchall()
-    this_year = year or str(date_cls.today().year)
+    this_year = year or str(clock.today().year)
     counts = {key: 0 for key in INTAKE_STATUS_KEYS}
     decided = {key: 0 for key in ("started", "rejected", "transferred", "merged")}
     stale = 0
