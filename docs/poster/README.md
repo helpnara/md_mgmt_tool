@@ -69,17 +69,18 @@ python make_thumbnail.py --scale 1  # 1280x800
 발표장에서는 말로 덧붙이고, 배포할 때는 자막만으로 읽힌다.
 
 ```bash
+# 저장소 맨 위에서 돌린다 (--app-dir backend 가 거기 기준이다)
 # 1) 빈 vault 로 서버를 띄우고 데모 자료를 채운다
 #    경로가 화면 머리글에 그대로 보이므로 짧고 보기 좋은 곳에 둔다
 MD_MGMT_VAULT=~/느린나이테 python -m uvicorn app.main:app --app-dir backend --port 8094 &
-python video/seed_demo.py
+python docs/poster/video/seed_demo.py
 
 # 2) 화면을 녹화한다 (clips/*.webm)
-OUT=video/clips node video/record.mjs
+OUT=docs/poster/video/clips node docs/poster/video/record.mjs
 
 # 3) 자막 카드를 굽고 이어 붙인다
-python video/make_video.py                 # 1920x1200 (16:10)
-python video/make_video.py --ratio 16:9    # 1920x1080 (프로젝터용)
+python docs/poster/video/make_video.py                 # 1920x1200 (16:10)
+python docs/poster/video/make_video.py --ratio 16:9    # 1920x1080 (프로젝터용)
 ```
 
 **실제 과제 데이터는 쓰지 않는다.** `seed_demo.py` 가 만드는 것은 전부 지어낸 팀이다 —
