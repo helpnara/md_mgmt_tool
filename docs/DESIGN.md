@@ -3,7 +3,7 @@
 > 이름은 2026-09-24 에 정해졌다 (TODO 132). 나무가 한 해에 한 겹씩 굵어지듯,
 > 이 도구도 주 단위로 한 줄씩 쌓여야 그 해가 보인다.
 
-작성일: 2026-09-01 · 상태: **M0~M5.18 구현 완료** (2026-10-15 기준 — 8절 마일스톤 표가 현재 상태다)
+작성일: 2026-09-01 · 상태: **M0~M5.19 구현 완료** (2026-10-22 기준 · 최신 배포본 `느린나이테-20261020-v1` — 8절 마일스톤 표가 현재 상태다)
 변경 이력
 - v0.2 — 보고 이력 관리 및 보고 대상 예측 설계 추가
 - v0.3 — vault 위치·상태 값·첨부 정책·그룹 체계 확정, 대용량 업로드 설계 추가
@@ -44,12 +44,12 @@
 | 기존 문서 이관 | **하지 않음.** 새 구조에 맞춰 과제별로 새로 작성 → 마이그레이션 도구 대신 **과제/일지 템플릿**에 투자 |
 | 첨부 용량 | **상한 없음.** 대신 대용량 업로드 시 **진행률 표시**와 스트리밍 저장 필수 |
 | 저장 방식 | **파일시스템(.md + 첨부) + SQLite 메타/인덱스 DB** |
-| 사용 범위 | **1인 사용** (인증 없음, 동시 편집 충돌 처리 불필요) |
+| 사용 범위 | **1인 사용** (인증 없음, 동시 편집 충돌 처리 불필요). TODO 191 부터 팀원은 **읽기 전용 공유**로 보기만 한다(5.1) — 쓰기는 여전히 한 사람 |
 | 기술 스택 | **Python / FastAPI + SQLite** |
 | 문서 구조 | 과제 1건 = **개요 문서 1개 + 날짜별 진행일지 N개**, 단 **전체를 하나의 긴 md로 다운로드** 가능해야 함 |
 | 첨부 유형 | 이미지 붙여넣기(스크린샷), 오피스 문서(xlsx/docx/pptx), PDF/논문 자료 |
 | 과제 목록 표시 정보 | 상태 / 기간·마감일 / 분류 태그·과제 그룹 / 최근 업데이트 일시 |
-| 보고 이력 | 과제별 **보고 이력**과 **보고 당시 문서**를 함께 보관. 현재는 **날짜만** 기록하고 유형·피보고자는 추후 확장 |
+| 보고 이력 | 과제별 **보고 이력**과 **보고 당시 문서**를 함께 보관. 현재는 **날짜만** 기록하고 유형·피보고자는 추후 확장 (피보고자는 TODO 3 에서 들어왔다 — 8.0) |
 | 보고 자료 형태 | **엑셀(xlsx)** 로 보고. 본문은 텍스트, 필요 시 이미지 포함 |
 | 보고 대상 선정 기준 | **마지막 보고 후 경과 기간** + **보고 이후 쌓인 새 진행 분량** |
 | 과제 상태 | 예정 / 검토중 / 진행중 / 보류 / 완료 / 중단 (진행 단계만) |
@@ -109,16 +109,20 @@ vault/                                  # 데이터 루트 (설정으로 위치 
 │   └── 2026-002-.../
 ├── people/                             # 팀원 역량 이력 — 과제가 아니라 사람에게 쌓인다
 │   └── 권경락/
-│       └── activities/
-│           ├── 2026-05-12-열처리-공정-심화-과정.md
-│           └── 2026-03-19-스마트제조-혁신-박람회.md
+│       ├── activities/
+│       │   ├── 2026-05-12-열처리-공정-심화-과정.md
+│       │   └── 2026-03-19-스마트제조-혁신-박람회.md
+│       └── meetings/                   # 팀원 면담 (TODO 182, 5.24) — 검색 · 내보내기에 넣지 않는다
 ├── intakes/                            # 과제 접수 — 착수 전의 요청 (TODO 136, 4.10)
 │   └── R2026-001-압연-두께편차-예측/
 │       ├── request.md                  # 요청 내용 + 판정 (front matter)
 │       ├── logs/                       # 인터뷰·검토 기록
 │       └── assets/                     # 과제정의서.pptx · 부연설명 원본
-├── .trash/                             # 삭제 항목 보관 (즉시 삭제하지 않음)
+├── .trash/                             # 삭제 항목 보관 (즉시 삭제하지 않음). 기록을 지우면 그 기록의 첨부도 함께 (TODO 218, 5.28)
 ├── .drafts/                            # 쓰다 만 글 — 편집기의 임시 보관 (TODO 170, 저장하면 지운다)
+├── .versions/                          # 저장 전 내용 — 이전 버전 (경로가 열쇠, 4.1 아래)
+├── .logs/                              # 오류 기록 · 입력 거절 · 공유 접속 기록 (5.10 · 5.27)
+├── settings.json                       # 설정 (4.8) — 파생물이 아니다
 └── .index/
     └── index.sqlite3                   # 파생 인덱스 (삭제해도 재생성됨)
 ```
@@ -144,7 +148,7 @@ vault/                                  # 데이터 루트 (설정으로 위치 
 ---
 id: 2026-001
 title: 리튬전지 수명평가
-status: in_progress        # 7단계 — 4.6 참조
+status: in_progress        # 여섯 단계 — 4.5 참조
 group: 차세대전지          # 과제 그룹 (단일)
 tags: [수명평가, 셀설계]    # 분류 태그 (복수)
 partners:          # 함께 일하는 팀과 그쪽 담당자 (4.5.3)
@@ -194,9 +198,9 @@ attachments:
 
 오늘 셀 3종에 대해 1차 측정을 진행함.
 
-![측정그래프](assets/2026-09-03/001-측정그래프.png)
+![측정그래프](../assets/2026-09-03/001-측정그래프.png)
 
-원시 데이터: [raw-data.xlsx](assets/2026-09-03/002-raw-data.xlsx)
+원시 데이터: [raw-data.xlsx](../assets/2026-09-03/002-raw-data.xlsx)
 ```
 
 > `attachments` front matter는 본문에서 참조되지 않는 첨부(순수 자료 보관)도 추적하기 위한 목록이다. 본문에 삽입된 첨부는 인덱싱 시 자동으로 여기에 병합된다.
@@ -292,13 +296,14 @@ audience:                      # 팀회의 / 부서장 / 고객사 …
 | 칸 | 어디서 빠지나 | 왜 |
 |---|---|---|
 | `no_report` | 보고 대상 후보 | 단순 현황 관리를 과제로 세운 경우. 손으로 보고를 남기는 길은 그대로 |
-| `no_effect` | 홈의 **[완료했는데 실증효과 미입력]** 과 효과 금액의 **분모** (TODO 125) | 유지보수·기획보고처럼 금액으로 재지 않는 일. 그런 과제가 경고에 계속 남으면 숫자가 줄지 않고, **줄지 않는 경고는 곧 안 보게 된다** |
+| `no_effect` | 홈의 **[완료했는데 실증효과 미입력]** 과 효과 금액의 **분모** (TODO 125), 효과 금액 **합계**(TODO 214 D2) | 유지보수·기획보고처럼 금액으로 재지 않는 일. 그런 과제가 경고에 계속 남으면 숫자가 줄지 않고, **줄지 않는 경고는 곧 안 보게 된다** |
 
 둘 다 **칸이 없으면 대상**이다. 빼는 것은 사람이 정하는 일이고, 없다고 빼 버리면 지금까지
 세던 수가 소리 없이 달라진다(4.8 의 설정 기본값과 같은 원칙).
 
-`no_effect` 는 효과 금액 **합계에서는 빼지 않는다** — 비대상 과제는 금액이 비어 있는 것이
-정상이라 뺄 것이 없고, 혹시 적혀 있다면 그것은 사실이므로 더한다. 분모만 바꾼다.
+처음(125)에는 `no_effect` 를 효과 금액 **합계에서는 빼지 않았다** — 비대상 과제는 금액이 비어 있는 것이
+정상이라 뺄 것이 없고, 혹시 적혀 있다면 그것은 사실이므로 더한다고 봤다. **TODO 214 D2 에서 바뀜** — 지금은
+금액이 적혀 있어도 합계에 넣지 않는다(파일의 값은 그대로, `period.counted_*` 한 자리 — 5.27).
 
 ### 별도 보고 불필요 (`no_report`) — 처음 도입할 때의 메모
 
@@ -329,7 +334,7 @@ audience:                      # 팀회의 / 부서장 / 고객사 …
 
 **기대효과와 실증효과는 반드시 나눈다.** 한 칸에 담으면 "예상은 얼마였고 실제로 얼마였나"를
 되짚을 수 없고, 그 비교가 없으면 다음 과제의 추정 근거도 생기지 않는다.
-실증효과는 과제가 끝나야 나오므로 **비어 있는 것이 정상**이다.
+실증효과는 과제가 끝나야 나오므로 **비어 있는 것이 정상**이다. (진행중 과제가 분기 · 반기 중간 결산을 적으면 그것도 합계에 든다 — TODO 217, 5.27)
 
 **비어 있는 것과 0은 다른 뜻이다.** 전자는 "아직 안 정했다", 후자는 "효과가 없다".
 그래서 `null` 을 0으로 바꾸지 않고, 효과순 정렬에서도 미입력 과제는 0이 아니라 맨 뒤로 보낸다.
@@ -420,11 +425,18 @@ CREATE TABLE project (
   dir_name      TEXT NOT NULL UNIQUE,    -- '2026-001-리튬전지-수명평가'
   title         TEXT NOT NULL,
   status        TEXT NOT NULL,
+  type          TEXT,                    -- 과제 속성 키 (4.5)
   grp           TEXT,
   owner         TEXT,
   start_date    TEXT,
   due_date      TEXT,
+  effect_expected REAL,                  -- 기대효과 · 실증효과 (억원/년, 4.5.1)
+  effect_verified REAL,
+  no_report     INTEGER NOT NULL DEFAULT 0,  -- 관리 축에서 빼는 두 칸 (4.5.0)
+  no_effect     INTEGER NOT NULL DEFAULT 0,
+  created_by    TEXT,                    -- 과제를 등록한 사람 (4.5.2)
   completed_at  TEXT,                    -- 완료일 (TODO 104, 스키마 11). 홈의 "그해 끝낸 과제"가 이 열을 센다
+  -- nature · category · delivery · cost_kind · intake_id — 스키마 13 (아래)
   created_at    TEXT,
   updated_at    TEXT,                    -- 과제 및 하위 일지 중 최신 수정 시각
   last_reported_at TEXT,                 -- 파생값: 최신 확정 보고일 (report에서 계산)
@@ -438,6 +450,7 @@ CREATE TABLE entry (
   rel_path      TEXT NOT NULL,           -- 'logs/2026-09-03-1차측정결과.md'
   date          TEXT NOT NULL,
   title         TEXT NOT NULL,
+  author        TEXT,                    -- 작성자 (TODO 8)
   body          TEXT,
   created_at    TEXT,
   updated_at    TEXT,
@@ -467,6 +480,7 @@ CREATE TABLE report (
   rel_path      TEXT NOT NULL,           -- 'reports/2026-09-05/report.md'
   covers_from   TEXT,
   covers_to     TEXT,
+  author        TEXT,
   body          TEXT,
   frozen_at     TEXT,                    -- NULL이면 아직 작성 중인 초안
   report_type   TEXT,                    -- 예약 필드 (추후 확장)
@@ -496,7 +510,7 @@ CREATE TABLE tag (
 CREATE TABLE project_tag (project_id TEXT, tag_id INTEGER, PRIMARY KEY(project_id, tag_id));
 CREATE TABLE entry_tag   (entry_id INTEGER, tag_id INTEGER, PRIMARY KEY(entry_id, tag_id));
 
--- 전문 검색 (한국어 대응: unicode61 + trigram 보조)
+-- 전문 검색 (trigram, 구버전 SQLite 면 unicode61 로 물러난다 — db.py 가 만든다)
 CREATE VIRTUAL TABLE search_fts USING fts5(
   kind, ref_id UNINDEXED, project_id UNINDEXED, title, body,
   tokenize = "trigram"
@@ -513,7 +527,7 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 `cost_kind` · `intake_id` 다섯 칸, 그리고 `intake` 표 — 접수 한 건이 한 줄이다(`id` · `dir_name` ·
 `title` · `status` · `leader` · `leader_team` · 분류 넷 · `start_date` · `due_date` · `effect_request` ·
 `priority` · `priority_note` · `picked` · `received_on` · `decided_on` · `decision_note` · `project_id` ·
-`merged_into` · `tags` · `log_count` · `attachment_count` · `last_log_date` · `body` · `file_mtime`).
+`merged_into` · `tags` · `created_by` · `created_at` · `updated_at` · `log_count` · `attachment_count` · `last_log_date` · `body` · `file_mtime`).
 스키마 **14** 에서 `precheck_score`(다 매겼을 때만, 100점 환산) · `precheck_rated` · `precheck_total` 을 더했다(TODO 155). `log_count` 는 **사람이 쓴 검토 기록만** 센다 — 판정 줄(`상태변경` 태그)은 빼고. 파생값이라
 파일에서 언제든 다시 만든다.
 
@@ -525,14 +539,14 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 담당자가 없는 팀은 `person = ''` 한 줄로 남는다. 팀과 사람을 한 문자열로 묶지 않는
 이유는 4.5.3 에 적었다.
 
-**`activity` — 역량 이력** (TODO 72 · 4.9). `people/<이름>/activities/*.md` 한 장이 한 줄 — `id` · `person` · `date` · `kind` · `title` · `body` · `rel_path` · `file_mtime`.
+**`activity` — 역량 이력** (TODO 72 · 4.9). `people/<이름>/activities/*.md` 한 장이 한 줄 — `id` · `person` · `date` · `end_date` · `kind` · `title` · `host` · `place` · `hours` · `cost` · `takeaway` · `link` · `body` · `author` · `rel_path` · `file_mtime` (+ `created_at` · `updated_at`).
 과제와 이어지지 않으므로 `reindex_all` 이 따로 훑는다.
 
-**스키마 16 — `meeting` 팀원 면담** (TODO 182 · 4.9). `people/<이름>/meetings/*.md` 한 장이 한 줄 — `id` · `person` · `date` · `summary` · `followups`(JSON) · `next_date` ·
-`rel_path` · `file_mtime`. 검색 색인(`search`)에는 넣지 않는다 — 팀장 본인만 보는 기록이라서. 읽기 전용 공유에서는 빈 목록으로 답한다(5.24).
+**스키마 16 — `meeting` 팀원 면담** (TODO 182 · 4.9). `people/<이름>/meetings/*.md` 한 장이 한 줄 — `id` · `person` · `date` · `kind` · `summary` · `followups`(JSON) · `open_followups` · `next_date` ·
+`body` · `author` · `rel_path` · `file_mtime`. 검색 색인(`search_fts`)에는 넣지 않는다 — 팀장 본인만 보는 기록이라서. 읽기 전용 공유에서는 빈 목록으로 답한다(5.24).
 
 > 표는 모두 열넷이다 — `project` · `intake` · `entry` · `report` · `report_entry` · `attachment` · `project_predecessor` · `project_owner` · `project_partner` · `tag` · `project_tag` ·
-> `entry_tag` · `activity` · `meeting`, 그리고 FTS 가상 표 `search`. 정본은 `backend/app/vault/schema.sql` 이고 판 번호는 `db.py` 의 `SCHEMA_VERSION`(16) 이다.
+> `entry_tag` · `activity` · `meeting`, 그리고 FTS 가상 표 `search_fts`(`db.py` 가 만든다). 정본은 `backend/app/vault/schema.sql` 이고 판 번호는 `db.py` 의 `SCHEMA_VERSION`(16) 이다.
 
 ### 4.8 설정 파일 (`vault/settings.json`)
 
@@ -560,6 +574,8 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 | `intake_stale_days` | 묵힘 기준일(기본 14). 접수·검토중인 건이 이 날수를 넘기면 풀과 홈에 붉게 선다. 보류는 빼고 센다 | 136 |
 | `meeting_cycle_days` | 면담 주기(기본 90). 마지막 면담이 이보다 오래됐으면 팀원역량에 "면담 D+N" | 182 · 5.24 |
 | `meeting_kinds` | 면담 종류 목록. `null` 이면 기본 목록 | 182 |
+| `backup_skip_assets` | 자동 백업에서 첨부(`assets/`) 빼기 — 문서 · 설정 · 이전 버전만. 기본 `false` | 202 · 197 |
+| `effect_confirm_over` | 효과 금액 단위 확인 기준(억원/년, 기본 100). 한 칸이 이보다 크면 화면이 저장 전에 묻는다. `0` 이면 묻지 않는다 — 서버는 막지 않는다 | 214 D4 |
 
 읽을 때 기본값과 합치므로 **열쇠가 빠져 있어도 동작한다.** 새 항목을 더할 때 기존 파일을 고칠
 필요가 없고, 반대로 모르는 열쇠는 그대로 두고 지나간다(손으로 적어 둔 메모를 지우지 않는다).
@@ -664,11 +680,11 @@ tags: []
 | 화면 | 내용 |
 |---|---|
 | **화면의 머리** (TODO 147 · 153) | 메뉴 화면은 모두 **같은 머리** — 제목(20px) 한 줄과 설명 한 줄. **제목은 탭 이름 그대로**(붙여 쓰기까지 — 홈 · 접수 · 과제목록 · 로드맵 · 보고대상 · 보고이력 · 팀원역량 · 설정 · 도움말), 무엇을 보는 화면인지는 설명 줄 머리에(*과제 수행 현황 — …*). 설명 줄은 어디서나 `.page-desc` 로 제목과 **4px**. 메뉴로 들어온 화면에는 뒤로 가기가 없다(설정 포함 — 153). 상세 화면(과제·접수)의 제목은 **이름**이라 한 단계 크게(22px). 표는 모두 `.grid`, 거르기 줄의 상자는 한 높이(34px). 같은 일은 같은 이름 — 삭제 보관함으로 옮기는 단추는 어디서나 **[삭제]**, 만들기는 **[… 추가]** · **[접수 등록]**(`+` 는 양식 안의 작은 더하기에만). 화면 시험 `[26]` 이 제목 크기와 상자 높이가 화면을 가로질러 한 가지인지 본다 |
-| **읽기 전용 공유** (TODO 191 · 192) | `run.py --share` 가 0.0.0.0 에 열면서 **같은 순간** 규칙을 켠다(`share.py` · `main.py` 미들웨어 한 곳). 막는 기준은 "누구" 가 아니라 **"어디서"** — 서버 PC 자신(127.0.0.1 · ::1 · 그 PC 의 자기 주소들, TODO 206)에서 온 요청은 지금처럼 전부, 바깥은 GET · HEAD 만(쓰기 53 끝점은 403), 읽기여도 folders · backup · settings · people(명부 · 사번) · errors · trash · versions · drafts · linkfix · health 는 403, 면담은 **빈 목록**, 팀원역량 요약의 면담 칸은 비움, `meta.vault` 빈 값 + `readonly`. 화면은 `body.readonly` 로 쓰기 단추(채운 단추 · .commit · .report · .danger · `[data-write]` · 첨부 · 면담 칸 · 설정 메뉴)를 숨긴다 — 숨기는 것은 편의, 막는 것은 서버. 바깥 요청은 `.logs/access-<날짜>.jsonl` 에 주소 · 시각 · 끝점만. 주인에게는 `meta.share`(주소 · 오늘 접속 수). 로그인 · 사용자 개념 없이 안전하다 — 그것은 2단계 |
+| **읽기 전용 공유** (TODO 191 · 192) | `run.py --share` 가 0.0.0.0 에 열면서 **같은 순간** 규칙을 켠다(`share.py` · `main.py` 미들웨어 한 곳). 막는 기준은 "누구" 가 아니라 **"어디서"** — 서버 PC 자신(127.0.0.1 · ::1 · 그 PC 의 자기 주소들, TODO 206)에서 온 요청은 지금처럼 전부, 바깥은 GET · HEAD 만(쓰기 54 끝점은 403 — 2026-10-22 셈), 읽기여도 folders · backup · settings · people(명부 · 사번) · errors · trash · versions · drafts · linkfix · health 는 403, API 문서(`/openapi.json` · `/docs` · `/redoc`)와 과제 원본 내보내기(`export?format=backup`)도 403(206), 면담은 **빈 목록**, 팀원역량 요약의 면담 칸은 비움, `meta.vault` 빈 값 + `readonly`. 화면은 `body.readonly` 로 쓰기 단추(채운 단추 · .commit · .report · .danger · `[data-write]` · 첨부 · 면담 칸 · 설정 메뉴)를 숨긴다 — 숨기는 것은 편의, 막는 것은 서버. 바깥 요청은 `.logs/access-<날짜>.jsonl` 에 주소 · 시각 · 끝점만. 주인에게는 `meta.share`(주소 · 오늘 접속 수). 로그인 · 사용자 개념 없이 안전하다 — 그것은 2단계 |
 | **여럿이 동시에 읽기** (TODO 190) | 혼자 38ms 던 홈이 10명이 같은 순간 열자 6.9초였다 — 한 요청이 SQL **1,164 문장**(과제마다 담당자 · 보고 · 기록을 따로 묻는 N+1). ① 후보 목록 · 홈 · 대시보드 · 과제목록이 **과제별로 묻지 않고 한 번에 모은다**(`_owners_by_project` · 창 함수 · `_Batch`) — 홈 52 · 대시보드 20 · 목록 7 문장. `test_query_budget` 이 끝점마다 문장 수 상한을 지킨다. ② 무거운 읽기(홈 · 대시보드 · 목록 · 후보 · meta · 로드맵 · 팀원역량 요약 · 접수 · 보고)의 답을 **5초 동안 나눠 쓴다**(`readcache.py`) — 쓰기 요청이 끝나면 판을 올려 전부 버리므로 "저장했는데 옛것" 은 없다. 열쇠에 읽기 전용 여부가 든다. ③ 스레드 풀 64, `/api/meta` ETag(304), 화면 묶음은 빌드 때 `.gz` 를 함께 내고 `/assets` 가 1년 캐시로 보낸다(574KB → 181KB). 실측은 [검토-다중접속](검토-다중접속-2026-10-13.md) · TODO 190 |
 | **단추의 색** (TODO 189) | 채운 색은 **누르면 일이 일어나는 대표 기능**에만, 목적별로 — **파랑**(기본) 만들기 · 저장 · **보라**(`.report`) 보고 ([보고 초안 만들기] 채움, 목록 줄마다의 [보고 초안] 은 연보라 `.ghost.report`) · **갈색**(`.commit`, 나이테 색) 보고 확정 · 착수 · 과제로 승격 · 번호 다시 매기기 적용 — 되돌리기 어려운 결정 · **빨강** 삭제 · 빼기(`.ghost.danger`, 빨간 글 + 연한 빨간 테두리). **고른 상태는 채우지 않는다** — [표]/[보드] · 대시보드 거르기 칩은 연한 파랑. 그 밖 200여 개는 흰 단추(`.ghost`). 규칙 둘: 채운 단추는 **한 자리에 하나**(보고 편집기의 [저장] 은 흰 단추 — 주인공은 [보고 확정]), **같은 기능은 어느 화면에서나 같은 색**. 도움말 FAQ "단추 색은 무엇을 뜻하나요?", 화면 시험 `[37]` 이 색과 대비를 잰다 |
 | **홈 — 처음 켰을 때** | 과제가 하나도 없는 동안에는 **지표를 세우지 않는다** (TODO 84). 0 이 여덟 개 늘어선 대시보드는 처음 켠 사람에게 아무것도 알려 주지 않는다. 대신 세 걸음을 세운다 — ① 작성자·담당자 명부 ② 첫 과제 ③ 진행일지. [과제 만들기]는 `#/projects?new=1` 로 **입력 칸까지 바로 연다.** 이 도구는 다른 팀장에게 배포해 쓰는 것이 목표(R2)라 **첫 5분이 곧 채택 여부**다 |
-| **홈 (`#/`)** | 첫 화면 (TODO 56). 연도 하나를 골라 **"우리 팀이 그 해에 무엇을 했나"**를 본다 — 이번 주 할 일(보고 대상·기한 초과·마감 임박·오래 방치), 팀 현황(과제·진행중·완료·보고 횟수·효과 금액), 연도별 추이, **팀원별 성과**(ROADMAP R1)와 **속성별**·**그룹별**(TODO 90) — 셋 다 상태 여섯 칸을 `STATUSES` 순서로 세운다(0도 빼지 않는다. 줄끼리 세로로 견주는 자리라 칸이 줄마다 달라지면 비교가 안 된다) —, **이번 주 할 일과 팀 현황은 나란히 선다** — 세로로 쌓으면 오른쪽이 비고 매일 보는 것을 보려고 스크롤해야 한다 (1100px 아래에서는 한 줄씩). 모든 수는 눌러서 그 조건의 목록으로 이어진다 (5.8). 팀원별 표에는 **역량 이력 건수**가 한 칸 붙는다 (TODO 89) — 면담 준비에 두 화면을 오가지 않게 하려는 것이고, 0 이면 그 자체가 이야깃거리다. 효과 금액에는 **분모**를 적는다 (TODO 86) — 실증은 끝난 과제에서만 나오므로 `기대 → 실증` 화살표가 달성률로 읽히면 안 된다. 대시보드와 목적이 다르다 — 대시보드는 *지금 무엇을 볼까*, 홈은 *올해 무엇을 했나* |
+| **홈 (`#/`)** | 첫 화면 (TODO 56). 연도 하나를 골라 **"우리 팀이 그 해에 무엇을 했나"**를 본다 — 이번 주 할 일(보고 대상·기한 초과·마감 임박·오래 방치), 팀 현황(과제·진행중·완료·보고 횟수·효과 금액), 연도별 추이, **팀원별 성과**(ROADMAP R1)와 **속성별**·**그룹별**(TODO 90) — 셋 다 상태 여섯 칸을 `STATUSES` 순서로 세운다(0도 빼지 않는다. 줄끼리 세로로 견주는 자리라 칸이 줄마다 달라지면 비교가 안 된다) —, **이번 주 할 일과 팀 현황은 나란히 선다** — 세로로 쌓으면 오른쪽이 비고 매일 보는 것을 보려고 스크롤해야 한다 (1100px 아래에서는 한 줄씩). 모든 수는 눌러서 그 조건의 목록으로 이어진다 (5.8). 팀원별 표에는 **역량 이력 건수**가 한 칸 붙는다 (TODO 89) — 면담 준비에 두 화면을 오가지 않게 하려는 것이고, 0 이면 그 자체가 이야깃거리다. 효과 금액에는 **분모**를 적는다 (TODO 86) — 실증은 끝난 과제에서만 나오므로 `기대 → 실증` 화살표가 달성률로 읽히면 안 된다(217 부터는 진행중 과제의 중간 결산도 실증 합계에 들고, 그 몫을 따로 적는다 — 5.27). 대시보드와 목적이 다르다 — 대시보드는 *지금 무엇을 볼까*, 홈은 *올해 무엇을 했나* |
 | **메인 대시보드** | 과제 목록 화면 맨 위. 상태별·속성별·담당자별 과제 수(누르면 그 조건으로 목록이 걸러짐), 이번 주 보고 대상 후보 5건(누르면 상세로), 마감 임박·기한 초과를 작게. 접을 수 있고 접은 상태를 기억한다. 지표를 늘리지 않는 것이 규칙이다 — 숫자가 많아지면 대시보드가 아니라 또 하나의 표가 된다 (5.8) |
 | **과제 목록 / 보드** (`#/projects`) | 과제를 다루는 화면. 상태별 칸반 보드 ↔ 테이블 뷰 전환. **유관부서 거르기**는 적어 둔 것이 하나라도 있을 때만 선다 (TODO 92) — 쓰지 않는 팀에게 고를 것 없는 상자를 늘리지 않는다. 컬럼: 제목, 상태, 그룹, 태그, 마감일(D-day 배지), 최근 업데이트, **마지막 보고일 / 보고 후 경과일 / 미보고 진행 건수**. 필터: 상태·그룹·태그·기간·**등록 경로**(접수에서 승격 / 직접 등록), 분류 넷 상자는 속성에서 스마트과제를 골랐거나 분류 조건이 걸려 있을 때만 선다 (TODO 136), 정렬: 최근 업데이트순(기본)/마감일순/**보고 경과일순** |
 | **접수 풀** (`#/intakes`) | 현업 과제 요청을 모아 두는 곳 (TODO 136). 메뉴는 과제목록 **앞**에 둔다 — 팀의 일이 그 순서로 흐른다. 기본은 판정이 안 난 것(접수·검토중·보류). 위쪽 칩이 곧 거르기 — 대기·검토중·보류·**묵힘** / 그 해 착수·반려·이관·병합. 분류 넷·중요도·요청 부서·접수 연도·★ 로 거르고 경과일·중요도·접수일로 정렬. **과제 목록과 섞지 않는다** |
@@ -696,7 +712,7 @@ POST /api/entries/{entry_id}/attachments  (multipart, 스트리밍)
         │  └─ 같은 패스에서 sha256 누적 계산 (파일 재읽기 없음)
         ├─ 디스크 여유 공간 확인 → 부족하면 즉시 중단하고 임시 파일 정리
         ├─ 완료 후 vault/projects/{proj}/assets/{일지날짜}/{NNN}-{이름} 으로 원자적 이동(os.replace)
-        ├─ 같은 과제 내 동일 sha256이면 기존 경로 재사용(중복 저장 방지)
+        ├─ 같은 문서에 내용(sha256)·이름이 같은 파일이 있으면 기존 경로 재사용(중복 저장 방지 — 204 부터 문서 단위, 처음엔 과제 단위)
         └─ attachment 레코드 생성
         │
         ▼
@@ -704,7 +720,7 @@ POST /api/entries/{entry_id}/attachments  (multipart, 스트리밍)
         │
         ▼
 에디터가 커서 위치에 스니펫 삽입
-   이미지 → ![이름](assets/…)   그 외 → [이름](assets/…)
+   이미지 → ![이름](../assets/…)   그 외 → [이름](../assets/…)   (문서 위치 기준 — 원칙 2)
 ```
 
 **대용량 업로드 처리 (용량 상한 없음)**
@@ -721,10 +737,10 @@ POST /api/entries/{entry_id}/attachments  (multipart, 스트리밍)
 | 이미지 처리 | 썸네일 생성은 이미지에 한해 수행하고, 초대형 이미지(예: 8000px 초과)는 축소본만 생성. 이미지가 아닌 대용량 파일은 아이콘 + 용량 표시만 |
 | 목록 표시 | 과제별 첨부 용량을 표시해 저장소가 얼마나 커지는지 사용자가 인지할 수 있게 함 (차단은 하지 않음). 전체 용량은 설정 → 점검에 (TODO 204) |
 
-> 상한을 두지 않으므로 **백업 부담**이 커질 수 있다. vault를 통째로 복사하는 방식이 느려지면, 첨부를 제외한 문서만 백업하는 옵션(`format=zip&assets=none`)을 함께 제공한다 (→ TODO 202 에서 만든다 — 2026-10-15 전수 점검까지 없었다).
+> 상한을 두지 않으므로 **백업 부담**이 커질 수 있다. vault를 통째로 복사하는 방식이 느려지면, 첨부를 제외한 문서만 백업하는 옵션을 함께 제공한다 (→ TODO 202 에서 만들었다 — 2026-10-15 전수 점검까지 없었다. 내려받기 `/api/backup?assets=none` · 자동 백업은 설정 `backup_skip_assets`).
 
 * **미리보기 정책**: 이미지는 인라인 렌더링(썸네일 캐시 생성), PDF는 브라우저 내장 뷰어로 새 탭, 오피스 문서는 다운로드 링크 + 아이콘 표시(서버 측 변환 없음).
-* **고아 파일 정리**: 어떤 문서에서도 참조되지 않는 assets 파일은 재인덱싱 시 표시만 하고 자동 삭제하지 않는다. 사용자가 [정리] 를 눌러 확인한 뒤 `.trash/`로 이동시킨다 (→ TODO 204 — 지금은 "본문에서 쓰지 않는 파일 N건" 표시까지만 있다).
+* **고아 파일 정리**: 어떤 문서에서도 참조되지 않는 assets 파일은 재인덱싱 시 표시만 하고 자동 삭제하지 않는다. 사용자가 [정리] 를 눌러 확인한 뒤 `.trash/`로 이동시킨다 (→ TODO 204 에서 만들었다 — 과제 상세 "본문에서 쓰지 않는 파일 N건" 옆 [정리], `POST /api/projects/{id}/attachments/cleanup`. 보고 자료는 빼고 옮긴다). 기록을 지울 때는 그 기록에만 쓰인 첨부가 함께 보관함으로 가므로(218, 5.28) 고아가 덜 생긴다.
 
 **첨부하는 방법은 세 가지** — 붙여넣기(Ctrl+V), 끌어다 놓기, 그리고 **[📎 파일 첨부] 버튼**(파일 선택 대화상자). 앞의 두 가지만 있으면 "첨부 기능이 어디 있는지 모르겠다"는 반응이 나온다. 눈에 보이는 버튼이 있어야 한다.
 **파일을 붙이는 자리는 모두 같은 판을 쓴다** (TODO 138) — 📎 · 끌어다 놓기 · Ctrl+V · 첨부 목록 · [본문에 삽입] · (엑셀이면) [내용 보기]. 진행일지·보고·과제 개요·접수 요청 내용·접수 검토 기록·새 접수 양식. 편집기를 새로 짤 때 이 중 하나가 빠지면 결함이다.
@@ -739,26 +755,26 @@ POST /api/entries/{entry_id}/attachments  (multipart, 스트리밍)
 
 **첨부와 진행일지의 연결**
 
-* 첨부는 진행일지에 속하므로, 아직 저장하지 않은 새 기록에 파일을 붙이면 **기록을 먼저 만든 뒤** 업로드한다.
+* 첨부는 진행일지에 속하므로, 아직 저장하지 않은 새 기록에 파일을 붙이면 **기록을 먼저 만든 뒤** 업로드한다. 그 기록은 [저장] 전까지 **임시**라 버리면 이번 첨부와 함께 지운다(213, 5.26).
 * 업로드·삭제 시 진행일지 front matter의 `attachments` 목록을 실제 파일과 동기화한다. 본문에서 참조하지 않는 자료도 md 파일만 보고 알 수 있다.
 
 ### 5.3 채택하지 않은 대안 — 중앙 첨부 저장소
 
-`attachments/ab/cd/<sha256>.png` 형태의 콘텐츠 주소 저장은 중복 제거에 유리하지만, md 파일을 외부 도구로 열었을 때 이미지가 깨지고 사람이 파일 탐색기에서 자료를 찾을 수 없다. 이식성이 이 도구의 핵심 가치이므로 **과제 폴더 내 상대경로 저장**을 택하고, 중복 제거는 같은 과제 내 sha256 비교 수준으로 한정한다.
+`attachments/ab/cd/<sha256>.png` 형태의 콘텐츠 주소 저장은 중복 제거에 유리하지만, md 파일을 외부 도구로 열었을 때 이미지가 깨지고 사람이 파일 탐색기에서 자료를 찾을 수 없다. 이식성이 이 도구의 핵심 가치이므로 **과제 폴더 내 상대경로 저장**을 택하고, 중복 제거는 같은 과제 내 sha256 비교 수준으로 한정한다. (TODO 204 에서 **같은 문서 안**으로 더 좁혔다 — 5.2)
 
 ### 5.4 단일 md 내보내기
 
 과제 상세 → "전체 이력 다운로드". 개요 + 모든 진행일지를 날짜 오름차순으로 병합한다.
 
 ```
-GET /api/projects/{id}/export?format=md&assets=zip|inline|link
+GET /api/projects/{id}/export?format=zip|md|html|backup[&assets=inline|link][&include_reports_full=true]
 ```
 
 | 옵션 | 결과 |
 |---|---|
-| `assets=zip` (기본) | `2026-001-리튬전지-수명평가.zip` = 병합된 `과제명.md` + `assets/` 폴더. 상대경로가 그대로 유효 |
-| `assets=inline` | 단일 `.md` 하나만. 이미지는 base64 data URI로 인라인, 비이미지 첨부는 파일명만 각주로 표기 |
-| `assets=link` | 단일 `.md` 하나만. 첨부 링크는 로컬 서버 URL로 치환 (도구를 계속 쓰는 전제) |
+| `format=zip` (기본) | `2026-001-리튬전지-수명평가.zip` = 병합된 `과제명.md` + `assets/` 폴더. 상대경로가 그대로 유효 |
+| `format=md&assets=inline` | 단일 `.md` 하나만. 이미지는 base64 data URI로 인라인, 비이미지 첨부는 파일명만 각주로 표기 |
+| `format=md&assets=link` | 단일 `.md` 하나만. 첨부 링크는 로컬 서버 URL로 치환 (도구를 계속 쓰는 전제) |
 
 구현하면서 두 가지를 보탰다.
 
@@ -783,9 +799,9 @@ GET /api/projects/{id}/export?format=md&assets=zip|inline|link
 ...
 ```
 
-병합 문서 말미에는 **보고 이력 요약**(보고일 목록 + 각 보고의 요약 첫 줄)을 덧붙이며, `?include=reports_full`을 주면 각 보고의 `report.md` 전문도 함께 포함한다.
+병합 문서 말미에는 **보고 이력 요약**(보고일 목록 + 각 보고의 요약 첫 줄)을 덧붙이며, `include_reports_full=true` 를 주면 각 보고의 `report.md` 전문도 함께 포함한다.
 
-추가로 `format=html`(단일 HTML, 이미지 인라인 — 보고용 공유에 편리), `format=zip`(원본 파일 구조 그대로 백업)을 제공한다.
+추가로 `format=html`(단일 HTML, 이미지 인라인 — 보고용 공유에 편리), `format=backup`(과제 폴더 원본 구조 그대로 — 읽기 전용 공유의 바깥에는 403, TODO 206)을 제공한다.
 
 ### 5.5 외부 편집 동기화
 
@@ -802,7 +818,7 @@ GET /api/projects/{id}/export?format=md&assets=zip|inline|link
         ▼ 마지막 보고 이후의 진행일지를 자동 수집
 POST /api/projects/{id}/reports/draft
         │
-        ├─ 기간: 직전 보고의 covers_to 다음날 ~ 오늘
+        ├─ 담는 것: 아직 확정 보고에 없는 진행일지 중 보고일까지 (TODO 81 — 아래). covers_from·to 는 그 첫날·끝날
         ├─ 해당 구간 진행일지 본문·이미지를 모아 report.md 초안 생성
         └─ 상태: 초안 (frozen_at = NULL, 자유롭게 편집 가능)
         │
@@ -990,6 +1006,7 @@ score = elapsed + unreported_entries × 0.5
 | GET | `/api/projects` | 목록. `?status=&type=&group=&tag=&owner=&partner=&q=&year=&done_year=&verified=&owner_left=&effect=&no_effect=&nature=&category=&delivery=&cost_kind=&from_intake=&due=&new=&sort=&order=` (분류 넷은 `none` 이 *비어 있는 것* · `from_intake=yes\|no` — 136) (`effect=expected\|verified` 금액이 적힌 과제 — 124 · `no_effect=none\|only` 효과성 비대상/대상 — 125) (`owner_left=1` 떠난 담당자가 남은 **끝나지 않은** 과제 — 122) (`done_year` 완료일 기준 · `verified=none` 실증효과 미입력 — TODO 104 · 106) (`year` 는 **수행기간이 그 해와 겹치는 과제**, 상태 · 효과 거르기도 그 해 기준 · `new=1` 그 해에 착수한 과제만 — 181) · 한 줄에 `effect_year`(효과를 세는 해 — 181) · `year_status`(그 해의 상태 — 184, `status` 는 지금 상태), `sort=status` 는 그 해의 상태로 |
 | POST | `/api/projects` | 과제 생성 (폴더 + index.md 생성). 번호의 연도는 **시작일**을 따른다 (95) |
 | GET | `/api/projects/next-id` | 저장하면 붙을 번호를 미리 보여 준다 (`?start_date=`, 95) |
+| GET | `/api/projects/title-check` | 같은 이름의 과제 (`?title=&exclude=`) — 화면이 **저장 전에** 묻는다(새 과제 · 제목 수정 · 승격 · 이 과제로 새 과제, 214 D11) |
 | GET | `/api/projects/{id}` | 개요 + 일지 목록 요약. 답하지 않은 지시·다음 할 일·개요 작성 여부를 함께 준다 (107 · 112 · 106-B) |
 | PATCH | `/api/projects/{id}` | 메타 수정 → front matter 재작성 |
 | GET/POST | `/api/projects/{id}/year-fix` | 번호의 연도가 시작일과 어긋날 때 — 옮길 번호 미리보기 / 실제로 옮기기 (폴더·첨부·버전까지, 95) |
@@ -1004,7 +1021,7 @@ score = elapsed + unreported_entries × 0.5
 |---|---|---|
 | GET | `/api/projects/{id}/entries` | 진행일지 목록 |
 | POST | `/api/projects/{id}/entries` | 일지 생성 |
-| GET/PATCH/DELETE | `/api/entries/{entry_id}` | 일지 조회/수정/삭제 |
+| GET/PATCH/DELETE | `/api/entries/{entry_id}` | 일지 조회/수정/삭제. 삭제는 그 기록에만 쓰인 첨부도 함께 보관함으로 (218, 5.28) |
 
 **보고**
 
@@ -1028,6 +1045,7 @@ score = elapsed + unreported_entries × 0.5
 | Method | Path | 설명 |
 |---|---|---|
 | GET/POST | `/api/projects/{id}/attachments` | 과제 개요 첨부(효과 산출 근거 등) 목록·업로드 |
+| POST | `/api/projects/{id}/attachments/cleanup` | 본문에서 쓰지 않는 첨부를 보관함으로 — [정리]. 보고 자료는 옮기지 않는다 (204) |
 | GET/POST | `/api/entries/{entry_id}/attachments` | 진행일지 첨부 목록·업로드(multipart) |
 | GET | `/api/attachments/{id}/thumb` | 이미지 썸네일 |
 | GET | `/api/attachments/{id}/preview` | xlsx 표·이미지 추출 미리보기(HTML) |
@@ -1091,7 +1109,7 @@ score = elapsed + unreported_entries × 0.5
 |---|---|---|
 | GET | `/api/versions` · `/overview` · `/content` | 로컬 버전 보관(`.versions/`) 목록·개요·내용. 목록의 `body_changed` — 그 다음 저장이 본문을 바꿨나(아니면 *정보만 바뀐 저장*, 화면이 접는다 — 152) |
 | POST | `/api/versions/restore` | 지난 버전으로 되돌리기 — **본문만**. 정보 칸(front matter — 과제명·상태·담당·기간·접수 번호 …)은 지금 것 그대로 (152) |
-| GET | `/api/trash` · POST `/api/trash/{name}/restore` | 삭제 보관함 목록 · 원래 자리로 되돌리기 |
+| GET | `/api/trash` · POST `/api/trash/{name}/restore` | 삭제 보관함 목록 · 원래 자리로 되돌리기. 기록을 되돌리면 함께 간 첨부(`parent`)도 돌아온다 (218) |
 | GET | `/api/settings/backup/status` · POST `/api/settings/backup/run` | 백업 상태(층별 보관 수 · 전체 용량 · **되돌릴 수 있는 날짜** · 최근 5벌) · 지금 백업 (119) |
 | GET | `/api/backup` | 전체 vault ZIP 내려받기 |
 | GET/DELETE | `/api/errors` | 오류 기록 조회·비우기 (5.10 — 과제 내용은 담지 않는다) |
@@ -1134,28 +1152,32 @@ md_mgmt_tool/
 │   │   ├── config.py            # vault 경로, 상태 목록, 업로드 설정
 │   │   ├── db.py                # 커넥션, PRAGMA user_version 기반 스키마 버전
 │   │   ├── deps.py              # 요청 스코프 의존성
-│   │   ├── schemas.py           # Pydantic 모델
+│   │   ├── schemas.py           # Pydantic 모델 · 입력 규칙의 서버 쪽 (205 · 214)
+│   │   ├── clock.py             # 날짜 규칙의 "오늘" 한 곳 — 시험은 MD_MGMT_TODAY (219, 5.28)
+│   │   ├── readcache.py         # 무거운 읽기의 답을 5초 나눠 쓴다 (190)
+│   │   ├── share.py             # 읽기 전용 공유 규칙 — 어디서 온 요청인가 (191 · 206)
 │   │   ├── vault/
 │   │   │   ├── paths.py         # 경로 계산 & traversal 방어
 │   │   │   ├── markdown.py      # front matter 읽기/쓰기
 │   │   │   ├── indexer.py       # 스캔 & 인덱싱 (md 가 원본, DB 는 파생물)
 │   │   │   ├── versions.py      # .versions/ 로컬 버전 보관
 │   │   │   └── schema.sql       # 색인 스키마 (SCHEMA_VERSION 과 함께 움직인다)
-│   │   ├── api/                 # projects entries reports attachments activities intakes meetings roadmap drafts …(17)
+│   │   ├── api/                 # 라우터 21 — projects entries reports attachments activities intakes meetings roadmap drafts
 │   │   │                        # home dashboard search export people settings
-│   │   │                        # meta trash versions errors folders linkfix intakes
-│   │   └── services/            # projects entries reports attachments activities intakes meetings roadmap period precheck …
+│   │   │                        # meta trash versions errors folders linkfix
+│   │   └── services/            # 25 — projects entries reports attachments activities intakes meetings roadmap period precheck drafts
 │   │                            # home dashboard search export people settings
 │   │                            # trash backup renumber errorlog ai_prompt
-│   │                            # folders linkfix buildinfo intakes
-│   └── tests/                   # pytest 66 파일 (백엔드 자동 시험, 2026-10-15)
+│   │                            # folders linkfix buildinfo
+│   └── tests/                   # pytest 74 파일 (백엔드 자동 시험, 2026-10-22)
 ├── frontend/
 │   ├── src/
 │   │   ├── api.ts               # 서버로 가는 길 한 곳
 │   │   ├── nav.ts               # 주소가 화면 상태를 든다 (5.12)
 │   │   ├── markdown.ts          # 렌더링 + 첨부 링크 기준 경로
 │   │   ├── plaintext.ts · table.ts · tsv.ts   # 엑셀 셀 복사 · 표 붙여넣기 · 표 복사 (108)
-│   │   ├── components/          # 화면 부품 57개 — ProjectDetail Home Settings ReportEditor …
+│   │   ├── inputRules.ts        # 입력 규칙의 화면 쪽 한 자리 (214, 5.27)
+│   │   ├── components/          # 화면 부품 59개(.tsx, 2026-10-22) — ProjectDetail Home Settings ReportEditor …
 │   │   └── styles.css           # 색·간격 토큰 한 곳
 │   └── dist/                    # 빌드 결과. Node 없는 PC 를 위해 저장소에 함께 둔다
 ├── tests/ui/                    # Playwright 화면 자동 시험 (screens.mjs, contrast.mjs)
@@ -1209,6 +1231,7 @@ md_mgmt_tool/
 | **M5.17. 팀원 면담** ✅ | 팀원역량 화면 안의 면담 기록 — 한 줄 요약 · 하기로 한 것(닫을 때까지) · 다음 면담, 사람별 마지막 면담 · 열린 것, 면담할 때가 지난 사람(182, 스키마 16). 고른 사람은 좁혀지는 두 칸 위의 띠 [팀 전체로 ×] · 이름 다시 누르기로 푼다(183 · 185) | 역량 이력을 놓고 한 면담의 결과가 남고, 다음 면담에서 "하기로 한 것" 부터 꺼낸다 |
 | **M5.16. 연도 = 수행기간** ✅ | 연도를 고르면 그 해에 수행한 과제 모두(다년도 과제는 해마다), 완료 = 그 해에 끝낸 과제, 효과 = 끝나는 해, 신규 착수 칸 · 거르기(181). 과제목록 · 보드의 상태 칸도 그 해의 상태, 지금 상태가 다르면 옆에 작게(184) | 해가 바뀌어도 하고 있는 과제가 첫 화면에서 사라지지 않고, 그 해의 계획 대비 실적을 같은 해에서 본다 |
 | **M5.18. 팀원에게 읽기 전용으로** ✅ | 여럿이 동시에 읽는 성능(190 — 묶음 질의 · 답 나눠 쓰기 · 미리 압축한 화면 파일), 읽기 전용 공유 모드 `run.bat --share`(191 — 서버가 어디서 온 요청인지 보고 막는다), 켜기 · 운영(192), 떠난 사람 표시(194), 단추 색(189) | 팀장 PC 한 대로 팀원이 **보기만** 한다. 로그인 없이 — 막는 기준이 "누구" 가 아니라 "어디서" 라서(5.24 · [검토](검토-다중접속-2026-10-13.md)) |
+| **M5.19. 지키기 · 정합성** ✅ | 문서와 코드 맞추기(196 · 197), 파일과 색인을 지키는 규칙(198~201 · 206 — 5.25), 쓰기 원자성 · 보관함 복구 · 첨부 · 입력 검증(202~205), 화면의 틈(207~212), 편집 장부(213 — 5.26), 입력값 정합성 · 입력 거절은 따로(214 · 216 — 5.27), 임시 보관 지우기 겹침(215), 진행중 과제의 실증효과(217), 기록과 첨부가 함께 가고 돌아옴 · 오늘은 한 곳에서(218 · 219 — 5.28) | 손으로 고친 파일 · 잠긴 파일 · 중간 실패 · 엉뚱한 입력에도 데이터가 상하지 않고, [닫기] 하면 아무것도 바뀌지 않는다 (배포본 `느린나이테-20261015-v1` ~ `20261020-v1`) |
 | **M6. 팀원까지 쓰기 (2.0)** ◀ 신호 대기 | 사용자 개념 · 소유 팀 · 로그인 · 권한 · 동시 편집 안내 · 서비스 등록 (TODO 193, [로드맵-확산단계](로드맵-확산단계.md) 3.3) | 착수 신호 "팀원도 쓰게 하자" |
 
 M1~M2까지가 첨부 관련 불편을 해소하는 최소 유용 제품(MVP)이고, **M4가 "보고 시점 예측"이라는 두 번째 핵심 가치**를 완성한다.
@@ -1270,12 +1293,12 @@ M5.12 는 요청이 아니라 **전수 점검**에서 나왔다 — 기계로 �
 | 리스크 | 대응 |
 |---|---|
 | vault를 외부 도구로 동시 편집하며 덮어쓰기 | 저장 전 `file_mtime` 비교 → 변경 감지 시 사용자에게 알리고 덮어쓰기 여부 확인 |
-| 첨부 누적으로 저장소 비대화 | 용량 상한을 두지 않기로 했으므로 **차단 대신 가시화** — 과제별 첨부 용량 표시(있다), 전체 용량 · 문서만 백업하는 옵션(TODO 202 · 204). 중복 파일 감지는 하지 않기로(같은 과제 안의 같은 파일은 이미 한 벌만 둔다 — 2026-10-15) |
+| 첨부 누적으로 저장소 비대화 | 용량 상한을 두지 않기로 했으므로 **차단 대신 가시화** — 과제별 첨부 용량 표시(있다), 전체 용량 · 문서만 백업하는 옵션(TODO 202 · 204). 중복 파일 감지는 하지 않기로(같은 과제 안의 같은 파일은 이미 한 벌만 둔다 — 2026-10-15. 204 부터는 같은 **문서** 안에서만 — 다른 기록에 올린 같은 파일은 따로 둔다) |
 | 백업 부재 | vault 폴더를 그대로 복사하면 완전 백업(자동 백업 — 5.18). 첨부가 커지면 문서만 백업하는 옵션 병행(TODO 202). vault를 git 저장소로 두는 방식은 사내망 운영 관점에서 제외(T20) |
 | 한국어 전문 검색 품질 | trigram으로 시작, 부족하면 형태소 분석기 도입 |
 | 확정된 보고 문서를 나중에 고치고 싶어짐 | 원칙은 읽기 전용이나 `unfreeze`로 해제 가능하게 하되, 해제·재확정 시각을 front matter에 남겨 사후 수정 여부가 드러나게 함 |
 | 엑셀 미리보기가 원본 서식과 다름 | 표와 이미지 추출 수준으로만 제공하고 원본 다운로드를 항상 병행. 서식 재현이 목적이 아님을 UI에 명시 |
-| 보고 없이 오래 방치된 과제의 경과일이 무한정 커짐 | 후보 점수 상한을 두고, 상태가 보류·완료·중단이면 후보에서 제외 |
+| 보고 없이 오래 방치된 과제의 경과일이 무한정 커짐 | 점수를 매기지 않는다 — 경과일 · 미보고 건수를 그대로 보이고 그 순서로 세운다(5.7, 처음엔 점수 상한을 뒀다). 상태가 보류·완료·중단이면 후보에서 제외 |
 | 경로 traversal / 파일명 충돌 | 모든 경로를 vault 루트 기준으로 정규화 후 검증, 파일명은 순번 접두사로 유일성 확보 |
 
 ---
@@ -1320,7 +1343,8 @@ M5.12 는 요청이 아니라 **전수 점검**에서 나왔다 — 기계로 �
 기록으로 남는다.** 3개는 원인 추적에 대개 충분하면서 그 선을 넘지 않는 크기다.
 
 404 를 기록하지 않는 것도 같은 맥락이다. 흔하고 대개 문제가 아니라서, 기록이 그런 줄로
-차면 정작 봐야 할 것을 못 본다. 기록은 **적을수록 읽힌다.**
+차면 정작 봐야 할 것을 못 본다. 기록은 **적을수록 읽힌다.** 같은 까닭으로 입력 규칙이 돌려보낸 400 · 422 도
+"최근 오류" 에 세우지 않고 따로 센다(`.logs/input.log`, 최근 50건 — TODO 216, 5.27).
 
 **화면 쪽 오류도 같은 기록에 쌓는다 (TODO 166).** 그리다 멈춘 화면(오류 경계)과 아무도 받지 않은
 실패(`unhandledrejection`)를 `POST /api/errors/client` 로 보낸다. 보내는 것은 **화면 이름 · 오류 종류 ·
@@ -1575,7 +1599,7 @@ vault 를 git 저장소로 두지 않기로 한 것과 같은 판단이다(§ R2
 그 한 칸이 생기면 나머지가 따라온다.
 
 ```
-명부에 left_on 을 적는다
+명부에 left_on 을 적는다 (그날부터 — 미래 날짜면 아직 있는 사람, TODO 214)
   → 새 과제 담당자 후보에서 빠진다
   → 이름 옆에 [전배]·[퇴사] 딱지 (이름은 그대로)
   → 끝나지 않은 과제에 남아 있으면 홈이 "대체 담당자 지정 필요 N건"
