@@ -522,14 +522,14 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
     clause, params = _year_clause(year)
     overdue = conn.execute(
         "SELECT COUNT(*) AS n FROM project p"
-        " WHERE due_date IS NOT NULL AND due_date < DATE('now', 'localtime')"
+        " WHERE due_date IS NOT NULL AND due_date < app_today()"
         f"   AND status NOT IN ({placeholders}){clause}",
         (*FINISHED_STATUSES, *params),
     ).fetchone()["n"]
     due_soon = conn.execute(
         "SELECT COUNT(*) AS n FROM project p"
-        " WHERE due_date IS NOT NULL AND due_date >= DATE('now', 'localtime')"
-        "   AND due_date <= DATE('now', 'localtime', '+7 day')"
+        " WHERE due_date IS NOT NULL AND due_date >= app_today()"
+        "   AND due_date <= DATE(app_today(), '+7 day')"
         f"   AND status NOT IN ({placeholders}){clause}",
         (*FINISHED_STATUSES, *params),
     ).fetchone()["n"]

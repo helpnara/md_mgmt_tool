@@ -238,12 +238,12 @@ def _serialize(
 # 끝난 과제(완료·중단)는 빼 둔다 — 마감이 지났다고 경고할 이유가 없고,
 # 무엇보다 대시보드가 세는 수와 이 필터가 거르는 수가 어긋나면 안 된다.
 _NOT_FINISHED = f"p.status NOT IN ({','.join(repr(s) for s in FINISHED_STATUSES)})"
-_UPCOMING = f"p.due_date IS NOT NULL AND p.due_date >= DATE('now', 'localtime') AND {_NOT_FINISHED}"
+_UPCOMING = f"p.due_date IS NOT NULL AND p.due_date >= app_today() AND {_NOT_FINISHED}"
 DUE_FILTERS = {
-    "overdue": f"p.due_date IS NOT NULL AND p.due_date < DATE('now', 'localtime') AND {_NOT_FINISHED}",
-    "7": f"{_UPCOMING} AND p.due_date <= DATE('now', 'localtime', '+7 day')",
-    "14": f"{_UPCOMING} AND p.due_date <= DATE('now', 'localtime', '+14 day')",
-    "30": f"{_UPCOMING} AND p.due_date <= DATE('now', 'localtime', '+30 day')",
+    "overdue": f"p.due_date IS NOT NULL AND p.due_date < app_today() AND {_NOT_FINISHED}",
+    "7": f"{_UPCOMING} AND p.due_date <= DATE(app_today(), '+7 day')",
+    "14": f"{_UPCOMING} AND p.due_date <= DATE(app_today(), '+14 day')",
+    "30": f"{_UPCOMING} AND p.due_date <= DATE(app_today(), '+30 day')",
 }
 
 

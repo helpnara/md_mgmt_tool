@@ -81,7 +81,7 @@ def is_local_host(host: str | None) -> bool:
 # 읽기(GET)여도 바깥에는 열지 않는 끝점 — 앞부분이 맞으면 막는다
 BLOCKED_PREFIXES = (
     "/api/folders", "/api/backup", "/api/settings", "/api/errors", "/api/trash",
-    "/api/versions", "/api/drafts", "/api/linkfix", "/api/health", "/api/people",
+    "/api/versions", "/api/drafts", "/api/maintenance", "/api/health", "/api/people",  # maintenance = 링크 점검 (TODO 220)
     # API 문서 — 끝점 전체 · 스키마 필드명이 보인다 (TODO 206 ㉘)
     "/openapi.json", "/docs", "/redoc",
 )

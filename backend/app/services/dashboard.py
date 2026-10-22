@@ -80,15 +80,15 @@ def summary(conn: sqlite3.Connection, limit: int = CANDIDATE_LIMIT, year: str | 
     # 끝난 과제는 마감 경고에서 뺀다. 보류는 멈춰 있을 뿐이라 그대로 센다.
     overdue = conn.execute(
         f"SELECT COUNT(*) AS n FROM project p"
-        f" WHERE due_date IS NOT NULL AND due_date < DATE('now', 'localtime')"
+        f" WHERE due_date IS NOT NULL AND due_date < app_today()"
         f"   AND status NOT IN ({placeholders}){year_clause}",
         (*FINISHED_STATUSES, *year_params),
     ).fetchone()["n"]
     due_soon = conn.execute(
         f"SELECT COUNT(*) AS n FROM project p"
         f" WHERE due_date IS NOT NULL"
-        f"   AND due_date >= DATE('now', 'localtime')"
-        f"   AND due_date <= DATE('now', 'localtime', '+{DUE_SOON_DAYS} day')"
+        f"   AND due_date >= app_today()"
+        f"   AND due_date <= DATE(app_today(), '+{DUE_SOON_DAYS} day')"
         f"   AND status NOT IN ({placeholders}){year_clause}",
         (*FINISHED_STATUSES, *year_params),
     ).fetchone()["n"]

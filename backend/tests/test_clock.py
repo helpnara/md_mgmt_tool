@@ -53,3 +53,24 @@ def test_report_date_rule_follows_the_clock(client, monkeypatch):
     monkeypatch.setenv(clock.ENV, "2028-06-01")
     late = client.post(f"/api/projects/{project['id']}/reports/draft", json={"report_date": "2026-10-20"})
     assert late.status_code == 400, late.text
+
+
+def test_sql_reads_today_from_the_clock_too():
+    """SQL 의 `DATE('now')` 도 실제 오늘이다 — 219 가 놓쳐, 실제 날짜가 이틀 지나자 '곧 마감' 시험이 깨졌다 (TODO 220).
+    질의는 연결에 심어 둔 `app_today()` 를 쓴다."""
+    found = []
+    for path in APP.rglob("*.py"):
+        if path.name in REAL_TIME:
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue  # 설명 글
+            if re.search(r"""(?i)\b(date|datetime|julianday|strftime)\s*\([^)]*['"]now['"]""", line):
+                found.append(f"{path.relative_to(APP)}:{number}: {line.strip()}")
+    assert found == [], "app_today() 를 쓰세요:\n" + "\n".join(found)
+
+
+def test_sql_today_follows_the_clock(db, monkeypatch):
+    assert db.execute("SELECT app_today()").fetchone()[0] == FIXED_TODAY
+    monkeypatch.setenv(clock.ENV, "2028-06-01")
+    assert db.execute("SELECT DATE(app_today(), '+7 day')").fetchone()[0] == "2028-06-08"

@@ -4,6 +4,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from . import clock
 from .config import get_settings
 
 SCHEMA_PATH = Path(__file__).with_name("vault") / "schema.sql"
@@ -68,6 +69,9 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     # 쓰는 요청이 겹치면 SQLite 는 곧바로 "database is locked" 를 낸다.
     # 사람이 저장 단추를 누르는 속도에서는 잠깐 기다렸다 쓰는 편이 언제나 낫다.
     conn.execute("PRAGMA busy_timeout = 5000")
+    # SQL 안의 '오늘' 도 시계 한 곳에서 (TODO 220 — 219 가 놓친 자리). `DATE('now')` 는 실제 오늘이라
+    # 시험의 고정된 오늘과 어긋났다. 질의는 `app_today()` 를 쓴다.
+    conn.create_function("app_today", 0, lambda: clock.today().isoformat())
     return conn
 
 

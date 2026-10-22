@@ -52,7 +52,7 @@ def test_remote_can_read_but_not_write(shared):
 def test_remote_cannot_see_the_sensitive_reads(shared):
     remote, local = shared
     for path in ["/api/folders", "/api/backup", "/api/settings", "/api/settings/backup/status", "/api/errors", "/api/trash",
-                 "/api/versions?path=x", "/api/drafts", "/api/linkfix", "/api/health", "/api/people"]:
+                 "/api/versions?path=x", "/api/drafts", "/api/maintenance/link-fix", "/api/health", "/api/people"]:
         assert remote.get(path).status_code == 403, path
         assert local.get(path).status_code != 403, path
 
@@ -134,3 +134,25 @@ def test_owner_on_its_own_lan_address_is_local(tmp_path, monkeypatch):
         assert other.patch(f"/api/projects/{made.json()['id']}", json={"status": "done"}).status_code == 403
         assert other.get("/api/meta").json()["readonly"] is True
     get_settings.cache_clear()
+
+
+def test_every_blocked_prefix_names_a_real_route():
+    """막는 목록의 주소가 실제로 있는 끝점이어야 한다 (TODO 220).
+
+    `/api/linkfix` 를 막아 두었는데 실제 끝점은 `/api/maintenance/link-fix` 였다 — 팀원 PC 에서 링크 점검이 열려
+    있었다. 위 시험도 같은 틀린 주소로 403 을 봤다. 없는 주소도 막는 규칙에 먼저 걸려 403 이라 통과했다.
+    """
+    from app import share
+    from app.main import app
+
+    # 라우터가 겹겹이 들어가면 app.routes 에 경로가 다 안 보인다 — 문서(openapi)가 모든 끝점을 안다
+    paths = list(app.openapi()["paths"]) + ["/openapi.json", "/docs", "/redoc"]
+    for prefix in share.BLOCKED_PREFIXES:
+        assert any(path == prefix or path.startswith(prefix + "/") for path in paths), f"없는 끝점을 막고 있다: {prefix}"
+
+
+def test_link_fix_scan_is_closed_to_the_team_but_open_on_the_server_pc(shared):
+    remote, local = shared
+    assert remote.get("/api/maintenance/link-fix").status_code == 403
+    assert remote.get("/api/maintenance/link-fix?include_frozen=true").status_code == 403
+    assert local.get("/api/maintenance/link-fix").status_code == 200
