@@ -237,12 +237,12 @@ def test_meeting_future_date_is_allowed_with_a_warning_and_kinds_come_from_the_l
 # ── 214 D5 · F14 · 역량 기록 ─────────────────────────────────────────────────────────
 
 
-def test_activity_dates_in_the_future_are_refused(client):
+def test_activity_dates_in_the_future_are_plans_now(client):
+    """214 D5 의 "미래 막음" 은 TODO 221 에서 되돌렸다 — 미래 날짜는 예정이다. 2000~2100 밖은 여전히 막는다."""
     for payload in ({"date": TOMORROW}, {"date": YESTERDAY, "end_date": TOMORROW}):
         response = client.post("/api/activities", json={"person": "가", "title": "교육", **payload})
-        assert response.status_code == 400
-        assert response.json()["detail"].startswith("역량 기록은 지나간 일만 적습니다 — 날짜가 오늘보다 뒤입니다")
-    assert client.post("/api/activities", json={"person": "가", "title": "교육", "date": TODAY.isoformat()}).status_code == 201
+        assert response.status_code == 201, response.text
+    assert client.post("/api/activities", json={"person": "가", "title": "교육", "date": "2101-01-01"}).status_code in (400, 422)
 
 
 def test_activity_hours_and_cost_have_bounds(client):

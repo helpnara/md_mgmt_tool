@@ -661,6 +661,10 @@ export interface Home {
     /** 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 건수는 **과제 수** 다 */
     owner_gaps: OwnerGap[];
     owner_gaps_total: number;
+    /** 앞으로 days 일 안의 팀원 역량 예정 · 그 뒤 건수 (TODO 221) */
+    team_upcoming?: { days: number; items: ActivityBrief[]; later: number };
+    /** 예정으로 적었는데 날짜가 지나고 손대지 않은 것 — 2주 동안 (TODO 221) */
+    team_missed?: ActivityBrief[];
   };
   team: HomeTeam;
   /** 최근 몇 해를 나란히. 왼쪽이 과거다. */
@@ -855,11 +859,26 @@ export interface Activity {
   body: string | null;
   author: string | null;
   updated_at: string | null;
+  /** 예정 — 시작일이 오늘보다 뒤 (TODO 221). 그날이 지나면 저절로 이력이 된다 */
+  planned?: boolean;
+}
+
+/** 홈의 다가오는 팀원 일정 · 지난 예정 확인 한 줄 (TODO 221) */
+export interface ActivityBrief {
+  id: number;
+  person: string;
+  date: string;
+  end_date: string | null;
+  kind: string;
+  title: string;
+  place: string | null;
 }
 
 export interface ActivityPerson {
   name: string;
+  /** 지나간 것만 — 예정은 planned 에 따로 (TODO 221) */
   count: number;
+  planned?: number;
   hours: number;
   cost: number;
   /** 시간·비용을 실제로 채운 건수 — 합계가 몇 건에서 나온 값인지 밝힌다 */
@@ -893,7 +912,7 @@ export interface ActivitySummary {
   quiet_days: number;
   meeting_cycle_days: number;
   /** count 는 **참여 연인원**, events 는 **행사 수**다. 둘은 다르다 (TODO 85) */
-  team: { count: number; events: number; hours: number; cost: number; people: number };
+  team: { count: number; events: number; hours: number; cost: number; people: number; planned?: number };
   people: ActivityPerson[];
 }
 

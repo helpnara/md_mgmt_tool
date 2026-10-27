@@ -42,9 +42,11 @@ def list_activities(
     kind: str | None = None,
     year: str | None = Query(None, pattern=r"^(\d{4})?$"),
     q: str | None = None,
+    # 예정만 · 지난 것만 (TODO 221). 비우면 모두
+    when: str | None = Query(None, pattern=r"^(planned|past)?$"),
 ) -> list[dict]:
     return svc.listing(conn, person=person or None, kind=kind or None,
-                       year=year or None, q=(q or "").strip() or None)
+                       year=year or None, q=(q or "").strip() or None, when=when or None)
 
 
 @router.get("/summary")

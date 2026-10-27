@@ -2079,3 +2079,12 @@ textarea[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(-
 .precheck-row-invalid .precheck-note { border-color: var(--warn); }
 .precheck-note-error { grid-column: 1 / -1; font-size: 12px; }
 .tag-merge-hint { margin: 2px 0 0; color: var(--warn); }
+
+/* 팀원 역량의 예정 (TODO 221) — 흐리게, 딱지로. 숫자에는 그날이 지나야 든다 */
+.activity-list li.activity-planned { background: #f8fafc; border-style: dashed; }
+.activity-list li.activity-planned .activity-title { color: var(--muted-strong); }
+.tag.planned-tag { background: #eef2ff; color: #3730a3; }
+.planned-count { font-size: 11px; }
+.activity-planned-hint { display: block; }
+button.home-stat { font: inherit; text-align: left; cursor: pointer; }
+button.home-stat.on { border-color: var(--accent); background: var(--accent-soft); }

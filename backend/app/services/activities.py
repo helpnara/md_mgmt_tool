@@ -8,8 +8,10 @@
 1. **기록 단위는 사람.** 한 행사에 세 명이 가면 기록도 세 건이다.
    행사 단위로 묶으면 사람별 이력을 뽑을 때마다 풀어야 한다 — 팀장이 보는 축은 사람이다.
 2. **시간·비용은 옵션.** 비워 두는 것이 정상이고, 채운 것만 합계에 들어간다.
-3. **지나간 이력만.** 예정은 담지 않는다. 목적이 "내년에 어떤 교육을 받으면 좋을지"를
-   면담에서 이야기하는 것이므로, 계획표가 아니라 **쌓인 실적**이 필요하다.
+3. ~~지나간 이력만. 예정은 담지 않는다.~~ → **예정도 적는다** (TODO 221, 2026-10-27 사용자 — 214 D5 의 "미래 막음" 도 되돌림).
+   시작일이 오늘보다 뒤인 기록이 **예정**이다 — 칸을 따로 두지 않고 날짜가 곧 상태다. 그날이 지나면 저절로 이력이 된다.
+   그래도 면담 자료는 **쌓인 실적**이어야 하므로, 사람별 요약 · 추이 · 마지막 활동 · 뜸한 사람 · 홈 팀원 표는
+   **지나간 것만** 센다(`PAST`). 예정은 "예정 N건" 으로 따로, 홈 [이번 주 할 일] 에 다가오는 일정으로 보인다.
 """
 from __future__ import annotations
 
@@ -90,7 +92,13 @@ def _clean(value: object) -> str | None:
 
 
 COST_MAX = 1e12  # 비용(원) 위쪽 한계 — 1조 원. 이보다 크면 단위를 잘못 적은 것이다 (TODO 214 F14)
-FUTURE_REFUSED = "역량 기록은 지나간 일만 적습니다 — 날짜가 오늘보다 뒤입니다"
+
+# 세는 곳은 지나간 것만 (TODO 221) — 시작일이 오늘 이후인 기록은 예정이다. SQL 의 오늘은 `app_today()` (TODO 220)
+PAST = "date <= app_today()"
+PLANNED = "date > app_today()"
+# 홈 [이번 주 할 일] 에 세우는 범위 (TODO 221 ② · ① — 사용자, 추천안)
+UPCOMING_DAYS = 30
+MISSED_DAYS = 14
 
 
 def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -118,12 +126,7 @@ def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dic
         # 하루짜리를 같은 날짜 두 번으로 적어 두면 화면이 "~" 를 괜히 붙인다.
         if end == start:
             end = None
-    # TODO 214 D5 — "지나간 이력만" (모듈 머리 3번). 새로 적거나 바꾼 날짜가 오늘보다 뒤면 막는다.
-    # 이미 파일에 있는 미래 날짜(예전 기록)는 다른 칸을 고칠 때 막지 않는다 — 경고는 손 편집 알림이 맡는다.
-    today = clock.today().isoformat()
-    for value, field in ((start, "date"), (end, "end_date")):
-        if value and value > today and value != _day_quietly(stored.get(field)):
-            raise ValueError(f"{FUTURE_REFUSED} ({rules.field_label(field)} {value}).")
+    # 미래 날짜도 받는다 — 예정 (TODO 221 이 214 D5 의 "미래 막음" 을 되돌렸다). 범위는 strict_day 의 2000~2100 그대로
     hours = normalize_number(data.get("hours"), "hours")
     if hours is not None:
         # TODO 214 F14 — 하루 24시간 × 걸친 날수를 넘을 수 없다 (1e300 을 받았다)
@@ -147,13 +150,6 @@ def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dic
         "link": _clean(data.get("link")),
         "tags": rules.split_list(data.get("tags")),  # 담당자와 같은 쉼표 규칙 (TODO 205)
     }
-
-
-def _day_quietly(value: object) -> str | None:
-    try:
-        return rules.strict_day(value, "date")
-    except ValueError:
-        return None
 
 
 def warnings(people: list[str]) -> list[str]:
@@ -298,6 +294,8 @@ def _row(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "body": row["body"],
         "author": row["author"],
         "updated_at": row["updated_at"],
+        # 예정 (TODO 221) — 시작일이 오늘보다 뒤. 화면이 딱지를 붙이고 흐리게 둔다
+        "planned": row["date"] > clock.today().isoformat(),
         "tags": [],
     }
 
@@ -308,9 +306,14 @@ def listing(
     kind: str | None = None,
     year: str | None = None,
     q: str | None = None,
+    when: str | None = None,
 ) -> list[dict]:
     sql = "SELECT * FROM activity WHERE 1=1"
     params: list = []
+    if when == "planned":
+        sql += f" AND {PLANNED}"
+    elif when == "past":
+        sql += f" AND {PAST}"
     if person:
         sql += " AND person = ?"
         params.append(person)
@@ -361,8 +364,12 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
     people = []
     for name in names:
         left = left_by.get(name)
-        clause = " AND SUBSTR(date, 1, 4) = ?" if year else ""
+        year_clause = " AND SUBSTR(date, 1, 4) = ?" if year else ""
+        clause = f" AND {PAST}{year_clause}"
         params = [name, year] if year else [name]
+        planned = conn.execute(
+            f"SELECT COUNT(*) AS n FROM activity WHERE person = ? AND {PLANNED}{year_clause}", params
+        ).fetchone()["n"]
         row = conn.execute(
             "SELECT COUNT(*) AS n, COALESCE(SUM(hours), 0) AS hours,"
             "       COALESCE(SUM(cost), 0) AS cost,"
@@ -382,12 +389,12 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
             r["y"]: r["n"]
             for r in conn.execute(
                 "SELECT SUBSTR(date, 1, 4) AS y, COUNT(*) AS n FROM activity"
-                " WHERE person = ? GROUP BY y",
+                f" WHERE person = ? AND {PAST} GROUP BY y",
                 (name,),
             )
         }
         last = conn.execute(
-            "SELECT MAX(date) AS d FROM activity WHERE person = ?", (name,)
+            f"SELECT MAX(date) AS d FROM activity WHERE person = ? AND {PAST}", (name,)
         ).fetchone()["d"]
         days_since = None
         if last:
@@ -399,6 +406,8 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
             {
                 "name": name,
                 "count": row["n"],
+                # 예정 (TODO 221) — 위의 건수 · 시간 · 비용에는 들지 않는다
+                "planned": planned,
                 "hours": round(row["hours"] or 0, 1),
                 "cost": round(row["cost"] or 0),
                 # 옵션 칸이라 "합계가 몇 건에서 나온 값인가"를 함께 준다.
@@ -432,8 +441,12 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
         item.update(info)
     people.sort(key=lambda item: (-item["count"], item["name"]))
 
-    clause = " WHERE SUBSTR(date, 1, 4) = ?" if year else ""
+    year_clause = " AND SUBSTR(date, 1, 4) = ?" if year else ""
+    clause = f" WHERE {PAST}{year_clause}"
     params = [year] if year else []
+    team_planned = conn.execute(
+        f"SELECT COUNT(*) AS n FROM activity WHERE {PLANNED}{year_clause}", params
+    ).fetchone()["n"]
     team = conn.execute(
         "SELECT COUNT(*) AS n, COALESCE(SUM(hours), 0) AS hours, COALESCE(SUM(cost), 0) AS cost,"
         "       COUNT(DISTINCT person) AS people,"
@@ -457,12 +470,58 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
             "hours": round(team["hours"] or 0, 1),
             "cost": round(team["cost"] or 0),
             "people": team["people"],
+            "planned": team_planned,
         },
         "people": people,
     }
 
 
+def _brief(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "person": row["person"],
+        "date": row["date"],
+        "end_date": row["end_date"],
+        "kind": row["kind"],
+        "title": row["title"],
+        "place": row["place"],
+    }
+
+
+def upcoming(conn: sqlite3.Connection, days: int = UPCOMING_DAYS) -> dict:
+    """앞으로 `days` 일 안의 예정 — 홈 [이번 주 할 일] 의 "다가오는 팀원 일정" (TODO 221).
+
+    오늘 시작하는 것도 넣는다(오늘 가는 교육). 그 뒤의 것은 세기만 한다.
+    """
+    window = f"date >= app_today() AND date <= DATE(app_today(), '+{int(days)} day')"
+    rows = conn.execute(
+        f"SELECT * FROM activity WHERE {window} ORDER BY date, person, id"
+    ).fetchall()
+    later = conn.execute(
+        f"SELECT COUNT(*) AS n FROM activity WHERE date > DATE(app_today(), '+{int(days)} day')"
+    ).fetchone()["n"]
+    return {"days": days, "items": [_brief(row) for row in rows], "later": later}
+
+
+def missed_plans(conn: sqlite3.Connection, days: int = MISSED_DAYS) -> list[dict]:
+    """예정으로 적었는데 날짜가 지나고도 손대지 않은 기록 — 홈의 "지난 예정 확인" (TODO 221 ①).
+
+    칸을 따로 두지 않는다. **만든 날 < 시작일**(예정으로 적었다) 이고 **고친 날 < 시작일**(그날 이후 손대지 않았다),
+    끝난 날(종료일, 없으면 시작일)이 어제부터 `days` 일 안이면 세운다. 다녀왔으면 소감 · 시간을 채우고(고친 날이 바뀐다),
+    안 갔으면 지우면 된다. `days` 일이 지나면 저절로 내려간다.
+    """
+    finished = "COALESCE(end_date, date)"
+    rows = conn.execute(
+        "SELECT * FROM activity"
+        f" WHERE {finished} < app_today() AND {finished} >= DATE(app_today(), '-{int(days)} day')"
+        "   AND SUBSTR(COALESCE(created_at, ''), 1, 10) < date"
+        "   AND SUBSTR(COALESCE(updated_at, created_at, ''), 1, 10) < date"
+        f" ORDER BY {finished} DESC, person, id"
+    ).fetchall()
+    return [_brief(row) for row in rows]
+
+
 __all__ = [
-    "create", "update", "delete", "listing", "summary", "years",
+    "create", "update", "delete", "listing", "summary", "years", "upcoming", "missed_plans",
     "event_key", "BODY_TEMPLATE",
 ]

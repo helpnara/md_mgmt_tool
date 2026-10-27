@@ -687,7 +687,7 @@ async function main() {
   });
 
   await check("여러 날에 걸친 교육은 기간으로 보인다", async () => {
-    // 역량 기록은 지나간 일만 (TODO 214 D5) — 그저께부터 오늘까지
+    // 그저께부터 오늘까지 — 지난 기록 (미래면 예정이다, TODO 221)
     const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
     await api.post("/api/activities", {
       person: "권경락", kind: "education", title: "사흘짜리 교육",
@@ -4978,7 +4978,7 @@ async function main() {
     }
   });
 
-  await check("역량 기록에 오늘 뒤의 날짜를 적으면 칸 옆에서 막는다 (214 D5)", async () => {
+  await check("역량 기록에 오늘 뒤의 날짜를 적으면 예정이라고 알리고 저장할 수 있다 (221 — 214 D5 되돌림)", async () => {
     await go("#/skills");
     await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
@@ -4986,10 +4986,10 @@ async function main() {
     await form.locator('input[placeholder^="예: 권경락, 김현우"]').fill("권경락");
     await form.locator('input[placeholder^="예: 열처리"]').fill("미래 교육");
     const day = form.locator('input[type="date"]').first();
-    equal(await day.getAttribute("max"), localDay(), "달력의 상한은 오늘");
+    equal(await day.getAttribute("max"), "2100-12-31", "달력의 상한은 2100년 (예정을 받는다)");
     await day.fill(localDay(10));
-    expect((await form.innerText()).includes("오늘 뒤의 날짜는 저장할 수 없습니다"), "칸 옆 안내");
-    expect(await form.getByRole("button", { name: "저장" }).isDisabled(), "[저장] 이 꺼진다");
+    expect((await form.innerText()).includes("예정으로 저장됩니다"), "칸 옆 안내");
+    expect(!(await form.getByRole("button", { name: "저장" }).isDisabled()), "[저장] 이 켜져 있다");
     // 시간은 하루 24시간 × 날수까지 (214 F14)
     await day.fill(localDay());
     await form.locator('input[type="number"]').first().fill("30");
@@ -5352,6 +5352,66 @@ async function main() {
     }
   }
   page.on("dialog", (dialog) => dialog.accept());
+
+  console.log("\n[47] 팀원 역량의 예정 · 홈의 다가오는 팀원 일정 (TODO 221)");
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
+  {
+    const stamp = Date.now();
+    const soonTitle = `다음 주 교육 ${stamp}`;
+    const pastPlanTitle = `지난 예정 ${stamp}`;
+    const made = [];
+    try {
+      await check("예정으로 적은 교육이 홈 [이번 주 할 일] 의 다가오는 팀원 일정에 보이고, 누르면 그 사람의 예정으로 간다", async () => {
+        const created = await api.post("/api/activities", { person: "권경락", kind: "education", title: soonTitle, date: dayFromToday(5), place: "판교" });
+        made.push(...(created.ids ?? [created.id]));
+        await go("#/");
+        const card = page.locator(".home-week");
+        const row = card.locator(".home-upcoming li", { hasText: soonTitle });
+        equal(await row.count(), 1, "다가오는 팀원 일정의 줄");
+        const text = await row.innerText();
+        expect(text.includes("권경락") && text.includes("판교") && text.includes(dayFromToday(5)), `줄 내용: ${text}`);
+        await row.getByRole("link").click();
+        await page.waitForTimeout(900);
+        expect(page.url().includes("#/skills") && page.url().includes("when=planned"), `옮겨 간 주소: ${page.url()}`);
+        const item = page.locator(".activity-list > li", { hasText: soonTitle });
+        equal(await item.count(), 1, "팀원역량의 예정 목록에 그 기록");
+        expect((await item.innerText()).includes("예정"), "예정 딱지");
+      });
+      await check("예정은 사람별 건수에 들지 않고 '+예정 N' 으로 따로 보인다", async () => {
+        const summary = await api.get(`/api/activities/summary?year=${dayFromToday(5).slice(0, 4)}`);
+        const person = summary.people.find((item) => item.name === "권경락");
+        expect((person?.planned ?? 0) >= 1, `예정 수: ${person?.planned}`);
+        await go("#/skills");
+        const cell = page.locator(".skills-table tr", { hasText: "권경락" }).first();
+        expect((await cell.innerText()).includes("+예정"), `표의 줄: ${await cell.innerText()}`);
+      });
+      await check("예정으로 적고 날짜가 지났는데 손대지 않았으면 홈에 '지난 예정 확인' 으로 선다", async () => {
+        // 예정으로 적은 것처럼 — 만든 날 · 고친 날을 그 일정보다 앞으로 둔 파일을 직접 만든다 (서버 시계를 옮기지 않고)
+        const created = await api.post("/api/activities", { person: "권경락", kind: "seminar", title: pastPlanTitle, date: dayFromToday(-3) });
+        made.push(...(created.ids ?? [created.id]));
+        const id = (created.ids ?? [created.id])[0];
+        const listed = await api.get(`/api/activities?person=${encodeURIComponent("권경락")}`);
+        expect(listed.some((item) => item.id === id), "만든 기록");
+        const folder = join(vault, "people", "권경락", "activities");
+        let file = null;
+        for (const name of await readdir(folder)) {
+          if ((await readFile(join(folder, name), "utf-8")).includes(pastPlanTitle)) file = name;
+        }
+        expect(file, "그 기록의 파일");
+        const path = join(folder, file);
+        const before = dayFromToday(-10);
+        const text = (await readFile(path, "utf-8")).replace(/created_at: .*/, `created_at: '${before}T09:00:00+09:00'`).replace(/updated_at: .*/, `updated_at: '${before}T09:00:00+09:00'`);
+        await writeFile(path, text, "utf-8");
+        await api.post("/api/reindex", {});
+        await go("#/");
+        const row = page.locator(".home-week .home-missed li", { hasText: pastPlanTitle });
+        equal(await row.count(), 1, "지난 예정 확인 줄");
+      });
+    } finally {
+      for (const id of made) await fetch(`${BASE}/api/activities/${id}`, { method: "DELETE" });
+    }
+  }
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {

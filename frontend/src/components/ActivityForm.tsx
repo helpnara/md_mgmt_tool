@@ -4,7 +4,7 @@ import type { Activity, Meta } from "../types";
 import { splitPeople } from "../people";
 import { useFormUnsaved } from "../unsaved";
 import { confirmDiscard, dateOrderProblem, isPlainEnter, todayIso } from "../util";
-import { DATE_MIN, confirmPeople, dateProblem as dayProblem, daySpan, numberProblem, personNameProblem, warningList } from "../inputRules";
+import { DATE_MAX, DATE_MIN, confirmPeople, dateProblem as dayProblem, daySpan, numberProblem, personNameProblem, warningList } from "../inputRules";
 import { departedNames, freshRoster } from "./roster";
 
 /** 비용 상한 (TODO 214 F14) — 서버와 같은 1조 원 */
@@ -59,11 +59,10 @@ export default function ActivityForm({
   };
   // 날짜 화면 검사 (TODO 212) — 언제는 필수 · 종료일이 앞서면 안 된다(서버 422)
   const missingDate = !date;
-  // 역량 기록은 지나간 이력이다 — 미래 날짜는 막는다 (TODO 214 D5). 2000~2100 년 밖도
-  const futureText = "역량 기록은 지난 일만 적습니다 — 오늘 뒤의 날짜는 저장할 수 없습니다.";
-  const startProblem = dayProblem(date, "날짜") ?? (date > today ? futureText : null);
-  const dateProblem =
-    dayProblem(endDate, "종료일") ?? (endDate > today ? futureText : null) ?? dateOrderProblem(date, endDate, "시작일", "종료일");
+  // 미래 날짜는 예정이다 (TODO 221 — 214 D5 의 "미래 막음" 을 되돌림). 2000~2100 년 밖만 막는다
+  const startProblem = dayProblem(date, "날짜");
+  const dateProblem = dayProblem(endDate, "종료일") ?? dateOrderProblem(date, endDate, "시작일", "종료일");
+  const planned = !startProblem && date > today;
 
   // 시간 · 비용 (TODO 214 F14 · U4) — `<form>` 밖이라 min · step 이 막지 못한다. 시간은 하루 24시간 × 날수까지
   const span = daySpan(date, endDate);
@@ -238,13 +237,18 @@ export default function ActivityForm({
             type="date"
             value={date}
             min={DATE_MIN}
-            max={today}
+            max={DATE_MAX}
             onChange={(event) => setDate(event.target.value)}
             required
             aria-invalid={missingDate || startProblem ? true : undefined}
           />
           {missingDate && <span className="form-warn date-warn">날짜를 적어 주세요.</span>}
           {startProblem && <span className="field-error date-warn activity-future">{startProblem}</span>}
+          {planned && (
+            <span className="hint date-warn activity-planned-hint">
+              <b>예정</b>으로 저장됩니다 — 홈에 다가오는 일정으로 보이고, 숫자에는 그날이 지나야 듭니다. 다녀온 뒤 얻은 것 · 시간 · 비용을 채우세요.
+            </span>
+          )}
         </label>
         <label>
           종료일 (여러 날이면)
@@ -252,7 +256,7 @@ export default function ActivityForm({
             type="date"
             value={endDate}
             min={date || DATE_MIN}
-            max={today}
+            max={DATE_MAX}
             onChange={(event) => setEndDate(event.target.value)}
             aria-invalid={dateProblem ? true : undefined}
           />

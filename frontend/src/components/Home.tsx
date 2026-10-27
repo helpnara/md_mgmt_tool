@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
-import type { BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
+import type { ActivityBrief, BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
 import { listLink, projectLink, screenLink, useAddressBar } from "../nav";
 import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
@@ -283,6 +283,10 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
 
   const yearParam = year === ALL_YEARS ? "" : year;
   const { team, this_week: week } = data;
+  // 팀원 일정 한 줄 (TODO 221) — 여러 날이면 기간, 같은 해면 뒤쪽은 월 · 일만
+  const activityKind = (key: string) => meta.activity_kinds.find((item) => item.key === key)?.label ?? key;
+  const briefPeriod = (item: ActivityBrief) =>
+    item.end_date ? `${item.date} ~ ${item.end_date.slice(0, 4) === item.date.slice(0, 4) ? item.end_date.slice(5) : item.end_date}` : item.date;
 
   // ── 아직 아무것도 없을 때 ──────────────────────────────────────────
   // 0 이 여덟 개 늘어선 대시보드는 처음 켠 사람에게 아무것도 알려 주지 않는다.
@@ -439,6 +443,53 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             <strong>{week.drafts}건</strong>
           </a>
         </div>
+
+        {/* 다가오는 팀원 일정 · 지난 예정 확인 (TODO 221) — 팀원 역량에 예정으로 적은 교육 · 행사 */}
+        {(week.team_upcoming?.items.length ?? 0) > 0 && (
+          <>
+            <p className="hint">
+              <b>다가오는 팀원 일정</b> — 앞으로 {week.team_upcoming!.days}일 안에 예정한 교육 · 행사입니다.
+            </p>
+            <ul className="home-stale home-upcoming">
+              {week.team_upcoming!.items.map((item) => (
+                <li key={item.id}>
+                  <span className="due">{briefPeriod(item)}</span>
+                  <a href={screenLink("skills", { person: item.person, year: item.date.slice(0, 4), when: "planned" })}>
+                    {item.title}
+                  </a>
+                  <span className="muted">
+                    {item.person} · {activityKind(item.kind)}
+                    {item.place ? ` · ${item.place}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {week.team_upcoming!.later > 0 && (
+              <p className="hint">
+                <a href={screenLink("skills", { when: "planned", year: "all" })}>
+                  그 뒤 예정 {week.team_upcoming!.later}건도 팀원역량에서 보기 →
+                </a>
+              </p>
+            )}
+          </>
+        )}
+        {(week.team_missed?.length ?? 0) > 0 && (
+          <>
+            <p className="hint">
+              <b>지난 예정 확인</b> — 예정으로 적었던 일정이 지났습니다. 다녀왔으면 얻은 것 · 시간을 채우고, 안 갔으면 지우세요.
+              (2주가 지나면 이 줄에서 내려갑니다)
+            </p>
+            <ul className="home-stale home-missed">
+              {week.team_missed!.map((item) => (
+                <li key={item.id}>
+                  <span className="due">{briefPeriod(item)}</span>
+                  <a href={screenLink("skills", { person: item.person, year: item.date.slice(0, 4) })}>{item.title}</a>
+                  <span className="muted">{item.person} · {activityKind(item.kind)}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         {/* 쓰다 만 글 (TODO 170) — 어느 과제에서 쓰다 말았는지 기억하지 않아도 되게, 누르면 그 편집기로 */}
         {drafts.length > 0 && (

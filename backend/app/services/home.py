@@ -27,6 +27,7 @@ from datetime import date as date_cls
 
 from .. import clock
 from ..config import CLASSIFICATION_KEYS, CLASSIFIED_TYPE, FINISHED_STATUSES, STATUS_KEYS, STATUSES
+from . import activities as activities_service
 from . import intakes as intakes_service
 from . import period as period_service
 from . import reports as reports_service
@@ -185,7 +186,8 @@ def _activity_counts(conn: sqlite3.Connection, year: str | None, period: str | N
     면담 준비를 한 화면에서 끝내기 위한 것이다 — 지금까지는 홈(과제 성과)과
     팀원 역량 두 화면을 오가야 "이 사람이 올해 무엇을 맡았고 무엇을 배웠나"가 나왔다.
     """
-    sql = "SELECT person, COUNT(*) AS n FROM activity WHERE 1=1"
+    # 지나간 것만 — 예정은 아직 쌓인 이력이 아니다 (TODO 221)
+    sql = "SELECT person, COUNT(*) AS n FROM activity WHERE date <= app_today()"
     clause, params = _date_clause("date", year, period)
     sql += clause
     return {row["person"]: row["n"] for row in conn.execute(sql + " GROUP BY person", params)}
@@ -565,6 +567,9 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
             # 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 건수는 **과제 수**다.
             "owner_gaps": owner_gaps,
             "owner_gaps_total": owner_gaps_total,
+            # 다가오는 팀원 일정 · 지난 예정 확인 (TODO 221) — 역량 기록의 예정
+            "team_upcoming": activities_service.upcoming(conn),
+            "team_missed": activities_service.missed_plans(conn),
         },
         "team": _team(conn, year, period),
         "compare": _compare(conn),

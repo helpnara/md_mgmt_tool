@@ -40,6 +40,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const [person, setPerson] = useState(initial.get("person") ?? ALL);
   const [kind, setKind] = useState(initial.get("kind") ?? ALL);
   const [find, setFind] = useState(initial.get("q") ?? "");
+  // 예정만 · 지난 것만 (TODO 221). 비우면 모두
+  const [when, setWhen] = useState(initial.get("when") ?? "");
 
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [rows, setRows] = useState<Activity[]>([]);
@@ -69,7 +71,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
     const mine = latest();
     Promise.all([
       api.activitySummary(yearParam),
-      api.activities({ year: yearParam, person, kind, q: findQuery }),
+      api.activities({ year: yearParam, person, kind, q: findQuery, when }),
     ])
       .then(([nextSummary, nextRows]) => {
         if (!mine()) return;
@@ -78,14 +80,14 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         setError(null);
       })
       .catch((err: Error) => mine() && setError(err.message));
-  }, [yearParam, person, kind, findQuery, latest]);
+  }, [yearParam, person, kind, findQuery, when, latest]);
 
   useEffect(load, [load]);
 
   useAddressBar(
     "skills",
     Object.fromEntries(
-      Object.entries({ year: year === THIS_YEAR ? "" : year, person, kind, q: find.trim(), back })
+      Object.entries({ year: year === THIS_YEAR ? "" : year, person, kind, q: find.trim(), when, back })
         .filter(([, value]) => value),
     ) as Record<string, string>,
     (params) => {
@@ -93,6 +95,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       setPerson(params.get("person") ?? ALL);
       setKind(params.get("kind") ?? ALL);
       setFind(params.get("q") ?? "");
+      setWhen(params.get("when") ?? "");
     },
   );
 
@@ -159,8 +162,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           <h1>팀원역량</h1>
           <p className="hint page-desc skills-intro">
             팀원 역량 이력 — 교육·세미나·박람회·학회 참여 이력을 <b>사람 기준</b>으로 쌓습니다. 한 행사에 여러 명이 가면
-        사람 수만큼 기록합니다. <b>지나간 이력만</b> 담습니다 — 이 화면의 쓸모는 계획표가 아니라,
-        쌓인 이력을 놓고 <b>내년에 무엇을 하면 좋을지 면담에서 이야기하는 것</b>입니다.
+        사람 수만큼 기록합니다. 앞으로 갈 교육 · 행사도 <b>예정</b>으로 적어 둘 수 있습니다(홈에 다가오는 일정으로 보입니다).
+        다만 아래 숫자는 <b>지나간 것만</b> 셉니다 — 이 화면의 쓸모는 쌓인 이력을 놓고 <b>내년에 무엇을 하면 좋을지 면담에서 이야기하는 것</b>입니다.
           </p>
         </div>
         <div className="skills-head-right">
@@ -205,6 +208,17 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             <strong>{summary.team.events}건</strong>
             <span className="home-stat-note">참여 기록 {summary.team.count}건</span>
           </div>
+          {(summary.team.planned ?? 0) > 0 && (
+            <button
+              className={when === "planned" ? "home-stat go on" : "home-stat go"}
+              onClick={() => setWhen(when === "planned" ? "" : "planned")}
+              title="아래 목록을 예정만으로 거릅니다 — 다시 누르면 모두"
+            >
+              <span className="home-stat-label">예정</span>
+              <strong>{summary.team.planned}건</strong>
+              <span className="home-stat-note">숫자에 들지 않음</span>
+            </button>
+          )}
           <div className="home-stat">
             <span className="home-stat-label">참여 인원</span>
             <strong>{summary.team.people}명</strong>
@@ -319,7 +333,11 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                       </span>
                     )}
                   </td>
-                  <td className={item.count ? undefined : "zero"}>{cellCount(item.count)}</td>
+                  <td className={item.count ? undefined : "zero"}>
+                    {cellCount(item.count)}
+                    {/* 예정은 건수에 들지 않는다 — 옆에 작게 (TODO 221) */}
+                    {(item.planned ?? 0) > 0 && <span className="muted planned-count" title="예정 — 그날이 지나야 셉니다"> +예정 {item.planned}</span>}
+                  </td>
                   {meta.activity_kinds.map((kindInfo) => (
                     // 0 은 흐린 `-` (TODO 158). 칸은 지우지 않는다 — 어디가 비었는지가 요점이다
                     <td key={kindInfo.key} className={item.by_kind[kindInfo.key] ? undefined : "zero"}>
@@ -452,6 +470,11 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 </option>
               ))}
             </select>
+            <select value={when} onChange={(event) => setWhen(event.target.value)} aria-label="예정 · 지난 것">
+              <option value="">예정 · 지난 것 모두</option>
+              <option value="planned">예정만</option>
+              <option value="past">지난 것만</option>
+            </select>
             <select value={kind} onChange={(event) => setKind(event.target.value)}>
               <option value={ALL}>구분 전체</option>
               {meta.activity_kinds.map((item) => (
@@ -478,9 +501,10 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
               const first = group[0];
               const shared = group.length > 1;
               return (
-                <li key={first.event_key}>
+                <li key={first.event_key} className={first.planned ? "activity-planned" : undefined}>
                   <div className="activity-head">
                     <span className="activity-date">{period(first)}</span>
+                    {first.planned && <span className="tag planned-tag" title="시작일이 오늘보다 뒤 — 숫자에는 그날이 지나야 듭니다">예정</span>}
                     <span className="tag">{kindLabel(first.kind)}</span>
                     <strong className="activity-title">{first.title}</strong>
                     {/* 한 행사에 여러 명이면 이름을 나란히 세운다. 줄이 사람 수만큼
