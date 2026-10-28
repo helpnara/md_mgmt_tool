@@ -10,6 +10,8 @@ import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
 import PasteOfferBar from "./PasteOffer";
 import { type PasteOffer, handleEditorPaste } from "../table";
+import type { ImageJob } from "../htmlPaste";
+import { placeImages } from "../pasteImages";
 import { scrollEditorIntoView, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
@@ -309,6 +311,25 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
     onCancel();
   }
 
+  /** 붙여넣은 글 · 표 사이의 그림 (TODO 225) — 그 자리의 표시를 그림 링크로 바꾼다 */
+  function placePasted(jobs: ImageJob[], spare: File[]) {
+    void placeImages(
+      jobs,
+      spare,
+      async (file) => {
+        const targetId = await ensureEntryId();
+        const saved = await uploadAttachment(`/api/entries/${targetId}/attachments`, file, () => undefined).promise;
+        if (!saved.deduplicated) ledger.addUploaded(saved.id);
+        refreshAttachments(targetId);
+        return saved.markdown;
+      },
+      (marker, text) => {
+        setBody((prev) => prev.replace(marker, text));
+        markDirty();
+      },
+    );
+  }
+
   async function handleFiles(files: File[]) {
     if (files.length === 0) return;
     let targetId: number;
@@ -459,6 +480,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
               },
               onFiles: (files) => void handleFiles(files),
               onOffer: setPasteOffer,
+              onImages: placePasted,
             })
           }
           placeholder="진행 내용을 마크다운으로 작성합니다. 이미지는 Ctrl+V로 바로 붙여넣을 수 있습니다."

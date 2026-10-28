@@ -10,6 +10,7 @@ import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
 import PasteOfferBar from "./PasteOffer";
 import { type PasteOffer, handleEditorPaste, spliceAtCaret } from "../table";
+import { placeImages } from "../pasteImages";
 import { todayIso, daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
@@ -1061,6 +1062,18 @@ export default function ProjectDetail({
                       setOverviewDraft((prev) => spliceAtCaret(overviewAreaRef.current, prev, snippet)),
                     onFiles: (files) => void attachToOverview(files),
                     onOffer: setPasteOffer,
+                    // 섞인 붙여넣기의 그림은 그 자리에 (TODO 225)
+                    onImages: (jobs, spare) =>
+                      void placeImages(
+                        jobs,
+                        spare,
+                        async (file) => {
+                          const saved = await uploadAttachment(`/api/projects/${project.id}/attachments`, file, () => undefined).promise;
+                          if (!saved.deduplicated) overviewLedger.addUploaded(saved.id);
+                          return saved.markdown;
+                        },
+                        (marker, text) => setOverviewDraft((prev) => prev.replace(marker, text)),
+                      ),
                   })
                 }
                 spellCheck={false}

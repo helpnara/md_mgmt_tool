@@ -2088,3 +2088,7 @@ textarea[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(-
 .activity-planned-hint { display: block; }
 button.home-stat { font: inherit; text-align: left; cursor: pointer; }
 button.home-stat.on { border-color: var(--accent); background: var(--accent-soft); }
+
+/* 붙여넣기 점검 (TODO 225) */
+.paste-check-area { width: 100%; resize: none; }
+.paste-check-result { margin: 8px 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }

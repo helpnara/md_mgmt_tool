@@ -18,6 +18,7 @@ import {
 import PasteOfferBar from "./PasteOffer";
 import PrecheckDialog, { BandChip } from "./PrecheckDialog";
 import { type PasteOffer, handleEditorPaste } from "../table";
+import { placeImages } from "../pasteImages";
 import type { IntakeAttachment, IntakeDetail as Detail, IntakeLog, Meta, Project, PromotionPlan } from "../types";
 import { type Attachment, uploadAttachment } from "../upload";
 import { dateOrderProblem, effectNumber, todayIso, useEscape } from "../util";
@@ -879,6 +880,19 @@ function MarkdownArea({
               onInsert: field.insert,
               onFiles: (files) => void handleFiles(files),
               onOffer: setPasteOffer,
+              // 섞인 붙여넣기의 그림은 그 자리에 (TODO 225)
+              onImages: (jobs, spare) =>
+                void placeImages(
+                  jobs,
+                  spare,
+                  async (file) => {
+                    const [saved] = await uploadFiles(intake.id, [file]);
+                    ledger.addUploaded(saved.rel_path);
+                    onUploaded();
+                    return saved[linkKind];
+                  },
+                  (marker, text) => field.setValue((prev) => prev.replace(marker, text)),
+                ),
             })
           }
           placeholder={placeholder}

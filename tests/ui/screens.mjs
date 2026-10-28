@@ -5466,6 +5466,60 @@ async function main() {
     }
   }
 
+  console.log("\n[49] 붙여넣기의 그림 — 경우마다 (TODO 225)");
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
+  {
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    const source = await api.post("/api/projects", { title: `그림 원래 과제 ${Date.now()}` });
+    const old = await api.post(`/api/projects/${source.id}/entries`, { date: dayFromToday(-3), title: "그림 있는 기록" });
+    const form = new FormData();
+    form.append("file", new Blob([Buffer.from(png, "base64")], { type: "image/png" }), "측정사진.png");
+    const uploaded = await (await fetch(`${BASE}/api/entries/${old.id}/attachments`, { method: "POST", body: form })).json();
+    const dir = (await api.get(`/api/projects/${source.id}`)).dir_name;
+    const localSrc = `${BASE}/files/${encodeURIComponent(dir)}/${uploaded.rel_path.split("/").map(encodeURIComponent).join("/")}`;
+    const target = await api.post("/api/projects", { title: `그림 붙일 과제 ${Date.now()}` });
+    const chart = `<svg width="200" height="120" viewBox="0 0 200 120"><rect x="10" y="10" width="60" height="100" fill="#6f431e"/></svg>`;
+    const html = `<div><p>이 앱의 그림</p><p><img src="${localSrc}" alt="측정사진"></p>`
+      + `<p>단추로 감싼 그림 <button aria-label="크게 보기"><img src="https://copilot.example.com/a.png" alt="생성된 차트"></button></p>`
+      + `<table><tr><th>항목</th><th>그림</th></tr><tr><td>칸</td><td><img src="data:image/png;base64,${png}" alt="칸 그림"></td></tr></table>`
+      + `<p>차트</p>${chart}<p>아이콘 <svg width="16" height="16"><path d="M0 0h16v16z"/></svg></p><canvas aria-label="그림판 차트"></canvas></div>`;
+    try {
+      await check("이 앱의 그림은 다시 첨부되고, 단추 안 · 바깥 그림은 도메인과 함께 안내, 칸 안 · 도형은 그 자리에 그림으로", async () => {
+        await go(`#/projects/${target.id}`);
+        await page.locator(".timeline-head").getByRole("button", { name: "기록 추가" }).click();
+        await page.waitForTimeout(500);
+        await pasteInto(".entry-editor textarea", { html, text: "글자만" });
+        await page.waitForTimeout(3500);
+        const value = await page.locator(".entry-editor textarea").first().inputValue();
+        expect(!value.includes("그림 가져오는 중"), `표시가 남았다:\n${value}`);
+        expect(/!\[측정사진\.png\]\(\.\.\/assets\/[^)]+측정사진\.png\)/.test(value), `이 앱의 그림이 링크로 다시 붙지 않았다:\n${value}`);
+        expect(value.includes("생성된 차트") && value.includes("copilot.example.com"), `단추 안 바깥 그림의 안내(도메인):\n${value}`);
+        expect(/\| 칸 \| !\[붙여넣은-그림-\d\.png\]/.test(value), `표 칸 안의 그림:\n${value}`);
+        expect(/!\[붙여넣은-도형-\d\.png\]/.test(value), `도형(svg)이 그림으로:\n${value}`);
+        expect(value.includes("그림판 차트") && value.includes("그림 데이터가 오지 않습니다"), `그림판(canvas) 안내:\n${value}`);
+        const entries = await api.get(`/api/projects/${target.id}/entries`);
+        const names = (await api.get(`/api/entries/${entries[0].id}/attachments`)).map((item) => item.orig_name);
+        expect(names.includes("측정사진.png") && names.some((name) => name.startsWith("붙여넣은-도형-")), `첨부: ${JSON.stringify(names)}`);
+        expect(names.length === 3, `아이콘 svg 는 첨부하지 않는다 — 첨부 ${names.length}개`);
+        await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
+        await page.waitForTimeout(600);
+      });
+      await check("설정 → 점검의 붙여넣기 점검 — 무엇이 어떤 모양으로 왔는지만 센다", async () => {
+        await go("#/settings");
+        const card = page.locator(".paste-check");
+        equal(await card.count(), 1, "붙여넣기 점검 카드");
+        await pasteInto(".paste-check textarea", { html, text: "글자만" });
+        const text = await card.innerText();
+        expect(text.includes("그림(img): 3개") && text.includes("copilot.example.com") && text.includes("단추 안 1개") && text.includes("표 칸 안 1개"), `요약: ${text}`);
+        expect(text.includes("통째로 마크다운"), `처리 방식: ${text}`);
+        expect(!text.includes("이 앱의 그림"), "내용(글)은 보이지 않는다");
+      });
+    } finally {
+      for (const id of [source.id, target.id]) await fetch(`${BASE}/api/projects/${id}/archive`, { method: "POST" });
+    }
+  }
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

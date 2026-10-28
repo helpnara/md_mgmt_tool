@@ -11,6 +11,7 @@ import type { Attachment } from "../upload";
 import { formatBytes, formatRate, uploadAttachment } from "../upload";
 import PasteOfferBar from "./PasteOffer";
 import { type PasteOffer, handleEditorPaste, spliceAtCaret } from "../table";
+import { placeImages } from "../pasteImages";
 import { scrollEditorIntoView } from "../util";
 import AttachmentList from "./AttachmentList";
 import XlsxPreview from "./XlsxPreview";
@@ -646,6 +647,22 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                 },
                 onFiles: (files) => void handleFiles(files),
                 onOffer: setPasteOffer,
+                // 섞인 붙여넣기의 그림은 그 자리에 — 보고 자료로 올리고 본문에 링크 (TODO 225)
+                onImages: (jobs, spare) =>
+                  void placeImages(
+                    jobs,
+                    spare,
+                    async (file) => {
+                      const saved = await uploadAttachment(`/api/reports/${report.id}/attachments`, file, () => undefined).promise;
+                      if (!saved.deduplicated) ledger.addUploaded(saved.id);
+                      refresh();
+                      return saved.markdown;
+                    },
+                    (marker, text) => {
+                      setBody((prev) => prev.replace(marker, text));
+                      setDirty(true);
+                    },
+                  ),
               })
             }
             spellCheck={false}

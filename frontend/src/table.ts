@@ -5,7 +5,7 @@
  * 그대로 붙여넣으면 탭만 늘어선 한 덩어리가 되어, 결국 손으로 표를 다시 그려야 했다.
  * 실무에서 가장 자주 하는 동작이라 여기서 손이 가장 많이 준다.
  */
-import { type HtmlPaste, htmlToMarkdown, soleTable } from "./htmlPaste";
+import { type HtmlPaste, type ImageJob, hasMedia, htmlToMarkdown, markdownExternalImages, soleTable } from "./htmlPaste";
 
 /** 표로 볼 만한 최소 조건 — 두 줄 이상이고, 모든 줄에 탭이 같은 개수로 들어 있다. */
 export function looksLikeTable(text: string): boolean {
@@ -50,15 +50,19 @@ export function rowsToMarkdown(rows: string[][]): string {
   return [head, rule, ...body].join("\n");
 }
 
+/** 칸 안의 그림을 글로 — 글 · 표가 섞인 붙여넣기(225)가 그림 자리 표시를 돌려준다. 없으면 그림은 건너뛴다(엑셀 표) */
+export type CellMedia = (el: Element) => string;
+
 /** 셀의 글 — 소스의 줄바꿈·들여쓰기는 공백 하나로, `<br>` 만 진짜 줄바꿈으로. */
-function cellText(node: Node): string {
+function cellText(node: Node, media?: CellMedia): string {
   let out = "";
   node.childNodes.forEach((child) => {
     if (child.nodeType === Node.TEXT_NODE) out += (child.textContent ?? "").replace(/\s+/g, " ");
     else if (child.nodeName === "BR") out += "\n";
     else if (child.nodeName === "STYLE" || child.nodeName === "SCRIPT") return;
+    else if (media && /^(IMG|SVG|svg|PICTURE|CANVAS)$/.test(child.nodeName)) out += media(child as Element);
     else {
-      const inner = cellText(child);
+      const inner = cellText(child, media);
       // 셀 안의 문단(<p>·<div>)은 줄을 바꾼다 — 워드 표가 이렇게 온다
       out += /^(P|DIV|LI)$/.test(child.nodeName) && out && !out.endsWith("\n") ? `\n${inner}` : inner;
     }
@@ -81,7 +85,7 @@ export function htmlTableRows(html: string): string[][] | null {
 }
 
 /** 표 요소 하나 → 행 목록. 글 · 표가 섞인 붙여넣기(222)는 표마다 이것을 부른다. 안의 표(표 속 표)는 그 칸의 글로 들어간다. */
-export function tableElementRows(table: Element): string[][] {
+export function tableElementRows(table: Element, media?: CellMedia): string[][] {
   const rows: string[][] = [];
   // 위 행의 rowspan 이 아래 행 몇 칸을 차지하는지 — 열 번호 → 남은 행 수
   const carry = new Map<number, number>();
@@ -101,7 +105,7 @@ export function tableElementRows(table: Element): string[][] {
       skip();
       const span = Math.max(1, Number(td.getAttribute("colspan")) || 1);
       const down = Math.max(1, Number(td.getAttribute("rowspan")) || 1);
-      row.push(cellText(td).trim());
+      row.push(cellText(td, media).trim());
       for (let i = 1; i < span; i += 1) row.push("");
       if (down > 1) for (let i = 0; i < span; i += 1) carry.set(column + i, down - 1);
       column += span;
@@ -172,31 +176,46 @@ export function handleEditorPaste(
     onFiles?: (files: File[]) => void;
     /** 표로 넣었는데 그림도 함께 왔다 — [그림으로 바꾸기] 를 띄울 자리 (TODO 149) */
     onOffer?: (offer: PasteOffer) => void;
+    /**
+     * 섞인 붙여넣기의 그림 (TODO 225) — 본문에 그림 자리 표시가 먼저 들어가 있다. `pasteImages.placeImages` 로 가져와 올리고 표시를 바꾼다.
+     * spare — 클립보드에 함께 온 그림 파일(못 가져온 자리부터 채운다). 없으면 그림은 안내 줄로만 들어간다
+     */
+    onImages?: (jobs: ImageJob[], spare: File[]) => void;
   },
 ): boolean {
   const data = event.clipboardData;
   const files = Array.from(data.files);
   // 글 · 표 · 그림이 섞인 HTML (AI 답 · 워드 · 웹 페이지) — 통째로 마크다운으로 (TODO 222)
   const html = data.getData("text/html");
-  if (html && mixedHtml(html)) {
+  if (html && mixedHtml(html, files)) {
     event.preventDefault();
     let converted: HtmlPaste | null = null;
     try {
-      converted = htmlToMarkdown(html);
+      converted = htmlToMarkdown(html, { canAttach: Boolean(handlers.onImages) });
     } catch {
       converted = null;
     }
     if (converted && converted.markdown) {
       handlers.onInsert(`\n${converted.markdown}\n`);
-      // 그림 데이터가 함께 왔으면 첨부로 — HTML 안의 것(data:)이 먼저, 없으면 클립보드 파일
-      const images = converted.files.length > 0 ? converted.files : files.filter((file) => file.type.startsWith("image/"));
-      if (images.length > 0 && handlers.onFiles) handlers.onFiles(images);
+      // 그림은 그 자리에서 — 가져오고 올려 표시를 링크로 바꾼다 (225)
+      const spare = files.filter((file) => file.type.startsWith("image/"));
+      if (converted.jobs.length > 0 && handlers.onImages) handlers.onImages(converted.jobs, spare);
     } else {
       // 바꾸지 못했다 — 버리지 않고 글자 전체를 넣는다
       const text = data.getData("text/plain");
       if (text) handlers.onInsert(text);
     }
     return true;
+  }
+  // 글자(마크다운)로만 온 바깥 그림 — 주소 대신 안내 줄 (225)
+  const plain = data.getData("text/plain");
+  if (!html && plain) {
+    const cleaned = markdownExternalImages(plain);
+    if (cleaned !== null) {
+      event.preventDefault();
+      handlers.onInsert(cleaned);
+      return true;
+    }
   }
   const table = tableFromClipboard(data);
   if (table) {
@@ -220,16 +239,19 @@ export function handleEditorPaste(
  * 통째로 바꿀 HTML 인가 (TODO 222) — 표가 있는데 표 하나뿐(엑셀)은 아니거나, 그림과 글이 함께 있다.
  * 글만 있는 HTML 은 브라우저의 기본 붙여넣기(글자)로 둔다 — 지금까지와 같다.
  */
-function mixedHtml(html: string): boolean {
+function mixedHtml(html: string, files: File[]): boolean {
   const hasTable = /<table[\s>]/i.test(html);
-  const hasImage = /<img[\s>]/i.test(html);
-  if (!hasTable && !hasImage) return false;
+  const maybeMedia = /<(img|svg|picture|canvas)[\s>]|background(-image)?\s*:[^;"]*url\(/i.test(html);
+  if (!hasTable && !maybeMedia) return false;
   const doc = new DOMParser().parseFromString(html, "text/html");
   if (hasTable) return !soleTable(doc);
-  // 그림만 하나 복사한 것은 파일 붙여넣기(캡처와 같은 길)로 둔다
+  // 그림이라 할 만한 것이 없다(단추 아이콘 svg 뿐) — 글자 붙여넣기 그대로 (225)
+  if (!hasMedia(doc)) return false;
   const body = doc.body.cloneNode(true) as HTMLElement;
   body.querySelectorAll("style, script, meta, title, link").forEach((node) => node.remove());
-  return (body.textContent ?? "").replace(/\s+/g, "") !== "";
+  // 그림만 하나 복사했고 그림 파일이 함께 왔으면 파일 붙여넣기(캡처와 같은 길)로 둔다
+  if ((body.textContent ?? "").replace(/\s+/g, "") === "" && files.some((file) => file.type.startsWith("image/"))) return false;
+  return true;
 }
 
 /** 예전 이름 — 표만 가로챈다. 파일을 받지 않는 칸(보고 지시사항 등)에서 쓴다. */

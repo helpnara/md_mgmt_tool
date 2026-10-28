@@ -16,6 +16,7 @@ import ProjectTypeCard from "./ProjectTypeCard";
 import ReportDayCard from "./ReportDayCard";
 import ErrorLogCard from "./ErrorLogCard";
 import LinkFixCard from "./LinkFixCard";
+import PasteCheckCard from "./PasteCheckCard";
 import VersionsCard from "./VersionsCard";
 import BackupCard from "./BackupCard";
 import LoadError from "./LoadError";
@@ -318,6 +319,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
         <div className="settings-grid">
           <ErrorLogCard />
           <LinkFixCard />
+          <PasteCheckCard />
         </div>
       </div>
     </section>
