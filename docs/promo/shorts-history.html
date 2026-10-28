@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>느린 나이테 — 쇼츠 · 과제별 이력 관리의 중요성</title>
+<!--
+  유튜브 쇼츠 두 번째 (TODO 224) — 컨셉 "과제별 이력 관리의 중요성". render.mjs --shorts=history 가 seek(t) 로 한 장씩 찍어 mp4 로 묶는다.
+  기능 소개(223)가 아니라 **왜 이력을 남겨야 하는가** 의 이야기다 — 문제(과정이 사라진다 · 담당이 바뀐다) → 전환 → 쓸모 넷 → 마무리.
+  화면 속 자료는 모두 지어낸 것이다 — 회사 · 팀 · 사람 · 과제 이름 · 금액 · 사내 분류 체계 없음. 실제 화면 캡처도 쓰지 않는다.
+  쇼츠 화면의 아래(제목 · 채널) · 오른쪽(단추) 자리를 비워 둔다 — 중요한 것은 x 70~1010, y 180~1500 안에.
+-->
+<style>
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-400-normal.woff2'); font-weight: 400; }
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-500-normal.woff2'); font-weight: 500; }
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-700-normal.woff2'); font-weight: 700; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-400-normal.woff2'); font-weight: 400; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-500-normal.woff2'); font-weight: 500; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-700-normal.woff2'); font-weight: 700; }
+:root { --bg: #faf6ef; --ink: #2b2118; --muted: #7a6a58; --line: #e6d9c6; --brown: #6f431e; --wood: #f2e1c6; --soft: #fdfaf5;
+        --green: #2f7d4f; --green-bg: #e3f1e7; --blue: #2f5f9e; --blue-bg: #e4ecf7; --red: #a0442c; --red-bg: #f6e6e1; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #stage { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+body { font-family: NL, NK, sans-serif; color: var(--ink); }
+#stage { position: relative; }
+.abs { position: absolute; }
+.scene { position: absolute; inset: 0; opacity: 0; }
+
+#bgrings { position: absolute; right: -330px; bottom: -260px; width: 860px; height: 860px; opacity: .2; }
+#corner { position: absolute; left: 70px; top: 110px; display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 700; color: var(--brown); opacity: 0; }
+#corner svg { width: 50px; height: 50px; }
+
+.cap { position: absolute; left: 60px; right: 60px; top: 230px; text-align: center; }
+.kicker { display: inline-block; font-size: 30px; font-weight: 700; color: #fff; background: var(--brown); padding: 10px 26px; border-radius: 99px; }
+.kicker.warn { background: var(--red); }
+.cap h2 { font-size: 92px; line-height: 1.18; font-weight: 700; letter-spacing: -2.5px; margin-top: 30px; }
+.cap h2 em { font-style: normal; color: var(--brown); }
+.cap h2 em.r { color: var(--red); }
+.cap p { font-size: 36px; line-height: 1.5; color: var(--muted); margin-top: 26px; }
+
+.panel { position: absolute; left: 70px; top: 800px; width: 940px; height: 700px; background: #fff; border-radius: 28px;
+         box-shadow: 0 30px 80px rgba(80, 50, 20, .16), 0 0 0 1.5px var(--line); overflow: hidden; }
+.bar { height: 62px; display: flex; align-items: center; gap: 10px; padding: 0 24px; border-bottom: 1.5px solid var(--line); background: var(--soft); }
+.dot { width: 14px; height: 14px; border-radius: 99px; background: #e2d4c0; }
+.bar .tab { margin-left: 18px; font-size: 23px; font-weight: 500; color: var(--muted); }
+.body { position: absolute; left: 0; right: 0; top: 62px; bottom: 0; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 99px; font-size: 21px; font-weight: 500; background: #eee6da; color: #6b5a47; }
+
+#cursor { position: absolute; width: 44px; height: 44px; left: 0; top: 0; opacity: 0; z-index: 50; }
+#ripple { position: absolute; width: 76px; height: 76px; border-radius: 99px; border: 4px solid var(--brown); opacity: 0; z-index: 49; }
+
+/* s0 훅 */
+.hook { position: absolute; left: 40px; right: 40px; top: 300px; text-align: center; font-size: 110px; line-height: 1.17; font-weight: 700; letter-spacing: -4px; }
+.hook em { font-style: normal; color: var(--brown); }
+.hooksub { position: absolute; left: 60px; right: 60px; top: 760px; text-align: center; font-size: 40px; color: var(--muted); }
+.memo { position: absolute; left: 230px; top: 920px; width: 620px; height: 420px; border-radius: 26px; background: #fffdf8; border: 2px solid var(--line);
+        box-shadow: 0 20px 50px rgba(80,50,20,.12); padding: 40px 46px; transform-origin: center; }
+.memo b { font-size: 34px; } .memo .ln { height: 18px; border-radius: 99px; background: #eee3d3; margin-top: 26px; }
+.memo .q { position: absolute; right: 40px; bottom: 30px; font-size: 120px; font-weight: 700; color: var(--brown); opacity: 0; }
+
+/* 시간 줄 (s1 · s4) */
+.tl { position: absolute; left: 60px; right: 60px; height: 6px; border-radius: 99px; background: #e9dccb; }
+.tl .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--brown); width: 0; }
+.ev { position: absolute; width: 34px; height: 34px; margin-left: -17px; border-radius: 99px; background: #fff; border: 5px solid var(--brown); }
+.ev.goal { width: 46px; height: 46px; margin-left: -23px; background: var(--brown); }
+.evl { position: absolute; width: 170px; margin-left: -85px; text-align: center; font-size: 21px; color: var(--muted); line-height: 1.35; }
+.evl b { display: block; color: var(--ink); font-size: 22px; }
+.gone { position: absolute; left: 0; right: 0; text-align: center; font-size: 30px; font-weight: 700; color: var(--red); opacity: 0; }
+
+/* s2 인수인계 */
+.person { position: absolute; width: 200px; height: 230px; border-radius: 24px; border: 2px solid var(--line); background: var(--soft);
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 27px; font-weight: 700; }
+.person .face { font-size: 76px; line-height: 1; }
+.handoff { position: absolute; left: 370px; top: 260px; width: 200px; height: 140px; border-radius: 16px; border: 2px solid var(--line); background: #fff;
+           padding: 18px 22px; font-size: 20px; font-weight: 700; box-shadow: 0 12px 30px rgba(80,50,20,.12); }
+.handoff .ln { height: 12px; border-radius: 99px; background: #eee3d3; margin-top: 14px; }
+.lost { position: absolute; font-size: 25px; padding: 8px 18px; border-radius: 99px; background: var(--red-bg); color: var(--red); font-weight: 700; opacity: 0; white-space: nowrap; }
+
+/* s3 전환 */
+.center { position: absolute; left: 0; right: 0; text-align: center; }
+.big { font-size: 96px; font-weight: 700; letter-spacing: -3px; line-height: 1.18; }
+.big em { font-style: normal; color: var(--brown); }
+.tagline { font-size: 42px; color: var(--muted); line-height: 1.45; }
+.title { font-size: 138px; font-weight: 700; letter-spacing: -4px; }
+.note { font-size: 32px; color: var(--brown); font-weight: 500; }
+.ringrow { display: flex; justify-content: center; gap: 14px; }
+.ringlbl { display: inline-block; font-size: 26px; font-weight: 700; color: var(--brown); background: var(--wood); border: 2px solid var(--brown); padding: 8px 18px; border-radius: 99px; opacity: 0; white-space: nowrap; }
+
+/* s4 과정 — 열리는 기록 */
+.open { position: absolute; left: 70px; right: 70px; top: 330px; border-radius: 20px; border: 2.5px solid var(--brown); background: #fff; padding: 22px 26px; opacity: 0;
+        box-shadow: 0 18px 40px rgba(80,50,20,.14); }
+.open .d { font-size: 21px; color: var(--brown); font-weight: 700; } .open h4 { font-size: 30px; margin: 6px 0 12px; }
+.open .why { font-size: 24px; line-height: 1.5; color: #3d3127; }
+.open .att { display: inline-flex; gap: 10px; margin-top: 14px; }
+.open .att span { font-size: 19px; padding: 6px 14px; border-radius: 10px; background: var(--wood); color: var(--brown); font-weight: 700; }
+
+/* s5 새 담당 */
+.reader { position: absolute; left: 70px; top: 50px; width: 230px; height: 270px; border-radius: 24px; border: 2.5px solid var(--brown); background: var(--wood);
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 26px; font-weight: 700; }
+.reader .face { font-size: 82px; line-height: 1; }
+.stack { position: absolute; left: 350px; right: 60px; }
+.srow { height: 62px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--soft); display: flex; align-items: center; gap: 16px; padding: 0 20px;
+        font-size: 23px; margin-bottom: 12px; opacity: 0; }
+.srow b { color: var(--brown); font-family: NL, monospace; font-size: 21px; width: 70px; }
+.srow.on { border-color: var(--brown); background: #fff; }
+.ok { position: absolute; left: 70px; right: 70px; bottom: 36px; text-align: center; font-size: 28px; font-weight: 700; color: var(--green);
+      background: var(--green-bg); border-radius: 16px; padding: 14px; opacity: 0; }
+
+/* s6 보고 · 성과 */
+.logc { position: absolute; left: 50px; width: 300px; height: 64px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--soft); font-size: 21px;
+        display: flex; align-items: center; padding: 0 18px; gap: 10px; }
+.logc b { color: var(--brown); font-family: NL, monospace; }
+.rep { position: absolute; left: 470px; top: 40px; width: 420px; height: 270px; border-radius: 18px; border: 2px solid var(--line); background: #fff; padding: 20px 24px; }
+.rep h4 { font-size: 25px; } .rep .ln { height: 13px; border-radius: 99px; background: #eee3d3; margin-top: 14px; }
+.eff { position: absolute; left: 470px; top: 340px; width: 420px; height: 250px; border-radius: 18px; border: 2px solid var(--brown); background: var(--wood); padding: 22px 26px; opacity: 0; }
+.eff small { font-size: 22px; color: var(--muted); } .eff .n { font-size: 50px; font-weight: 700; margin-top: 8px; letter-spacing: -1px; }
+.eff .n span { color: var(--brown); } .eff .n i { font-style: normal; color: var(--muted); font-size: 34px; }
+.flow { position: absolute; width: 18px; height: 18px; border-radius: 99px; background: var(--brown); opacity: 0; }
+
+/* s7 여러 해 */
+.years { position: absolute; left: 40px; right: 40px; top: 30px; display: grid; grid-template-columns: repeat(3, 1fr); font-size: 24px; color: var(--muted); font-weight: 700; }
+.years span { border-left: 1.5px dashed #e0d2bd; padding-left: 12px; height: 560px; }
+.gbar { position: absolute; height: 64px; border-radius: 14px; background: var(--wood); border: 2px solid var(--brown); font-size: 22px; font-weight: 700;
+        display: flex; align-items: center; padding: 0 18px; overflow: hidden; white-space: nowrap; transform-origin: left center; }
+.gbar.done { background: #ece6dd; border-color: #b9a993; color: #6b5a47; }
+.garrow { position: absolute; font-size: 32px; color: var(--brown); opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="bgrings" viewBox="0 0 100 100"><g fill="none" stroke="#6f431e" stroke-width=".5">
+    <ellipse cx="50" cy="50" rx="48" ry="46"/><ellipse cx="50" cy="50.5" rx="40" ry="38"/><ellipse cx="49.5" cy="51" rx="31" ry="29.5"/>
+    <ellipse cx="49" cy="51" rx="23" ry="22"/><ellipse cx="49" cy="51.5" rx="15" ry="14"/><ellipse cx="49" cy="51.5" rx="7.5" ry="7"/></g></svg>
+
+  <div id="corner"><svg viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#f2e1c6"/><g fill="none" stroke="#6f431e" stroke-width="1.6">
+    <ellipse cx="16" cy="16.5" rx="11" ry="10.5"/><ellipse cx="15.6" cy="16.8" rx="7" ry="6.6"/><ellipse cx="15.4" cy="17" rx="3.4" ry="3.1"/></g></svg>느린 나이테</div>
+
+  <!-- s0 훅 -->
+  <div class="scene" id="s0">
+    <div class="hook" id="s0-hook">6개월 전 그 결정,<br><em>왜</em> 했는지<br>기억나세요?</div>
+    <div class="hooksub" id="s0-sub">보고 자리에서 가장 곤란한 질문</div>
+    <div class="memo" id="s0-memo"><b>결정: B안으로 간다</b><div class="ln" style="width:80%"></div><div class="ln" style="width:55%"></div><div class="ln" style="width:68%"></div>
+      <div class="q" id="s0-q">?</div></div>
+  </div>
+
+  <!-- s1 과정이 사라진다 -->
+  <div class="scene" id="s1">
+    <div class="cap"><span class="kicker warn">문제 1</span>
+      <h2>남는 건 결과뿐,<br><em class="r">과정</em>은 사라진다</h2>
+      <p>메일 · 메신저 · 회의 메모에 흩어진 "왜"</p></div>
+    <div class="panel"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">어느 과제의 1년</span></div>
+      <div class="body" id="s1-body">
+        <div class="tl" style="top:250px"><i class="fill" id="s1-fill"></i></div>
+        <div class="gone" id="s1-gone" style="top:470px">무엇을 시도했고, 왜 바꿨는지 — 남지 않았다</div>
+      </div></div>
+  </div>
+
+  <!-- s2 담당이 바뀌면 -->
+  <div class="scene" id="s2">
+    <div class="cap"><span class="kicker warn">문제 2</span>
+      <h2>담당이 바뀌면<br><em class="r">처음부터</em> 다시</h2>
+      <p>인수인계는 문서 한 장, 맥락은 떠난 사람 머릿속에</p></div>
+    <div class="panel"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">인수인계</span></div>
+      <div class="body">
+        <div class="person" id="s2-old" style="left:80px;top:120px"><span class="face">🧑‍💼</span>전 담당</div>
+        <div class="person" id="s2-new" style="left:660px;top:120px"><span class="face">🧑</span>새 담당</div>
+        <div class="handoff" id="s2-doc">인수인계서<div class="ln" style="width:85%"></div><div class="ln" style="width:60%"></div></div>
+        <div class="lost" style="left:90px;top:430px">시도했다 접은 방법</div>
+        <div class="lost" style="left:420px;top:470px">협의한 조건</div>
+        <div class="lost" style="left:160px;top:530px">그때 받은 지시</div>
+        <div class="lost" style="left:560px;top:550px">실패한 시험 결과</div>
+      </div></div>
+  </div>
+
+  <!-- s3 전환 -->
+  <div class="scene" id="s3">
+    <div class="center big" id="s3-big" style="top:330px">그래서,<br><em>과제마다 이력</em>을</div>
+    <svg id="s3-rings" class="abs" style="left:315px;top:720px;width:450px;height:450px" viewBox="0 0 100 100">
+      <g fill="none" stroke="#6f431e" stroke-linecap="round" stroke-width="1.6">
+        <ellipse class="ring" cx="50" cy="51" rx="46" ry="44"/><ellipse class="ring" cx="49.5" cy="51.5" rx="36" ry="34.5"/><ellipse class="ring" cx="49" cy="52" rx="27" ry="25.5"/>
+        <ellipse class="ring" cx="48.6" cy="52.4" rx="18.5" ry="17.5"/><ellipse class="ring" cx="48.3" cy="52.6" rx="10.5" ry="10"/><ellipse class="ring" cx="48" cy="52.8" rx="3.5" ry="3.2"/></g></svg>
+    <div class="center ringrow" style="top:1240px"><span class="ringlbl">착수</span><span class="ringlbl">진행일지</span><span class="ringlbl">결정 · 근거</span><span class="ringlbl">보고</span><span class="ringlbl">결과</span></div>
+    <div class="center tagline" id="s3-tag" style="top:1340px">날짜마다 한 겹씩,<br>과정이 그대로 쌓입니다</div>
+  </div>
+
+  <!-- s4 과정이 남는다 -->
+  <div class="scene" id="s4">
+    <div class="cap"><span class="kicker">① 과정이 남는다</span>
+      <h2>"왜?" 에<br><em>기록</em>으로 답한다</h2>
+      <p>지난 기록을 누르면 그때의 이유와 근거가</p></div>
+    <div class="panel"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">과제 · 수행 이력</span></div>
+      <div class="body" id="s4-body">
+        <div class="tl" style="top:150px"><i class="fill" style="width:100%"></i></div>
+        <div class="open" id="s4-open"><div class="d">03-14 · 진행일지</div><h4>A안 대신 B안으로</h4>
+          <div class="why">시험 두 번 모두 A안이 기준에 못 미쳤다.<br>B안은 비용이 조금 늘지만 일정이 맞는다.</div>
+          <div class="att"><span>📎 시험 결과.xlsx</span><span>🖼 비교 그래프</span></div></div>
+      </div></div>
+  </div>
+
+  <!-- s5 인수인계 -->
+  <div class="scene" id="s5">
+    <div class="cap"><span class="kicker">② 인수인계가 한 줄로</span>
+      <h2>새 담당도<br><em>처음부터 끝까지</em></h2>
+      <p>개요 · 진행일지 · 보고가 날짜순으로</p></div>
+    <div class="panel"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">과제 상세</span></div>
+      <div class="body">
+        <div class="reader"><span class="face">🧑</span>새 담당</div>
+        <div class="stack" style="top:40px">
+          <div class="srow"><b>01-08</b>착수 · 목표와 범위</div>
+          <div class="srow"><b>02-21</b>1차 시험 · 결과 첨부</div>
+          <div class="srow"><b>03-14</b>B안으로 결정 · 근거</div>
+          <div class="srow"><b>05-02</b>보고 · 받은 지시</div>
+          <div class="srow"><b>06-30</b>2차 시험 · 개선 확인</div>
+          <div class="srow"><b>09-15</b>적용 · 효과 확인</div>
+        </div>
+        <div class="ok" id="s5-ok">맥락까지 넘겨받았습니다 ✓</div>
+      </div></div>
+  </div>
+
+  <!-- s6 보고 · 성과 -->
+  <div class="scene" id="s6">
+    <div class="cap"><span class="kicker">③ 보고와 성과</span>
+      <h2>보고도 성과도<br><em>기록</em>에서 나온다</h2>
+      <p>쌓인 기록이 초안이 되고, 효과가 숫자로</p></div>
+    <div class="panel"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">보고 · 연말 정리</span></div>
+      <div class="body">
+        <div class="logc" style="top:50px"><b>02-21</b>1차 시험</div>
+        <div class="logc" style="top:130px"><b>03-14</b>B안 결정</div>
+        <div class="logc" style="top:210px"><b>06-30</b>2차 시험</div>
+        <div class="logc" style="top:290px"><b>09-15</b>적용</div>
+        <div class="rep" id="s6-rep"><h4>보고 초안</h4><div class="ln dl" style="width:88%"></div><div class="ln dl" style="width:72%"></div><div class="ln dl" style="width:84%"></div><div class="ln dl" style="width:60%"></div></div>
+        <div class="eff" id="s6-eff"><small>효과 · 기대 → 실증</small><div class="n"><i>기대</i> 3.0 → <span id="s6-n">0.0</span></div><small>확인한 근거는 그날의 기록에</small></div>
+        <i class="flow"></i><i class="flow"></i><i class="flow"></i><i class="flow"></i>
+      </div></div>
+  </div>
+
+  <!-- s7 여러 해 -->
+  <div class="scene" id="s7">
+    <div class="cap"><span class="kicker">④ 여러 해 과제도</span>
+      <h2>해가 바뀌어도<br><em>한 줄기</em>로</h2>
+      <p>앞 단계의 이력이 다음 단계로 이어집니다</p></div>
+    <div class="panel"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">로드맵</span></div>
+      <div class="body" id="s7-body">
+        <div class="years"><span>2025</span><span>2026</span><span>2027</span></div>
+      </div></div>
+  </div>
+
+  <!-- s8 마무리 -->
+  <div class="scene" id="s8">
+    <div class="center big" id="s8-big" style="top:300px;font-size:84px">기록은 <em>오늘</em>의 일,<br>이력은 <em>내일</em>의 자산</div>
+    <svg id="s8-rings" class="abs" style="left:410px;top:640px;width:260px;height:260px" viewBox="0 0 100 100">
+      <g fill="none" stroke="#6f431e" stroke-linecap="round" stroke-width="2.4">
+        <ellipse class="ring" cx="50" cy="51" rx="46" ry="44"/><ellipse class="ring" cx="49.5" cy="51.5" rx="36" ry="34.5"/><ellipse class="ring" cx="49" cy="52" rx="27" ry="25.5"/>
+        <ellipse class="ring" cx="48.6" cy="52.4" rx="18.5" ry="17.5"/><ellipse class="ring" cx="48.3" cy="52.6" rx="10.5" ry="10"/><ellipse class="ring" cx="48" cy="52.8" rx="3.5" ry="3.2"/></g></svg>
+    <div class="center title" id="s8-title" style="top:950px">느린 나이테</div>
+    <div class="center tagline" id="s8-tag" style="top:1140px">과제의 이력이<br>한 겹씩 쌓이는 곳</div>
+    <div class="center note" id="s8-note" style="top:1320px;color:var(--muted);font-weight:400">느린 시리즈 — 느린 부자의 기록 · 느린 여백 · 느린 나이테</div>
+  </div>
+
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2 L3 19 L8 14.5 L11.5 22 L14.5 20.6 L11 13.2 L17.5 13.2 Z" fill="#2b2118" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  <div id="ripple"></div>
+</div>
+
+<script>
+const SCENES = [[0, 3], [3, 8], [8, 12.5], [12.5, 16], [16, 21], [21, 25.5], [25.5, 30], [30, 34.5], [34.5, 40]];
+const DURATION = 40;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+const easeInOut = (p) => (p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const back = (p) => { const c = 1.7; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); };
+const prog = (t, a, b, ease = easeOut) => ease(clamp((t - a) / (b - a)));
+const lerp = (a, b, p) => a + (b - a) * p;
+function put(el, { o, x = 0, y = 0, s = 1, r = 0 } = {}) {
+  if (o !== undefined) el.style.opacity = o;
+  el.style.transform = `translate(${x}px, ${y}px) scale(${s}) rotate(${r}deg)`;
+}
+const rise = (el, t, a, d = .5, dy = 30) => { const p = prog(t, a, a + d); put(el, { o: p, y: (1 - p) * dy }); };
+const pop = (el, t, a, d = .45) => { const p = clamp((t - a) / d); put(el, { o: Math.min(1, p * 2), s: lerp(.82, 1, back(p)) }); };
+
+$$(".ring").forEach((el) => { const L = el.getTotalLength(); el.style.strokeDasharray = L; el.dataset.len = L; });
+const drawRings = (svg, t, a, step = .18, d = .6) => $$(".ring", svg).forEach((el, i) => {
+  const p = prog(t, a + i * step, a + i * step + d, easeInOut); el.style.strokeDashoffset = el.dataset.len * (1 - p);
+});
+
+// 한 해의 사건 — s1 은 흐려지고, s4 는 남는다 (x 는 창 안 %, 시간 줄 60~880)
+const EVENTS = [
+  { x: 0.02, d: "01-08", t: "착수" }, { x: 0.2, d: "02-21", t: "1차 시험" }, { x: 0.38, d: "03-14", t: "B안 결정" },
+  { x: 0.56, d: "05-02", t: "보고 · 지시" }, { x: 0.74, d: "06-30", t: "2차 시험" }, { x: 0.98, d: "09-15", t: "결과", goal: true },
+];
+const TLX = (p) => 60 + p * 820;
+function buildTimeline(body, top, labelTop) {
+  return EVENTS.map((e, i) => {
+    const dot = document.createElement("i"); dot.className = "ev" + (e.goal ? " goal" : "");
+    dot.style.left = `${TLX(e.x)}px`; dot.style.top = `${top - (e.goal ? 20 : 14)}px`; body.appendChild(dot);
+    const lab = document.createElement("div"); lab.className = "evl"; lab.style.left = `${TLX(e.x)}px`; lab.style.top = `${labelTop + (i % 2 ? 60 : 0)}px`;
+    lab.innerHTML = `<b>${e.t}</b>${e.d}`; body.appendChild(lab);
+    return { dot, lab };
+  });
+}
+const S1 = buildTimeline($("#s1-body"), 253, 300);
+const S4 = buildTimeline($("#s4-body"), 153, 30);
+// s4 는 이름표를 점 아래 한 줄로, 열리는 기록 자리를 비워 둔다
+S4.forEach((e, i) => { e.lab.style.top = `${i % 2 ? 60 : 190}px`; });
+
+// s6 흐르는 점
+const FLOWS = $$("#s6 .flow");
+
+// s7 로드맵 (창 안 940 폭, 한 해 = 287px, 2025 시작 = 40)
+const Y0 = 40, YW = 287;
+const STEMS = [
+  { top: 130, bars: [["1단계 · 조사", 0, .95, true], ["2단계 · 시범", 1, .95, false], ["3단계 · 확산", 2, .85, false]] },
+  { top: 300, bars: [["1단계", .4, 1, true], ["2단계", 1.45, 1.1, false]] },
+  { top: 470, bars: [["1단계", 1.05, .85, false], ["2단계", 2, .8, false]] },
+];
+STEMS.forEach((stem) => {
+  stem.els = stem.bars.map(([name, start, len, done], bi) => {
+    const b = document.createElement("div"); b.className = "gbar" + (done ? " done" : "");
+    b.style.left = `${Y0 + start * YW}px`; b.style.top = `${stem.top}px`; b.style.width = `${len * YW - 12}px`; b.textContent = name;
+    $("#s7-body").appendChild(b);
+    let arrow = null;
+    if (bi > 0) { arrow = document.createElement("div"); arrow.className = "garrow"; arrow.textContent = "→";
+      arrow.style.left = `${Y0 + start * YW - 32}px`; arrow.style.top = `${stem.top + 10}px`; $("#s7-body").appendChild(arrow); }
+    return { b, arrow };
+  });
+});
+
+const W = (x, y) => ({ x: 70 + x, y: 800 + 62 + y });
+const moveCursor = (t, a, b, from, to) => { const p = prog(t, a, b, easeInOut); return { x: lerp(from.x, to.x, p), y: lerp(from.y, to.y, p) }; };
+
+function seek(T) {
+  $("#bgrings").style.transform = `rotate(${T * 1.5}deg)`;
+  put($("#corner"), { o: prog(T, 3, 3.5) * (1 - prog(T, 34.1, 34.5)) });
+  let cursor = null, ripple = null;
+  SCENES.forEach(([a, b], i) => {
+    const el = $(`#s${i}`), last = i === SCENES.length - 1;
+    const o = i === 0 ? 1 - prog(T, b - .3, b) : prog(T, a, a + .3) * (last ? 1 : 1 - prog(T, b - .3, b));
+    el.style.opacity = o; el.style.visibility = o > 0.001 ? "visible" : "hidden";
+    if (o <= 0.001) return;
+    const t = T - a;
+    const cap = $(".cap", el);
+    if (cap) { pop($(".kicker", cap), t, .05, .35); pop($("h2", cap), t, .15); rise($("p", cap), t, .45, .4, 20); }
+    const panel = $(".panel", el); if (panel) { const p = prog(t, .2, .8); put(panel, { o: p, y: (1 - p) * 60, s: lerp(.96, 1, p) }); }
+    const r = SCENE_FN[i](t, el); if (r) { if (r.cursor) cursor = r.cursor; if (r.ripple) ripple = r.ripple; }
+  });
+  if (cursor) put($("#cursor"), { o: cursor.o ?? 1, x: cursor.x, y: cursor.y, s: cursor.s ?? 1 }); else $("#cursor").style.opacity = 0;
+  if (ripple) put($("#ripple"), { o: (1 - ripple.p) * .8, x: ripple.x - 38, y: ripple.y - 38, s: lerp(.3, 1.6, ripple.p) }); else $("#ripple").style.opacity = 0;
+}
+
+const SCENE_FN = [
+  // s0 훅 — 첫 장부터 글이 서 있다
+  (t) => { put($("#s0-hook"), { o: 1, s: lerp(.94, 1, back(clamp(t / .5))) });
+    rise($("#s0-sub"), t, .5, .4, 16);
+    const m = prog(t, .3, .8); put($("#s0-memo"), { o: m, y: (1 - m) * 50, r: lerp(-6, -2, m) + Math.sin(t * 2) * .6 });
+    // 메모의 줄이 지워진다 — 결정은 남았는데 이유가 없다
+    $$("#s0-memo .ln").forEach((l, i) => { l.style.opacity = 1 - prog(t, 1.2 + i * .2, 1.6 + i * .2); });
+    const q = prog(t, 1.9, 2.2); put($("#s0-q"), { o: q, s: lerp(.4, 1, back(q)), r: Math.sin(t * 5) * 6 }); },
+  // s1 과정이 흐려진다 — 결과만 남는다
+  (t) => { $("#s1-fill").style.width = `${prog(t, .7, 1.8, easeInOut) * 100}%`;
+    S1.forEach((e, i) => { const a = prog(t, .8 + i * .15, 1.1 + i * .15); const goal = EVENTS[i].goal;
+      const fade = goal ? 0 : prog(t, 2.6 + i * .18, 3.1 + i * .18);
+      put(e.dot, { o: a * (1 - fade * .85), s: lerp(.4, 1, a) }); put(e.lab, { o: a * (1 - fade), y: fade * 10 });
+      e.dot.style.borderStyle = fade > .5 ? "dashed" : "solid"; });
+    const g = prog(t, 3.8, 4.2); put($("#s1-gone"), { o: g, y: (1 - g) * 16 }); },
+  // s2 담당이 바뀐다 — 문서 한 장만 건너가고, 맥락은 흩어진다
+  (t, el) => { rise($("#s2-old"), t, .5); rise($("#s2-new"), t, .7);
+    const d = prog(t, 1.2, 2.2, easeInOut); put($("#s2-doc"), { o: prog(t, 1.0, 1.3), x: lerp(-250, 0, d), y: Math.sin(d * Math.PI) * -40 + 30 });
+    $("#s2-old").style.opacity = String(Math.min(+$("#s2-old").style.opacity || 0, 1 - prog(t, 2.4, 3.0) * .6));
+    $$(".lost", el).forEach((l, i) => { const p = prog(t, 2.2 + i * .2, 2.5 + i * .2); const f = prog(t, 3.4 + i * .1, 4.0 + i * .1);
+      put(l, { o: p * (1 - f), y: f * 40 + Math.sin(t * 3 + i) * 3, r: (i % 2 ? 3 : -3) * f }); l.style.textDecoration = f > .2 ? "line-through" : "none"; }); },
+  // s3 전환 — 나이테가 한 겹씩, 이름표가 붙는다
+  (t, el) => { pop($("#s3-big"), t, .05, .5); drawRings($("#s3-rings"), t, .5, .25, .6);
+    $$(".ringlbl", el).forEach((l, i) => rise(l, t, .9 + i * .25, .35, 10)); rise($("#s3-tag"), t, 2.4, .5); },
+  // s4 과정이 남는다 — 지난 점을 누르면 그때의 이유
+  (t) => { S4.forEach((e, i) => { const a = prog(t, .6 + i * .1, .9 + i * .1); put(e.dot, { o: a, s: lerp(.4, 1, a) }); put(e.lab, { o: a * (1 - prog(t, 2.3, 2.6) * .6) }); });
+    const target = W(TLX(.38), 153);
+    const c = moveCursor(t, 1.2, 2.0, W(700, 560), target);
+    const op = prog(t, 2.3, 2.7); put($("#s4-open"), { o: op, y: (1 - op) * 30, s: lerp(.95, 1, op) });
+    S4[2].dot.style.boxShadow = t > 2.1 ? "0 0 0 8px rgba(111,67,30,.2)" : "none";
+    return { cursor: { ...c, o: prog(t, 1.1, 1.4) * (1 - prog(t, 4.2, 4.5)), s: t > 2.05 && t < 2.2 ? .88 : 1 },
+             ripple: t > 2.05 && t < 2.7 ? { ...target, p: prog(t, 2.05, 2.7, (p) => p) } : null }; },
+  // s5 새 담당이 처음부터 읽는다
+  (t, el) => { $$(".srow", el).forEach((r, i) => { const p = prog(t, .7 + i * .3, 1.0 + i * .3); put(r, { o: p, x: (1 - p) * 40 });
+      r.classList.toggle("on", t > .9 + i * .3 && t < 1.4 + i * .3); });
+    const ok = prog(t, 3.0, 3.3); put($("#s5-ok"), { o: ok, s: lerp(.85, 1, back(ok)) }); },
+  // s6 기록 → 보고 초안 → 효과
+  (t) => { FLOWS.forEach((f, i) => { const a = .6 + i * .35; const p = prog(t, a, a + .6, easeInOut);
+      const from = { x: 350, y: 82 + i * 80 }, to = { x: 470, y: 120 + i * 30 };
+      f.style.left = `${lerp(from.x, to.x, p)}px`; f.style.top = `${lerp(from.y, to.y, p)}px`; f.style.opacity = p > 0 && p < 1 ? 1 : 0; });
+    $$("#s6-rep .dl").forEach((l, i) => { const on = t > 1.2 + i * .35; l.style.background = on ? "var(--brown)" : "#eee3d3"; l.style.opacity = on ? .55 : 1; });
+    const e = prog(t, 2.5, 2.9); put($("#s6-eff"), { o: e, y: (1 - e) * 30 });
+    $("#s6-n").textContent = (3.4 * prog(t, 2.9, 3.8)).toFixed(1); },
+  // s7 여러 해 — 막대가 자라고 화살표로 이어진다
+  (t) => { STEMS.forEach((stem, si) => stem.els.forEach(({ b, arrow }, bi) => { const a = .7 + si * .45 + bi * .4; const p = prog(t, a, a + .45);
+      b.style.opacity = p > 0 ? 1 : 0; b.style.transform = `scaleX(${p})`; if (arrow) arrow.style.opacity = prog(t, a - .1, a + .15); })); },
+  // s8 마무리
+  (t) => { pop($("#s8-big"), t, .05, .5); drawRings($("#s8-rings"), t, .7, .15, .55);
+    pop($("#s8-title"), t, 1.5, .5); rise($("#s8-tag"), t, 2.0, .5); rise($("#s8-note"), t, 2.6, .5); },
+];
+
+window.seek = seek; window.DURATION = DURATION;
+seek(0);
+if (location.search.includes("play")) { const t0 = performance.now(); const loop = () => { seek(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); }; loop(); }
+</script>
+</body>
+</html>

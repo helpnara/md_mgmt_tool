@@ -5,6 +5,7 @@
  *   node docs/promo/render.mjs --fps 24     # 가볍게
  *   node docs/promo/render.mjs --vertical   # 세로형 느린나이테-소개-9x16.mp4 (1080×1920 — 릴스 · 쇼츠)
  *   node docs/promo/render.mjs --shorts     # 쇼츠 전용 느린나이테-쇼츠-9x16.mp4 (1080×1920 · 37초, shorts.html — TODO 223)
+ *   node docs/promo/render.mjs --shorts=history  # 쇼츠 둘째 — 과제별 이력 관리의 중요성 (shorts-history.html · 40초 — TODO 224)
  *
  * promo.html 의 seek(t) 로 한 장씩 그려 ffmpeg 에 바로 넘긴다 — 재생 속도와 상관없이 매번 같은 영상이 나온다.
  * 준비물: ffmpeg, playwright(전역), 글꼴(fonts/ 가 없으면 npm 으로 Noto Sans KR 을 받아 채운다 — OFL).
@@ -26,12 +27,19 @@ const { chromium } = (() => {
 })();
 
 const fps = Number(process.argv[process.argv.indexOf("--fps") + 1]) || 30;
-const shorts = process.argv.includes("--shorts");
+// --shorts (기능 소개 · 223) · --shorts=history (이력 관리의 중요성 · 224)
+const shortsArg = process.argv.find((arg) => arg === "--shorts" || arg.startsWith("--shorts="));
+const shorts = Boolean(shortsArg);
+const SHORTS = {
+  "": { page: "shorts.html", name: "느린나이테-쇼츠", cover: 1.5 },
+  history: { page: "shorts-history.html", name: "느린나이테-쇼츠-이력관리", cover: 2.4 },
+}[shortsArg?.split("=")[1] ?? ""];
+if (shorts && !SHORTS) throw new Error(`모르는 쇼츠: ${shortsArg}`);
 const vertical = shorts || process.argv.includes("--vertical");
 const [WIDTH, HEIGHT, TAG] = vertical ? [1080, 1920, "9x16"] : [1920, 1080, "16x9"];
 // 쇼츠는 따로 짠 페이지(shorts.html) — 소개 영상을 세로로 옮긴 것이 아니다
-const PAGE = shorts ? "shorts.html" : "promo.html";
-const NAME = shorts ? "느린나이테-쇼츠" : "느린나이테-소개";
+const PAGE = shorts ? SHORTS.page : "promo.html";
+const NAME = shorts ? SHORTS.name : "느린나이테-소개";
 
 // 글꼴 — 저장소에 넣지 않는다(.gitignore). 없으면 받아 온다.
 const FONTS = join(HERE, "fonts");
@@ -65,7 +73,7 @@ ff.stdin.end();
 await new Promise((r) => ff.on("close", r));
 
 // 표지 — 블로그 · SNS 미리보기용 (인트로가 다 그려진 때). 쇼츠는 첫 질문 장면(1.5초)
-await page.evaluate((t) => window.seek(t), shorts ? 1.5 : 4.0);
-await page.screenshot({ path: join(HERE, shorts ? "느린나이테-쇼츠-표지-9x16.png" : vertical ? "느린나이테-소개-표지-9x16.png" : "느린나이테-소개-표지.png") });
+await page.evaluate((t) => window.seek(t), shorts ? SHORTS.cover : 4.0);
+await page.screenshot({ path: join(HERE, shorts ? `${NAME}-표지-9x16.png` : vertical ? "느린나이테-소개-표지-9x16.png" : "느린나이테-소개-표지.png") });
 await browser.close();
 console.log(`\n만들었습니다: ${out} (${frames} 장, ${duration}초)`);
