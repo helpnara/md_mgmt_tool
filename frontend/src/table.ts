@@ -5,6 +5,7 @@
  * 그대로 붙여넣으면 탭만 늘어선 한 덩어리가 되어, 결국 손으로 표를 다시 그려야 했다.
  * 실무에서 가장 자주 하는 동작이라 여기서 손이 가장 많이 준다.
  */
+import { type HtmlPaste, htmlToMarkdown, soleTable } from "./htmlPaste";
 
 /** 표로 볼 만한 최소 조건 — 두 줄 이상이고, 모든 줄에 탭이 같은 개수로 들어 있다. */
 export function looksLikeTable(text: string): boolean {
@@ -40,7 +41,7 @@ export function toMarkdownTable(text: string): string {
 }
 
 /** 표를 마크다운으로 — 행 길이가 다르면 가장 긴 행에 맞춰 빈 칸을 채운다. */
-function rowsToMarkdown(rows: string[][]): string {
+export function rowsToMarkdown(rows: string[][]): string {
   const columns = Math.max(...rows.map((row) => row.length));
   const pad = (row: string[]) => [...row, ...Array(columns - row.length).fill("")];
   const head = `| ${pad(rows[0]).map(cell).join(" | ")} |`;
@@ -76,10 +77,17 @@ export function htmlTableRows(html: string): string[][] | null {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const table = doc.querySelector("table");
   if (!table) return null;
+  return tableElementRows(table);
+}
+
+/** 표 요소 하나 → 행 목록. 글 · 표가 섞인 붙여넣기(222)는 표마다 이것을 부른다. 안의 표(표 속 표)는 그 칸의 글로 들어간다. */
+export function tableElementRows(table: Element): string[][] {
   const rows: string[][] = [];
   // 위 행의 rowspan 이 아래 행 몇 칸을 차지하는지 — 열 번호 → 남은 행 수
   const carry = new Map<number, number>();
-  table.querySelectorAll("tr").forEach((tr) => {
+  // 이 표의 줄만 — 칸 안에 표가 또 있으면 그 줄까지 세면 안 된다
+  const own = Array.from(table.querySelectorAll("tr")).filter((tr) => tr.closest("table") === table);
+  own.forEach((tr) => {
     const row: string[] = [];
     let column = 0;
     const skip = () => {
@@ -111,11 +119,19 @@ function isTable(rows: string[][] | null): rows is string[][] {
   return rows !== null && rows.length >= 2 && Math.max(...rows.map((row) => row.length)) >= 2;
 }
 
-/** 클립보드의 표를 마크다운 표로. 표가 아니면 null. HTML 을 먼저 보고, 없으면 탭 글. */
+/**
+ * 클립보드의 표를 마크다운 표로. 표가 아니면 null. HTML 을 먼저 보고, 없으면 탭 글.
+ *
+ * **표 하나뿐인 HTML(엑셀 · 구글 시트)만** 여기서 표로 받는다. 표 밖에 글 · 그림 · 다른 표가 있으면 null —
+ * 그것은 `handleEditorPaste` 가 통째로 마크다운으로 바꾼다(TODO 222 — 예전에는 첫 표만 넣고 나머지를 버렸다).
+ */
 export function tableFromClipboard(data: DataTransfer): string | null {
   const html = data.getData("text/html");
   if (html && /<table[\s>]/i.test(html)) {
-    const rows = htmlTableRows(html);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    if (!soleTable(doc)) return null;
+    const table = doc.querySelector("table");
+    const rows = table ? tableElementRows(table) : null;
     if (isTable(rows)) return rowsToMarkdown(rows);
   }
   const text = data.getData("text/plain");
@@ -160,6 +176,28 @@ export function handleEditorPaste(
 ): boolean {
   const data = event.clipboardData;
   const files = Array.from(data.files);
+  // 글 · 표 · 그림이 섞인 HTML (AI 답 · 워드 · 웹 페이지) — 통째로 마크다운으로 (TODO 222)
+  const html = data.getData("text/html");
+  if (html && mixedHtml(html)) {
+    event.preventDefault();
+    let converted: HtmlPaste | null = null;
+    try {
+      converted = htmlToMarkdown(html);
+    } catch {
+      converted = null;
+    }
+    if (converted && converted.markdown) {
+      handlers.onInsert(`\n${converted.markdown}\n`);
+      // 그림 데이터가 함께 왔으면 첨부로 — HTML 안의 것(data:)이 먼저, 없으면 클립보드 파일
+      const images = converted.files.length > 0 ? converted.files : files.filter((file) => file.type.startsWith("image/"));
+      if (images.length > 0 && handlers.onFiles) handlers.onFiles(images);
+    } else {
+      // 바꾸지 못했다 — 버리지 않고 글자 전체를 넣는다
+      const text = data.getData("text/plain");
+      if (text) handlers.onInsert(text);
+    }
+    return true;
+  }
   const table = tableFromClipboard(data);
   if (table) {
     event.preventDefault();
@@ -176,6 +214,22 @@ export function handleEditorPaste(
     return true;
   }
   return false;
+}
+
+/**
+ * 통째로 바꿀 HTML 인가 (TODO 222) — 표가 있는데 표 하나뿐(엑셀)은 아니거나, 그림과 글이 함께 있다.
+ * 글만 있는 HTML 은 브라우저의 기본 붙여넣기(글자)로 둔다 — 지금까지와 같다.
+ */
+function mixedHtml(html: string): boolean {
+  const hasTable = /<table[\s>]/i.test(html);
+  const hasImage = /<img[\s>]/i.test(html);
+  if (!hasTable && !hasImage) return false;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  if (hasTable) return !soleTable(doc);
+  // 그림만 하나 복사한 것은 파일 붙여넣기(캡처와 같은 길)로 둔다
+  const body = doc.body.cloneNode(true) as HTMLElement;
+  body.querySelectorAll("style, script, meta, title, link").forEach((node) => node.remove());
+  return (body.textContent ?? "").replace(/\s+/g, "") !== "";
 }
 
 /** 예전 이름 — 표만 가로챈다. 파일을 받지 않는 칸(보고 지시사항 등)에서 쓴다. */

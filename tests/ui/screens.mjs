@@ -5413,6 +5413,59 @@ async function main() {
     }
   }
 
+  console.log("\n[48] 글 · 표 여러 개 · 그림이 섞인 붙여넣기 — 첫 표만 들어가던 것 (TODO 222)");
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
+  {
+    const made = await api.post("/api/projects", { title: `붙여넣기 확인 ${Date.now()}` });
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    const aiAnswer = `<div class="markdown"><h2>분석 요약</h2><p>이번 분기 <strong>불량률</strong>은 감소했습니다.</p>`
+      + `<table><thead><tr><th>항목</th><th>1분기</th></tr></thead><tbody><tr><td>불량률</td><td>3.2%</td></tr></tbody></table>`
+      + `<p>두 번째 표는 원인별입니다.</p><ul><li>원인 A</li><li>원인 B</li></ul>`
+      + `<table><tr><td>원인</td><td>건수</td></tr><tr><td>설비</td><td>12</td></tr></table>`
+      + `<p><img src="https://files.example.com/chart.png" alt="추이 그래프"></p>`
+      + `<p>끝으로 첨부 그림 <img src="data:image/png;base64,${png}" alt="작은 그림"></p></div>`;
+    try {
+      await check("AI 답(글 · 표 둘 · 그림)을 붙이면 글과 두 표가 모두 들어가고, 주소 그림은 '그림 자리' · 데이터 그림은 첨부로", async () => {
+        await go(`#/projects/${made.id}`);
+        await page.locator(".timeline-head").getByRole("button", { name: "기록 추가" }).click();
+        await page.waitForTimeout(500);
+        await pasteInto(".entry-editor textarea", { html: aiAnswer, text: "글자만" });
+        await page.waitForTimeout(1500);
+        const value = await page.locator(".entry-editor textarea").first().inputValue();
+        for (const piece of ["## 분석 요약", "**불량률**", "| 항목 | 1분기 |", "| 불량률 | 3.2% |", "두 번째 표는 원인별입니다.", "- 원인 A", "| 원인 | 건수 |", "| 설비 | 12 |", "그림 자리", "추이 그래프", "끝으로 첨부 그림"]) {
+          expect(value.includes(piece), `빠진 것: ${piece}\n${value}`);
+        }
+        expect(value.indexOf("| 항목 |") < value.indexOf("두 번째 표") && value.indexOf("두 번째 표") < value.indexOf("| 원인 |"), "붙인 순서 그대로");
+        expect(!value.includes("files.example.com"), "바깥 그림 주소를 본문에 넣지 않는다");
+        // 데이터로 온 그림은 첨부로 올라간다 (임시 기록이 먼저 생긴다 — 213)
+        const entries = await api.get(`/api/projects/${made.id}/entries`);
+        expect(entries.length === 1, `첨부 때문에 먼저 만든 기록: ${entries.length}`);
+        const files = await api.get(`/api/entries/${entries[0].id}/attachments`);
+        expect(files.some((item) => item.orig_name.startsWith("붙여넣은-그림-")), `첨부: ${JSON.stringify(files.map((item) => item.orig_name))}`);
+        expect((await page.locator(".entry-editor textarea").first().inputValue()).includes("붙여넣은-그림-"), "본문에 그 그림 링크");
+        await page.locator(".entry-editor").getByRole("button", { name: "저장", exact: true }).click();
+        await page.waitForTimeout(1200);
+        const body = (await api.get(`/api/projects/${made.id}/entries`))[0].body;
+        expect(body.includes("| 설비 | 12 |") && body.includes("| 불량률 | 3.2% |"), "저장된 본문에 두 표");
+      });
+      await check("엑셀처럼 표 하나뿐인 붙여넣기는 지금처럼 표 하나로 (137 그대로)", async () => {
+        await page.locator(".timeline-head").getByRole("button", { name: "기록 추가" }).click();
+        await page.waitForTimeout(500);
+        await pasteInto(".entry-editor textarea", {
+          html: `<html><head><style>td{}</style></head><body><!--StartFragment--><table><tr><td>가</td><td>나</td></tr><tr><td>1</td><td>2</td></tr></table><!--EndFragment--></body></html>`,
+          text: "가\t나\n1\t2\n",
+        });
+        const value = await page.locator(".entry-editor textarea").first().inputValue();
+        expect(value.includes("| 가 | 나 |\n|---|---|\n| 1 | 2 |"), `표: ${value}`);
+        await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
+        await page.waitForTimeout(600);
+      });
+    } finally {
+      await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  }
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
