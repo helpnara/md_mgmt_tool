@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>느린 나이테 — 쇼츠</title>
+<!--
+  유튜브 쇼츠용 세로 영상 (TODO 223). render.mjs --shorts 가 이 페이지를 띄우고 seek(t) 로 한 장씩 찍어 mp4 로 묶는다.
+  promo.html(TODO 188)을 세로로 옮긴 것이 아니라 쇼츠에 맞춰 새로 짰다 — 첫 2초에 묻고, 자막처럼 큰 글, 장면 4~5초, 37초.
+  화면 속 자료는 모두 지어낸 것이다 — 회사 · 팀 · 사람 · 과제 이름 · 금액 · 사내 분류 체계 없음. 실제 화면 캡처도 쓰지 않는다.
+  쇼츠 화면의 아래(제목 · 채널) · 오른쪽(단추) 자리를 비워 둔다 — 중요한 것은 x 70~1010, y 180~1500 안에.
+  브라우저에서 그냥 열면 ?play 로 재생해 볼 수 있다.
+-->
+<style>
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-400-normal.woff2'); font-weight: 400; }
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-500-normal.woff2'); font-weight: 500; }
+@font-face { font-family: NL; src: url('fonts/noto-sans-kr-latin-700-normal.woff2'); font-weight: 700; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-400-normal.woff2'); font-weight: 400; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-500-normal.woff2'); font-weight: 500; }
+@font-face { font-family: NK; src: url('fonts/noto-sans-kr-korean-700-normal.woff2'); font-weight: 700; }
+:root { --bg: #faf6ef; --ink: #2b2118; --muted: #7a6a58; --line: #e6d9c6; --brown: #6f431e; --wood: #f2e1c6; --soft: #fdfaf5;
+        --green: #2f7d4f; --green-bg: #e3f1e7; --blue: #2f5f9e; --blue-bg: #e4ecf7; --red: #a0442c; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #stage { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+body { font-family: NL, NK, sans-serif; color: var(--ink); }
+#stage { position: relative; }
+.abs { position: absolute; }
+.scene { position: absolute; inset: 0; opacity: 0; }
+
+#bgrings { position: absolute; right: -330px; bottom: -260px; width: 860px; height: 860px; opacity: .2; }
+#corner { position: absolute; left: 70px; top: 110px; display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 700; color: var(--brown); opacity: 0; }
+#corner svg { width: 50px; height: 50px; }
+
+/* 위쪽 자막 */
+.cap { position: absolute; left: 60px; right: 60px; top: 230px; text-align: center; }
+.kicker { display: inline-block; font-size: 30px; font-weight: 700; color: #fff; background: var(--brown); padding: 10px 26px; border-radius: 99px; }
+.cap h2 { font-size: 92px; line-height: 1.18; font-weight: 700; letter-spacing: -2.5px; margin-top: 30px; }
+.cap h2 em { font-style: normal; color: var(--brown); }
+.cap p { font-size: 36px; line-height: 1.5; color: var(--muted); margin-top: 26px; }
+
+/* 아래쪽 창 — 안쪽 940×700 */
+.win { position: absolute; left: 70px; top: 800px; width: 940px; height: 700px; background: #fff; border-radius: 28px;
+       box-shadow: 0 30px 80px rgba(80, 50, 20, .16), 0 0 0 1.5px var(--line); overflow: hidden; }
+.bar { height: 62px; display: flex; align-items: center; gap: 10px; padding: 0 24px; border-bottom: 1.5px solid var(--line); background: var(--soft); }
+.dot { width: 14px; height: 14px; border-radius: 99px; background: #e2d4c0; }
+.bar .tab { margin-left: 18px; font-size: 23px; font-weight: 500; color: var(--muted); }
+.body { position: absolute; left: 0; right: 0; top: 62px; bottom: 0; padding: 34px 40px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 99px; font-size: 21px; font-weight: 500; background: #eee6da; color: #6b5a47; }
+
+#cursor { position: absolute; width: 44px; height: 44px; left: 0; top: 0; opacity: 0; z-index: 50; }
+#ripple { position: absolute; width: 76px; height: 76px; border-radius: 99px; border: 4px solid var(--brown); opacity: 0; z-index: 49; }
+
+/* s0 훅 */
+.hook { position: absolute; left: 40px; right: 40px; top: 300px; text-align: center; font-size: 124px; line-height: 1.15; font-weight: 700; letter-spacing: -4px; }
+.hook em { font-style: normal; color: var(--brown); }
+.hooksub { position: absolute; left: 60px; right: 60px; top: 640px; text-align: center; font-size: 40px; color: var(--muted); }
+.scrap { position: absolute; width: 230px; height: 160px; border-radius: 22px; background: #fff; box-shadow: 0 14px 34px rgba(80,50,20,.14), 0 0 0 1.5px var(--line);
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 30px; font-weight: 700; }
+.scrap .ico { font-size: 58px; line-height: 1; }
+.qmark { position: absolute; font-size: 90px; font-weight: 700; color: var(--brown); opacity: 0; }
+
+/* s1 · s8 가운데 */
+.center { position: absolute; left: 0; right: 0; text-align: center; }
+.title { font-size: 138px; font-weight: 700; letter-spacing: -4px; }
+.tagline { font-size: 44px; color: var(--muted); }
+.note { font-size: 32px; color: var(--brown); font-weight: 500; }
+
+/* s2 기록 */
+.editor { font-family: NL, NK, monospace; font-size: 28px; line-height: 1.7; white-space: pre-wrap; color: #3d3127; }
+.caret { display: inline-block; width: 3px; height: 30px; background: var(--brown); vertical-align: -5px; margin-left: 2px; }
+.keycap { position: absolute; padding: 14px 26px; border-radius: 16px; background: var(--ink); color: #fff; font-size: 32px; font-weight: 700; box-shadow: 0 8px 0 #000; }
+.pasted { position: absolute; left: 40px; right: 40px; top: 170px; }
+.pasted .h { font-size: 27px; font-weight: 700; color: var(--brown); }
+.pasted .t { font-size: 24px; color: #3d3127; margin: 10px 0 12px; }
+.xl { display: inline-grid; grid-template-columns: repeat(3, 120px); margin-bottom: 14px; }
+.xl span { height: 40px; border: 1px solid #d9cbb6; font-size: 20px; display: flex; align-items: center; justify-content: center; background: #fff; }
+.xl span.hd { background: var(--wood); font-weight: 700; }
+.toast { position: absolute; right: 36px; bottom: 30px; padding: 14px 24px; border-radius: 14px; background: var(--green-bg); color: var(--green); font-size: 25px; font-weight: 700; }
+
+/* s3 후보 */
+.crow { position: absolute; left: 40px; right: 40px; height: 104px; border-radius: 18px; border: 1.5px solid var(--line); background: #fff;
+        display: grid; grid-template-columns: 1fr 200px; align-items: center; padding: 0 26px; font-size: 27px; }
+.crow .t { font-weight: 700; } .crow .d { color: var(--muted); font-size: 23px; text-align: right; }
+.crow .cnt { grid-column: 1 / 2; display: flex; align-items: center; gap: 12px; font-size: 20px; color: var(--muted); margin-top: -18px; }
+.crow .cnt i { display: block; height: 12px; border-radius: 99px; background: var(--brown); opacity: .7; }
+.crow.top { background: var(--wood); border-color: var(--brown); border-width: 2.5px; }
+.pick { position: absolute; right: -12px; top: -18px; padding: 5px 16px; border-radius: 99px; background: var(--brown); color: #fff; font-size: 19px; font-weight: 700; opacity: 0; }
+
+/* s4 보고 */
+.log { position: absolute; left: 40px; width: 330px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--soft); padding: 16px 20px; font-size: 22px; }
+.log b { display: block; font-size: 19px; color: var(--brown); margin-bottom: 6px; }
+.btn { position: absolute; padding: 16px 28px; border-radius: 14px; background: var(--brown); color: #fff; font-size: 25px; font-weight: 700; }
+.doc { position: absolute; left: 410px; top: 34px; width: 490px; height: 560px; border-radius: 18px; border: 2px solid var(--line); background: #fff; padding: 26px 28px; }
+.doc h4 { font-size: 28px; } .doc .sec { margin-top: 20px; font-size: 21px; color: var(--brown); font-weight: 700; }
+.doc .ln { height: 15px; border-radius: 99px; background: #eee3d3; margin-top: 12px; }
+.stamp { position: absolute; left: 470px; top: 300px; padding: 18px 32px; border: 6px solid var(--red); color: var(--red); border-radius: 18px;
+         font-size: 40px; font-weight: 700; background: rgba(255,255,255,.88); opacity: 0; }
+
+/* s5 홈 */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.stat { border: 1.5px solid var(--line); border-radius: 18px; padding: 18px 20px; background: var(--soft); }
+.stat small { font-size: 21px; color: var(--muted); }
+.stat b { display: block; font-size: 56px; margin-top: 4px; letter-spacing: -1px; }
+.up { margin-top: 34px; border: 2px solid var(--brown); border-radius: 18px; padding: 20px 24px; background: #fff; }
+.up h4 { font-size: 28px; margin-bottom: 6px; } .up h4 span { color: var(--muted); font-weight: 400; font-size: 22px; }
+.urow { display: grid; grid-template-columns: 150px 1fr auto; gap: 16px; align-items: center; padding: 18px 0; border-bottom: 1.5px solid #f1e9dd; font-size: 24px; }
+.urow:last-child { border-bottom: 0; }
+.urow .dt { font-family: NL, monospace; color: var(--brown); font-weight: 700; }
+.urow .who { color: var(--muted); font-size: 21px; }
+
+/* s6 공유 */
+.host { position: absolute; left: 330px; top: 70px; width: 280px; height: 200px; border-radius: 22px; border: 3px solid var(--brown); background: var(--wood);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 28px; font-weight: 700; }
+.host span { font-size: 20px; color: var(--brown); font-weight: 500; }
+.peer { position: absolute; top: 360px; width: 250px; height: 190px; border-radius: 20px; border: 2px solid var(--line); background: var(--soft);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 25px; font-weight: 700; opacity: 0; }
+.peer .chip { background: var(--blue-bg); color: var(--blue); font-size: 19px; }
+.link { position: absolute; height: 4px; background: var(--brown); opacity: .5; transform-origin: left center; }
+.nope { position: absolute; padding: 8px 18px; border-radius: 99px; background: #f6e6e1; color: var(--red); font-size: 21px; font-weight: 700; opacity: 0; }
+
+/* s7 원칙 */
+.pc { position: absolute; left: 230px; top: 860px; width: 620px; height: 460px; border-radius: 28px; border: 3px solid var(--brown); background: #fff; }
+.pc .lbl { position: absolute; top: -22px; left: 30px; padding: 6px 18px; border-radius: 99px; background: var(--brown); color: #fff; font-size: 23px; }
+.md { position: absolute; width: 120px; height: 150px; border-radius: 14px; border: 2px solid var(--brown); background: var(--wood); display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 700; color: var(--brown); opacity: 0; }
+.cloud { position: absolute; left: 380px; top: 1400px; width: 320px; height: 120px; border-radius: 30px; border: 3px dashed #c9b9a3; display: flex; align-items: center; justify-content: center;
+         font-size: 26px; color: var(--muted); text-align: center; }
+.cross { position: absolute; left: 510px; top: 1310px; font-size: 64px; color: var(--red); font-weight: 700; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="bgrings" viewBox="0 0 100 100"><g fill="none" stroke="#6f431e" stroke-width=".5">
+    <ellipse cx="50" cy="50" rx="48" ry="46"/><ellipse cx="50" cy="50.5" rx="40" ry="38"/><ellipse cx="49.5" cy="51" rx="31" ry="29.5"/>
+    <ellipse cx="49" cy="51" rx="23" ry="22"/><ellipse cx="49" cy="51.5" rx="15" ry="14"/><ellipse cx="49" cy="51.5" rx="7.5" ry="7"/></g></svg>
+
+  <div id="corner"><svg viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#f2e1c6"/><g fill="none" stroke="#6f431e" stroke-width="1.6">
+    <ellipse cx="16" cy="16.5" rx="11" ry="10.5"/><ellipse cx="15.6" cy="16.8" rx="7" ry="6.6"/><ellipse cx="15.4" cy="17" rx="3.4" ry="3.1"/></g></svg>느린 나이테</div>
+
+  <!-- s0 훅 -->
+  <div class="scene" id="s0">
+    <div class="hook" id="s0-hook">이번 주엔<br><em>뭘</em> 보고하지?</div>
+    <div class="hooksub" id="s0-sub">기록은 메모 · 메일 · 엑셀에 흩어져 있고</div>
+    <div class="scrap" data-x="90" data-y="860"><span class="ico">📝</span>메모</div>
+    <div class="scrap" data-x="420" data-y="800"><span class="ico">✉️</span>메일</div>
+    <div class="scrap" data-x="760" data-y="900"><span class="ico">📊</span>엑셀</div>
+    <div class="scrap" data-x="200" data-y="1170"><span class="ico">📈</span>그래프</div>
+    <div class="scrap" data-x="600" data-y="1210"><span class="ico">🗂️</span>폴더</div>
+    <div class="qmark" style="left:120px;top:1460px">?</div><div class="qmark" style="left:500px;top:1500px">?</div><div class="qmark" style="left:880px;top:1420px">?</div>
+  </div>
+
+  <!-- s1 이름 -->
+  <div class="scene" id="s1">
+    <div class="center" style="top:330px"><span class="kicker" id="s1-k">그래서 만들었습니다</span></div>
+    <svg id="s1-rings" class="abs" style="left:390px;top:500px;width:300px;height:300px" viewBox="0 0 100 100">
+      <g fill="none" stroke="#6f431e" stroke-linecap="round" stroke-width="2.2">
+        <ellipse class="ring" cx="50" cy="51" rx="46" ry="44"/><ellipse class="ring" cx="49.5" cy="51.5" rx="36" ry="34.5"/><ellipse class="ring" cx="49" cy="52" rx="27" ry="25.5"/>
+        <ellipse class="ring" cx="48.6" cy="52.4" rx="18.5" ry="17.5"/><ellipse class="ring" cx="48.3" cy="52.6" rx="10.5" ry="10"/><ellipse class="ring" cx="48" cy="52.8" rx="3.5" ry="3.2"/></g></svg>
+    <div class="center title" id="s1-title" style="top:860px">느린 나이테</div>
+    <div class="center tagline" id="s1-tag" style="top:1050px">팀 과제의 이력이<br>한 겹씩 쌓이는 곳</div>
+    <div class="center note" id="s1-note" style="top:1230px">내 PC 안에서 도는 팀 과제 관리 도구</div>
+  </div>
+
+  <!-- s2 기록 -->
+  <div class="scene" id="s2">
+    <div class="cap"><span class="kicker">① 기록</span>
+      <h2>쓰고 붙이면<br><em>기록</em>이 된다</h2>
+      <p>AI 답도 글 · 표 그대로 Ctrl+V</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">주간 지표 대시보드 · 진행일지</span></div>
+      <div class="body">
+        <div class="editor" id="s2-ed"></div>
+        <div class="keycap" id="s2-key" style="left:640px;top:40px;opacity:0">Ctrl + V</div>
+        <div class="pasted" id="s2-paste" style="opacity:0">
+          <div class="h">## 분석 요약</div>
+          <div class="t">지표 두 가지가 모두 나아졌습니다.</div>
+          <div class="xl" id="s2-t1"><span class="hd">항목</span><span class="hd">9월</span><span class="hd">10월</span><span>지표 1</span><span>82</span><span>91</span><span>지표 2</span><span>14</span><span>9</span></div>
+          <div class="t" id="s2-mid">원인별로 나누면 아래와 같습니다.</div>
+          <div class="xl" id="s2-t2"><span class="hd">원인</span><span class="hd">건수</span><span class="hd">비중</span><span>원인 A</span><span>12</span><span>60%</span><span>원인 B</span><span>8</span><span>40%</span></div>
+        </div>
+        <div class="toast" id="s2-toast" style="opacity:0">글 · 표 2개 모두 ✓</div>
+      </div></div>
+  </div>
+
+  <!-- s3 보고 대상 -->
+  <div class="scene" id="s3">
+    <div class="cap"><span class="kicker">② 보고 대상</span>
+      <h2>이번 주 보고는<br><em>기록</em>이 고른다</h2>
+      <p>마지막 보고 뒤 지난 날 · 쌓인 기록으로</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">보고 대상 후보</span></div>
+      <div class="body" id="s3-body" style="padding:0"></div></div>
+  </div>
+
+  <!-- s4 초안 · 확정 -->
+  <div class="scene" id="s4">
+    <div class="cap"><span class="kicker">③ 보고</span>
+      <h2>초안은 자동,<br>확정은 <em>그날 그대로</em></h2>
+      <p>지난 보고 뒤의 기록만 모아 초안으로</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">문서 검색 개선 · 보고</span></div>
+      <div class="body" style="padding:0">
+        <div class="log" style="top:34px"><b>10-01</b>검색 색인 범위 정리</div>
+        <div class="log" style="top:150px"><b>10-04</b>시험 사용자 의견 반영</div>
+        <div class="log" style="top:266px"><b>10-08</b>속도 비교 결과 첨부</div>
+        <div class="btn" id="s4-btn1" style="left:40px;top:410px">보고 초안 만들기</div>
+        <div class="doc" id="s4-doc"><h4>보고 · 10-09</h4>
+          <div class="sec">보고 요약</div><div class="ln" style="width:90%"></div><div class="ln" style="width:70%"></div>
+          <div class="sec">진행 내용</div><div class="ln dl" style="width:85%"></div><div class="ln dl" style="width:78%"></div><div class="ln dl" style="width:88%"></div>
+          <div class="sec">다음 계획</div><div class="ln" style="width:60%"></div></div>
+        <div class="btn" id="s4-btn2" style="left:40px;top:510px;background:var(--red)">확정</div>
+        <div class="stamp" id="s4-stamp">🔒 확정 · 10-09</div>
+      </div></div>
+  </div>
+
+  <!-- s5 홈 -->
+  <div class="scene" id="s5">
+    <div class="cap"><span class="kicker">④ 팀 현황</span>
+      <h2>올해 팀이 한 일이<br><em>한 화면</em>에</h2>
+      <p>다가오는 팀원 교육 일정까지</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">홈 · 올해 팀 현황</span></div>
+      <div class="body">
+        <div class="stats">
+          <div class="stat"><small>과제</small><b data-n="24">0</b></div>
+          <div class="stat"><small>진행중</small><b data-n="11">0</b></div>
+          <div class="stat"><small>완료</small><b data-n="7">0</b></div>
+          <div class="stat"><small>보고</small><b data-n="38">0</b></div>
+        </div>
+        <div class="up" id="s5-up"><h4>다가오는 팀원 일정 <span>· 앞으로 30일</span></h4>
+          <div class="urow"><span class="dt">11-04</span><span>데이터 분석 기초 교육</span><span class="who">팀원 A</span></div>
+          <div class="urow"><span class="dt">11-12</span><span>업무 자동화 세미나</span><span class="who">팀원 C</span></div>
+          <div class="urow"><span class="dt">11-20</span><span>품질 관리 학회</span><span class="who">팀원 B</span></div>
+          <div class="urow"><span class="dt">11-27</span><span>사내 기술 세미나</span><span class="who">팀원 D</span></div>
+        </div>
+      </div></div>
+  </div>
+
+  <!-- s6 공유 -->
+  <div class="scene" id="s6">
+    <div class="cap"><span class="kicker">⑤ 팀과 함께</span>
+      <h2>팀원은 브라우저로<br><em>읽기만</em></h2>
+      <p>설치 없이 · 고치는 건 팀장 PC 에서만</p></div>
+    <div class="win"><div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="tab">읽기 전용 공유</span></div>
+      <div class="body" style="padding:0">
+        <div class="host" id="s6-host">🖥️ 팀장 PC<span>기록의 원본</span></div>
+        <div class="link" data-x1="470" data-y1="270" data-x2="165" data-y2="360"></div>
+        <div class="link" data-x1="470" data-y1="270" data-x2="470" data-y2="360"></div>
+        <div class="link" data-x1="470" data-y1="270" data-x2="775" data-y2="360"></div>
+        <div class="peer" style="left:40px">💻 팀원 A<span class="chip">👀 읽기 전용</span></div>
+        <div class="peer" style="left:345px">💻 팀원 B<span class="chip">👀 읽기 전용</span></div>
+        <div class="peer" style="left:650px">💻 팀원 C<span class="chip">👀 읽기 전용</span></div>
+        <div class="nope" id="s6-nope" style="left:0;right:0;margin:0 auto;width:max-content;top:575px">✏️ 고치기 · 설정은 팀원 PC 에서 막힘</div>
+      </div></div>
+  </div>
+
+  <!-- s7 원칙 -->
+  <div class="scene" id="s7">
+    <div class="cap"><span class="kicker">설계</span>
+      <h2>파일이 원본,<br><em>내 PC 안에서만</em></h2>
+      <p>평범한 마크다운 파일 · 밖으로 나가는 연결 없음</p></div>
+    <div class="pc"><span class="lbl">내 PC</span>
+      <div class="md" style="left:60px;top:80px">.md</div><div class="md" style="left:250px;top:80px">.md</div><div class="md" style="left:440px;top:80px">.md</div>
+      <div class="md" style="left:60px;top:260px">📎</div><div class="md" style="left:250px;top:260px">.md</div><div class="md" style="left:440px;top:260px">📎</div></div>
+    <div class="cross">✕</div>
+    <div class="cloud">인터넷 · 외부 서비스</div>
+  </div>
+
+  <!-- s8 마무리 -->
+  <div class="scene" id="s8">
+    <svg id="s8-rings" class="abs" style="left:400px;top:470px;width:280px;height:280px" viewBox="0 0 100 100">
+      <g fill="none" stroke="#6f431e" stroke-linecap="round" stroke-width="2.4">
+        <ellipse class="ring" cx="50" cy="51" rx="46" ry="44"/><ellipse class="ring" cx="49.5" cy="51.5" rx="36" ry="34.5"/><ellipse class="ring" cx="49" cy="52" rx="27" ry="25.5"/>
+        <ellipse class="ring" cx="48.6" cy="52.4" rx="18.5" ry="17.5"/><ellipse class="ring" cx="48.3" cy="52.6" rx="10.5" ry="10"/><ellipse class="ring" cx="48" cy="52.8" rx="3.5" ry="3.2"/></g></svg>
+    <div class="center title" id="s8-title" style="top:810px">느린 나이테</div>
+    <div class="center tagline" id="s8-tag" style="top:1000px">한 해에 한 겹,<br>팀의 기록이 굵어집니다</div>
+    <div class="center note" id="s8-note" style="top:1190px;color:var(--muted);font-weight:400">느린 시리즈 — 느린 부자의 기록 · 느린 여백 · 느린 나이테</div>
+  </div>
+
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2 L3 19 L8 14.5 L11.5 22 L14.5 20.6 L11 13.2 L17.5 13.2 Z" fill="#2b2118" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  <div id="ripple"></div>
+</div>
+
+<script>
+// ── 시간표 (초) — 장면마다 [시작, 끝] ─────────────────────────────────────────
+const SCENES = [[0, 2.8], [2.8, 6.2], [6.2, 11.2], [11.2, 16], [16, 20.6], [20.6, 25.2], [25.2, 29.4], [29.4, 33], [33, 37]];
+const DURATION = 37;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+const easeInOut = (p) => (p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const back = (p) => { const c = 1.7; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); };
+const prog = (t, a, b, ease = easeOut) => ease(clamp((t - a) / (b - a)));
+const lerp = (a, b, p) => a + (b - a) * p;
+function put(el, { o, x = 0, y = 0, s = 1, r = 0 } = {}) {
+  if (o !== undefined) el.style.opacity = o;
+  el.style.transform = `translate(${x}px, ${y}px) scale(${s}) rotate(${r}deg)`;
+}
+const rise = (el, t, a, d = .5, dy = 30) => { const p = prog(t, a, a + d); put(el, { o: p, y: (1 - p) * dy }); };
+// 자막은 튀어나오듯 — 쇼츠는 첫 순간에 읽혀야 한다
+const pop = (el, t, a, d = .45) => { const p = clamp((t - a) / d); put(el, { o: Math.min(1, p * 2), s: lerp(.82, 1, back(p)) }); };
+
+$$(".ring").forEach((el) => { const L = el.getTotalLength(); el.style.strokeDasharray = L; el.dataset.len = L; });
+const drawRings = (svg, t, a, step = .18, d = .6) => $$(".ring", svg).forEach((el, i) => {
+  const p = prog(t, a + i * step, a + i * step + d, easeInOut); el.style.strokeDashoffset = el.dataset.len * (1 - p);
+});
+
+// s3 후보 줄
+const CANDS = [
+  { t: "업무 매뉴얼 정비", d: 9, n: 2 }, { t: "알림 자동화", d: 41, n: 7 }, { t: "데이터 표준화", d: 16, n: 3 },
+  { t: "문서 검색 개선", d: 28, n: 6 }, { t: "주간 지표 대시보드", d: 35, n: 5 },
+];
+const SORTED = [...CANDS].sort((a, b) => b.d - a.d);
+CANDS.forEach((c) => {
+  const row = document.createElement("div");
+  row.className = "crow";
+  row.innerHTML = `<span class=t>${c.t}</span><span class=d>마지막 보고 D+${c.d}</span><span class=cnt><i style="width:${c.n * 16}px"></i>기록 ${c.n}건</span><span class=pick>이번 주 후보</span>`;
+  $("#s3-body").appendChild(row); c.el = row;
+});
+
+// s6 연결선
+$$("#s6 .link").forEach((l) => {
+  const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((k) => +l.dataset[k]);
+  l.style.left = `${x1}px`; l.style.top = `${y1}px`; l.style.width = `${Math.hypot(x2 - x1, y2 - y1)}px`;
+  l.dataset.angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+});
+
+const TYPED = "## 진행 내용\n- 지표 정의서 검토";
+
+// 창 안 좌표 → 화면 좌표 (창: left 70, top 800, 몸통은 62 아래)
+const W = (x, y) => ({ x: 70 + x, y: 800 + 62 + y });
+const moveCursor = (t, a, b, from, to) => { const p = prog(t, a, b, easeInOut); return { x: lerp(from.x, to.x, p), y: lerp(from.y, to.y, p) }; };
+
+function seek(T) {
+  $("#bgrings").style.transform = `rotate(${T * 1.5}deg)`;
+  put($("#corner"), { o: prog(T, 6.2, 6.7) * (1 - prog(T, 32.6, 33)) });
+  let cursor = null, ripple = null;
+  SCENES.forEach(([a, b], i) => {
+    const el = $(`#s${i}`), last = i === SCENES.length - 1;
+    const o = prog(T, a, a + .3) * (last ? 1 : 1 - prog(T, b - .3, b));
+    el.style.opacity = i === 0 ? (1 - prog(T, b - .3, b)) : o;
+    el.style.visibility = el.style.opacity > 0.001 ? "visible" : "hidden";
+    if (el.style.visibility === "hidden") return;
+    const t = T - a;
+    const cap = $(".cap", el);
+    if (cap) { pop($(".kicker", cap), t, .05, .35); pop($("h2", cap), t, .15); rise($("p", cap), t, .45, .4, 20); }
+    const win = $(".win", el); if (win) { const p = prog(t, .2, .8); put(win, { o: p, y: (1 - p) * 60, s: lerp(.96, 1, p) }); }
+    const r = SCENE_FN[i](t, el); if (r) { if (r.cursor) cursor = r.cursor; if (r.ripple) ripple = r.ripple; }
+  });
+  if (cursor) put($("#cursor"), { o: cursor.o ?? 1, x: cursor.x, y: cursor.y, s: cursor.s ?? 1 }); else $("#cursor").style.opacity = 0;
+  if (ripple) put($("#ripple"), { o: (1 - ripple.p) * .8, x: ripple.x - 38, y: ripple.y - 38, s: lerp(.3, 1.6, ripple.p) }); else $("#ripple").style.opacity = 0;
+}
+
+const SCENE_FN = [
+  // s0 훅 — 첫 장부터 글이 서 있다(0초 표지가 곧 미리보기)
+  (t, el) => {
+    put($("#s0-hook"), { o: 1, s: lerp(.94, 1, back(clamp(t / .5))) });
+    rise($("#s0-sub"), t, .5, .4, 16);
+    $$(".scrap", el).forEach((s, i) => {
+      const x0 = +s.dataset.x, y0 = +s.dataset.y;
+      s.style.left = `${x0}px`; s.style.top = `${y0}px`;
+      const ap = prog(t, .1 + i * .1, .4 + i * .1);
+      const g = prog(t, 2.0, 2.7, easeInOut);
+      const bob = Math.sin((t + i) * 3) * 8 * (1 - g);
+      put(s, { o: ap * (1 - g), x: (425 - x0) * g, y: (1100 - y0) * g + bob, s: lerp(1, .3, g), r: (i % 2 ? 7 : -6) * (1 - g) + Math.sin(t * 4 + i) * 2 });
+    });
+    $$(".qmark", el).forEach((q, i) => { const p = prog(t, .8 + i * .2, 1.1 + i * .2); put(q, { o: p * (1 - prog(t, 2.0, 2.4)), y: Math.sin(t * 3 + i) * 10, s: lerp(.5, 1, back(p)) }); });
+  },
+  // s1 이름
+  (t) => { pop($("#s1-k"), t, .05, .35); drawRings($("#s1-rings"), t, .15, .15, .55);
+    pop($("#s1-title"), t, 1.0, .5); rise($("#s1-tag"), t, 1.5, .5); rise($("#s1-note"), t, 2.0, .5); },
+  // s2 기록 — 타자 → Ctrl+V → 글 · 표 둘이 통째로
+  (t) => { const n = Math.floor(TYPED.length * prog(t, .7, 1.8, (p) => p));
+    $("#s2-ed").innerHTML = TYPED.slice(0, n) + (t < 2.0 && Math.floor(t * 3) % 2 === 0 ? "<span class=caret></span>" : "");
+    const k = prog(t, 1.9, 2.1); put($("#s2-key"), { o: k * (1 - prog(t, 2.8, 3.0)), s: lerp(.6, 1, back(k)), y: Math.sin(prog(t, 2.15, 2.35) * Math.PI) * 7 });
+    const p = prog(t, 2.3, 2.6); put($("#s2-paste"), { o: p, y: (1 - p) * 20 });
+    ["#s2-t1", "#s2-mid", "#s2-t2"].forEach((id, i) => { const q = prog(t, 2.4 + i * .3, 2.8 + i * .3); put($(id), { o: q, y: (1 - q) * 30 }); });
+    const to = prog(t, 3.8, 4.1); put($("#s2-toast"), { o: to, y: (1 - to) * 20, s: lerp(.8, 1, back(to)) }); },
+  // s3 후보 — 줄이 다시 서고 위 셋이 후보로
+  (t) => { const sp = prog(t, 1.4, 2.4, easeInOut);
+    CANDS.forEach((c, i) => { const j = SORTED.indexOf(c); const y = lerp(30 + i * 122, 30 + j * 122, sp);
+      c.el.style.top = `${y}px`; c.el.style.opacity = prog(t, .4 + i * .08, .8 + i * .08);
+      const top = j < 3 && t > 2.7; c.el.classList.toggle("top", top);
+      $(".pick", c.el).style.opacity = top ? prog(t, 2.7 + j * .15, 3.0 + j * .15) : 0; }); },
+  // s4 초안 → 확정
+  (t) => { const b1 = W(170, 440), b2 = W(80, 540);
+    const docp = prog(t, 1.2, 1.9); put($("#s4-doc"), { o: lerp(.25, 1, docp) });
+    $$("#s4-doc .dl").forEach((l, i) => { const on = prog(t, 1.5 + i * .18, 1.8 + i * .18) > .5; l.style.background = on ? "var(--brown)" : "#eee3d3"; l.style.opacity = on ? .55 : 1; });
+    const st = prog(t, 3.3, 3.6); put($("#s4-stamp"), { o: st, s: lerp(1.9, 1, st), r: lerp(-20, -8, st) });
+    $("#s4-doc").style.borderColor = t > 3.3 ? "var(--red)" : "var(--line)";
+    const c = t < 2.1 ? moveCursor(t, .4, 1.0, W(420, 640), b1) : moveCursor(t, 2.2, 2.9, b1, b2);
+    const c1 = t > 1.0 && t < 1.6, c2 = t > 3.0 && t < 3.6;
+    return { cursor: { ...c, o: prog(t, .3, .6) * (1 - prog(t, 4.1, 4.4)), s: (t > 1.0 && t < 1.15) || (t > 3.0 && t < 3.15) ? .88 : 1 },
+             ripple: c1 ? { ...b1, p: prog(t, 1.0, 1.6, (p) => p) } : c2 ? { ...b2, p: prog(t, 3.0, 3.6, (p) => p) } : null }; },
+  // s5 홈 — 숫자가 오르고 다가오는 일정
+  (t, el) => { $$(".stat b", el).forEach((b, i) => { b.textContent = Math.round(+b.dataset.n * prog(t, .6 + i * .1, 1.7 + i * .1)); });
+    const u = prog(t, 1.9, 2.4); put($("#s5-up"), { o: u, y: (1 - u) * 40 });
+    $$("#s5-up .urow", el).forEach((r, i) => rise(r, t, 2.3 + i * .25, .4, 20)); },
+  // s6 공유 — 팀장 PC 에서 팀원 PC 로, 읽기만
+  (t, el) => { const h = prog(t, .5, 1.0); put($("#s6-host"), { o: h, s: lerp(.85, 1, back(h)) });
+    $$(".link", el).forEach((l, i) => { const p = prog(t, 1.1 + i * .15, 1.6 + i * .15); l.style.transform = `rotate(${l.dataset.angle}deg) scaleX(${p})`; });
+    $$(".peer", el).forEach((p, i) => { const q = prog(t, 1.5 + i * .15, 1.9 + i * .15); put(p, { o: q, y: (1 - q) * 30 }); });
+    const n = prog(t, 2.8, 3.1); put($("#s6-nope"), { o: n, s: lerp(.8, 1, back(n)) }); },
+  // s7 원칙 — 파일이 쌓이고, 바깥은 끊는다
+  (t, el) => { const pc = prog(t, .3, .8); put($(".pc", el), { o: pc, y: (1 - pc) * 40 });
+    $$(".md", el).forEach((m, i) => { const p = prog(t, .8 + i * .14, 1.2 + i * .14); put(m, { o: p, y: (1 - p) * -40, s: lerp(.8, 1, p) }); });
+    $(".cloud", el).style.opacity = prog(t, 1.9, 2.3);
+    const cr = prog(t, 2.4, 2.7); put($(".cross", el), { o: cr, s: lerp(1.9, 1, cr) }); },
+  // s8 마무리
+  (t) => { drawRings($("#s8-rings"), t, .1, .15, .55);
+    pop($("#s8-title"), t, .9, .5); rise($("#s8-tag"), t, 1.4, .5); rise($("#s8-note"), t, 2.0, .5); },
+];
+
+window.seek = seek; window.DURATION = DURATION;
+seek(0);
+if (location.search.includes("play")) { const t0 = performance.now(); const loop = () => { seek(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); }; loop(); }
+</script>
+</body>
+</html>
