@@ -5437,7 +5437,9 @@ async function main() {
           expect(value.includes(piece), `빠진 것: ${piece}\n${value}`);
         }
         expect(value.indexOf("| 항목 |") < value.indexOf("두 번째 표") && value.indexOf("두 번째 표") < value.indexOf("| 원인 |"), "붙인 순서 그대로");
-        expect(!value.includes("files.example.com"), "바깥 그림 주소를 본문에 넣지 않는다");
+        // 주소는 넣지 않는다 — 안내 줄에는 어디서 온 그림인지(도메인)만 적는다 (225)
+        expect(!value.includes("https://files.example.com"), "바깥 그림 주소를 본문에 넣지 않는다");
+        expect(value.includes("바깥 주소(files.example.com)"), "안내 줄에 도메인");
         // 데이터로 온 그림은 첨부로 올라간다 (임시 기록이 먼저 생긴다 — 213)
         const entries = await api.get(`/api/projects/${made.id}/entries`);
         expect(entries.length === 1, `첨부 때문에 먼저 만든 기록: ${entries.length}`);
