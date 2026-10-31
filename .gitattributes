@@ -10,3 +10,6 @@ docs/poster/ export-ignore
 docs/promo/ export-ignore
 docs/blog/ export-ignore
 docs/review/ export-ignore
+
+# 경력기술서용 개인 자료 — 배포본에 담지 않는다
+CAREER_SUMMARY.md export-ignore
