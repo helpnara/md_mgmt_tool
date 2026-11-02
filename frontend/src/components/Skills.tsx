@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
 import type { Activity, ActivitySummary, Meta } from "../types";
@@ -31,6 +31,9 @@ function won(value: number): string {
   return value ? `${Math.round(value).toLocaleString("ko-KR")}원` : "—";
 }
 
+/** 기록 목록에 처음 세우는 행사 수 — 더 보기로 이만큼씩 늘린다 (TODO 227) */
+const EVENT_PAGE = 20;
+
 export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const readonly = isReadonly(); // 읽기 전용 공유 (191) — 면담 칸 · 면담 열을 뺀다. 설정 링크는 글자로 (208)
   const initial = useMemo(() => new URLSearchParams(query), [query]);
@@ -42,6 +45,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const [find, setFind] = useState(initial.get("q") ?? "");
   // 예정만 · 지난 것만 (TODO 221). 비우면 모두
   const [when, setWhen] = useState(initial.get("when") ?? "");
+  // 기록 목록은 처음에 최근 행사 몇 건만 (TODO 227) — 행사가 쌓이자 화면이 한없이 길어졌다. 조건을 바꾸면 다시 처음부터
+  const [shown, setShown] = useState(EVENT_PAGE);
 
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [rows, setRows] = useState<Activity[]>([]);
@@ -83,6 +88,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   }, [yearParam, person, kind, findQuery, when, latest]);
 
   useEffect(load, [load]);
+  useEffect(() => setShown(EVENT_PAGE), [yearParam, person, kind, findQuery, when]);
 
   useAddressBar(
     "skills",
@@ -496,12 +502,23 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         {rows.length === 0 ? (
           <p className="empty">조건에 맞는 기록이 없습니다.</p>
         ) : (
+          <>
           <ul className="activity-list">
-            {events.map((group) => {
+            {events.slice(0, shown).map((group, index, visible) => {
               const first = group[0];
               const shared = group.length > 1;
+              // 달이 바뀌는 자리에 머리줄 (TODO 227) — 길어도 어디쯤인지 보인다. 그 달의 행사 수는 자르기 전 전체에서 센다
+              const month = first.date.slice(0, 7);
+              const monthHead = index === 0 || visible[index - 1][0].date.slice(0, 7) !== month;
               return (
-                <li key={first.event_key} className={first.planned ? "activity-planned" : undefined}>
+                <Fragment key={first.event_key}>
+                {monthHead && (
+                  <li className="activity-month" aria-hidden="true">
+                    {month.slice(0, 4)}년 {Number(month.slice(5, 7))}월
+                    <span className="muted"> · 행사 {events.filter((item) => item[0].date.slice(0, 7) === month).length}건</span>
+                  </li>
+                )}
+                <li className={first.planned ? "activity-planned" : undefined}>
                   <div className="activity-head">
                     <span className="activity-date">{period(first)}</span>
                     {first.planned && <span className="tag planned-tag" title="시작일이 오늘보다 뒤 — 숫자에는 그날이 지나야 듭니다">예정</span>}
@@ -591,9 +608,21 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                       ),
                   )}
                 </li>
+                </Fragment>
               );
             })}
           </ul>
+          {events.length > shown && (
+            <div className="activity-more">
+              <button className="ghost" onClick={() => setShown((value) => value + EVENT_PAGE)}>
+                더 보기 — 남은 행사 {events.length - shown}건
+              </button>
+              <button className="ghost small" onClick={() => setShown(events.length)}>
+                모두 보기
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </section>

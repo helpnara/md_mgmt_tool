@@ -285,6 +285,10 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const { team, this_week: week } = data;
   // 팀원 일정 한 줄 (TODO 221) — 여러 날이면 기간, 같은 해면 뒤쪽은 월 · 일만
   const activityKind = (key: string) => meta.activity_kinds.find((item) => item.key === key)?.label ?? key;
+  const leftChipText = (item: ActivityBrief) =>
+    item.ongoing ? "진행 중" : item.days_left === 0 ? "오늘" : `D-${item.days_left ?? "?"}`;
+  const leftChipClass = (item: ActivityBrief) =>
+    `left-chip ${item.ongoing || item.days_left === 0 ? "left-now" : (item.days_left ?? 99) <= 7 ? "left-soon" : "left-later"}`;
   const briefPeriod = (item: ActivityBrief) =>
     item.end_date ? `${item.date} ~ ${item.end_date.slice(0, 4) === item.date.slice(0, 4) ? item.end_date.slice(5) : item.end_date}` : item.date;
 
@@ -448,13 +452,16 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         {(week.team_upcoming?.items.length ?? 0) > 0 && (
           <>
             <p className="hint">
-              <b>다가오는 팀원 일정</b> — 앞으로 {week.team_upcoming!.days}일 안에 예정한 교육 · 행사입니다.
+              <b>다가오는 팀원 일정</b> — 앞으로 {week.team_upcoming!.days}일 안에 예정한 교육 · 행사, 그리고 지금 진행 중인 것입니다.
             </p>
             <ul className="home-stale home-upcoming">
               {week.team_upcoming!.items.map((item) => (
                 <li key={item.id}>
+                  {/* 남은 날 띠지 (TODO 226) — 오늘이면 "오늘", 진행 중이면 "진행 중", 아니면 D-N. 일주일 안은 진하게 */}
+                  <span className={leftChipClass(item)}>{leftChipText(item)}</span>
                   <span className="due">{briefPeriod(item)}</span>
-                  <a href={screenLink("skills", { person: item.person, year: item.date.slice(0, 4), when: "planned" })}>
+                  {/* 진행 중인 것은 이미 시작해 '예정' 이 아니다 — 예정만으로 거르면 빈 목록이 된다 */}
+                  <a href={screenLink("skills", { person: item.person, year: item.date.slice(0, 4), when: item.ongoing ? undefined : "planned" })}>
                     {item.title}
                   </a>
                   <span className="muted">

@@ -492,15 +492,24 @@ def upcoming(conn: sqlite3.Connection, days: int = UPCOMING_DAYS) -> dict:
     """앞으로 `days` 일 안의 예정 — 홈 [이번 주 할 일] 의 "다가오는 팀원 일정" (TODO 221).
 
     오늘 시작하는 것도 넣는다(오늘 가는 교육). 그 뒤의 것은 세기만 한다.
+    **이미 시작해 아직 끝나지 않은 여러 날 일정**도 넣는다(TODO 226 ③ — 사흘짜리 교육의 둘째 날이 어디에도 안 보였다).
+    줄마다 남은 날(`days_left`, 오늘이면 0)과 진행 중인가(`ongoing`)를 싣는다 — 화면이 `D-3` · "오늘" · "진행 중" 띠지를 붙인다.
+    오늘은 `clock`(219)의 오늘이라 화면의 셈과 어긋나지 않는다.
     """
-    window = f"date >= app_today() AND date <= DATE(app_today(), '+{int(days)} day')"
+    today = clock.today()
+    soon = f"date >= app_today() AND date <= DATE(app_today(), '+{int(days)} day')"
+    ongoing = "date < app_today() AND end_date IS NOT NULL AND end_date >= app_today()"
     rows = conn.execute(
-        f"SELECT * FROM activity WHERE {window} ORDER BY date, person, id"
+        f"SELECT * FROM activity WHERE ({soon}) OR ({ongoing}) ORDER BY date, person, id"
     ).fetchall()
     later = conn.execute(
         f"SELECT COUNT(*) AS n FROM activity WHERE date > DATE(app_today(), '+{int(days)} day')"
     ).fetchone()["n"]
-    return {"days": days, "items": [_brief(row) for row in rows], "later": later}
+    items = []
+    for row in rows:
+        left = (date_cls.fromisoformat(row["date"]) - today).days
+        items.append(_brief(row) | {"days_left": max(left, 0), "ongoing": left < 0})
+    return {"days": days, "items": items, "later": later}
 
 
 def missed_plans(conn: sqlite3.Connection, days: int = MISSED_DAYS) -> list[dict]:

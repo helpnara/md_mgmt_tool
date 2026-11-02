@@ -2092,3 +2092,14 @@ button.home-stat.on { border-color: var(--accent); background: var(--accent-soft
 /* 붙여넣기 점검 (TODO 225) */
 .paste-check-area { width: 100%; resize: none; }
 .paste-check-result { margin: 8px 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+
+/* 다가오는 팀원 일정의 남은 날 띠지 (TODO 226) — 오늘 · 진행 중은 채운 색, 일주일 안은 진하게, 그 뒤는 흐리게 */
+.left-chip { flex: 0 0 auto; min-width: 58px; text-align: center; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+             font-variant-numeric: tabular-nums; border: 1px solid transparent; }
+.left-chip.left-now { background: var(--accent); color: #fff; }
+.left-chip.left-soon { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent); }
+.left-chip.left-later { background: #f1f5f9; color: #475569; }
+
+/* 팀원역량 기록 목록 — 달 머리줄 · 더 보기 (TODO 227) */
+.activity-list li.activity-month { border: none; background: none; padding: 10px 2px 2px; font-size: 13px; font-weight: 700; color: var(--text); }
+.activity-more { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; }

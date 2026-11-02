@@ -66,6 +66,17 @@ def test_home_shows_upcoming_plans_within_30_days(client):
     assert [item["title"] for item in upcoming["items"]] == ["오늘 세미나", "사흘 뒤 교육", "한 달 뒤 학회"]
     assert upcoming["items"][1]["place"] == "대전" and upcoming["items"][1]["person"] == "김예정"
     assert upcoming["later"] == 1
+    # 남은 날 — 오늘이면 0 (TODO 226)
+    assert [item["days_left"] for item in upcoming["items"]] == [0, 3, 30]
+    assert not any(item["ongoing"] for item in upcoming["items"])
+
+
+def test_an_ongoing_multi_day_plan_stays_in_the_upcoming_list(client):
+    """어제 시작해 모레 끝나는 교육은 '진행 중' 으로 남는다 — 시작일만 보면 목록에서 빠졌다 (TODO 226 ③)."""
+    add(client, date=day(-1), end_date=day(2), title="사흘짜리 교육")
+    add(client, date=day(-3), end_date=day(-1), title="어제 끝난 교육")
+    items = client.get("/api/home").json()["this_week"]["team_upcoming"]["items"]
+    assert [(item["title"], item["ongoing"], item["days_left"]) for item in items] == [("사흘짜리 교육", True, 0)]
 
 
 def test_home_member_table_counts_only_past_activities(client):

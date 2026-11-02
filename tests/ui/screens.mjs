@@ -5369,6 +5369,7 @@ async function main() {
         const card = page.locator(".home-week");
         const row = card.locator(".home-upcoming li", { hasText: soonTitle });
         equal(await row.count(), 1, "다가오는 팀원 일정의 줄");
+        expect((await row.locator(".left-chip").innerText()).trim() === "D-5", `남은 날 띠지: ${await row.locator(".left-chip").innerText()}`);
         const text = await row.innerText();
         expect(text.includes("권경락") && text.includes("판교") && text.includes(dayFromToday(5)), `줄 내용: ${text}`);
         await row.getByRole("link").click();
@@ -5519,6 +5520,73 @@ async function main() {
       });
     } finally {
       for (const id of [source.id, target.id]) await fetch(`${BASE}/api/projects/${id}/archive`, { method: "POST" });
+    }
+  }
+
+  console.log("\n[50] 다가오는 팀원 일정의 남은 날 — 오늘 · 진행 중 띠지 (TODO 226)");
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
+  {
+    const stamp = Date.now();
+    const made = [];
+    try {
+      await check("오늘 시작하는 일정은 '오늘', 어제 시작해 진행 중인 여러 날 일정은 '진행 중' 띠지로 선다", async () => {
+        for (const body of [
+          { title: `오늘 교육 ${stamp}`, date: dayFromToday(0) },
+          { title: `진행 중 교육 ${stamp}`, date: dayFromToday(-1), end_date: dayFromToday(1) },
+          { title: `내일 교육 ${stamp}`, date: dayFromToday(1) },
+        ]) {
+          const created = await api.post("/api/activities", { person: "권경락", kind: "education", ...body });
+          made.push(...(created.ids ?? [created.id]));
+        }
+        await go("#/");
+        const chip = async (title) => (await page.locator(".home-upcoming li", { hasText: title }).locator(".left-chip").innerText()).trim();
+        equal(await chip(`오늘 교육 ${stamp}`), "오늘", "오늘 띠지");
+        equal(await chip(`진행 중 교육 ${stamp}`), "진행 중", "진행 중 띠지");
+        equal(await chip(`내일 교육 ${stamp}`), "D-1", "내일은 D-1");
+        expect(await page.locator(".home-upcoming li", { hasText: `오늘 교육 ${stamp}` }).locator(".left-chip.left-now").count() === 1, "오늘은 강조 띠지");
+        // 진행 중인 것을 누르면 예정만으로 거르지 않는다 — 그 기록이 목록에 있다
+        await page.locator(".home-upcoming li", { hasText: `진행 중 교육 ${stamp}` }).getByRole("link").click();
+        await page.waitForTimeout(900);
+        expect(!page.url().includes("when=planned"), `진행 중 링크: ${page.url()}`);
+        equal(await page.locator(".activity-list > li", { hasText: `진행 중 교육 ${stamp}` }).count(), 1, "옮겨 간 목록에 그 기록");
+      });
+    } finally {
+      for (const id of made) await fetch(`${BASE}/api/activities/${id}`, { method: "DELETE" });
+    }
+  }
+
+  console.log("\n[51] 팀원역량 기록 목록 — 달 머리줄 · 더 보기 (TODO 227)");
+  {
+    const stamp = Date.now();
+    const made = [];
+    try {
+      await check("행사가 많으면 처음엔 20건만 · 달 머리줄 · [더 보기] 로 20건씩 · 조건을 바꾸면 다시 처음부터", async () => {
+        // 한 사람 이름으로 행사 25건 — 하루씩 앞으로(지난 기록), 두 달에 걸치게
+        const person = `목록시험${stamp % 1000}`;
+        for (let i = 0; i < 25; i += 1) {
+          const created = await api.post("/api/activities", { person, kind: "seminar", title: `목록 시험 행사 ${i + 1}`, date: dayFromToday(-1 - i * 2) });
+          made.push(...(created.ids ?? [created.id]));
+        }
+        await go(`#/skills?person=${encodeURIComponent(person)}&year=all`);
+        await page.waitForTimeout(800);
+        const events = () => page.locator(".activity-list > li:not(.activity-month)");
+        equal(await events().count(), 20, "처음 세우는 행사");
+        expect(await page.locator(".activity-list > li.activity-month").count() >= 2, "달 머리줄이 둘 이상");
+        const more = page.getByRole("button", { name: /더 보기 — 남은 행사 5건/ });
+        equal(await more.count(), 1, "[더 보기 — 남은 행사 5건]");
+        await more.click();
+        await page.waitForTimeout(300);
+        equal(await events().count(), 25, "더 보기 뒤 전부");
+        equal(await page.getByRole("button", { name: /더 보기/ }).count(), 0, "다 보이면 [더 보기] 가 사라진다");
+        // 조건을 바꾸면 다시 처음부터 — 찾기 글을 넣었다 지운다
+        const search = page.locator('input[aria-label="역량 이력 찾기"]');
+        await search.fill("목록 시험");
+        await page.waitForTimeout(700);
+        equal(await events().count(), 20, "조건을 바꾸면 다시 20건");
+      });
+    } finally {
+      for (const id of made) await fetch(`${BASE}/api/activities/${id}`, { method: "DELETE" });
     }
   }
 

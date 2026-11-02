@@ -872,6 +872,10 @@ export interface ActivityBrief {
   kind: string;
   title: string;
   place: string | null;
+  /** 시작까지 남은 날 — 오늘이면 0 (TODO 226). 다가오는 일정에만 */
+  days_left?: number;
+  /** 이미 시작해 아직 끝나지 않은 여러 날 일정 (TODO 226 ③) */
+  ongoing?: boolean;
 }
 
 export interface ActivityPerson {
