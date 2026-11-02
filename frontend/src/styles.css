@@ -1618,8 +1618,10 @@ a.class-chip:hover { background: #e2e8f0; }
 .intake-logs .log-editor-card { padding: 14px 16px; }
 .intake-table .intake-title { color: var(--text); }
 .summary-bar dd.danger { color: var(--danger); }
-/* 거르기 줄의 글 칸도 선택 상자와 같은 높이로 (TODO 147) */
-.filters input:not([type="checkbox"]):not([type="radio"]) { padding-top: 5px; padding-bottom: 5px; }
+/* 거르기 줄의 글 칸도 선택 상자와 같은 높이로 (TODO 147) — 안쪽 여백으로 맞추던 것은 글꼴에 따라 0.6px 씩 갈렸다(2026-11-02, 다른 PC 글꼴).
+   높이를 정해 두면 글꼴이 달라도 같다 */
+.filters select,
+.filters input:not([type="checkbox"]):not([type="radio"]) { height: 35px; padding-top: 5px; padding-bottom: 5px; }
 /* 엑셀 표를 넣은 직후의 한 줄 (TODO 149) */
 .paste-offer { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 10px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); font-size: 13px; }
 /* 흡수할 과제 고르기 (TODO 151) */
