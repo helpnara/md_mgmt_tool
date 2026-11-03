@@ -110,3 +110,52 @@ def test_a_past_plan_nobody_touched_asks_for_a_check(client, monkeypatch):
 def test_a_record_written_after_the_day_is_not_a_missed_plan(client):
     add(client, date=day(-2), title="다녀와서 적은 교육")
     assert client.get("/api/home").json()["this_week"]["team_missed"] == []
+
+
+def test_went_takes_a_past_plan_off_the_home_check_and_keeps_the_record(client, monkeypatch):
+    """[다녀옴] — 확인한 날만 적고 홈의 지난 예정 확인에서 내려간다. 기록은 이력으로 남는다 (TODO 231)."""
+    made = add(client, date=day(3), title="다녀온 교육", takeaway=None)
+    other = add(client, date=day(4), title="아직 확인 안 한 교육")
+    monkeypatch.setenv(clock.ENV, day(8))
+    from app import readcache
+
+    readcache.bump()
+    assert {item["title"] for item in client.get("/api/home").json()["this_week"]["team_missed"]} == {"다녀온 교육", "아직 확인 안 한 교육"}
+    response = client.post(f"/api/activities/{one_id(made)}/plan-check")
+    assert response.status_code == 200 and response.json()["plan_checked"] == day(8)
+    missed = client.get("/api/home").json()["this_week"]["team_missed"]
+    assert [item["title"] for item in missed] == ["아직 확인 안 한 교육"]
+    # 기록은 그대로 이력으로
+    kept = next(item for item in client.get("/api/activities").json() if item["id"] == one_id(made))
+    assert kept["title"] == "다녀온 교육" and kept["planned"] is False
+    # 다시 읽어도(파일이 원본) 확인한 날이 남는다
+    assert client.post("/api/reindex").status_code == 200
+    readcache.bump()
+    assert [item["title"] for item in client.get("/api/home").json()["this_week"]["team_missed"]] == ["아직 확인 안 한 교육"]
+    assert client.post("/api/activities/999999/plan-check").status_code == 404
+    assert other
+
+
+def test_home_trend_shows_every_year_with_past_current_future(client):
+    """연도별 추이 — 과제가 있는 모든 해, 해마다 지난해 · 올해 · 미래 (TODO 228). 미래 해는 그 해에 걸친 과제 수."""
+    year = TODAY.year
+    client.post("/api/projects", json={"title": "작년 과제", "status": "done", "start_date": f"{year - 1}-02-01", "due_date": f"{year - 1}-11-30", "completed_at": f"{year - 1}-11-30"})
+    client.post("/api/projects", json={"title": "다년도 과제", "status": "in_progress", "start_date": f"{year}-03-01", "due_date": f"{year + 1}-06-30"})
+    client.post("/api/projects", json={"title": "내년 시작 과제", "status": "planned", "start_date": f"{year + 2}-01-10", "due_date": f"{year + 2}-12-31"})
+    compare = client.get("/api/home").json()["compare"]
+    assert [(item["year"], item["when"]) for item in compare] == [
+        (str(year - 1), "past"), (str(year), "current"), (str(year + 1), "future"), (str(year + 2), "future"),
+    ]
+    totals = {item["year"]: item["total"] for item in compare}
+    assert totals[str(year + 1)] == 1 and totals[str(year + 2)] == 1
+    # 목록을 그 해로 거르면 같은 수
+    assert len(client.get(f"/api/projects?year={year + 1}").json()) == totals[str(year + 1)]
+
+
+def test_home_tells_how_many_non_smart_projects_carry_a_classification(client):
+    """성격별 · 분류별 합이 스마트과제 수보다 큰 까닭 — 다른 속성인데 성격 · 분류가 적힌 과제 수 (TODO 229)."""
+    client.put("/api/settings", json={"natures": ["연구과제/PoC", "현장적용"]} )
+    client.post("/api/projects", json={"title": "스마트", "type": "smart", "nature": "현장적용"})
+    client.post("/api/projects", json={"title": "R&D 인데 성격 적음", "type": "rnd", "nature": "연구과제/PoC"})
+    outside = client.get("/api/home").json()["classified_outside"]
+    assert outside == {"nature": 1, "category": 0}

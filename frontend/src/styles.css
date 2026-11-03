@@ -2105,3 +2105,25 @@ button.home-stat.on { border-color: var(--accent); background: var(--accent-soft
 /* 팀원역량 기록 목록 — 달 머리줄 · 더 보기 (TODO 227) */
 .activity-list li.activity-month { border: none; background: none; padding: 10px 2px 2px; font-size: 13px; font-weight: 700; color: var(--text); }
 .activity-more { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; }
+
+/* 연도별 추이 — 모든 해 · 지난해 회색 · 올해 파랑 · 내년 이후 초록 (TODO 228). 넘치면 가로로 */
+.bar-row.trend { overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+.bar-row.trend .bar-col { flex: 1 0 44px; }
+.bar-col.when-past .bar { background: #f1f3f5; border-color: #d0d5db; }
+.bar-col.when-past .bar-done { background: #8a94a0; }
+a.bar-col.when-past:hover .bar { background: #e6e9ed; border-color: #8a94a0; }
+.bar-col.when-future .bar { background: #e6f5ec; border-color: #a9dbbc; }
+.bar-col.when-future .bar-done { background: #2f8f57; }
+a.bar-col.when-future:hover .bar { background: #d4eedf; border-color: #2f8f57; }
+a.bar-col.on .bar { box-shadow: 0 0 0 2px var(--text); }
+.trend-key { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.trend-key.past { background: #f1f3f5; color: #4b5563; }
+.trend-key.current { background: var(--accent-soft); color: var(--accent-strong); }
+.trend-key.future { background: #e6f5ec; color: #1f6b3f; }
+/* 스마트과제 묶음 (TODO 229) · 그룹별 예시 (TODO 230) */
+.home-smart .home-slices { margin-top: 8px; }
+.slice-example { display: block; color: var(--muted); font-style: italic; margin-bottom: 2px; }
+.home-smart { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px 2px; background: #f8fafc; margin: 12px 0; }
+.home-smart > h2 { margin: 0 0 4px; font-size: 16px; }
+.home-smart > .hint { margin: 0; }
+.home-missed .grow { flex: 1 1 auto; }

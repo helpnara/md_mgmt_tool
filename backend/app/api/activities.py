@@ -106,3 +106,14 @@ def delete_activity(activity_id: RowId, conn: sqlite3.Connection = Depends(get_d
         raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.") from exc
     except FileInUseError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/{activity_id}/plan-check")
+def check_plan(activity_id: RowId, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """홈 "지난 예정 확인" 의 [다녀옴] — 확인한 날만 적는다 (TODO 231)."""
+    try:
+        return {"plan_checked": svc.check_plan(conn, activity_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.") from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

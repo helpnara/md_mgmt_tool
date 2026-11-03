@@ -33,8 +33,6 @@ from . import period as period_service
 from . import reports as reports_service
 from . import settings as settings_service
 
-# 연도 비교 막대에 세우는 해의 수. 더 늘리면 막대가 얇아지기만 한다.
-COMPARE_YEARS = 5
 # "오래 방치된 과제" 로 보여 줄 수. 셋을 넘으면 목록이지 요약이 아니다.
 STALE_LIMIT = 3
 
@@ -418,12 +416,31 @@ def _effect_by_cost(conn: sqlite3.Connection, year: str | None) -> list[dict]:
 
 
 def _compare(conn: sqlite3.Connection) -> list[dict]:
-    """최근 몇 해를 나란히. 한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다."""
+    """과제가 있는 **모든 해**를 나란히 — 지난해 · 올해 · 내년 이후 (TODO 228). 한 해만 보면 흐름을 알 수 없다.
+
+    처음(181)에는 아직 오지 않은 해를 세우지 않고 최근 다섯 해만 보였다 — "내년에는 과제가 얼마나 있지" 를 홈에서 알 수 없었다.
+    미래 해의 수도 연도 규칙(181, `period`) 그대로 **그 해에 수행기간이 걸친 과제**다 — 이어지는 다년도 과제와 그 해에 시작할 과제.
+    목록을 그 해로 거르면 같은 수가 나온다. `when` 은 화면의 색(과거 회색 · 올해 파랑 · 미래 초록).
+    """
+    this_year = str(clock.today().year)
     return [
-        {"year": year, **{k: v for k, v in _team(conn, year).items()}}
-        # 아직 오지 않은 해(다년도 과제의 마감년도)는 추이에 세우지 않는다 (TODO 181)
-        for year in [item for item in years(conn) if item <= str(clock.today().year)][:COMPARE_YEARS]
+        {"year": year, "when": "past" if year < this_year else "current" if year == this_year else "future",
+         **{k: v for k, v in _team(conn, year).items()}}
+        for year in years(conn)
     ][::-1]  # 화면에는 왼쪽이 과거
+
+
+def _classified_outside(conn: sqlite3.Connection, year: str | None) -> dict[str, int]:
+    """스마트과제가 아닌데 성격 · 분류가 적힌 과제 수 (TODO 229) — 성격별 · 분류별 합이 스마트과제 수보다 큰 까닭."""
+    source, params = period_service.scope(year)
+    out: dict[str, int] = {}
+    for column in ("nature", "category"):
+        row = conn.execute(
+            f"SELECT COUNT(*) AS n FROM {source} WHERE COALESCE(p.type, '') <> ? AND COALESCE(NULLIF(TRIM(p.{column}), ''), '') <> ''",
+            (*params, CLASSIFIED_TYPE),
+        ).fetchone()
+        out[column] = int(row["n"] or 0)
+    return out
 
 
 def _stale(candidates: list[dict], limit: int = STALE_LIMIT) -> tuple[list[dict], int]:
@@ -579,10 +596,12 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
         # 과제 분류 넷 중 표로 세우는 둘 · 기대효과의 비용구분 (TODO 136)
         "natures": _classified(conn, year, "nature"),
         "categories": _classified(conn, year, "category"),
+        # 스마트과제가 아닌데 성격 · 분류가 적힌 과제 수 (TODO 229)
+        "classified_outside": _classified_outside(conn, year),
         "effect_by_cost": _effect_by_cost(conn, year),
         # 접수 풀 (TODO 136) — 과제 집계와 **섞지 않고** 따로 한 덩이로 보낸다
         "intakes": intakes_service.summary(conn, year),
     }
 
 
-__all__ = ["summary", "years", "COMPARE_YEARS", "STALE_LIMIT"]
+__all__ = ["summary", "years", "STALE_LIMIT"]

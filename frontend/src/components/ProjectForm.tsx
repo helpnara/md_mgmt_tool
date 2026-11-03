@@ -421,7 +421,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           )}
         </div>
         <label>
-          그룹 (예 : 회의체, 지시사항 등)
+          그룹 (예: 대표이사 지시 · 본부장 지시 · 주간 회의체)
           <input
             list="group-options"
             value={form.group ?? ""}

@@ -668,7 +668,8 @@ export interface Home {
   };
   team: HomeTeam;
   /** 최근 몇 해를 나란히. 왼쪽이 과거다. */
-  compare: (HomeTeam & { year: string })[];
+  /** 과제가 있는 모든 해 — 지난해 · 올해 · 미래 (TODO 228). 왼쪽이 과거다 */
+  compare: (HomeTeam & { year: string; when?: "past" | "current" | "future" })[];
   /** 담당 중복 포함 — 합이 team 보다 클 수 있다 */
   members: HomeMember[];
   types: HomeSlice[];
@@ -676,6 +677,8 @@ export interface Home {
   groups: HomeSlice[];
   /** 성격별 · 분류별 (TODO 136) */
   natures: HomeClassSlice[];
+  /** 스마트과제가 아닌데 성격 · 분류가 적힌 과제 수 (TODO 229) */
+  classified_outside?: { nature: number; category: number };
   categories: HomeClassSlice[];
   /** 기대효과를 비용구분으로 나눈 것 — 적힌 과제만 (TODO 136) */
   effect_by_cost: { key: string; count: number; effect_expected: number; effect_verified: number }[];

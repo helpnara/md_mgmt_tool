@@ -210,6 +210,8 @@ CREATE TABLE IF NOT EXISTS activity (
   author     TEXT,
   created_at TEXT,
   updated_at TEXT,
+  -- 지난 예정을 홈에서 [다녀옴] 으로 확인한 날 (TODO 231). 비어 있으면 아직 확인하지 않았다
+  plan_checked TEXT,
   file_mtime REAL
 );
 

@@ -160,6 +160,8 @@ export const api = {
   updateActivity: (id: number, payload: Partial<Activity>) =>
     request<{ ok: boolean }>(`/api/activities/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteActivity: (id: number) => request<void>(`/api/activities/${id}`, { method: "DELETE" }),
+  /** 지난 예정을 [다녀옴] 으로 확인 (TODO 231) — 확인한 날만 적는다 */
+  checkActivityPlan: (id: number) => request<{ plan_checked: string }>(`/api/activities/${id}/plan-check`, { method: "POST" }),
   // 팀원 면담 (TODO 182)
   meetings: (person?: string) =>
     request<MeetingListing>(`/api/meetings${person ? `?person=${encodeURIComponent(person)}` : ""}`),

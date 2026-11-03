@@ -5590,6 +5590,75 @@ async function main() {
     }
   }
 
+  console.log("\n[52] 홈 — 연도별 추이 모든 해 · 스마트과제 묶음 · 그룹 예시 · 지난 예정 [다녀옴] · [안 감] (TODO 228 ~ 231)");
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
+  {
+    const stamp = Date.now();
+    const thisYear = Number(dayFromToday(0).slice(0, 4));
+    const projects = [];
+    const acts = [];
+    try {
+      await check("연도별 추이 — 지난해 회색 · 올해 파랑 · 내년 이후 초록, 미래 해도 선다 (228)", async () => {
+        projects.push(await api.post("/api/projects", { title: `내년까지 과제 ${stamp}`, status: "in_progress", start_date: `${thisYear}-01-05`, due_date: `${thisYear + 1}-06-30` }));
+        projects.push(await api.post("/api/projects", { title: `내후년 과제 ${stamp}`, status: "planned", start_date: `${thisYear + 2}-02-01`, due_date: `${thisYear + 2}-11-30` }));
+        await go("#/");
+        const bars = page.locator(".home-compare a.bar-col");
+        const labels = await bars.locator(".bar-label").allInnerTexts();
+        expect(labels.includes(String(thisYear + 1)) && labels.includes(String(thisYear + 2)), `미래 해: ${labels.join(", ")}`);
+        equal(await page.locator(".home-compare a.bar-col.when-current").count(), 1, "올해 막대");
+        expect(await page.locator(".home-compare a.bar-col.when-future").count() >= 2, "미래 막대(초록)");
+        const future = page.locator(".home-compare a.bar-col.when-future", { hasText: String(thisYear + 2) });
+        await future.click();
+        await page.waitForTimeout(900);
+        expect(page.url().includes(`year=${thisYear + 2}`), `누르면 그 해 목록: ${page.url()}`);
+        expect((await page.locator(".project-list").innerText()).includes(`내후년 과제 ${stamp}`), "미래 해 목록에 그 과제");
+      });
+      await check("성격별 · 분류별은 '스마트과제' 묶음 안에 — 기준 건수와 합이 다르다는 안내 (229) · 그룹별 예시 (230)", async () => {
+        projects.push(await api.post("/api/projects", { title: `스마트 과제 ${stamp}`, type: "smart", status: "in_progress", start_date: `${thisYear}-02-01` }));
+        await go("#/");
+        const smart = page.locator(".home-smart");
+        equal(await smart.count(), 1, "스마트과제 묶음");
+        const text = await smart.innerText();
+        expect(text.includes("스마트과제") && text.includes("건 기준") && text.includes("팀 과제 수와 다릅니다"), `묶음 머리: ${text.slice(0, 200)}`);
+        equal(await smart.locator(".home-slice-nature, .home-slice-category").count() >= 1, true, "성격별 · 분류별 표가 묶음 안에");
+        expect((await page.locator(".home-slice-group .slice-example").innerText()).includes("지시"), "그룹별 예시 줄");
+      });
+      await check("지난 예정 — [다녀옴] 이면 홈에서 내려가고 기록은 남고, [안 감 — 지우기] 면 보관함으로 (231)", async () => {
+        const folder = join(vault, "people", "권경락", "activities");
+        for (const title of [`다녀온 예정 ${stamp}`, `안 간 예정 ${stamp}`]) {
+          const created = await api.post("/api/activities", { person: "권경락", kind: "seminar", title, date: dayFromToday(-3) });
+          acts.push(...(created.ids ?? [created.id]));
+          for (const name of await readdir(folder)) {
+            const path = join(folder, name);
+            const body = await readFile(path, "utf-8");
+            if (!body.includes(title)) continue;
+            const before = dayFromToday(-10);
+            await writeFile(path, body.replace(/created_at: .*/, `created_at: '${before}T09:00:00+09:00'`).replace(/updated_at: .*/, `updated_at: '${before}T09:00:00+09:00'`), "utf-8");
+          }
+        }
+        await api.post("/api/reindex", {});
+        await go("#/");
+        const row = (title) => page.locator(".home-missed li", { hasText: title });
+        equal(await row(`다녀온 예정 ${stamp}`).count(), 1, "지난 예정 확인 줄");
+        await row(`다녀온 예정 ${stamp}`).getByRole("button", { name: "다녀옴" }).click();
+        await page.waitForTimeout(900);
+        equal(await row(`다녀온 예정 ${stamp}`).count(), 0, "[다녀옴] 뒤 홈에서 내려간다");
+        const listed = await api.get(`/api/activities?person=${encodeURIComponent("권경락")}`);
+        expect(listed.some((item) => item.title === `다녀온 예정 ${stamp}`), "기록은 팀원역량에 이력으로 남는다");
+        await row(`안 간 예정 ${stamp}`).getByRole("button", { name: "안 감 — 지우기" }).click();
+        await page.waitForTimeout(900);
+        equal(await row(`안 간 예정 ${stamp}`).count(), 0, "[안 감] 뒤 홈에서 내려간다");
+        const after = await api.get(`/api/activities?person=${encodeURIComponent("권경락")}`);
+        expect(!after.some((item) => item.title === `안 간 예정 ${stamp}`), "안 간 기록은 지워진다(보관함)");
+        expect((await api.get("/api/trash")).some((item) => item.label.includes(`안 간 예정 ${stamp}`)), "삭제 보관함에");
+      });
+    } finally {
+      for (const id of acts) await fetch(`${BASE}/api/activities/${id}`, { method: "DELETE" });
+      for (const made of projects) if (made?.id) await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  }
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

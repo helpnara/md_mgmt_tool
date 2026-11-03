@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
+import { attempt } from "../notify";
 import type { ActivityBrief, BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
 import { listLink, projectLink, screenLink, useAddressBar } from "../nav";
 import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
@@ -247,6 +248,13 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   );
   const [allMembers, setAllMembers] = useState(false);
   const [data, setData] = useState<HomeData | null>(null);
+  // 연도별 추이가 넘치면 올해가 보이게 (TODO 228)
+  const trendRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const row = trendRef.current;
+    const current = row?.querySelector<HTMLElement>(".when-current");
+    if (row && current && row.scrollWidth > row.clientWidth) row.scrollLeft = Math.max(0, current.offsetLeft - row.clientWidth / 2);
+  }, [data]);
   const [error, setError] = useState<string | null>(null);
   // 자동 백업이 죽어 있어도 홈은 몰랐다 (TODO 106-A). 문제가 있을 때만 한 줄 띄운다.
   const [backup, setBackup] = useState<BackupStatus | null>(null);
@@ -283,6 +291,12 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
 
   const yearParam = year === ALL_YEARS ? "" : year;
   const { team, this_week: week } = data;
+  // 스마트과제 수 · 다른 속성인데 성격 · 분류가 적힌 과제 (TODO 229)
+  const smartCount = data.types.find((row) => row.key === meta.classified_type)?.count ?? 0;
+  const outside = data.classified_outside ?? { nature: 0, category: 0 };
+  const outsideNote = outside.nature || outside.category ? (
+    <> 다른 속성인데 성격이 적힌 과제 {outside.nature}건 · 분류가 적힌 과제 {outside.category}건도 그 줄에 셉니다.</>
+  ) : null;
   // 팀원 일정 한 줄 (TODO 221) — 여러 날이면 기간, 같은 해면 뒤쪽은 월 · 일만
   const activityKind = (key: string) => meta.activity_kinds.find((item) => item.key === key)?.label ?? key;
   const leftChipText = (item: ActivityBrief) =>
@@ -483,8 +497,8 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         {(week.team_missed?.length ?? 0) > 0 && (
           <>
             <p className="hint">
-              <b>지난 예정 확인</b> — 예정으로 적었던 일정이 지났습니다. 다녀왔으면 얻은 것 · 시간을 채우고, 안 갔으면 지우세요.
-              (2주가 지나면 이 줄에서 내려갑니다)
+              <b>지난 예정 확인</b> — 예정으로 적었던 일정이 지났습니다. <b>[다녀옴]</b> 을 누르면 이 줄에서 내려가고 팀원역량에 이력으로 남습니다.
+              안 갔으면 <b>[안 감 — 지우기]</b>(삭제 보관함으로). 얻은 것 · 시간은 팀원역량에서 채웁니다. (누르지 않아도 2주가 지나면 내려갑니다)
             </p>
             <ul className="home-stale home-missed">
               {week.team_missed!.map((item) => (
@@ -492,6 +506,19 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
                   <span className="due">{briefPeriod(item)}</span>
                   <a href={screenLink("skills", { person: item.person, year: item.date.slice(0, 4) })}>{item.title}</a>
                   <span className="muted">{item.person} · {activityKind(item.kind)}</span>
+                  {/* 확인하고 내린다 (TODO 231) — 다녀옴은 확인한 날만 적고, 안 감은 지금의 삭제(보관함으로) */}
+                  <span className="grow" />
+                  <button data-write className="ghost small" onClick={async () => {
+                    if (await attempt(() => api.checkActivityPlan(item.id))) load();
+                  }}>
+                    다녀옴
+                  </button>
+                  <button className="ghost small danger" onClick={async () => {
+                    if (!window.confirm(`${item.person} 님의 '${item.title}' — 가지 않은 일정이면 삭제 보관함으로 옮길까요?`)) return;
+                    if (await attempt(() => api.deleteActivity(item.id))) load();
+                  }}>
+                    안 감 — 지우기
+                  </button>
                 </li>
               ))}
             </ul>
@@ -793,11 +820,12 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               }
             />
           </h2>
-          <div className="bar-row">
+          {/* 과제가 있는 모든 해 (TODO 228) — 지난해 회색 · 올해 파랑 · 내년 이후 초록. 넘치면 가로로 넘기고, 올해가 보이게 둔다 */}
+          <div className="bar-row trend" ref={trendRef}>
             {data.compare.map((item) => (
               <a
                 key={item.year}
-                className={item.year === year ? "bar-col on" : "bar-col"}
+                className={["bar-col", `when-${item.when ?? "past"}`, item.year === year ? "on" : ""].filter(Boolean).join(" ")}
                 href={listLink({ year: item.year })}
                 title={`${item.year}년 과제 ${item.total}건 · 완료 ${item.done}건 · 보고 ${item.reports}회`}
               >
@@ -813,7 +841,9 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             ))}
           </div>
           <p className="hint">
-            막대는 과제 수, 진한 부분이 <b>완료</b>입니다. 누르면 그 해 과제 목록으로 갑니다.
+            막대는 과제 수, 진한 부분이 <b>완료</b>입니다. <span className="trend-key past">지난해</span> <span className="trend-key current">올해</span>{" "}
+            <span className="trend-key future">내년 이후</span> — 내년 이후는 <b>그 해에 수행기간이 걸친 과제</b>(이어지는 다년도 과제 · 그 해에 시작할 과제)입니다.
+            누르면 그 해 과제 목록으로 갑니다.
           </p>
         </div>
       )}
@@ -939,7 +969,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       </div>
 
       {/* ── 속성별 · 그룹별 ─────────────────────────────────────────
-          속성은 과제의 *성격*(R&D·투자…), 그룹은 *주제*(차세대전지·소재…)다.
+          속성은 과제의 *성격*(R&D·투자…), 그룹은 실제로 *지시사항 · 지시자 · 회의체*를 적는 칸이다(TODO 230 — 처음엔 주제로 설계했다).
           목록에는 두 필터가 다 있는데 홈에는 그룹 축만 없었다 (TODO 90).
           표 모양은 하나로 맞춘다 — 같은 화면에서 같은 것을 다르게 세지 않기 위해서다. */}
       {/* 속성별·그룹별은 줄이 짧아 한 줄씩 세우면 자리가 아깝다. 나란히 놓는다 (TODO 123) */}
@@ -968,7 +998,9 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         yearParam={yearParam}
         note={
           <>
-            그룹은 <b>자유 입력</b>이라 표기가 흔들리면 줄이 갈라집니다. 과제마다 그룹은
+            {/* 그룹은 실제로 지시사항 · 지시자를 적는 칸이다 (TODO 230) — 과제 폼의 예시와 같은 말 */}
+            <span className="slice-example">예: 대표이사 지시 · 본부장 지시 · 주간 회의체</span>
+            그룹은 <b>자유 입력</b>이라 표기가 흔들리면 줄이 갈라집니다(같은 지시자를 다르게 적으면 두 줄). 과제마다 그룹은
             하나뿐이므로 이 표의 합도 <b>팀 과제 수와 맞습니다.</b>
           </>
         }
@@ -979,6 +1011,16 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
           스마트과제 안의 두 축이다. *미지정* 줄은 **스마트과제인데 비어 있는 것**만 센다 —
           기획보고·유지보수가 미지정에 쌓이면 그 줄은 늘 가장 크고 아무 뜻이 없다. */}
       {(data.natures.length > 0 || data.categories.length > 0) && (
+        // 스마트과제만의 두 축 — 따로 묶어 밝힌다 (TODO 229). 합이 위의 팀 과제 수와 다르면 헷갈린다
+        <div className="home-smart">
+        <h2>
+          스마트과제 · 성격 · 분류
+          <span className="hint"> · 스마트과제 {smartCount}건 기준</span>
+        </h2>
+        <p className="hint">
+          성격과 분류는 <b>스마트과제만</b> 가지는 칸이라, 이 두 표의 합은 위의 <b>팀 과제 수와 다릅니다.</b>
+          {outsideNote}
+        </p>
         <div className="home-slices">
           <SliceTable
             meta={meta}
@@ -998,6 +1040,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             yearParam={yearParam}
             note={<>기술 영역별로 어디에 과제가 몰려 있는지 봅니다. 목록은 설정에서 고칩니다.</>}
           />
+        </div>
         </div>
       )}
 

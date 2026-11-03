@@ -523,6 +523,7 @@ def missed_plans(conn: sqlite3.Connection, days: int = MISSED_DAYS) -> list[dict
     rows = conn.execute(
         "SELECT * FROM activity"
         f" WHERE {finished} < app_today() AND {finished} >= DATE(app_today(), '-{int(days)} day')"
+        "   AND COALESCE(plan_checked, '') = ''"
         "   AND SUBSTR(COALESCE(created_at, ''), 1, 10) < date"
         "   AND SUBSTR(COALESCE(updated_at, created_at, ''), 1, 10) < date"
         f" ORDER BY {finished} DESC, person, id"
@@ -530,7 +531,26 @@ def missed_plans(conn: sqlite3.Connection, days: int = MISSED_DAYS) -> list[dict
     return [_brief(row) for row in rows]
 
 
+def check_plan(conn: sqlite3.Connection, activity_id: int) -> str:
+    """지난 예정을 "다녀왔다" 로 확인한다 — 홈의 [다녀옴] (TODO 231).
+
+    머리 정보에 확인한 날(`plan_checked`)만 적는다. 다른 칸은 건드리지 않고 입력 규칙도 다시 거치지 않는다 —
+    확인 한 번에 예전 기록의 다른 값이 거절되면 안 된다. 홈의 "지난 예정 확인" 에서 곧바로 내려가고, 기록은 이력으로 남는다.
+    안 간 것은 [안 감 — 지우기] 가 지금의 삭제(`delete`)로 보관함에 보낸다. 확인한 날을 돌려준다.
+    """
+    from ..vault.indexer import index_activities
+
+    path = file_path(conn, activity_id)
+    doc = md.load(path)
+    day = clock.today().isoformat()
+    doc.meta = md.merge_meta(doc.meta, {"plan_checked": day})
+    md.save(path, doc)
+    index_activities(conn)
+    conn.commit()
+    return day
+
+
 __all__ = [
-    "create", "update", "delete", "listing", "summary", "years", "upcoming", "missed_plans",
+    "create", "update", "delete", "listing", "summary", "years", "upcoming", "missed_plans", "check_plan",
     "event_key", "BODY_TEMPLATE",
 ]

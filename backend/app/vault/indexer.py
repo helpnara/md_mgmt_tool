@@ -751,8 +751,8 @@ def index_activities(
             """
             INSERT INTO activity(person, rel_path, date, end_date, kind, title, host, place,
                                  hours, cost, takeaway, link, body, author,
-                                 created_at, updated_at, file_mtime)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 created_at, updated_at, plan_checked, file_mtime)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rel_path) DO UPDATE SET
               person=excluded.person, date=excluded.date, end_date=excluded.end_date,
               kind=excluded.kind,
@@ -760,7 +760,7 @@ def index_activities(
               hours=excluded.hours, cost=excluded.cost, takeaway=excluded.takeaway,
               link=excluded.link, body=excluded.body, author=excluded.author,
               created_at=excluded.created_at, updated_at=excluded.updated_at,
-              file_mtime=excluded.file_mtime
+              plan_checked=excluded.plan_checked, file_mtime=excluded.file_mtime
             """,
             (
                 person,
@@ -779,6 +779,7 @@ def index_activities(
                 _as_str(doc.meta.get("author")),
                 _as_str(doc.meta.get("created_at")),
                 _as_str(doc.meta.get("updated_at")),
+                _as_str(doc.meta.get("plan_checked")),  # 지난 예정 확인 (TODO 231)
                 path.stat().st_mtime,
             ),
         )
