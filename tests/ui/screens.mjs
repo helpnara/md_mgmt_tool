@@ -403,7 +403,7 @@ async function main() {
 
   await check("홈의 수를 누르면 그 조건의 과제 목록으로 이어진다", async () => {
     // DESIGN 5.8 의 약속 — 이어지지 않는 수는 홈에 두지 않는다.
-    await go("#/");
+    await go("#/?tab=status");
     const stat = page.locator(".home-team .home-stat").first();
     const counted = Number((await stat.locator("strong").innerText()).replace(/[^0-9]/g, ""));
     await stat.click();
@@ -412,29 +412,33 @@ async function main() {
     equal(listed, counted, "홈의 과제 수와 목록에 실제로 선 줄 수");
   });
 
-  await check("홈의 두 표가 상태 여섯 칸을 모두 세운다", async () => {
-    // 줄끼리 세로로 견주는 표라, 칸이 줄마다 달라지면 비교가 안 된다 (TODO 75).
-    await go("#/");
+  await check("홈의 두 표가 상태 여섯 칸을 모두 세운다 — 모든 줄이 빈 상태는 숨기고 '숨긴 열' 로 밝힌다 (75 · 232 ③)", async () => {
+    // 줄끼리 세로로 견주는 표라, 칸이 줄마다 달라지면 비교가 안 된다 (TODO 75). 통째로 빈 열은 숨기되 말없이 숨기지 않는다 (232)
+    await go("#/?tab=status");
     const labels = (await api.get("/api/meta")).statuses.map((item) => item.label);
     for (const [name, selector] of [
-      ["팀원별", ".home-members thead"],
-      ["속성별", ".home-slice-type thead"],
-      ["그룹별", ".home-slice-group thead"],
+      ["팀원별", ".home-members"],
+      ["속성별", ".home-slice-type"],
+      ["그룹별", ".home-slice-group"],
     ]) {
-      const head = await page.locator(selector).innerText();
+      const head = await page.locator(`${selector} thead`).innerText();
+      const note = (await page.locator(`${selector} .hidden-cols`).count()) ? await page.locator(`${selector} .hidden-cols`).innerText() : "";
       for (const label of labels) {
-        expect(head.includes(label), `${name} 표에 "${label}" 칸이 없습니다: ${head}`);
+        expect(head.includes(label) !== note.includes(label), `${name} 표의 "${label}" — 머리에도 숨긴 열에도 하나만: ${head} / ${note}`);
       }
     }
   });
 
   await check("상태 칸의 합이 그 줄의 합계와 같다", async () => {
-    await go("#/");
-    const count = (await api.get("/api/meta")).statuses.length;
-    for (const selector of [".home-members tbody tr", ".home-slice-type tbody tr"]) {
+    await go("#/?tab=status");
+    const labels = (await api.get("/api/meta")).statuses.map((item) => item.label);
+    for (const [table, selector] of [[".home-members", ".home-members tbody tr"], [".home-slice-type", ".home-slice-type tbody tr"]]) {
+      // 상태 열은 숨겨진 것이 있을 수 있다 (232 ③) — 머리에 선 상태 열의 수만큼 센다
+      const heads = await page.locator(`${table} thead th`).allInnerTexts();
+      const count = heads.filter((head) => labels.includes(head.trim())).length;
       const row = page.locator(selector).first();
       const cells = await row.locator("td").allInnerTexts();
-      // [이름, 합계, 상태 6칸, …] — 표 안의 0 은 `-` 로 선다 (TODO 158)
+      // [이름, 합계, 상태 칸, …] — 표 안의 0 은 `-` 로 선다 (TODO 158)
       const num = (text) => (text.trim() === "-" ? 0 : Number(text));
       const total = num(cells[1]);
       const sum = cells.slice(2, 2 + count).reduce((acc, text) => acc + num(text), 0);
@@ -443,7 +447,7 @@ async function main() {
   });
 
   await check("홈이 팀원별 성과와 담당 중복을 함께 보여 준다", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     expect(await page.locator(".home-member-table tbody tr").count() > 0, "팀원 줄이 없습니다");
     // 공동 담당 과제가 있으면 사람별 합이 팀 합계를 넘는다. 그 사실을 숨기면 안 된다.
     const text = await page.locator(".home-members").innerText();
@@ -484,19 +488,23 @@ async function main() {
     await api.patch(`/api/projects/${seeded.projectA}`, { effect_expected: 3.5 });
   });
 
-  await check("홈이 이번 주 할 일과 팀 현황을 한 줄로 놓는다", async () => {
-    // 세로로 쌓으면 오른쪽이 통째로 비고, 매일 보는 것을 보려고 스크롤해야 한다 (TODO 78).
+  await check("홈 [팀 현황] 탭이 팀 현황과 연도별 추이를 한 줄로 놓는다", async () => {
+    // 세로로 쌓으면 오른쪽이 통째로 빈다 (TODO 78 · 123). 232 부터 [할 일] 은 탭으로 갈렸다 — 나란히 서는 것은 팀 현황 · 추이
     await page.setViewportSize({ width: 1500, height: 900 });
-    await go("#/");
-    const week = await page.locator(".home-top .home-week").boundingBox();
+    await go("#/?tab=status");
+    // 연도별 추이는 해가 둘 이상일 때만 선다 — 이 시험 자료가 한 해뿐이면 다음 해 과제를 하나 둔다
+    const nextYear = await api.post("/api/projects", { title: "이웃 해 과제", status: "planned", start_date: `${new Date().getFullYear() + 1}-02-01` });
+    await page.reload(); await page.waitForTimeout(900);
     const team = await page.locator(".home-top .home-team").boundingBox();
-    expect(week !== null && team !== null, "위쪽 두 칸을 찾지 못했습니다");
-    expect(team.x > week.x + week.width - 10, `나란히 서지 않았습니다: ${JSON.stringify({ week, team })}`);
+    const trend = await page.locator(".home-top .home-compare").boundingBox();
+    await fetch(`${BASE}/api/projects/${nextYear.id}/archive`, { method: "POST" });
+    expect(trend !== null && team !== null, "위쪽 두 칸을 찾지 못했습니다");
+    expect(trend.x > team.x + team.width - 10, `나란히 서지 않았습니다: ${JSON.stringify({ trend, team })}`);
     // 좁은 화면에서는 다시 한 줄씩 선다.
     await page.setViewportSize({ width: 900, height: 900 });
     await page.waitForTimeout(400);
-    const narrow = await page.locator(".home-top .home-team").boundingBox();
-    expect(narrow.y > week.y + 50, "좁은 화면에서 아래로 안 내려갑니다");
+    const narrow = await page.locator(".home-top .home-compare").boundingBox();
+    expect(narrow.y > team.y + 50, "좁은 화면에서 아래로 안 내려갑니다");
     await page.setViewportSize({ width: 1500, height: 900 });
   });
 
@@ -536,7 +544,7 @@ async function main() {
   });
 
   await check("홈은 기대효과와 실증효과를 합치지 않는다", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     const text = await page.locator(".home-stat.effect").innerText();
     expect(text.includes("기대") && text.includes("실증"), `둘이 나뉘어 있지 않습니다: ${text}`);
   });
@@ -581,7 +589,7 @@ async function main() {
       3,
       "저장된 기록 수",
     );
-    await go("#/skills");
+    await go("#/skills?tab=records");
     const row = page.locator(".activity-list > li").filter({ hasText: "스마트제조 박람회" });
     equal(await row.count(), 1, "화면에 선 행사 줄 수");
     equal(await row.locator(".activity-person").count(), 3, "그 줄에 붙은 사람 수");
@@ -610,18 +618,21 @@ async function main() {
   });
 
   await check("사람을 누르면 그 사람의 기록만 남는다", async () => {
-    await go("#/skills");
+    await go("#/skills?tab=records");
     // 행사 줄은 접히므로 사람 칩 수(= 참여 기록 수)로 본다.
     const before = await page.locator(".activity-list .activity-person").count();
+    // 사람별 표의 이름을 누르면 [기록] 탭으로 그 사람의 기록이 선다 (TODO 232 ②)
+    await go("#/skills");
     await page.locator(".skills-table tbody .linkish").first().click();
     await page.waitForTimeout(800);
+    expect(page.url().includes("tab=records"), `기록 탭으로 가지 않았습니다: ${page.url()}`);
     const after = await page.locator(".activity-list .activity-person").count();
     expect(after > 0 && after < before, `걸러지지 않았습니다 (전체 ${before}, 거른 뒤 ${after})`);
     expect(page.url().includes("person="), `조건이 주소에 없습니다: ${page.url()}`);
   });
 
   await check("역량 기록을 화면에서 추가한다", async () => {
-    await go("#/skills");
+    await go("#/skills?tab=records");
     await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
     await page.fill('.activity-form input[placeholder^="예: 권경락, 김현우"]', "이수민");
@@ -634,7 +645,7 @@ async function main() {
 
   await check("여러 명을 한 번에 넣으면 사람 수만큼 나뉜다", async () => {
     // 실사용에서 "A,B" 한 덩이가 사람 하나로 굳었던 사고를 막는 자리다 (TODO 74).
-    await go("#/skills");
+    await go("#/skills?tab=records");
     await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
     await page.fill('.activity-form input[placeholder^="예: 권경락, 김현우"]', "권경락, 김현우");
@@ -654,12 +665,13 @@ async function main() {
     equal(await rows.count(), 1, "화면에 선 행사 줄 수");
     equal(await rows.locator(".activity-person").count(), 2, "그 줄에 붙은 사람 수");
     // 사람별 표에 "권경락, 김현우" 같은 없는 사람이 생기면 안 된다.
+    await go("#/skills");
     const table = await page.locator(".skills-table").innerText();
     expect(!table.includes("권경락,"), `붙은 이름이 표에 남았습니다: ${table}`);
   });
 
   await check("명부에서 이름을 눌러 넣는다", async () => {
-    await go("#/skills");
+    await go("#/skills?tab=records");
     await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
     const chip = page.locator(".activity-form .tag-pick").first();
@@ -676,7 +688,7 @@ async function main() {
 
   await check("수정 폼은 누른 기록 바로 아래에서 열린다", async () => {
     // 화면 맨 위에서 열면 방금 누른 자리가 밀려나 무엇을 고치는 중인지 알 수 없다.
-    await go("#/skills");
+    await go("#/skills?tab=records");
     // 여럿이 간 행사는 사람마다 단추가 있으므로, 혼자 간 기록으로 확인한다.
     const row = page.locator(".activity-list > li").filter({ hasText: "열처리 공정 심화 과정" }).first();
     await row.getByRole("button", { name: "수정" }).click();
@@ -693,7 +705,7 @@ async function main() {
       person: "권경락", kind: "education", title: "사흘짜리 교육",
       date: twoDaysAgo, end_date: todayStr,
     });
-    await go("#/skills");
+    await go("#/skills?tab=records");
     const row = page.locator(".activity-list > li").filter({ hasText: "사흘짜리 교육" }).first();
     const text = await row.locator(".activity-date").innerText();
     expect(text.includes("~"), `기간으로 보이지 않습니다: ${text}`);
@@ -1429,7 +1441,7 @@ async function main() {
   });
 
   await check("홈의 글자가 읽힌다", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     for (const [label, selector, floor] of [
       // 흐린 글자(--muted)는 이 도구 전체가 AA_LARGE 기준으로 쓰고 있다 (.project-id 와 같다).
       ["칸 제목", ".home-stat-label", AA_LARGE],
@@ -1446,13 +1458,16 @@ async function main() {
   });
 
   await check("팀원 역량 화면의 글자가 읽힌다", async () => {
-    await go("#/skills");
-    for (const [label, selector, floor] of [
-      ["면담 대상 칩", ".skills-quiet-chip", AA],
-      ["사람 이름", ".skills-table .linkish", AA],
-      ["0 인 칸", ".skills-table td.zero", AA_LARGE],
-      ["얻은 것", ".activity-takeaway", AA],
+    for (const [label, selector, floor, hash] of [
+      ["면담 대상 칩", ".skills-quiet-chip", AA, "#/skills"],
+      ["사람 이름", ".skills-table .linkish", AA, "#/skills"],
+      ["0 인 칸", ".skills-table td.zero", AA_LARGE, "#/skills"],
+      ["얻은 것", ".activity-takeaway", AA, "#/skills?tab=records"],
+      ["탭", ".view-tab", AA, "#/skills"],
+      ["설명 펼치기", ".explain-toggle", AA, "#/skills"],
+      ["한 줄 기록의 주관", ".activity-meta-inline", AA, "#/skills?tab=records"],
     ]) {
+      await go(hash);
       if (!(await page.locator(selector).count())) continue;
       const value = await contrastOf(selector);
       expect(value >= floor, `역량 ${label} ${value} < ${floor}`);
@@ -1509,14 +1524,14 @@ async function main() {
 
   await check("홈이 효과 금액의 분모를 함께 적는다", async () => {
     // 화살표만 있으면 "기대 대비 달성률" 로 읽힌다 (TODO 86).
-    await go("#/");
+    await go("#/?tab=status");
     // 완료했는데 실증효과가 없는 과제로 가는 링크도 같은 자리에 선다 (TODO 106-F) — 문구 줄만 본다.
     const note = await page.locator(".home-stat.effect span.home-stat-note").innerText();
     expect(/기대 \d+건 · 실증 \d+건/.test(note), `분모가 안 보인다: ${note}`);
   });
 
   await check("팀원별 표에 역량 이력 열이 있다", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     const heads = await page.locator(".home-members thead th").allInnerTexts();
     expect(heads.includes("역량 이력"), `열이 없다: ${heads.join("|")}`);
   });
@@ -1524,7 +1539,7 @@ async function main() {
   await check("홈의 그룹별 표가 세는 수와 목록이 거르는 수가 같다", async () => {
     await api.patch(`/api/projects/${seeded.projectA}`, { group: "차세대전지" });
     await api.patch(`/api/projects/${seeded.projectB}`, { group: "차세대전지" });
-    await go("#/");
+    await go("#/?tab=status");
     const row = page.locator(".home-slice-group").locator("tbody tr").first();
     const label = await row.locator("td").first().innerText();
     const count = Number(await row.locator("td").nth(1).innerText());
@@ -1542,7 +1557,7 @@ async function main() {
       date: "2026-05-21", end_date: "2026-05-23", kind: "expo",
       person: "권경락, 김현우, 박서연", title: "InterBattery 2026",
     });
-    await go("#/skills");
+    await go("#/skills?tab=records");
     // 앞선 시험들이 남긴 행사도 함께 서 있으므로, **이 행사 하나**만 골라서 본다.
     const row = page.locator(".activity-list > li").filter({ hasText: "InterBattery 2026" });
     equal(await row.count(), 1, "화면에 선 행사 줄 수");
@@ -2450,12 +2465,12 @@ async function main() {
     equal(await page.locator(".toolbar .copy-table").innerText(), "복사됨 ✓", "눌린 표시");
     await go("#/reports");
     equal(await page.locator(".toolbar .copy-table").count(), 1, "보고대상");
-    await go("#/");
+    await go("#/?tab=status");
     expect((await page.locator(".home .copy-table").count()) >= 2, "홈 표들");
   });
 
   await check("기준 연도 옆 기간 상자 — 전체 연도에서는 사라진다 (TODO 110)", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     equal(await page.locator(".home-period select").count(), 1, "기간 상자");
     await page.locator(".home-period select").selectOption("H1");
     await page.waitForTimeout(700);
@@ -2679,17 +2694,20 @@ async function main() {
     equal(await fold.locator(".card").first().isVisible(), true, "펼친 뒤 카드");
   });
 
-  await check("홈의 연도별 추이가 팀 현황 아래 같은 칸에 선다 (TODO 123)", async () => {
+  await check("홈 [팀 현황] 의 팀 현황 · 연도별 추이가 같은 줄에서 시작한다 (TODO 123 · 232)", async () => {
+    await go("#/?tab=status");
+    const top = page.locator(".home-status-top");
+    equal(await top.count(), 1, "위쪽 줄");
+    equal(await top.locator(".home-team").count(), 1, "팀 현황");
+    equal(await top.locator(".home-compare").count(), 1, "연도별 추이");
+    const team = await page.locator(".home-team").boundingBox();
+    const box = await page.locator(".home-compare").boundingBox();
+    expect(Math.abs(team.y - box.y) < 40, `두 칸이 같은 줄에서 시작하지 않습니다 (${team.y} vs ${box.y})`);
+    expect(box.height > 0 && team.height > 0, "두 칸 모두 그려져야 한다");
+    // [할 일] 탭에는 표가 없다
     await go("#/");
-    const right = page.locator(".home-right");
-    equal(await right.count(), 1, "오른쪽 칸");
-    equal(await right.locator(".home-team").count(), 1, "팀 현황");
-    equal(await right.locator(".home-compare").count(), 1, "연도별 추이");
-    // 두 칸이 나란히 서고, 오른쪽 아래의 빈 자리가 채워졌는지 — 높이 차이로 본다.
-    const week = await page.locator(".home-week").boundingBox();
-    const box = await right.boundingBox();
-    expect(Math.abs(week.y - box.y) < 40, `두 칸이 같은 줄에서 시작하지 않습니다 (${week.y} vs ${box.y})`);
-    expect(box.height > 0 && week.height > 0, "두 칸 모두 그려져야 한다");
+    equal(await page.locator(".home-team, .home-members, .home-slices").count(), 0, "[할 일] 에는 팀 현황 표가 없다");
+    await go("#/?tab=status");
     // 속성별·그룹별은 나란히
     const slices = page.locator(".home-slices:has(.home-slice-type)");
     equal(await slices.count(), 1, "속성별·그룹별 묶음");
@@ -2697,7 +2715,7 @@ async function main() {
 
   console.log("\n[20] 효과 금액 분모 · 효과성 비대상 · 계정 칸 (TODO 124 · 125 · 126)");
   await check("홈의 효과 분모를 누르면 그 과제만 나온다 (TODO 124)", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     const note = page.locator(".home-stat.effect span.home-stat-note").first();
     const link = note.locator("a", { hasText: "기대" }).first();
     const said = Number((await link.innerText()).match(/(\d+)건/)[1]);
@@ -2711,7 +2729,7 @@ async function main() {
       title: "유지보수 비대상 시험", status: "done", effect_expected: null,
     });
     try {
-      await go("#/");
+      await go("#/?tab=status");
       const warn = page.locator(".home-stat.effect a.warn-text");
       const before = Number((await warn.innerText()).match(/(\d+)건/)[1]);
       // 과제 수정 화면에서 체크한다 — 서버만 고치면 화면을 안 본 것이 된다.
@@ -2723,7 +2741,7 @@ async function main() {
       await page.getByRole("button", { name: "저장" }).first().click();
       await page.waitForTimeout(1200);
       equal((await api.get(`/api/projects/${made.id}`)).no_effect, true, "저장된 값");
-      await go("#/");
+      await go("#/?tab=status");
       const after = await page.locator(".home-stat.effect a.warn-text").count();
       const now = after === 0 ? 0 : Number((await warn.innerText()).match(/(\d+)건/)[1]);
       equal(now, before - 1, "경고에서 하나 빠진다");
@@ -2780,7 +2798,7 @@ async function main() {
 
   console.log("\n[21] 홈에서 간 화면에서 돌아오는 길 (TODO 127)");
   await check("홈의 숫자를 누르면 목록에 ← 홈 이 선다", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     // 팀 현황의 [과제] — 홈에서 목록으로 가는 22곳 중 하나
     await page.locator(".home-team a.home-stat").first().click();
     await page.waitForTimeout(900);
@@ -2789,7 +2807,8 @@ async function main() {
     equal((await back.innerText()).trim(), "← 홈", "문구");
     await back.click();
     await page.waitForTimeout(900);
-    expect((page.url().split("#")[1] ?? "").replace(/^\//, "") === "", `홈으로 안 왔습니다: ${page.url()}`);
+    // 보던 탭 그대로 — [팀 현황] (TODO 232)
+    expect((page.url().split("#")[1] ?? "").replace(/^\//, "") === "?tab=status", `홈의 그 탭으로 안 왔습니다: ${page.url()}`);
   });
 
   await check("연도별 추이와 팀원별·속성별·그룹별도 같다", async () => {
@@ -2798,7 +2817,7 @@ async function main() {
       ["팀원별 성과", ".home-members tbody a"],
       ["속성별", ".home-slice-type tbody a"],
     ]) {
-      await go("#/");
+      await go("#/?tab=status");
       const link = page.locator(selector).first();
       if ((await link.count()) === 0) continue; // 자료가 없으면 건너뛴다
       await link.click();
@@ -2808,7 +2827,7 @@ async function main() {
   });
 
   await check("조건을 더 걸어도 돌아갈 길이 남는다", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     await page.locator(".home-team a.home-stat").first().click();
     await page.waitForTimeout(900);
     // 목록에서 상태를 바꿔도 back 이 주소에서 사라지면 안 된다.
@@ -2844,12 +2863,12 @@ async function main() {
 
   console.log("\n[22] 보고대상·보고이력·팀원역량의 뒤로 가기 · 보고 첨부 삭제 (TODO 128 · 129)");
   await check("홈에서 간 세 화면에도 ← 홈 이 선다 (TODO 128)", async () => {
-    for (const [name, selector, screen] of [
-      ["보고 대상", '.home-week a[href^="#/reports"]', "candidates"],
-      ["보고 이력", '.home-team a[href^="#/history"]', "report-history"],
-      ["팀원 역량", '.home-members a[href^="#/skills"]', "skills"],
+    for (const [name, selector, screen, home] of [
+      ["보고 대상", '.home-week a[href^="#/reports"]', "candidates", "#/"],
+      ["보고 이력", '.home-team a[href^="#/history"]', "report-history", "#/?tab=status"],
+      ["팀원 역량", '.home-members a[href^="#/skills"]', "skills", "#/?tab=status"],
     ]) {
-      await go("#/");
+      await go(home);
       const link = page.locator(selector).first();
       if ((await link.count()) === 0) continue; // 자료가 없으면 건너뛴다
       await link.click();
@@ -2872,7 +2891,7 @@ async function main() {
   });
 
   await check("보고이력에서 조건을 바꿔도 돌아갈 길이 남는다", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     const link = page.locator('.home-team a[href^="#/history"]').first();
     if ((await link.count()) === 0) return;
     await link.click();
@@ -3582,7 +3601,7 @@ async function main() {
     expect((await row.locator(".effect-col").innerText()).trim() === "3.0", "목록 3.0");
     await go(`#/projects/${seeded.projectA}`);
     expect((await page.locator(".summary-bar, .project-summary, main").first().innerText()).includes("3.0"), "상세 3.0");
-    await go("#/");
+    await go("#/?tab=status");
     expect((await page.locator(".home-team").innerText()).includes("3.0") ||
       (await page.locator(".home-team").innerText()).includes(".0") ||
       /\d\.\d/.test(await page.locator(".home-team").innerText()), "홈 팀 현황의 효과가 첫째 자리");
@@ -3592,8 +3611,8 @@ async function main() {
   await check("표마다 맨 아래 합계 줄이 선다 (157)", async () => {
     for (const [hash, selector] of [
       ["#/projects", ".project-table"],
-      ["#/", ".home-member-table"],
-      ["#/", ".home-slice-type table"],
+      ["#/?tab=status", ".home-member-table"],
+      ["#/?tab=status", ".home-slice-type table"],
       ["#/reports", "table.grid"],
       ["#/skills", ".skills-table"],
       ["#/intakes?status=all", ".intake-table"],
@@ -3646,7 +3665,7 @@ async function main() {
   });
 
   await check("표 안의 0 은 - 로 선다 (158)", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     const zeros = await page.locator(".home-member-table tbody td.zero").allInnerTexts();
     expect(zeros.length > 0, "빈 상태 칸이 있어야 한다(시험 자료)");
     expect(zeros.every((text) => text.trim() === "-"), `0 이 남았습니다: ${zeros.join(",")}`);
@@ -4169,7 +4188,7 @@ async function main() {
     await page.waitForTimeout(600);
     equal(await page.locator("tr", { hasText: "두 해 과제" }).count(), 0, "내년의 신규가 아니다");
     // 홈: 올해 신규 착수 칸, 효과 기준 안내
-    await go("#/");
+    await go("#/?tab=status");
     await page.waitForTimeout(900);
     const stats = await page.locator(".home-team .home-stat-label").allInnerTexts();
     expect(stats.includes("신규 착수"), `팀 현황 칸: ${stats}`);
@@ -4181,7 +4200,7 @@ async function main() {
   console.log("\n[35] 팀원 면담 기록 — 하기로 한 것 · 먼저 볼 사람 · 검색 제외 (TODO 182)");
 
   await check("면담을 남기고, 하기로 한 것을 닫고, 사람별 표에 마지막 면담이 선다 (182)", async () => {
-    await go(`#/skills?person=${encodeURIComponent("권경락")}`);
+    await go(`#/skills?tab=meetings&person=${encodeURIComponent("권경락")}`);
     await page.waitForTimeout(800);
     const panel = page.locator(".meeting-panel");
     equal(await panel.count(), 1, "면담 칸");
@@ -4204,10 +4223,12 @@ async function main() {
     await page.waitForTimeout(900);
     equal(await item.locator(".meeting-followups li.done").count(), 1, "닫힌 줄");
     // 사람별 표 — 마지막 면담 · 열린 것 1
+    await go(`#/skills?person=${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(800);
     const row = page.locator(".skills-table tr", { hasText: "권경락" });
     expect((await row.innerText()).includes("2026-09-15"), "마지막 면담");
     // 사람을 고르지 않으면 팀 전체의 열린 것
-    await go("#/skills");
+    await go("#/skills?tab=meetings");
     await page.waitForTimeout(800);
     expect((await page.locator(".meeting-open-list").innerText()).includes("멘토 정하기"), "팀 전체 열린 것");
     // 통합 검색에 걸리지 않는다
@@ -4215,7 +4236,7 @@ async function main() {
     await page.waitForTimeout(600);
     equal(await page.locator(".result-list li", { hasText: "시험 면담" }).count(), 0, "검색 제외");
     // 지우기 — 보관함 · 이전 버전 안내
-    await go(`#/skills?person=${encodeURIComponent("권경락")}`);
+    await go(`#/skills?tab=meetings&person=${encodeURIComponent("권경락")}`);
     await page.waitForTimeout(800);
     let asked = "";
     nextDialog((dialog) => { asked = dialog.message(); dialog.accept(); });
@@ -4253,43 +4274,54 @@ async function main() {
     await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
   });
 
-  await check("고른 사람은 좁혀지는 두 칸 위의 띠 [팀 전체로 ×] · 다시 누르기로 푼다 (183 · 185)", async () => {
-    await go(`#/skills?person=${encodeURIComponent("권경락")}`);
+  await check("고른 사람은 탭 위의 띠 [팀 전체로 ×] · 다시 누르기로 푼다 (183 · 185 · 232)", async () => {
+    await go(`#/skills?tab=meetings&person=${encodeURIComponent("권경락")}`);
     await page.waitForTimeout(800);
     const bar = page.locator(".skills-person-bar");
     expect((await bar.innerText()).includes("권경락"), "띠에 보는 사람");
     // 기준 연도 옆(화면 머리)에는 없다 — 화면 전체가 바뀐 것처럼 읽혔다 (185)
     equal(await page.locator(".home-head .skills-person-bar, .home-head .skills-person-chip").count(), 0, "머리에는 없다");
-    // 띠는 사람별 표 아래, 면담 칸 바로 위
+    // 띠는 탭 바로 아래, 면담 칸 위 (232 — 사람별 표는 [사람별] 탭에 있다)
     const order = await page.evaluate(() => {
-      const cards = [...document.querySelectorAll(".card")];
-      const at = (selector) => cards.findIndex((card) => card.matches(selector) || card.querySelector(selector));
-      return { table: at(".skills-table"), bar: at(".skills-person-bar"), meeting: at(".meeting-panel") };
+      const at = (selector) => document.querySelector(selector)?.getBoundingClientRect().top ?? -1;
+      return { tabs: at(".skills-tabs"), bar: at(".skills-person-bar"), meeting: at(".meeting-panel") };
     });
-    expect(order.table < order.bar && order.bar + 1 === order.meeting, `칸 순서: ${JSON.stringify(order)}`);
+    expect(order.tabs >= 0 && order.tabs < order.bar && order.bar < order.meeting, `칸 순서: ${JSON.stringify(order)}`);
+    // [사람별] 탭으로 가도 고른 사람은 남는다 — 표에서 고른 줄
+    await page.locator(".skills-tabs .view-tab", { hasText: "사람별" }).click();
+    await page.waitForTimeout(600);
     equal(await page.locator(".skills-table tr.picked-row", { hasText: "권경락" }).count(), 1, "표에서 고른 줄");
+    await page.locator(".skills-tabs .view-tab", { hasText: "면담" }).click();
+    await page.waitForTimeout(600);
     // 띠의 [팀 전체로 ×]
     await bar.getByRole("button", { name: /팀 전체로/ }).click();
     await page.waitForTimeout(700);
     equal(await bar.count(), 0, "띠가 사라진다");
     expect(!page.url().includes("person="), `주소에서도 빠진다: ${page.url()}`);
     expect((await page.locator(".meeting-panel h2").innerText()).includes("팀 전체"), "면담 칸이 팀 전체로");
-    // 표에서 고르면 띠가 서고, 이름을 한 번 더 누르면 풀린다
+    // 표에서 고르면 [기록] 탭으로 가고 띠가 선다. [사람별] 로 돌아와 이름을 한 번 더 누르면 풀린다
+    await go("#/skills");
     await page.locator(".skills-table button", { hasText: "권경락" }).click();
     await page.waitForTimeout(700);
+    expect(page.url().includes("tab=records"), `기록 탭으로: ${page.url()}`);
     equal(await bar.count(), 1, "표에서 고르면 띠가 선다");
+    await page.locator(".skills-tabs .view-tab", { hasText: "사람별" }).click();
+    await page.waitForTimeout(600);
     await page.locator(".skills-table button", { hasText: "권경락" }).click();
     await page.waitForTimeout(700);
-    equal(await bar.count(), 0, "이름을 다시 누르면 풀린다");
-    // 먼저 볼 사람 칩 — 다시 누르면 풀린다
+    expect(!page.url().includes("person="), `이름을 다시 누르면 풀린다: ${page.url()}`);
+    // 먼저 볼 사람 칩 — 누르면 그 사람의 면담 · 기록으로, [사람별] 로 와서 다시 누르면 풀린다
     const quiet = page.locator(".skills-quiet-chip").first();
     if ((await quiet.count()) > 0) {
       await quiet.click();
       await page.waitForTimeout(700);
+      expect(/tab=(records|meetings)/.test(page.url()), `칩을 누르면 기록 · 면담 탭으로: ${page.url()}`);
+      await page.locator(".skills-tabs .view-tab", { hasText: "사람별" }).click();
+      await page.waitForTimeout(600);
       equal(await page.locator(".skills-quiet-chip.on").count(), 1, "고른 칩은 눌린 모양");
       await page.locator(".skills-quiet-chip.on").click();
       await page.waitForTimeout(700);
-      equal(await bar.count(), 0, "칩을 다시 누르면 풀린다");
+      expect(!page.url().includes("person="), `칩을 다시 누르면 풀린다: ${page.url()}`);
     }
   });
 
@@ -4353,6 +4385,7 @@ async function main() {
     expect(await last.evaluate((el) => el.classList.contains("left-row")), "흐린 줄");
     equal(await last.locator(".left-tag").innerText(), "전배", "사유 딱지");
     equal(await page.locator(".skills-quiet-chip", { hasText: gone.name }).count(), 0, "먼저 볼 사람에 없다");
+    await go("#/skills?tab=meetings");
     await page.locator(".meeting-panel").getByRole("button", { name: "면담 추가" }).click();
     const options = await page.locator(".meeting-form datalist option").evaluateAll((els) => els.map((el) => el.value));
     expect(options.length > 0 && !options.includes(gone.name), `면담 상대 목록에 없다: ${options}`);
@@ -4747,7 +4780,7 @@ async function main() {
   page.on("dialog", (dialog) => dialog.accept());
 
   await check("홈의 기준 연도가 주소에 남아, 목록에 갔다 [← 홈] 으로 오면 그대로다 (210 ④)", async () => {
-    await go("#/");
+    await go("#/?tab=status");
     await page.locator(".home-year select").selectOption("all");
     await page.waitForTimeout(800);
     expect(page.url().includes("year=all"), `주소에 연도가 없다: ${page.url()}`);
@@ -4895,7 +4928,7 @@ async function main() {
   };
 
   await check("다음 면담이 면담일과 같거나 앞이면 [저장] 이 꺼지고, 면담일을 옮겨 앞서게 되면 바로 알린다 (216)", async () => {
-    await go("#/skills");
+    await go("#/skills?tab=meetings");
     await page.waitForTimeout(800);
     const panel = page.locator(".meeting-panel");
     await panel.getByRole("button", { name: "면담 추가" }).click();
@@ -4949,7 +4982,7 @@ async function main() {
     if (before.people.length === 0) await api.post("/api/people", { name: "권경락" }); // 명부가 비면 묻지 않는다
     const stranger = "면담시험인";
     try {
-      await go("#/skills");
+      await go("#/skills?tab=meetings");
       await page.waitForTimeout(800);
       const panel = page.locator(".meeting-panel");
       await panel.getByRole("button", { name: "면담 추가" }).click();
@@ -4979,7 +5012,7 @@ async function main() {
   });
 
   await check("역량 기록에 오늘 뒤의 날짜를 적으면 예정이라고 알리고 저장할 수 있다 (221 — 214 D5 되돌림)", async () => {
-    await go("#/skills");
+    await go("#/skills?tab=records");
     await page.getByRole("button", { name: "기록 추가" }).click();
     await page.waitForTimeout(400);
     const form = page.locator(".activity-form");
@@ -5298,7 +5331,7 @@ async function main() {
       const after = (await api.get(`/api/home?year=${year}`)).team;
       equal(Math.round((after.effect_verified - before.effect_verified) * 100) / 100, 2.5, "실증 합계가 2.5 늘어난다");
       expect((after.effect_verified_interim ?? 0) >= 2.5, `중간 결산 금액: ${after.effect_verified_interim}`);
-      await go(`#/?year=${year}`);
+      await go(`#/?tab=status&year=${year}`);
       const tile = await page.locator(".home-stat.effect").innerText();
       expect(tile.includes("중간 결산"), `홈 효과 칸에 중간 결산 표시가 없다: ${tile}`);
       await go(`#/projects/${made.id}`);
@@ -5377,7 +5410,10 @@ async function main() {
         expect(page.url().includes("#/skills") && page.url().includes("when=planned"), `옮겨 간 주소: ${page.url()}`);
         const item = page.locator(".activity-list > li", { hasText: soonTitle });
         equal(await item.count(), 1, "팀원역량의 예정 목록에 그 기록");
-        expect((await item.innerText()).includes("예정"), "예정 딱지");
+        expect(page.url().includes("tab=records"), `기록 탭으로: ${page.url()}`);
+        // 예정은 [기록] 탭 위의 예정 묶음에, 남은 날 띠지와 함께 (TODO 232 ⑥)
+        equal(await page.locator(".activity-planned-section li", { hasText: soonTitle }).count(), 1, "예정 묶음에");
+        equal((await item.locator(".left-chip").innerText()).trim(), "D-5", "남은 날 띠지");
       });
       await check("예정은 사람별 건수에 들지 않고 '+예정 N' 으로 따로 보인다", async () => {
         const summary = await api.get(`/api/activities/summary?year=${dayFromToday(5).slice(0, 4)}`);
@@ -5568,7 +5604,7 @@ async function main() {
           const created = await api.post("/api/activities", { person, kind: "seminar", title: `목록 시험 행사 ${i + 1}`, date: dayFromToday(-1 - i * 2) });
           made.push(...(created.ids ?? [created.id]));
         }
-        await go(`#/skills?person=${encodeURIComponent(person)}&year=all`);
+        await go(`#/skills?tab=records&person=${encodeURIComponent(person)}&year=all`);
         await page.waitForTimeout(800);
         const events = () => page.locator(".activity-list > li:not(.activity-month)");
         equal(await events().count(), 20, "처음 세우는 행사");
@@ -5602,7 +5638,7 @@ async function main() {
       await check("연도별 추이 — 지난해 회색 · 올해 파랑 · 내년 이후 초록, 미래 해도 선다 (228)", async () => {
         projects.push(await api.post("/api/projects", { title: `내년까지 과제 ${stamp}`, status: "in_progress", start_date: `${thisYear}-01-05`, due_date: `${thisYear + 1}-06-30` }));
         projects.push(await api.post("/api/projects", { title: `내후년 과제 ${stamp}`, status: "planned", start_date: `${thisYear + 2}-02-01`, due_date: `${thisYear + 2}-11-30` }));
-        await go("#/");
+        await go("#/?tab=status");
         const bars = page.locator(".home-compare a.bar-col");
         const labels = await bars.locator(".bar-label").allInnerTexts();
         expect(labels.includes(String(thisYear + 1)) && labels.includes(String(thisYear + 2)), `미래 해: ${labels.join(", ")}`);
@@ -5616,7 +5652,7 @@ async function main() {
       });
       await check("성격별 · 분류별은 '스마트과제' 묶음 안에 — 기준 건수와 합이 다르다는 안내 (229) · 그룹별 예시 (230)", async () => {
         projects.push(await api.post("/api/projects", { title: `스마트 과제 ${stamp}`, type: "smart", status: "in_progress", start_date: `${thisYear}-02-01` }));
-        await go("#/");
+        await go("#/?tab=status");
         const smart = page.locator(".home-smart");
         equal(await smart.count(), 1, "스마트과제 묶음");
         const text = await smart.innerText();
@@ -5656,6 +5692,123 @@ async function main() {
     } finally {
       for (const id of acts) await fetch(`${BASE}/api/activities/${id}`, { method: "DELETE" });
       for (const made of projects) if (made?.id) await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  }
+
+  console.log("\n[53] 홈 · 팀원역량 탭 · 빈 열 숨김 · 설명 접기 · 예정과 지난 기록 · [삭제]는 수정 칸 안 (TODO 232)");
+  page.removeAllListeners("dialog");
+  page.on("dialog", (dialog) => dialog.accept());
+  {
+    const stamp = Date.now();
+    const made = [];
+    try {
+      await check("홈은 [할 일] 이 기본 · [팀 현황] 은 주소에 남고 ← 홈 으로 돌아오면 그 탭 (232 ①)", async () => {
+        await go("#/");
+        equal(await page.locator(".home-tabs [role=tab]").count(), 2, "탭 둘");
+        equal((await page.locator(".home-tabs [aria-selected=true]").innerText()).trim(), "할 일", "기본은 [할 일]");
+        equal(await page.locator(".home-week").count(), 1, "[할 일] 에 이번 주 할 일");
+        equal(await page.locator(".home-team, .home-members").count(), 0, "[할 일] 에는 표가 없다");
+        equal(await page.locator(".home-period").count(), 0, "[할 일] 에는 반기 · 분기 칸이 없다");
+        await page.locator(".home-tabs [role=tab]", { hasText: "팀 현황" }).click();
+        await page.waitForTimeout(700);
+        expect(page.url().includes("tab=status"), `주소에 탭: ${page.url()}`);
+        equal(await page.locator(".home-week").count(), 0, "[팀 현황] 에는 할 일이 없다");
+        equal(await page.locator(".home-period").count(), 1, "[팀 현황] 에 반기 · 분기 칸");
+        await page.locator(".home-team a.home-stat").first().click();
+        await page.waitForTimeout(900);
+        await page.locator(".project-list a.back, a.back").first().click();
+        await page.waitForTimeout(900);
+        expect(page.url().includes("tab=status"), `← 홈 이 보던 탭으로: ${page.url()}`);
+        equal(await page.locator(".home-team").count(), 1, "[팀 현황] 이 다시 선다");
+        // 키보드 — ← → 로 탭을 옮긴다
+        await page.locator(".home-tabs [aria-selected=true]").focus();
+        await page.keyboard.press("ArrowLeft");
+        await page.waitForTimeout(500);
+        equal((await page.locator(".home-tabs [aria-selected=true]").innerText()).trim(), "할 일", "← 로 [할 일]");
+      });
+      await check("모든 줄이 빈 열은 숨기고 표 아래에 밝힌다 — 줄 안의 빈 칸은 그대로 - (232 ③)", async () => {
+        await go("#/?tab=status");
+        const card = page.locator(".home-slice-type");
+        const heads = await card.locator("thead th").allInnerTexts();
+        const note = card.locator(".hidden-cols");
+        // 이 시험 자료에 쓰지 않은 상태가 있으면 그 열은 숨는다 — 어느 쪽이든 머리와 안내가 맞아야 한다
+        if ((await note.count()) > 0) {
+          const text = await note.innerText();
+          const hidden = text.replace(/^숨긴 열:\s*/, "").split(" — ")[0].split(" · ").map((item) => item.trim());
+          expect(hidden.every((name) => !heads.some((head) => head.startsWith(name))), `숨긴 열이 머리에 남았다: ${hidden} / ${heads}`);
+          expect(text.includes("[표 복사]에는 들어갑니다"), `복사 안내: ${text}`);
+        }
+        expect(heads.some((head) => head.startsWith("과제")), "과제 열은 늘");
+      });
+      await check("설명은 첫 문장만 — [설명 ▾] 로 펼치고, 펼친 것은 다시 열어도 그대로 (232 ④)", async () => {
+        await go("#/?tab=status");
+        const explain = page.locator('[data-explain="home-members"]');
+        equal(await explain.count(), 1, "팀원별 설명");
+        expect((await explain.innerText()).includes("담당 중복 포함"), "경고 첫 문장은 늘 보인다");
+        expect(!(await explain.innerText()).includes("효과 금액도 마찬가지로"), "나머지는 접혀 있다");
+        await explain.locator(".explain-toggle").click();
+        await page.waitForTimeout(300);
+        expect((await explain.innerText()).includes("효과 금액도 마찬가지로"), "펼치면 보인다");
+        equal(await explain.locator(".explain-toggle").getAttribute("aria-expanded"), "true", "aria-expanded");
+        await page.reload();
+        await page.waitForTimeout(900);
+        expect((await page.locator('[data-explain="home-members"]').innerText()).includes("효과 금액도 마찬가지로"), "다시 열어도 펼친 채로");
+        await page.locator('[data-explain="home-members"] .explain-toggle').click();
+      });
+      await check("0 인 숫자 칸은 흐리게 — 자리는 그대로 (232 B)", async () => {
+        await go("#/");
+        const zero = page.locator(".home-week .home-stat.zero-stat");
+        const all = await page.locator(".home-week .home-stat").count();
+        expect(all >= 4, `숫자 칸 수: ${all}`);
+        for (let i = 0; i < (await zero.count()); i += 1) {
+          expect((await zero.nth(i).locator("strong").innerText()).startsWith("0"), "흐린 칸은 0 이다");
+        }
+      });
+      await check("팀원역량 — [사람별] · [기록] · [면담] 탭, 예정은 위에 가까운 것부터 · 지난 기록은 최근 것부터 (232 ② ⑥)", async () => {
+        const person = `탭시험${stamp % 1000}`;
+        for (const [title, offset] of [[`먼 예정 ${stamp}`, 20], [`가까운 예정 ${stamp}`, 3], [`옛 기록 ${stamp}`, -20], [`최근 기록 ${stamp}`, -2]]) {
+          const created = await api.post("/api/activities", { person, kind: "education", title, date: dayFromToday(offset), host: "시험 주관" });
+          made.push(...(created.ids ?? [created.id]));
+        }
+        await go("#/skills");
+        const tabs = await page.locator(".skills-tabs [role=tab]").allInnerTexts();
+        equal(tabs.map((text) => text.trim()).join(" "), "사람별 기록 면담", "탭 셋");
+        equal(await page.locator(".activity-list").count(), 0, "[사람별] 에는 기록 목록이 없다");
+        equal(await page.locator(".meeting-panel").count(), 0, "[사람별] 에는 면담이 없다");
+        await go(`#/skills?tab=records&person=${encodeURIComponent(person)}&year=all`);
+        await page.waitForTimeout(800);
+        const planned = await page.locator(".activity-planned-section .activity-title").allInnerTexts();
+        equal(planned.join(" | "), `가까운 예정 ${stamp} | 먼 예정 ${stamp}`, "예정은 가까운 것부터");
+        const past = await page.locator(".activity-past-section .activity-title").allInnerTexts();
+        equal(past.join(" | "), `최근 기록 ${stamp} | 옛 기록 ${stamp}`, "지난 기록은 최근 것부터");
+        const sectionTops = await page.evaluate(() => [".activity-planned-section", ".activity-past-section"].map((s) => document.querySelector(s).getBoundingClientRect().top));
+        expect(sectionTops[0] < sectionTops[1], "예정이 위");
+        equal((await page.locator(".activity-planned-section li", { hasText: `가까운 예정 ${stamp}` }).locator(".left-chip").innerText()).trim(), "D-3", "남은 날 띠지");
+        // 한 줄 — 주관이 제목 줄 안에
+        expect((await page.locator(".activity-past-section li", { hasText: `최근 기록 ${stamp}` }).locator(".activity-head").innerText()).includes("시험 주관"), "주관이 제목 줄에");
+        // 옛 주소(탭 없이 예정만) 는 [기록] 으로
+        await go(`#/skills?when=planned&person=${encodeURIComponent(person)}&year=all`);
+        await page.waitForTimeout(700);
+        equal((await page.locator(".skills-tabs [aria-selected=true]").innerText()).trim(), "기록", "조건만 실린 주소는 [기록]");
+      });
+      await check("기록 줄에는 [수정]만 — [삭제]는 수정 칸 안에 있고 보관함으로 간다 (232 ⑤)", async () => {
+        const person = `탭시험${stamp % 1000}`;
+        await go(`#/skills?tab=records&person=${encodeURIComponent(person)}&year=all`);
+        await page.waitForTimeout(800);
+        const row = page.locator(".activity-list > li", { hasText: `옛 기록 ${stamp}` });
+        equal(await row.locator(".activity-head").getByRole("button", { name: "삭제" }).count(), 0, "줄에는 [삭제]가 없다");
+        equal(await page.locator(".skills-records .activity-head button.danger").count(), 0, "빨간 단추가 줄에 없다");
+        await row.getByRole("button", { name: "수정" }).click();
+        await page.waitForTimeout(500);
+        const remove = row.locator(".activity-form").getByRole("button", { name: "삭제" });
+        equal(await remove.count(), 1, "수정 칸 안의 [삭제]");
+        await remove.click();
+        await page.waitForTimeout(900);
+        equal(await page.locator(".activity-list > li", { hasText: `옛 기록 ${stamp}` }).count(), 0, "목록에서 사라진다");
+        expect((await api.get("/api/trash")).some((item) => item.label.includes(`옛 기록 ${stamp}`)), "삭제 보관함에");
+      });
+    } finally {
+      for (const id of made) await fetch(`${BASE}/api/activities/${id}`, { method: "DELETE" });
     }
   }
 

@@ -2127,3 +2127,42 @@ a.bar-col.on .bar { box-shadow: 0 0 0 2px var(--text); }
 .home-smart > h2 { margin: 0 0 4px; font-size: 16px; }
 .home-smart > .hint { margin: 0; }
 .home-missed .grow { flex: 1 1 auto; }
+
+/* ── 232 홈 · 팀원역량 다시 짜기 ─────────────────────────────────────────────
+   ① ② 화면 안 탭 · ③ 빈 열 숨김 안내 · ④ 설명 접기 · E 한 줄 기록 · H 제목 밖 [표 복사] */
+.view-tabs { display: flex; gap: 4px; margin: 4px 0 14px; border-bottom: 1px solid var(--border); }
+.view-tab {
+  padding: 8px 16px; margin-bottom: -1px; border: 1px solid transparent; border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0; background: none; color: var(--muted-strong); font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.view-tab:hover { color: var(--accent-strong); background: var(--accent-soft); }
+.view-tab.on { color: var(--accent-strong); border-bottom-color: var(--accent); background: var(--surface); }
+.view-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* 제목과 [표 복사]를 한 줄에 — 단추는 제목(h2) 밖 */
+.card-title-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.card-title-row h2 { margin: 0; }
+
+/* 설명 접기 — 첫 문장은 늘, 나머지는 [설명 ▾] */
+.explain-toggle {
+  border: none; background: none; padding: 0 2px; color: var(--accent-strong); font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.explain-toggle:hover { text-decoration: underline; }
+.page-desc.explain { margin-bottom: 0; }
+
+/* 숨긴 열 한 줄 · 0 인 숫자 칸 */
+.hidden-cols { margin: 6px 0 0; }
+.home-stat.zero-stat { background: transparent; border-style: dashed; }
+.home-stat.zero-stat strong { color: var(--muted-strong); font-weight: 600; }
+
+/* [할 일] 탭은 한 칸 — 줄 목록이 너무 넓어지지 않게 */
+.home-panel-todo .home-week { max-width: 1100px; }
+.home-status-top { margin-bottom: 14px; }
+
+/* 팀원역량 기록 — 한 줄로 (주관 · 장소 · 시간 · 비용을 제목 줄 끝에) */
+.activity-meta-inline { font-size: 12px; color: var(--muted-strong); }
+.activity-head .activity-link { font-size: 12px; color: var(--muted-strong); max-width: 260px; }
+.activity-section + .activity-section { margin-top: 18px; }
+.activity-section h3 { font-size: 13px; margin: 6px 0 6px; }
+.form-actions .grow { flex: 1 1 auto; }
+.form-actions .activity-delete { color: var(--danger); }

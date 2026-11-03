@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
-import type { ActivityBrief, BackupStatus, Home as HomeData, HomeSlice, Meta } from "../types";
+import type { ActivityBrief, BackupStatus, Home as HomeData, HomeSlice, Meta, StatusInfo } from "../types";
 import { listLink, projectLink, screenLink, useAddressBar } from "../nav";
 import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
@@ -10,6 +10,8 @@ import CopyTableButton from "./CopyTableButton";
 import TotalRow from "./TotalRow";
 import { dropDraft, useDrafts } from "../unsaved";
 import ProblemsBanner from "./ProblemsBanner";
+import ViewTabs from "./ViewTabs";
+import Explain from "./Explain";
 
 /** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
 const PERIODS: [string, string][] = [
@@ -54,10 +56,10 @@ function money(value: number): string {
  * 하나 더할 때 두 곳이 어긋난다. 팀원별·속성별 두 표가 이 부품을 나눠 쓰므로,
  * 한 화면에서 같은 것을 다르게 세는 일이 생기지 않는다 (TODO 75).
  */
-function StatusHead({ meta }: { meta: Meta }) {
+function StatusHead({ statuses }: { statuses: StatusInfo[] }) {
   return (
     <>
-      {meta.statuses.map((status) => (
+      {statuses.map((status) => (
         <th key={status.key}>{status.label}</th>
       ))}
     </>
@@ -65,18 +67,19 @@ function StatusHead({ meta }: { meta: Meta }) {
 }
 
 function StatusCells({
-  meta,
+  statuses,
   counts,
   link,
 }: {
-  meta: Meta;
+  /** 이 표에 세운 상태 열 — 모든 줄이 빈 상태는 빠져 있다 (TODO 232 ③) */
+  statuses: StatusInfo[];
   counts: Record<string, number>;
   /** 그 칸이 가리킬 목록 주소. 0 인 칸은 갈 곳이 없으므로 링크를 걸지 않는다. */
   link: (statusKey: string) => string;
 }) {
   return (
     <>
-      {meta.statuses.map((status) => {
+      {statuses.map((status) => {
         const count = counts?.[status.key] ?? 0;
         return (
           // 0 은 흐린 `-` (TODO 158). 칸은 지우지 않는다 — 어디가 비었는지가 이 표의 요점이다 (TODO 75).
@@ -90,11 +93,45 @@ function StatusCells({
 }
 
 /** 상태 여섯 칸의 합계 (TODO 157). 줄마다 더한 값을 `meta.statuses` 순서로. */
-function statusTotals(meta: Meta, rows: { by_status: Record<string, number> }[]): string[] {
-  return meta.statuses.map((status) => {
+function statusTotals(statuses: StatusInfo[], rows: { by_status: Record<string, number> }[]): string[] {
+  return statuses.map((status) => {
     const total = sumBy(rows, (row) => row.by_status?.[status.key] ?? 0);
     return total ? String(total) : DASH;
   });
+}
+
+/**
+ * 빈 열 숨기기 (TODO 232 ③). **모든 줄이 빈** 상태 열만 화면에서 뺀다 — 한 줄이라도 있으면 남는다.
+ * 줄 안의 빈 칸은 그대로 `-` 다(TODO 75 · 158 — 어디가 비었는지가 표의 요점). 통째로 빈 열은 그 팀이 안 쓰는
+ * 상태라 칸만 늘린다(가상 데이터에서 홈 표 칸의 43% 가 `-`). 뺀 열은 표 아래 한 줄로 밝히고, [표 복사]는 전체 열 그대로다.
+ */
+function usedStatuses(meta: Meta, rows: { by_status: Record<string, number> }[]): StatusInfo[] {
+  return meta.statuses.filter((status) => rows.some((row) => (row.by_status?.[status.key] ?? 0) > 0));
+}
+
+function HiddenColumns({ names }: { names: string[] }) {
+  if (names.length === 0) return null;
+  return (
+    <p className="hint hidden-cols">
+      숨긴 열: {names.join(" · ")} — 이 표에서 모두 비어 있습니다. [표 복사]에는 들어갑니다.
+    </p>
+  );
+}
+
+/** 제목과 [표 복사] — 단추를 제목 **밖**에 둔다(화면 낭독기가 제목을 "속성별 표 복사" 로 읽었다, TODO 232 H) */
+function CardTitle({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
+  return (
+    <div className="card-title-row">
+      <h2>{children}</h2>
+      {actions}
+    </div>
+  );
+}
+
+/** 1년을 넘긴 경과일은 "D+1368" 보다 "3년 넘음" 이 읽힌다 (TODO 232 H). 정확한 날수는 마우스를 올리면 */
+function sinceText(days: number | null): string {
+  if (days === null) return "D+?";
+  return days >= 365 ? `${Math.floor(days / 365)}년 넘음` : `D+${days}`;
 }
 
 /** 그룹 표는 자유 입력이라 길어질 수 있다. 이만큼만 세우고 나머지는 접는다. */
@@ -114,6 +151,7 @@ function SliceTable({
   param,
   yearParam,
   note,
+  more,
 }: {
   meta: Meta;
   title: string;
@@ -123,10 +161,21 @@ function SliceTable({
   /** 목록을 거를 때 쓸 질의 이름 */
   param: "type" | "group" | "nature" | "category";
   yearParam: string;
+  /** 표 아래 설명의 첫 문장 — 늘 보인다 */
   note: ReactNode;
+  /** 나머지 설명 — [설명 ▾] 로 접힌다 (TODO 232 ④) */
+  more?: ReactNode;
 }) {
   const [all, setAll] = useState(false);
   if (rows.length === 0) return null;
+  const statuses = usedStatuses(meta, rows);
+  const showExpected = rows.some((item) => item.effect_expected);
+  const showVerified = rows.some((item) => item.effect_verified);
+  const hidden = [
+    ...meta.statuses.filter((status) => !statuses.includes(status)).map((status) => status.label),
+    ...(showExpected ? [] : ["기대효과"]),
+    ...(showVerified ? [] : ["실증효과"]),
+  ];
   const shown = all ? rows : rows.slice(0, SLICE_LIMIT);
   // 서버가 거르기 조건을 함께 주면 그것을 쓴다 (성격별·분류별의 *미지정* 줄은 조건이 둘이다 — TODO 136).
   // 세는 곳과 거르는 곳이 같아야 한다 (DESIGN 5.8).
@@ -137,8 +186,8 @@ function SliceTable({
     // 속성별과 그룹별을 이름으로 가려낼 수 있어야 한다 — 시험이 둘을 헷갈리면
     // 어느 표를 보고 있는지 모른 채 통과할 수 있다.
     <div className={`card home-types home-slice-${param}`}>
-      <h2>
-        {title}
+      <CardTitle
+        actions={
         <CopyTableButton
           headers={[column, "과제", ...meta.statuses.map((status) => status.label), "기대효과(억원/년)", "실증효과(억원/년)"]}
           rows={() =>
@@ -151,20 +200,27 @@ function SliceTable({
             ])
           }
         />
-      </h2>
+        }
+      >
+        {title}
+      </CardTitle>
       <div className="table-scroll">
         <table className="grid home-member-table">
           <thead>
             <tr>
               <th>{column}</th>
               <th>과제</th>
-              <StatusHead meta={meta} />
-              <th>
-                기대효과<span className="th-unit">억원/년</span>
-              </th>
-              <th>
-                실증효과<span className="th-unit">억원/년</span>
-              </th>
+              <StatusHead statuses={statuses} />
+              {showExpected && (
+                <th>
+                  기대효과<span className="th-unit">억원/년</span>
+                </th>
+              )}
+              {showVerified && (
+                <th>
+                  실증효과<span className="th-unit">억원/년</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -175,12 +231,12 @@ function SliceTable({
                 </td>
                 <td>{item.count || DASH}</td>
                 <StatusCells
-                  meta={meta}
+                  statuses={statuses}
                   counts={item.by_status}
                   link={(status) => link(item, status)}
                 />
-                <td>{cellEffect(item.effect_expected)}</td>
-                <td>{cellEffect(item.effect_verified)}</td>
+                {showExpected && <td>{cellEffect(item.effect_expected)}</td>}
+                {showVerified && <td>{cellEffect(item.effect_verified)}</td>}
               </tr>
             ))}
           </tbody>
@@ -189,9 +245,9 @@ function SliceTable({
             label="합계"
             cells={[
               String(sumBy(rows, (item) => item.count) || DASH),
-              ...statusTotals(meta, rows),
-              cellEffect(sumBy(rows, (item) => item.effect_expected)),
-              cellEffect(sumBy(rows, (item) => item.effect_verified)),
+              ...statusTotals(statuses, rows),
+              ...(showExpected ? [cellEffect(sumBy(rows, (item) => item.effect_expected))] : []),
+              ...(showVerified ? [cellEffect(sumBy(rows, (item) => item.effect_verified))] : []),
             ]}
           />
         </table>
@@ -201,7 +257,10 @@ function SliceTable({
           {all ? "접기" : `나머지 ${rows.length - SLICE_LIMIT}개 더 보기`}
         </button>
       )}
-      <p className="hint">{note}</p>
+      <HiddenColumns names={hidden} />
+      <Explain id={`home-slice-${param}`} lead={note}>
+        {more}
+      </Explain>
     </div>
   );
 }
@@ -236,16 +295,23 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const [year, setYear] = useState(() => new URLSearchParams(query).get("year") || thisYear);
   // 반기·분기 (TODO 110). 연도 전체를 볼 때는 뜻이 없으므로 그때는 보내지 않는다.
   const [period, setPeriod] = useState(() => new URLSearchParams(query).get("period") ?? "");
+  // 화면 안 탭 (TODO 232 ①) — "" = [할 일] · "status" = [팀 현황]. 주소에 남아 "← 홈" 이 보던 탭으로 돌아온다
+  const [tab, setTab] = useState(() => (new URLSearchParams(query).get("tab") === "status" ? "status" : ""));
   useAddressBar(
     "",
     Object.fromEntries(
-      Object.entries({ year: year === thisYear ? "" : year, period: year === ALL_YEARS ? "" : period }).filter(([, value]) => value),
+      Object.entries({ tab, year: year === thisYear ? "" : year, period: year === ALL_YEARS ? "" : period }).filter(([, value]) => value),
     ) as Record<string, string>,
     (params) => {
+      setTab(params.get("tab") === "status" ? "status" : "");
       setYear(params.get("year") || thisYear);
       setPeriod(params.get("period") ?? "");
     },
   );
+  // 탭을 바꾸면 주소는 그린 **뒤에** 고쳐진다(useAddressBar) — 그 탭에서 그린 링크의 "← 홈" 이 옛 주소(탭 없음)를 물고 있었다.
+  // 주소가 바뀐 뒤 한 번 더 그려 링크가 새 주소를 물게 한다 (TODO 232)
+  const [, redraw] = useState(0);
+  useEffect(() => redraw((n) => n + 1), [tab]);
   const [allMembers, setAllMembers] = useState(false);
   const [data, setData] = useState<HomeData | null>(null);
   // 연도별 추이가 넘치면 올해가 보이게 (TODO 228)
@@ -356,6 +422,667 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
 
   const memberSum = data.members.reduce((sum, item) => sum + item.total, 0);
   const maxCompare = Math.max(1, ...data.compare.map((item) => item.total));
+  // 팀원별 표의 빈 열 (TODO 232 ③) — 모든 사람이 빈 열만 뺀다
+  const memberStatuses = usedStatuses(meta, data.members);
+  const memberCols = {
+    expected: data.members.some((member) => member.effect_expected),
+    verified: data.members.some((member) => member.effect_verified),
+    reports: data.members.some((member) => member.reports),
+    activities: data.members.some((member) => member.activities),
+    last: data.members.some((member) => member.last_reported_at),
+  };
+  const memberHidden = [
+    ...meta.statuses.filter((status) => !memberStatuses.includes(status)).map((status) => status.label),
+    ...(memberCols.expected ? [] : ["기대효과"]),
+    ...(memberCols.verified ? [] : ["실증효과"]),
+    ...(memberCols.reports ? [] : ["보고 횟수"]),
+    ...(memberCols.activities ? [] : ["역량 이력"]),
+    ...(memberCols.last ? [] : ["마지막 보고"]),
+  ];
+  // 0 인 숫자 칸은 흐리게 — 자리는 그대로 둔다(위치로 기억하므로, TODO 232 B)
+  const statClass = (count: number, alert = "") => ["home-stat go", count ? alert : "zero-stat"].filter(Boolean).join(" ");
+
+  // ── [할 일] 탭 — 매일 여는 이유 (TODO 232 ①) ─────────────────────────────
+  const todo = (
+    <div className="card home-week">
+      <h2>
+        이번 주 할 일
+        <span className="hint"> · 보고 예정일 {week.report_date}</span>
+      </h2>
+      <div className="home-week-row">
+        {/* 접수 풀 (TODO 136) — 과제 수와 섞지 않고 따로 선다. 풀이 비어 있으면 세우지 않는다. */}
+        {data.intakes.pool > 0 && (
+          <a className="home-stat go intake-stat" href={screenLink("intakes")}>
+            <span className="home-stat-label">접수 풀</span>
+            <strong>{data.intakes.pool}건</strong>
+            {data.intakes.stale > 0 && (
+              <span className="home-stat-note warn-text">묵힘 {data.intakes.stale}건</span>
+            )}
+          </a>
+        )}
+        <a className={statClass(week.candidates)} href={screenLink("reports")}>
+          <span className="home-stat-label">보고 대상</span>
+          <strong>{week.candidates}건</strong>
+        </a>
+        <a className={statClass(week.overdue, "danger")} href={listLink({ due: "overdue", year: yearParam })}>
+          <span className="home-stat-label">기한 초과</span>
+          <strong>{week.overdue}건</strong>
+        </a>
+        <a className={statClass(week.due_soon, "warn")} href={listLink({ due: "7", year: yearParam })}>
+          <span className="home-stat-label">마감 임박 (7일)</span>
+          <strong>{week.due_soon}건</strong>
+        </a>
+        {/* 쓰다 만 보고 (TODO 101). 배너는 보고하는 날에만 뜨므로, 지난주에 쓰다 만
+            것은 다음 보고일까지 아무 데도 보이지 않았다. 여기서 계속 들고 있는다. */}
+        <a
+          className={statClass(week.drafts, week.drafts_overdue ? "danger" : "")}
+          href={screenLink("reports")}
+          title="보고 대상 화면 맨 위의 [확정을 기다리는 초안] 으로 갑니다"
+        >
+          <span className="home-stat-label">작성 중인 보고</span>
+          <strong>{week.drafts}건</strong>
+        </a>
+      </div>
+
+      {/* 다가오는 팀원 일정 · 지난 예정 확인 (TODO 221) — 팀원 역량에 예정으로 적은 교육 · 행사. 30일 안 모두(232 ⑦ 그대로) */}
+      {(week.team_upcoming?.items.length ?? 0) > 0 && (
+        <>
+          <p className="hint">
+            <b>다가오는 팀원 일정</b> — 앞으로 {week.team_upcoming!.days}일 안에 예정한 교육 · 행사, 그리고 지금 진행 중인 것입니다.
+          </p>
+          <ul className="home-stale home-upcoming">
+            {week.team_upcoming!.items.map((item) => (
+              <li key={item.id}>
+                {/* 남은 날 띠지 (TODO 226) — 오늘이면 "오늘", 진행 중이면 "진행 중", 아니면 D-N. 일주일 안은 진하게 */}
+                <span className={leftChipClass(item)}>{leftChipText(item)}</span>
+                <span className="due">{briefPeriod(item)}</span>
+                {/* 진행 중인 것은 이미 시작해 '예정' 이 아니다 — 예정만으로 거르면 빈 목록이 된다 */}
+                <a href={screenLink("skills", { tab: "records", person: item.person, year: item.date.slice(0, 4), when: item.ongoing ? undefined : "planned" })}>
+                  {item.title}
+                </a>
+                <span className="muted">
+                  {item.person} · {activityKind(item.kind)}
+                  {item.place ? ` · ${item.place}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {week.team_upcoming!.later > 0 && (
+            <p className="hint">
+              <a href={screenLink("skills", { tab: "records", when: "planned", year: "all" })}>
+                그 뒤 예정 {week.team_upcoming!.later}건도 팀원역량에서 보기 →
+              </a>
+            </p>
+          )}
+        </>
+      )}
+      {(week.team_missed?.length ?? 0) > 0 && (
+        <>
+          <Explain
+            id="home-missed"
+            lead={<><b>지난 예정 확인</b> — 예정으로 적었던 일정이 지났습니다. <b>[다녀옴]</b> 이면 이 줄에서 내려가고 팀원역량에 이력으로 남습니다.</>}
+          >
+            안 갔으면 <b>[안 감 — 지우기]</b>(삭제 보관함으로). 얻은 것 · 시간은 팀원역량에서 채웁니다. (누르지 않아도 2주가 지나면 내려갑니다)
+          </Explain>
+          <ul className="home-stale home-missed">
+            {week.team_missed!.map((item) => (
+              <li key={item.id}>
+                <span className="due">{briefPeriod(item)}</span>
+                <a href={screenLink("skills", { tab: "records", person: item.person, year: item.date.slice(0, 4) })}>{item.title}</a>
+                <span className="muted">{item.person} · {activityKind(item.kind)}</span>
+                {/* 확인하고 내린다 (TODO 231) — 다녀옴은 확인한 날만 적고, 안 감은 지금의 삭제(보관함으로) */}
+                <span className="grow" />
+                <button data-write className="ghost small" onClick={async () => {
+                  if (await attempt(() => api.checkActivityPlan(item.id))) load();
+                }}>
+                  다녀옴
+                </button>
+                <button className="ghost small danger" onClick={async () => {
+                  if (!window.confirm(`${item.person} 님의 '${item.title}' — 가지 않은 일정이면 삭제 보관함으로 옮길까요?`)) return;
+                  if (await attempt(() => api.deleteActivity(item.id))) load();
+                }}>
+                  안 감 — 지우기
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/* 쓰다 만 글 (TODO 170) — 어느 과제에서 쓰다 말았는지 기억하지 않아도 되게, 누르면 그 편집기로 */}
+      {drafts.length > 0 && (
+        <>
+          <p className="hint">
+            <b>작성 중이던 글 {drafts.length}건</b> — 저장하지 않고 남은 글입니다. 누르면 그 편집기가 열리고 글이 되살아납니다.
+          </p>
+          <ul className="home-drafts home-unsaved">
+            {drafts.map((item) => (
+              <li key={item.key}>
+                {item.link && !item.missing ? (
+                  <a href={item.link}>{item.where || item.label}</a>
+                ) : (
+                  <span className="muted">{item.where || item.label} (찾을 수 없음)</span>
+                )}
+                <span className="due">{item.label}</span>
+                {item.updated_at && <span className="muted">{item.updated_at.slice(5, 16).replace("T", " ")}</span>}
+                <button
+                  className="ghost small"
+                  title="남은 글을 지웁니다 — 되돌릴 수 없습니다"
+                  onClick={() => {
+                    if (window.confirm(`"${item.where || item.label}" 의 ${item.label} — 작성 중이던 글을 버릴까요?`))
+                      dropDraft(item.key);
+                  }}
+                >
+                  버리기
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {week.drafts > 0 && (
+        <>
+          <p className="hint">
+            <b>아직 확정하지 않은 보고</b> — 확정해야 보고 이력에 남고, 그 진행일지가
+            미보고에서 빠집니다.
+            {week.drafts_overdue > 0 && (
+              <>
+                {" "}그중 <b className="warn-text">{week.drafts_overdue}건</b>은 보고일이
+                이미 지났습니다.
+              </>
+            )}
+          </p>
+          <ul className="home-drafts">
+            {week.draft_items.map((item) => (
+              <li key={item.id}>
+                {/* 이름을 적어 놓고 목록으로 보내면 그 한 건을 다시 찾아야 한다 (TODO 91) */}
+                <a href={projectLink(item.project_id, { report: item.id })}>
+                  {item.project_title}
+                </a>
+                <span className={item.overdue_days > 0 ? "due due-danger" : "due"}>
+                  {item.report_date}
+                  {item.overdue_days > 0 && ` · D+${item.overdue_days}`}
+                </span>
+                {item.audience && <span className="muted">{item.audience}</span>}
+              </li>
+            ))}
+          </ul>
+          {week.drafts > week.draft_items.length && (
+            <p className="hint">
+              <a href={screenLink("reports")}>
+                나머지 {week.drafts - week.draft_items.length}건도 보고 대상 화면에서 보기 →
+              </a>
+            </p>
+          )}
+        </>
+      )}
+      {week.stale.length > 0 && (
+        <>
+          <p className="hint">
+            <b>오래 보고되지 않은 과제</b> — 이번 주에 할 일이라기보다, 이미 새어 나간 것입니다.
+          </p>
+          <ul className="home-stale">
+            {week.stale.map((item) => (
+              <li key={item.id}>
+                <a href={projectLink(item.id)}>{item.title}</a>
+                <span className="due due-danger" title={`D+${item.days_since_report}`}>
+                  {sinceText(item.days_since_report)}
+                </span>
+                <span className="muted">
+                  {item.never_reported ? "보고 이력 없음" : `마지막 보고 ${item.last_reported_at}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {/* 세 건만 세우고 잘렸다고 말하지 않으면 세 건만 있는 줄 안다 (TODO 103-B) */}
+          {week.stale_total > week.stale.length && (
+            <p className="hint">
+              <a href={screenLink("reports")}>
+                나머지 {week.stale_total - week.stale.length}건도 보고 대상 화면에서 보기 →
+              </a>
+            </p>
+          )}
+        </>
+      )}
+      {/* 떠난 담당자가 그대로 남아 있는 끝나지 않은 과제 (TODO 122).
+          "지금 사람이 없는 일" 이라 보고보다 먼저 정해야 한다. */}
+      {week.owner_gaps_total > 0 && (
+        <>
+          <p className="hint">
+            <b>대체 담당자 지정 필요</b> —{" "}
+            <a href={listLink({ owner_left: "1" })}>
+              {week.owner_gaps_total}건 보기 →
+            </a>
+          </p>
+          <ul className="home-owner-gaps" data-testid="owner-gaps">
+            {week.owner_gaps.map((item) => (
+              <li key={`${item.id}-${item.owner}`}>
+                <a href={projectLink(item.id)}>{item.title}</a>
+                <span className="tag left-tag">
+                  {item.owner} {item.left_reason || "떠남"}
+                </span>
+                <span className="muted">{item.left_on}</span>
+              </li>
+            ))}
+          </ul>
+          {week.owner_gaps_total > week.owner_gaps.length && (
+            <p className="hint">
+              <a href={listLink({ owner_left: "1" })}>
+                나머지 {week.owner_gaps_total - week.owner_gaps.length}건도 목록에서 보기 →
+              </a>
+            </p>
+          )}
+        </>
+      )}
+      {/* 과제별 다음 할 일 — 최근 진행일지의 계획 칸 (TODO 112). 이미 적어 둔 것을 올릴 뿐이다. */}
+      {week.plans.length > 0 && (
+        <>
+          <p className="hint">
+            <b>다음 할 일</b> — 진행일지의 <code>## 계획</code>에 적어 둔 것입니다.
+          </p>
+          <ul className="home-plans" data-testid="home-plans">
+            {week.plans.map((item) => (
+              <li key={item.entry_id}>
+                <a href={projectLink(item.project_id, { entry: item.entry_id })}>{item.project_title}</a>
+                <span className="plan-text">{item.text}</span>
+                <span className="muted">{item.date}</span>
+              </li>
+            ))}
+          </ul>
+          {week.plans_total > week.plans.length && (
+            <p className="hint">나머지 {week.plans_total - week.plans.length}건은 각 과제 위쪽에 있습니다.</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  // ── [팀 현황] 탭 — 보고 때 보는 표들 (TODO 232 ①) ────────────────────────
+  const status = (
+    <>
+      {/* 팀 현황 · 연도별 추이를 나란히 (TODO 123) — 좁은 화면에서는 한 줄씩 선다 */}
+      <div className="home-top home-status-top">
+        <div className="card home-team">
+          <h2>{year === ALL_YEARS ? "전체" : `${year}년`} 팀 현황</h2>
+          <div className="home-stats">
+            {/* 과제 = 그 해에 수행한 과제(수행기간이 그 해와 겹침) — 다년도 과제는 해마다 하나씩 (TODO 181) */}
+            <a
+              className="home-stat"
+              href={listLink({ year: yearParam })}
+              title={yearParam ? "그 해에 수행한 과제 — 여러 해에 걸친 과제는 해마다 셉니다" : undefined}
+            >
+              <span className="home-stat-label">과제</span>
+              <strong>{team.total}건</strong>
+            </a>
+            {yearParam && (
+              <a className="home-stat" href={listLink({ year: yearParam, new: "1" })} title="그 해에 새로 착수한 과제(과제 번호의 연도)">
+                <span className="home-stat-label">신규 착수</span>
+                <strong>{team.new ?? 0}건</strong>
+              </a>
+            )}
+            <a className="home-stat" href={listLink({ status: "in_progress", year: yearParam })}>
+              <span className="home-stat-label">진행중</span>
+              <strong>{team.in_progress}건</strong>
+            </a>
+            {/* 완료 = **그 해에 끝낸 과제** 하나 (TODO 181). 반기 · 분기를 고르면 그 기간에 끝낸 것만(완료일). */}
+            {data.period ? (
+              <a className="home-stat" href={listLink({ done_year: yearParam, year: "all" })} title="이 기간에 완료일이 든 과제">
+                <span className="home-stat-label">완료</span>
+                <strong>{team.done_in_year ?? 0}건</strong>
+              </a>
+            ) : (
+              <a
+                className="home-stat"
+                href={listLink({ status: "done", year: yearParam })}
+                title={yearParam ? "그 해에 끝낸 과제 — 시작한 해와 무관하게" : undefined}
+              >
+                <span className="home-stat-label">완료</span>
+                <strong>{team.done}건</strong>
+              </a>
+            )}
+            <a
+              className="home-stat"
+              href={
+                yearParam
+                  ? screenLink("history", { from: `${yearParam}-01-01`, to: `${yearParam}-12-31` })
+                  : screenLink("history")
+              }
+            >
+              <span className="home-stat-label">보고 횟수</span>
+              <strong>{team.reports}회</strong>
+            </a>
+            {/* 화살표만 놓으면 "42.9 중 10.5 달성 = 24%" 로 읽힌다. 실증은 끝난 과제에서만
+                나오므로 그 비율은 성립하지 않는다. **몇 건에서 나온 값인지**를 함께 적어
+                분모를 드러낸다 (TODO 86). */}
+            <div className="home-stat effect">
+              <span className="home-stat-label" title={yearParam ? "기대 · 실증 모두 과제가 끝나는 해(완료년도, 아니면 마감년도)에 셉니다" : undefined}>
+                효과 금액 (억원/년){yearParam ? " · 끝나는 해 기준" : ""}
+              </span>
+              <strong>
+                기대 {money(team.effect_expected)}
+                <span className="home-arrow"> → </span>
+                실증 {money(team.effect_verified)}
+              </strong>
+              {/* 분모도 **눌린다** (TODO 124). 홈의 다른 모든 수가 그렇듯, 여기만 글자였다. */}
+              <span className="home-stat-note">
+                <a href={listLink({ effect: "expected", year: yearParam })}>
+                  기대 {team.effect_expected_projects ?? 0}건
+                </a>{" "}
+                ·{" "}
+                <a href={listLink({ effect: "verified", year: yearParam })}>
+                  실증 {team.effect_verified_projects ?? 0}건
+                </a>
+                에 입력됨{" "}
+                {/* 실증 합계에 진행중 과제의 중간 결산이 섞여 있으면 얼마인지 밝힌다 (TODO 217) */}
+                {(team.effect_verified_interim_projects ?? 0) > 0 && (
+                  <span className="interim-note" title="분기 · 반기 결산으로 진행중 과제에 적은 실증효과 — 과제가 끝나면 최종 값으로 바뀝니다">
+                    (실증 중 진행중 과제의 중간 결산 {money(team.effect_verified_interim ?? 0)} · {team.effect_verified_interim_projects}건){" "}
+                  </span>
+                )}
+                {/* 비대상이 있으면 분모를 "전체" 라고 적을 수 없다 (TODO 125) */}
+                {(team.effect_managed ?? team.total) < team.total ? (
+                  <>
+                    (관리 대상 {team.effect_managed}건 ·{" "}
+                    <a href={listLink({ no_effect: "none", year: yearParam })}>
+                      비대상 {team.total - (team.effect_managed ?? 0)}건
+                    </a>
+                    {" "}제외)
+                  </>
+                ) : (
+                  <>(전체 {team.total}건)</>
+                )}
+              </span>
+              {/* 기대효과를 비용구분으로 나눠 본다 (TODO 136) — 적힌 과제만 센다 */}
+              {data.effect_by_cost.length > 0 && (
+                <span className="home-stat-note cost-split">
+                  {data.effect_by_cost.map((item, index) => (
+                    <span key={item.key}>
+                      {index > 0 && " · "}
+                      <a href={listLink({ cost_kind: item.key, year: yearParam })}>
+                        {item.key} {money(item.effect_expected)}
+                      </a>
+                    </span>
+                  ))}
+                </span>
+              )}
+              {/* 완료했는데 실증효과가 빈 과제 (TODO 106-C). 연말에 빈칸을 만나기 전에 여기서 본다. */}
+              {(team.done_unverified ?? 0) > 0 && (
+                <a
+                  className="home-stat-note warn-text"
+                  href={listLink({ verified: "none", year: yearParam || "all" })}
+                >
+                  완료했는데 실증효과 미입력 {team.done_unverified}건 →
+                </a>
+              )}
+            </div>
+          </div>
+          {/* 잘못 읽으면 숫자가 틀리게 보고되는 한 문장은 늘 보이게, 세는 규칙은 접는다 (TODO 232 ④) */}
+          <Explain id="home-team" lead={<b>실증효과는 끝난 과제에서만 나오므로 기대 대비 달성률이 아닙니다.</b>}>
+            과제 수는 <b>그 해에 수행한 과제</b>(여러 해에 걸친 과제는 해마다), 완료는 <b>그 해에 끝낸 과제</b>, 신규는{" "}
+            <b>그 해에 착수한 과제</b>, 효과 금액은 <b>끝나는 해</b>(기대 · 실증을 같은 해에), 보고 횟수는 <b>보고한 날의 연도</b>로 셉니다.
+            {" "}보고 횟수는 <b>확정된 보고</b>만 셉니다 — 초안은 아직 보고한 것이 아닙니다.
+          </Explain>
+        </div>
+        {/* ── 연도 비교 — 한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다 ── */}
+        {data.compare.length > 1 && (
+          <div className="card home-compare">
+            <CardTitle
+              actions={
+                <CopyTableButton
+                  headers={["연도", "과제", "완료", "보고 횟수", "기대효과(억원/년)", "실증효과(억원/년)"]}
+                  rows={() =>
+                    data.compare.map((item) => [
+                      item.year,
+                      item.total,
+                      item.done,
+                      item.reports,
+                      item.effect_expected,
+                      item.effect_verified,
+                    ])
+                  }
+                />
+              }
+            >
+              연도별 추이
+            </CardTitle>
+            {/* 과제가 있는 모든 해 (TODO 228) — 지난해 회색 · 올해 파랑 · 내년 이후 초록. 넘치면 가로로 넘기고, 올해가 보이게 둔다 */}
+            <div className="bar-row trend" ref={trendRef}>
+              {data.compare.map((item) => (
+                <a
+                  key={item.year}
+                  className={["bar-col", `when-${item.when ?? "past"}`, item.year === year ? "on" : ""].filter(Boolean).join(" ")}
+                  href={listLink({ year: item.year })}
+                  title={`${item.year}년 과제 ${item.total}건 · 완료 ${item.done}건 · 보고 ${item.reports}회`}
+                >
+                  <span className="bar-value">{item.total}</span>
+                  <span className="bar" style={{ height: `${(item.total / maxCompare) * 100}%` }}>
+                    <span
+                      className="bar-done"
+                      style={{ height: `${item.total ? (item.done / item.total) * 100 : 0}%` }}
+                    />
+                  </span>
+                  <span className="bar-label">{item.year}</span>
+                </a>
+              ))}
+            </div>
+            <Explain
+              id="home-trend"
+              lead={
+                <>
+                  막대는 과제 수, 진한 부분이 <b>완료</b>입니다. <span className="trend-key past">지난해</span> <span className="trend-key current">올해</span>{" "}
+                  <span className="trend-key future">내년 이후</span>
+                </>
+              }
+            >
+              — 내년 이후는 <b>그 해에 수행기간이 걸친 과제</b>(이어지는 다년도 과제 · 그 해에 시작할 과제)입니다.
+              누르면 그 해 과제 목록으로 갑니다.
+            </Explain>
+          </div>
+        )}
+      </div>
+
+      {/* ── 팀원별 성과 (ROADMAP R1 의 실체) ───────────────────────── */}
+      <div className="card home-members wide">
+        <CardTitle
+          actions={
+            data.members.length > 0 && (
+              <CopyTableButton
+                headers={["담당자", "담당 과제", ...meta.statuses.map((item) => item.label), "기대효과(억원/년)", "실증효과(억원/년)", "보고 횟수", "역량 이력", "마지막 보고"]}
+                rows={() =>
+                  data.members.map((member) => [
+                    member.name,
+                    member.total,
+                    ...statusCells(meta, member.by_status),
+                    member.effect_expected,
+                    member.effect_verified,
+                    member.reports,
+                    member.activities,
+                    member.last_reported_at ?? "",
+                  ])
+                }
+              />
+            )
+          }
+        >
+          팀원별 성과
+        </CardTitle>
+        {data.members.length === 0 ? (
+          <p className="hint">담당자가 지정된 과제가 없습니다.</p>
+        ) : (
+          <>
+            <div className="table-scroll">
+              <table className="grid home-member-table">
+                <thead>
+                  <tr>
+                    <th>담당자</th>
+                    <th>담당 과제</th>
+                    <StatusHead statuses={memberStatuses} />
+                    {memberCols.expected && (
+                      <th>
+                        기대효과
+                        <span className="th-unit">억원/년</span>
+                      </th>
+                    )}
+                    {memberCols.verified && (
+                      <th>
+                        실증효과
+                        <span className="th-unit">억원/년</span>
+                      </th>
+                    )}
+                    {memberCols.reports && <th>보고 횟수</th>}
+                    {/* 과제가 아니라 사람에게 쌓인 것. 면담 준비를 한 화면에서 끝내기 위해 여기 세운다 (TODO 89). */}
+                    {memberCols.activities && <th>역량 이력</th>}
+                    {memberCols.last && <th>마지막 보고</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(allMembers ? data.members : data.members.slice(0, MEMBER_LIMIT)).map((member) => (
+                    <tr key={member.name}>
+                      <td>
+                        <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
+                      </td>
+                      <td>{member.total || DASH}</td>
+                      <StatusCells
+                        statuses={memberStatuses}
+                        counts={member.by_status}
+                        link={(statusKey) => listLink({ owner: member.name, status: statusKey, year: yearParam })}
+                      />
+                      {memberCols.expected && <td>{cellEffect(member.effect_expected)}</td>}
+                      {memberCols.verified && <td>{cellEffect(member.effect_verified)}</td>}
+                      {memberCols.reports && <td>{member.reports || DASH}</td>}
+                      {memberCols.activities && (
+                        <td className={member.activities ? undefined : "zero"}>
+                          {member.activities ? (
+                            <a href={screenLink("skills", { person: member.name, year: yearParam, tab: "records" })}>
+                              {member.activities}
+                            </a>
+                          ) : (
+                            DASH
+                          )}
+                        </td>
+                      )}
+                      {memberCols.last && <td className="muted">{member.last_reported_at ?? DASH}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+                {/* 사람별로 더하므로 **담당 중복이 들어 있다** — 이름표에 밝힌다. 팀 합계는 위의 팀 현황이다 (TODO 157) */}
+                <TotalRow
+                  label={
+                    <span title="한 과제에 담당자가 여럿이면 양쪽에 잡힙니다. 팀 합계는 위의 팀 현황을 쓰십시오.">
+                      합계 <span className="total-note">중복 포함</span>
+                    </span>
+                  }
+                  cells={[
+                    String(memberSum || DASH),
+                    ...statusTotals(memberStatuses, data.members),
+                    ...(memberCols.expected ? [cellEffect(sumBy(data.members, (member) => member.effect_expected))] : []),
+                    ...(memberCols.verified ? [cellEffect(sumBy(data.members, (member) => member.effect_verified))] : []),
+                    ...(memberCols.reports ? [String(sumBy(data.members, (member) => member.reports) || DASH)] : []),
+                    ...(memberCols.activities ? [String(sumBy(data.members, (member) => member.activities) || DASH)] : []),
+                    ...(memberCols.last ? [null] : []),
+                  ]}
+                />
+              </table>
+            </div>
+            {data.members.length > MEMBER_LIMIT && (
+              <button type="button" className="ghost small" onClick={() => setAllMembers((on) => !on)}>
+                {allMembers ? "접기" : `나머지 ${data.members.length - MEMBER_LIMIT}명 더 보기`}
+              </button>
+            )}
+            <HiddenColumns names={memberHidden} />
+            {/* 이 문구는 수가 어긋날 때만 띄우면 안 된다. 담당자 없는 과제가 중복분을
+                상쇄해 **우연히 합이 맞는 순간**이 가장 위험하기 때문이다 — 그래서 늘 밝힌다(첫 문장은 접히지 않는다). */}
+            <Explain
+              id="home-members"
+              lead={
+                <>
+                  <b>담당 중복 포함</b> — 한 과제에 담당자가 여럿이면 양쪽에 잡힙니다.
+                  {memberSum !== team.total && (
+                    <>
+                      {" "}그래서 이 표의 합({memberSum}건)은 팀 과제 수({team.total}건)와 다릅니다.
+                    </>
+                  )}
+                </>
+              }
+            >
+              <b>효과 금액도 마찬가지로 중복 합산</b>되므로, 팀 합계는 위의 &ldquo;팀 현황&rdquo;에 있는
+              과제 기준 숫자를 쓰십시오. <b>역량 이력</b>은 과제와 무관한 그 해 교육·세미나
+              참여 건수입니다 — 눌러서 그 사람의 이력을 봅니다.
+            </Explain>
+          </>
+        )}
+      </div>
+
+      {/* ── 속성별 · 그룹별 ─────────────────────────────────────────
+          속성은 과제의 *성격*(R&D·투자…), 그룹은 실제로 *지시사항 · 지시자 · 회의체*를 적는 칸이다(TODO 230).
+          표 모양은 하나로 맞춘다 — 같은 화면에서 같은 것을 다르게 세지 않기 위해서다. 줄이 짧아 나란히 놓는다 (TODO 123) */}
+      <div className="home-slices">
+        <SliceTable
+          meta={meta}
+          title="속성별"
+          column="속성"
+          rows={data.types}
+          param="type"
+          yearParam={yearParam}
+          note={<>과제마다 속성은 하나뿐이라 이 표의 합은 <b>팀 과제 수와 정확히 맞습니다.</b></>}
+          more={<>(담당 중복이 있는 위쪽 팀원별 표와 다른 점입니다)</>}
+        />
+        <SliceTable
+          meta={meta}
+          title="그룹별"
+          column="그룹"
+          rows={data.groups}
+          param="group"
+          yearParam={yearParam}
+          note={
+            <>
+              {/* 그룹은 실제로 지시사항 · 지시자를 적는 칸이다 (TODO 230) — 과제 폼의 예시와 같은 말 */}
+              <span className="slice-example">예: 대표이사 지시 · 본부장 지시 · 주간 회의체</span>
+              과제마다 그룹은 하나뿐이므로 이 표의 합도 <b>팀 과제 수와 맞습니다.</b>
+            </>
+          }
+          more={<>그룹은 <b>자유 입력</b>이라 표기가 흔들리면 줄이 갈라집니다(같은 지시자를 다르게 적으면 두 줄).</>}
+        />
+      </div>
+
+      {/* ── 성격별 · 분류별 (TODO 136) — 스마트과제 안의 두 축. 따로 묶어 밝힌다 (TODO 229) ── */}
+      {(data.natures.length > 0 || data.categories.length > 0) && (
+        <div className="home-smart">
+          <h2>
+            스마트과제 · 성격 · 분류
+            <span className="hint"> · 스마트과제 {smartCount}건 기준</span>
+          </h2>
+          <p className="hint">
+            성격과 분류는 <b>스마트과제만</b> 가지는 칸이라, 이 두 표의 합은 위의 <b>팀 과제 수와 다릅니다.</b>
+            {outsideNote}
+          </p>
+          <div className="home-slices">
+            <SliceTable
+              meta={meta}
+              title="성격별"
+              column="성격"
+              rows={data.natures}
+              param="nature"
+              yearParam={yearParam}
+              note={<>미지정은 스마트과제인데 비어 있는 것입니다.</>}
+              more={<>연구과제/PoC → 현장적용 → 확대전개로 이어지는 흐름을 봅니다.</>}
+            />
+            <SliceTable
+              meta={meta}
+              title="분류별"
+              column="분류"
+              rows={data.categories}
+              param="category"
+              yearParam={yearParam}
+              note={<>기술 영역별로 어디에 과제가 몰려 있는지 봅니다. 목록은 설정에서 고칩니다.</>}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <section className={reloading ? "home busy" : "home"} aria-busy={reloading || undefined}>
       {/* 읽지 못한 파일 · 값 — 백업 경고처럼 문제가 있을 때만 선다 (TODO 164) */}
@@ -390,7 +1117,8 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             <option value={ALL_YEARS}>전체</option>
           </select>
         </label>
-        {year !== ALL_YEARS && (
+        {/* 반기 · 분기는 [팀 현황] 의 숫자만 따른다 — [할 일] 에서는 뜻이 없어 세우지 않는다 */}
+        {year !== ALL_YEARS && tab === "status" && (
           <label className="home-period">
             기간
             <select value={period} onChange={(event) => setPeriod(event.target.value)} title="보고 횟수·완료·역량 이력처럼 날짜가 있는 숫자만 이 기간을 따릅니다. 과제 수는 연도 기준 그대로입니다.">
@@ -404,646 +1132,27 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         )}
         {reloading && <span className="hint home-reloading" role="status">불러오는 중…</span>}
       </div>
-      {data.period && (
+
+      {/* 화면 안 탭 (TODO 232 ①) — 매일 보는 것과 보고 때 보는 것을 가른다 */}
+      <ViewTabs
+        label="홈 보기"
+        className="home-tabs"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "", label: "할 일", title: "이번 주 할 일 · 다가오는 팀원 일정 · 오래 보고되지 않은 과제" },
+          { key: "status", label: "팀 현황", title: "팀 현황 · 연도별 추이 · 팀원별 · 속성별 · 그룹별 · 스마트과제 표" },
+        ]}
+      />
+      {tab === "status" && data.period && (
         <p className="hint home-period-note">
           <b>{PERIODS.find(([key]) => key === data.period)?.[1]}</b> — 보고 횟수·완료·역량 이력처럼{" "}
           <b>날짜가 있는 숫자만</b> 이 기간을 따릅니다. 과제 수·상태별 수는 연도 기준 그대로입니다.
         </p>
       )}
-
-      {/* ── 이번 주 할 일 · 팀 현황 ───────────────────────────────────────
-          홈을 매일 여는 이유는 지표가 아니라 "이번 주 할 일" 이다. 그래서 맨 위에 둔다.
-          둘을 **나란히** 놓는다 — 세로로 쌓으면 오른쪽이 통째로 비고, 정작 중요한 것을
-          보려고 스크롤해야 한다 (TODO 78). 좁은 화면에서는 다시 한 줄씩 선다. */}
-      <div className="home-top">
-      <div className="card home-week">
-        <h2>
-          이번 주 할 일
-          <span className="hint"> · 보고 예정일 {week.report_date}</span>
-        </h2>
-        <div className="home-week-row">
-          {/* 접수 풀 (TODO 136) — 과제 수와 섞지 않고 따로 선다. 풀이 비어 있으면 세우지 않는다. */}
-          {data.intakes.pool > 0 && (
-            <a className="home-stat go intake-stat" href={screenLink("intakes")}>
-              <span className="home-stat-label">접수 풀</span>
-              <strong>{data.intakes.pool}건</strong>
-              {data.intakes.stale > 0 && (
-                <span className="home-stat-note warn-text">묵힘 {data.intakes.stale}건</span>
-              )}
-            </a>
-          )}
-          <a className="home-stat go" href={screenLink("reports")}>
-            <span className="home-stat-label">보고 대상</span>
-            <strong>{week.candidates}건</strong>
-          </a>
-          <a
-            className={week.overdue ? "home-stat go danger" : "home-stat go"}
-            href={listLink({ due: "overdue", year: yearParam })}
-          >
-            <span className="home-stat-label">기한 초과</span>
-            <strong>{week.overdue}건</strong>
-          </a>
-          <a
-            className={week.due_soon ? "home-stat go warn" : "home-stat go"}
-            href={listLink({ due: "7", year: yearParam })}
-          >
-            <span className="home-stat-label">마감 임박 (7일)</span>
-            <strong>{week.due_soon}건</strong>
-          </a>
-          {/* 쓰다 만 보고 (TODO 101). 배너는 보고하는 날에만 뜨므로, 지난주에 쓰다 만
-              것은 다음 보고일까지 아무 데도 보이지 않았다. 여기서 계속 들고 있는다. */}
-          <a
-            className={week.drafts_overdue ? "home-stat go danger" : "home-stat go"}
-            href={screenLink("reports")}
-            title="보고 대상 화면 맨 위의 [확정을 기다리는 초안] 으로 갑니다"
-          >
-            <span className="home-stat-label">작성 중인 보고</span>
-            <strong>{week.drafts}건</strong>
-          </a>
-        </div>
-
-        {/* 다가오는 팀원 일정 · 지난 예정 확인 (TODO 221) — 팀원 역량에 예정으로 적은 교육 · 행사 */}
-        {(week.team_upcoming?.items.length ?? 0) > 0 && (
-          <>
-            <p className="hint">
-              <b>다가오는 팀원 일정</b> — 앞으로 {week.team_upcoming!.days}일 안에 예정한 교육 · 행사, 그리고 지금 진행 중인 것입니다.
-            </p>
-            <ul className="home-stale home-upcoming">
-              {week.team_upcoming!.items.map((item) => (
-                <li key={item.id}>
-                  {/* 남은 날 띠지 (TODO 226) — 오늘이면 "오늘", 진행 중이면 "진행 중", 아니면 D-N. 일주일 안은 진하게 */}
-                  <span className={leftChipClass(item)}>{leftChipText(item)}</span>
-                  <span className="due">{briefPeriod(item)}</span>
-                  {/* 진행 중인 것은 이미 시작해 '예정' 이 아니다 — 예정만으로 거르면 빈 목록이 된다 */}
-                  <a href={screenLink("skills", { person: item.person, year: item.date.slice(0, 4), when: item.ongoing ? undefined : "planned" })}>
-                    {item.title}
-                  </a>
-                  <span className="muted">
-                    {item.person} · {activityKind(item.kind)}
-                    {item.place ? ` · ${item.place}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {week.team_upcoming!.later > 0 && (
-              <p className="hint">
-                <a href={screenLink("skills", { when: "planned", year: "all" })}>
-                  그 뒤 예정 {week.team_upcoming!.later}건도 팀원역량에서 보기 →
-                </a>
-              </p>
-            )}
-          </>
-        )}
-        {(week.team_missed?.length ?? 0) > 0 && (
-          <>
-            <p className="hint">
-              <b>지난 예정 확인</b> — 예정으로 적었던 일정이 지났습니다. <b>[다녀옴]</b> 을 누르면 이 줄에서 내려가고 팀원역량에 이력으로 남습니다.
-              안 갔으면 <b>[안 감 — 지우기]</b>(삭제 보관함으로). 얻은 것 · 시간은 팀원역량에서 채웁니다. (누르지 않아도 2주가 지나면 내려갑니다)
-            </p>
-            <ul className="home-stale home-missed">
-              {week.team_missed!.map((item) => (
-                <li key={item.id}>
-                  <span className="due">{briefPeriod(item)}</span>
-                  <a href={screenLink("skills", { person: item.person, year: item.date.slice(0, 4) })}>{item.title}</a>
-                  <span className="muted">{item.person} · {activityKind(item.kind)}</span>
-                  {/* 확인하고 내린다 (TODO 231) — 다녀옴은 확인한 날만 적고, 안 감은 지금의 삭제(보관함으로) */}
-                  <span className="grow" />
-                  <button data-write className="ghost small" onClick={async () => {
-                    if (await attempt(() => api.checkActivityPlan(item.id))) load();
-                  }}>
-                    다녀옴
-                  </button>
-                  <button className="ghost small danger" onClick={async () => {
-                    if (!window.confirm(`${item.person} 님의 '${item.title}' — 가지 않은 일정이면 삭제 보관함으로 옮길까요?`)) return;
-                    if (await attempt(() => api.deleteActivity(item.id))) load();
-                  }}>
-                    안 감 — 지우기
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-
-        {/* 쓰다 만 글 (TODO 170) — 어느 과제에서 쓰다 말았는지 기억하지 않아도 되게, 누르면 그 편집기로 */}
-        {drafts.length > 0 && (
-          <>
-            <p className="hint">
-              <b>작성 중이던 글 {drafts.length}건</b> — 저장하지 않고 남은 글입니다. 누르면 그 편집기가 열리고 글이 되살아납니다.
-            </p>
-            <ul className="home-drafts home-unsaved">
-              {drafts.map((item) => (
-                <li key={item.key}>
-                  {item.link && !item.missing ? (
-                    <a href={item.link}>{item.where || item.label}</a>
-                  ) : (
-                    <span className="muted">{item.where || item.label} (찾을 수 없음)</span>
-                  )}
-                  <span className="due">{item.label}</span>
-                  {item.updated_at && <span className="muted">{item.updated_at.slice(5, 16).replace("T", " ")}</span>}
-                  <button
-                    className="ghost small"
-                    title="남은 글을 지웁니다 — 되돌릴 수 없습니다"
-                    onClick={() => {
-                      if (window.confirm(`"${item.where || item.label}" 의 ${item.label} — 작성 중이던 글을 버릴까요?`))
-                        dropDraft(item.key);
-                    }}
-                  >
-                    버리기
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-
-        {week.drafts > 0 && (
-          <>
-            <p className="hint">
-              <b>아직 확정하지 않은 보고</b> — 확정해야 보고 이력에 남고, 그 진행일지가
-              미보고에서 빠집니다.
-              {week.drafts_overdue > 0 && (
-                <>
-                  {" "}그중 <b className="warn-text">{week.drafts_overdue}건</b>은 보고일이
-                  이미 지났습니다.
-                </>
-              )}
-            </p>
-            <ul className="home-drafts">
-              {week.draft_items.map((item) => (
-                <li key={item.id}>
-                  {/* 이름을 적어 놓고 목록으로 보내면 그 한 건을 다시 찾아야 한다 (TODO 91) */}
-                  <a href={projectLink(item.project_id, { report: item.id })}>
-                    {item.project_title}
-                  </a>
-                  <span className={item.overdue_days > 0 ? "due due-danger" : "due"}>
-                    {item.report_date}
-                    {item.overdue_days > 0 && ` · D+${item.overdue_days}`}
-                  </span>
-                  {item.audience && <span className="muted">{item.audience}</span>}
-                </li>
-              ))}
-            </ul>
-            {week.drafts > week.draft_items.length && (
-              <p className="hint">
-                <a href={screenLink("reports")}>
-                  나머지 {week.drafts - week.draft_items.length}건도 보고 대상 화면에서 보기 →
-                </a>
-              </p>
-            )}
-          </>
-        )}
-        {week.stale.length > 0 && (
-          <>
-            <p className="hint">
-              <b>오래 보고되지 않은 과제</b> — 이번 주에 할 일이라기보다, 이미 새어 나간 것입니다.
-            </p>
-            <ul className="home-stale">
-              {week.stale.map((item) => (
-                <li key={item.id}>
-                  <a href={projectLink(item.id)}>{item.title}</a>
-                  <span className="due due-danger">D+{item.days_since_report}</span>
-                  <span className="muted">
-                    {item.never_reported ? "보고 이력 없음" : `마지막 보고 ${item.last_reported_at}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {/* 세 건만 세우고 잘렸다고 말하지 않으면 세 건만 있는 줄 안다 (TODO 103-B) */}
-            {week.stale_total > week.stale.length && (
-              <p className="hint">
-                <a href={screenLink("reports")}>
-                  나머지 {week.stale_total - week.stale.length}건도 보고 대상 화면에서 보기 →
-                </a>
-              </p>
-            )}
-          </>
-        )}
-        {/* 과제별 다음 할 일 — 최근 진행일지의 계획 칸 (TODO 112). 이미 적어 둔 것을 올릴 뿐이다. */}
-        {/* 떠난 담당자가 그대로 남아 있는 끝나지 않은 과제 (TODO 122).
-            "지금 사람이 없는 일" 이라 보고보다 먼저 정해야 한다. */}
-        {week.owner_gaps_total > 0 && (
-          <>
-            <p className="hint">
-              <b>대체 담당자 지정 필요</b> —{" "}
-              <a href={listLink({ owner_left: "1" })}>
-                {week.owner_gaps_total}건 보기 →
-              </a>
-            </p>
-            <ul className="home-owner-gaps" data-testid="owner-gaps">
-              {week.owner_gaps.map((item) => (
-                <li key={`${item.id}-${item.owner}`}>
-                  <a href={projectLink(item.id)}>{item.title}</a>
-                  <span className="tag left-tag">
-                    {item.owner} {item.left_reason || "떠남"}
-                  </span>
-                  <span className="muted">{item.left_on}</span>
-                </li>
-              ))}
-            </ul>
-            {week.owner_gaps_total > week.owner_gaps.length && (
-              <p className="hint">
-                <a href={listLink({ owner_left: "1" })}>
-                  나머지 {week.owner_gaps_total - week.owner_gaps.length}건도 목록에서 보기 →
-                </a>
-              </p>
-            )}
-          </>
-        )}
-        {week.plans.length > 0 && (
-          <>
-            <p className="hint">
-              <b>다음 할 일</b> — 진행일지의 <code>## 계획</code>에 적어 둔 것입니다.
-            </p>
-            <ul className="home-plans" data-testid="home-plans">
-              {week.plans.map((item) => (
-                <li key={item.entry_id}>
-                  <a href={projectLink(item.project_id, { entry: item.entry_id })}>{item.project_title}</a>
-                  <span className="plan-text">{item.text}</span>
-                  <span className="muted">{item.date}</span>
-                </li>
-              ))}
-            </ul>
-            {week.plans_total > week.plans.length && (
-              <p className="hint">나머지 {week.plans_total - week.plans.length}건은 각 과제 위쪽에 있습니다.</p>
-            )}
-          </>
-        )}
+      <div role="tabpanel" className={tab === "status" ? "home-panel home-panel-status" : "home-panel home-panel-todo"}>
+        {tab === "status" ? status : todo}
       </div>
-
-      {/* ── 오른쪽 칸 — 팀 현황 · 연도별 추이 (TODO 123) ──────────────
-          왼쪽 [이번 주 할 일]이 더 길어 오른쪽 아래가 비어 있었다. 그 자리에 연도별 추이를
-          쌓으면 세로가 카드 하나분 짧아진다. 좁은 화면에서는 한 줄씩 서므로 순서만 남는다. */}
-      <div className="home-right">
-      {/* ── 팀 현황 ──────────────────────────────────────────────────── */}
-      <div className="card home-team">
-        <h2>{year === ALL_YEARS ? "전체" : `${year}년`} 팀 현황</h2>
-        <div className="home-stats">
-          {/* 과제 = 그 해에 수행한 과제(수행기간이 그 해와 겹침) — 다년도 과제는 해마다 하나씩 (TODO 181) */}
-          <a
-            className="home-stat"
-            href={listLink({ year: yearParam })}
-            title={yearParam ? "그 해에 수행한 과제 — 여러 해에 걸친 과제는 해마다 셉니다" : undefined}
-          >
-            <span className="home-stat-label">과제</span>
-            <strong>{team.total}건</strong>
-          </a>
-          {yearParam && (
-            <a className="home-stat" href={listLink({ year: yearParam, new: "1" })} title="그 해에 새로 착수한 과제(과제 번호의 연도)">
-              <span className="home-stat-label">신규 착수</span>
-              <strong>{team.new ?? 0}건</strong>
-            </a>
-          )}
-          <a className="home-stat" href={listLink({ status: "in_progress", year: yearParam })}>
-            <span className="home-stat-label">진행중</span>
-            <strong>{team.in_progress}건</strong>
-          </a>
-          {/* 완료 = **그 해에 끝낸 과제** 하나 (TODO 181 — 예전에는 번호 연도의 "완료" 와 완료일의 "그해 끝낸 과제" 둘이었다).
-              반기 · 분기를 고르면 그 기간에 끝낸 것만(완료일). */}
-          {data.period ? (
-            <a className="home-stat" href={listLink({ done_year: yearParam, year: "all" })} title="이 기간에 완료일이 든 과제">
-              <span className="home-stat-label">완료</span>
-              <strong>{team.done_in_year ?? 0}건</strong>
-            </a>
-          ) : (
-            <a
-              className="home-stat"
-              href={listLink({ status: "done", year: yearParam })}
-              title={yearParam ? "그 해에 끝낸 과제 — 시작한 해와 무관하게" : undefined}
-            >
-              <span className="home-stat-label">완료</span>
-              <strong>{team.done}건</strong>
-            </a>
-          )}
-          <a
-            className="home-stat"
-            href={
-              yearParam
-                ? screenLink("history", { from: `${yearParam}-01-01`, to: `${yearParam}-12-31` })
-                : screenLink("history")
-            }
-          >
-            <span className="home-stat-label">보고 횟수</span>
-            <strong>{team.reports}회</strong>
-          </a>
-          {/* 화살표만 놓으면 "42.9 중 10.5 달성 = 24%" 로 읽힌다. 실증은 끝난 과제에서만
-              나오므로 그 비율은 성립하지 않는다. **몇 건에서 나온 값인지**를 함께 적어
-              분모를 드러낸다 (TODO 86). */}
-          <div className="home-stat effect">
-            <span className="home-stat-label" title={yearParam ? "기대 · 실증 모두 과제가 끝나는 해(완료년도, 아니면 마감년도)에 셉니다" : undefined}>
-              효과 금액 (억원/년){yearParam ? " · 끝나는 해 기준" : ""}
-            </span>
-            <strong>
-              기대 {money(team.effect_expected)}
-              <span className="home-arrow"> → </span>
-              실증 {money(team.effect_verified)}
-            </strong>
-            {/* 분모도 **눌린다** (TODO 124). 홈의 다른 모든 수가 그렇듯, 여기만 글자였다. */}
-            <span className="home-stat-note">
-              <a href={listLink({ effect: "expected", year: yearParam })}>
-                기대 {team.effect_expected_projects ?? 0}건
-              </a>{" "}
-              ·{" "}
-              <a href={listLink({ effect: "verified", year: yearParam })}>
-                실증 {team.effect_verified_projects ?? 0}건
-              </a>
-              에 입력됨{" "}
-              {/* 실증 합계에 진행중 과제의 중간 결산이 섞여 있으면 얼마인지 밝힌다 (TODO 217) */}
-              {(team.effect_verified_interim_projects ?? 0) > 0 && (
-                <span className="interim-note" title="분기 · 반기 결산으로 진행중 과제에 적은 실증효과 — 과제가 끝나면 최종 값으로 바뀝니다">
-                  (실증 중 진행중 과제의 중간 결산 {money(team.effect_verified_interim ?? 0)} · {team.effect_verified_interim_projects}건){" "}
-                </span>
-              )}
-              {/* 비대상이 있으면 분모를 "전체" 라고 적을 수 없다 (TODO 125) */}
-              {(team.effect_managed ?? team.total) < team.total ? (
-                <>
-                  (관리 대상 {team.effect_managed}건 ·{" "}
-                  <a href={listLink({ no_effect: "none", year: yearParam })}>
-                    비대상 {team.total - (team.effect_managed ?? 0)}건
-                  </a>
-                  {" "}제외)
-                </>
-              ) : (
-                <>(전체 {team.total}건)</>
-              )}
-            </span>
-            {/* 기대효과를 비용구분으로 나눠 본다 (TODO 136) — 적힌 과제만 센다 */}
-            {data.effect_by_cost.length > 0 && (
-              <span className="home-stat-note cost-split">
-                {data.effect_by_cost.map((item, index) => (
-                  <span key={item.key}>
-                    {index > 0 && " · "}
-                    <a href={listLink({ cost_kind: item.key, year: yearParam })}>
-                      {item.key} {money(item.effect_expected)}
-                    </a>
-                  </span>
-                ))}
-              </span>
-            )}
-            {/* 완료했는데 실증효과가 빈 과제 (TODO 106-C). 연말에 빈칸을 만나기 전에 여기서 본다. */}
-            {(team.done_unverified ?? 0) > 0 && (
-              <a
-                className="home-stat-note warn-text"
-                href={listLink({ verified: "none", year: yearParam || "all" })}
-              >
-                완료했는데 실증효과 미입력 {team.done_unverified}건 →
-              </a>
-            )}
-          </div>
-        </div>
-        <p className="hint">
-          과제 수는 <b>그 해에 수행한 과제</b>(여러 해에 걸친 과제는 해마다), 완료는 <b>그 해에 끝낸 과제</b>, 신규는{" "}
-          <b>그 해에 착수한 과제</b>, 효과 금액은 <b>끝나는 해</b>(기대 · 실증을 같은 해에), 보고 횟수는 <b>보고한 날의 연도</b>로 셉니다.
-          {" "}보고 횟수는 <b>확정된 보고</b>만 셉니다 — 초안은 아직 보고한 것이 아닙니다.
-          {" "}<b>실증효과는 끝난 과제에서만 나오므로 기대 대비 달성률이 아닙니다.</b>
-        </p>
-      </div>
-      {/* ── 연도 비교 ────────────────────────────────────────────────
-          한 해만 보면 늘고 있는지 줄고 있는지 알 수 없다.
-          **팀 현황 아래, 같은 칸에 쌓는다** (TODO 123) — 왼쪽 [이번 주 할 일]이 더 길어
-          오른쪽 아래가 비어 있었다. 그 자리를 채우면 세로가 카드 하나분 짧아진다. */}
-      {data.compare.length > 1 && (
-        <div className="card home-compare">
-          <h2>
-            연도별 추이
-            <CopyTableButton
-              headers={["연도", "과제", "완료", "보고 횟수", "기대효과(억원/년)", "실증효과(억원/년)"]}
-              rows={() =>
-                data.compare.map((item) => [
-                  item.year,
-                  item.total,
-                  item.done,
-                  item.reports,
-                  item.effect_expected,
-                  item.effect_verified,
-                ])
-              }
-            />
-          </h2>
-          {/* 과제가 있는 모든 해 (TODO 228) — 지난해 회색 · 올해 파랑 · 내년 이후 초록. 넘치면 가로로 넘기고, 올해가 보이게 둔다 */}
-          <div className="bar-row trend" ref={trendRef}>
-            {data.compare.map((item) => (
-              <a
-                key={item.year}
-                className={["bar-col", `when-${item.when ?? "past"}`, item.year === year ? "on" : ""].filter(Boolean).join(" ")}
-                href={listLink({ year: item.year })}
-                title={`${item.year}년 과제 ${item.total}건 · 완료 ${item.done}건 · 보고 ${item.reports}회`}
-              >
-                <span className="bar-value">{item.total}</span>
-                <span className="bar" style={{ height: `${(item.total / maxCompare) * 100}%` }}>
-                  <span
-                    className="bar-done"
-                    style={{ height: `${item.total ? (item.done / item.total) * 100 : 0}%` }}
-                  />
-                </span>
-                <span className="bar-label">{item.year}</span>
-              </a>
-            ))}
-          </div>
-          <p className="hint">
-            막대는 과제 수, 진한 부분이 <b>완료</b>입니다. <span className="trend-key past">지난해</span> <span className="trend-key current">올해</span>{" "}
-            <span className="trend-key future">내년 이후</span> — 내년 이후는 <b>그 해에 수행기간이 걸친 과제</b>(이어지는 다년도 과제 · 그 해에 시작할 과제)입니다.
-            누르면 그 해 과제 목록으로 갑니다.
-          </p>
-        </div>
-      )}
-      </div>
-      </div>
-
-      {/* ── 팀원별 성과 (ROADMAP R1 의 실체) ───────────────────────── */}
-      <div className="card home-members wide">
-        <h2>
-          팀원별 성과
-          {data.members.length > 0 && (
-            <CopyTableButton
-              headers={["담당자", "담당 과제", ...meta.statuses.map((status) => status.label), "기대효과(억원/년)", "실증효과(억원/년)", "보고 횟수", "역량 이력", "마지막 보고"]}
-              rows={() =>
-                data.members.map((member) => [
-                  member.name,
-                  member.total,
-                  ...statusCells(meta, member.by_status),
-                  member.effect_expected,
-                  member.effect_verified,
-                  member.reports,
-                  member.activities,
-                  member.last_reported_at ?? "",
-                ])
-              }
-            />
-          )}
-        </h2>
-        {data.members.length === 0 ? (
-          <p className="hint">담당자가 지정된 과제가 없습니다.</p>
-        ) : (
-          <>
-            <div className="table-scroll">
-              <table className="grid home-member-table">
-                <thead>
-                  <tr>
-                    <th>담당자</th>
-                    <th>담당 과제</th>
-                    <StatusHead meta={meta} />
-                    <th>
-                      기대효과
-                      <span className="th-unit">억원/년</span>
-                    </th>
-                    <th>
-                      실증효과
-                      <span className="th-unit">억원/년</span>
-                    </th>
-                    <th>보고 횟수</th>
-                    {/* 과제가 아니라 사람에게 쌓인 것. 면담 준비를 한 화면에서
-                        끝내기 위해 여기 세운다 (TODO 89). */}
-                    <th>역량 이력</th>
-                    <th>마지막 보고</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(allMembers ? data.members : data.members.slice(0, MEMBER_LIMIT)).map((member) => (
-                    <tr key={member.name}>
-                      <td>
-                        <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
-                      </td>
-                      <td>{member.total || DASH}</td>
-                      <StatusCells
-                        meta={meta}
-                        counts={member.by_status}
-                        link={(status) => listLink({ owner: member.name, status, year: yearParam })}
-                      />
-                      <td>{cellEffect(member.effect_expected)}</td>
-                      <td>{cellEffect(member.effect_verified)}</td>
-                      <td>{member.reports || DASH}</td>
-                      <td className={member.activities ? undefined : "zero"}>
-                        {member.activities ? (
-                          <a href={screenLink("skills", { person: member.name, year: yearParam })}>
-                            {member.activities}
-                          </a>
-                        ) : (
-                          DASH
-                        )}
-                      </td>
-                      <td className="muted">{member.last_reported_at ?? DASH}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                {/* 사람별로 더하므로 **담당 중복이 들어 있다** — 이름표에 밝힌다. 팀 합계는 위의 팀 현황이다 (TODO 157) */}
-                <TotalRow
-                  label={
-                    <span title="한 과제에 담당자가 여럿이면 양쪽에 잡힙니다. 팀 합계는 위의 팀 현황을 쓰십시오.">
-                      합계 <span className="total-note">중복 포함</span>
-                    </span>
-                  }
-                  cells={[
-                    String(memberSum || DASH),
-                    ...statusTotals(meta, data.members),
-                    cellEffect(sumBy(data.members, (member) => member.effect_expected)),
-                    cellEffect(sumBy(data.members, (member) => member.effect_verified)),
-                    String(sumBy(data.members, (member) => member.reports) || DASH),
-                    String(sumBy(data.members, (member) => member.activities) || DASH),
-                    null,
-                  ]}
-                />
-              </table>
-            </div>
-            {data.members.length > MEMBER_LIMIT && (
-              <button type="button" className="ghost small" onClick={() => setAllMembers((on) => !on)}>
-                {allMembers ? "접기" : `나머지 ${data.members.length - MEMBER_LIMIT}명 더 보기`}
-              </button>
-            )}
-            {/* 이 문구는 수가 어긋날 때만 띄우면 안 된다. 담당자 없는 과제가 중복분을
-                상쇄해 **우연히 합이 맞는 순간**이 가장 위험하기 때문이다 — 그때야말로
-                합계가 맞는 줄 알고 그대로 보고하게 된다. 그래서 늘 밝힌다. */}
-            <p className="hint">
-              <b>담당 중복 포함</b> — 한 과제에 담당자가 여럿이면 양쪽에 잡힙니다.
-              {memberSum !== team.total && (
-                <>
-                  {" "}그래서 이 표의 합({memberSum}건)은 팀 과제 수({team.total}건)와 다릅니다.
-                </>
-              )}{" "}
-              <b>효과 금액도 마찬가지로 중복 합산</b>되므로, 팀 합계는 위의 &ldquo;팀 현황&rdquo;에 있는
-              과제 기준 숫자를 쓰십시오. <b>역량 이력</b>은 과제와 무관한 그 해 교육·세미나
-              참여 건수입니다 — 눌러서 그 사람의 이력을 봅니다.
-            </p>
-          </>
-        )}
-      </div>
-
-      {/* ── 속성별 · 그룹별 ─────────────────────────────────────────
-          속성은 과제의 *성격*(R&D·투자…), 그룹은 실제로 *지시사항 · 지시자 · 회의체*를 적는 칸이다(TODO 230 — 처음엔 주제로 설계했다).
-          목록에는 두 필터가 다 있는데 홈에는 그룹 축만 없었다 (TODO 90).
-          표 모양은 하나로 맞춘다 — 같은 화면에서 같은 것을 다르게 세지 않기 위해서다. */}
-      {/* 속성별·그룹별은 줄이 짧아 한 줄씩 세우면 자리가 아깝다. 나란히 놓는다 (TODO 123) */}
-      <div className="home-slices">
-      <SliceTable
-        meta={meta}
-        title="속성별"
-        column="속성"
-        rows={data.types}
-        param="type"
-        yearParam={yearParam}
-        note={
-          <>
-            과제마다 속성은 하나뿐이라 이 표의 합은 <b>팀 과제 수와 정확히 맞습니다.</b>
-            (담당 중복이 있는 위쪽 팀원별 표와 다른 점입니다)
-          </>
-        }
-      />
-
-      <SliceTable
-        meta={meta}
-        title="그룹별"
-        column="그룹"
-        rows={data.groups}
-        param="group"
-        yearParam={yearParam}
-        note={
-          <>
-            {/* 그룹은 실제로 지시사항 · 지시자를 적는 칸이다 (TODO 230) — 과제 폼의 예시와 같은 말 */}
-            <span className="slice-example">예: 대표이사 지시 · 본부장 지시 · 주간 회의체</span>
-            그룹은 <b>자유 입력</b>이라 표기가 흔들리면 줄이 갈라집니다(같은 지시자를 다르게 적으면 두 줄). 과제마다 그룹은
-            하나뿐이므로 이 표의 합도 <b>팀 과제 수와 맞습니다.</b>
-          </>
-        }
-      />
-      </div>
-
-      {/* ── 성격별 · 분류별 (TODO 136) ─────────────────────────────────
-          스마트과제 안의 두 축이다. *미지정* 줄은 **스마트과제인데 비어 있는 것**만 센다 —
-          기획보고·유지보수가 미지정에 쌓이면 그 줄은 늘 가장 크고 아무 뜻이 없다. */}
-      {(data.natures.length > 0 || data.categories.length > 0) && (
-        // 스마트과제만의 두 축 — 따로 묶어 밝힌다 (TODO 229). 합이 위의 팀 과제 수와 다르면 헷갈린다
-        <div className="home-smart">
-        <h2>
-          스마트과제 · 성격 · 분류
-          <span className="hint"> · 스마트과제 {smartCount}건 기준</span>
-        </h2>
-        <p className="hint">
-          성격과 분류는 <b>스마트과제만</b> 가지는 칸이라, 이 두 표의 합은 위의 <b>팀 과제 수와 다릅니다.</b>
-          {outsideNote}
-        </p>
-        <div className="home-slices">
-          <SliceTable
-            meta={meta}
-            title="성격별"
-            column="성격"
-            rows={data.natures}
-            param="nature"
-            yearParam={yearParam}
-            note={<>연구과제/PoC → 현장적용 → 확대전개로 이어지는 흐름을 봅니다. 미지정은 스마트과제인데 비어 있는 것입니다.</>}
-          />
-          <SliceTable
-            meta={meta}
-            title="분류별"
-            column="분류"
-            rows={data.categories}
-            param="category"
-            yearParam={yearParam}
-            note={<>기술 영역별로 어디에 과제가 몰려 있는지 봅니다. 목록은 설정에서 고칩니다.</>}
-          />
-        </div>
-        </div>
-      )}
-
     </section>
   );
 }

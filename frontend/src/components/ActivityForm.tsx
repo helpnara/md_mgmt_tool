@@ -26,11 +26,14 @@ export default function ActivityForm({
   activity,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   meta: Meta;
   activity: Activity | null;
   onClose: () => void;
   onSaved: (message: string) => void;
+  /** 고치는 중일 때만 — [삭제]는 목록 줄이 아니라 여기 있다 (TODO 232 ⑤) */
+  onDeleted?: (message: string) => void;
 }) {
   const editing = activity !== null;
   const today = todayIso(); // 이 PC 의 오늘 — UTC 로 하면 오전 9시 전엔 어제다 (TODO 207)
@@ -350,6 +353,27 @@ export default function ActivityForm({
       {/* 서버가 거절한 사유는 단추 바로 위에 (TODO 205) */}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="form-actions">
+        {/* 목록 줄마다 서 있던 빨간 [삭제]를 고치는 자리로 옮겼다 (TODO 232 ⑤) — 지우기는 고치는 일의 하나다 */}
+        {editing && onDeleted && (
+          <button
+            className="ghost danger activity-delete"
+            disabled={busy}
+            onClick={async () => {
+              if (!window.confirm(`${activity!.person} 님의 '${activity!.title}' 기록을 삭제 보관함으로 옮길까요?`)) return;
+              setBusy(true);
+              try {
+                await api.deleteActivity(activity!.id);
+                onDeleted("삭제 보관함으로 옮겼습니다. 설정 → 삭제 보관함에서 되돌릴 수 있습니다.");
+              } catch (err) {
+                setError((err as Error).message);
+                setBusy(false);
+              }
+            }}
+          >
+            삭제
+          </button>
+        )}
+        <span className="grow" />
         <button className="ghost" onClick={close}>
           취소
         </button>
