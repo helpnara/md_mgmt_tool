@@ -62,7 +62,8 @@ export default function ExportMenu({ projectId }: Props) {
           </label>
           <ul>
             {OPTIONS.map((option) => (
-              <li key={option.key}>
+              // 과제 폴더 백업은 서버 PC 에서만 — 바깥(읽기 전용 · 팀원)에서는 서버가 403 이라 항목을 숨긴다 (TODO 238 ③)
+              <li key={option.key} {...(option.key === "backup" ? { "data-write": true, "data-owner-only": true } : {})}>
                 <a
                   href={`/api/projects/${projectId}/export?${option.query}${
                     withReports ? "&include_reports_full=true" : ""

@@ -146,6 +146,8 @@ export function backTarget(back: string | null | undefined): { href: string; lab
   }
   // 과제 상세에서 온 경우 — 유관부서 링크처럼 상세에서 목록으로 가는 길이 있다.
   if (path.startsWith("projects/")) return { href: `#/${back}`, label: "과제" };
+  // 사람별 이력에서 온 경우 (TODO 238) — 그 사람의 과제를 열었다가 돌아간다
+  if (path.startsWith("person/")) return { href: `#/${back}`, label: "이력" };
   // 접수 상세에서 온 경우 (TODO 136) — 승격된 과제나 병합 대상 과제를 열었다가 돌아간다.
   if (path.startsWith("intakes/")) return { href: `#/${back}`, label: "접수" };
   const label = LABELS[path];
@@ -236,9 +238,15 @@ export const SCREEN_TITLES: Record<string, string> = {
   settings: "설정",
   help: "도움말",
   search: "검색",
+  person: "이력",
 };
 
 /** 브라우저 탭 제목 — 과제 · 접수를 여러 탭으로 열어도 구분되게 (TODO 169). */
 export function setPageTitle(text: string): void {
   document.title = text ? `${text} · 느린 나이테` : "느린 나이테";
+}
+
+/** 사람별 이력 화면의 주소 (TODO 238) — 온 곳을 실어 [← 돌아가기] 가 그리로 */
+export function personLink(name: string): string {
+  return screenLink(`person/${encodeURIComponent(name)}`);
 }

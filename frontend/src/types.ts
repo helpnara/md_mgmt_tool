@@ -1187,7 +1187,7 @@ export interface Project {
 }
 
 // ── TODO 237 — 담당과 역할 · 금액 아닌 성과 ─────────────────────────────────────
-/** 한 사람의 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄. 팀원이 나중에 경력기술서를 쓸 재료 */
+/** 한 사람의 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄. 팀원이 나중에 업무 이력 · 성과를 정리할 재료 */
 export interface Contribution {
   name: string;
   /** 주관 · 참여 · 지원, 비어 있을 수 있다 */
@@ -1212,4 +1212,47 @@ export interface Project {
 export interface RetroDue {
   name: string;
   items: { id: string; title: string; completed_at: string }[];
+}
+
+// ── TODO 238 — 사람별 이력 ───────────────────────────────────────────────────
+export interface PersonProject {
+  id: string;
+  title: string;
+  status: string;
+  /** 맡기 시작한 해 */
+  year: string;
+  from: string | null;
+  /** 담당 끝 · 과제 완료일 — 없으면 아직(화면이 "지금") */
+  to: string | null;
+  current: boolean;
+  derived: boolean;
+  role: string;
+  part: string;
+  problem: string;
+  did: string;
+  result: string;
+  outcome: string;
+  effect_expected: number | null;
+  effect_verified: number | null;
+  no_effect: boolean;
+}
+export interface PersonActivity {
+  id: number;
+  date: string;
+  end_date: string | null;
+  kind: string;
+  title: string;
+  host: string | null;
+  hours: number | null;
+  takeaway: string;
+  planned: boolean;
+}
+export interface PersonHistory {
+  name: string;
+  in_roster: boolean;
+  leader: boolean;
+  left_on: string | null;
+  summary: { projects: number; current: number; lead: number; done: number; retro_written: number; activities: number; entry_only: number };
+  projects: PersonProject[];
+  activities: PersonActivity[];
 }

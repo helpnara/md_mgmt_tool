@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
 import type { ActivityBrief, BackupStatus, EditItem, Home as HomeData, RetroDue, HomeSlice, Meta, StatusInfo } from "../types";
-import { listLink, projectLink, screenLink, useAddressBar } from "../nav";
+import { listLink, personLink, projectLink, screenLink, useAddressBar } from "../nav";
 import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
 import CopyTableButton from "./CopyTableButton";
@@ -592,7 +592,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       )}
       </div>}
       {reportSide && <div className="home-week-col">
-      {/* 회고를 적을 과제 (TODO 237 A3) — 기억이 생생할 때. 나중에 경력기술서의 "내가 한 일 · 결과" 가 된다 */}
+      {/* 회고를 적을 과제 (TODO 237 A3) — 기억이 생생할 때. 나중에 업무 이력의 "내가 한 일 · 결과" 가 된다 */}
       {retroDue.length > 0 && (
         <>
           <p className="hint">
@@ -1005,6 +1005,8 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
                       <td>
                         <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
                         {isLeader(meta, member.name) && <span className="tag leader-tag">팀장</span>}
+                        {/* 사람별 이력 (TODO 238) — 이름은 지금처럼 그 사람의 과제 목록, 이 작은 링크가 이력 화면 */}
+                        <a className="person-link" href={personLink(member.name)} title={`${member.name} — 맡은 과제 · 역할 · 회고 · 교육 이력`}>이력</a>
                       </td>
                       <td>{member.total || DASH}</td>
                       <StatusCells

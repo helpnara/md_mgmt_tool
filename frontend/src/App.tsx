@@ -15,7 +15,8 @@ import IntakePool from "./components/IntakePool";
 import SearchResults from "./components/SearchResults";
 import type { Me, Meta } from "./types";
 import { getMe, setMe } from "./me";
-import { BACK_PARAM, SCREEN_TITLES, listLink, setPageTitle } from "./nav";
+import { BACK_PARAM, SCREEN_TITLES, listLink, personLink, setPageTitle } from "./nav";
+import PersonHistory from "./components/PersonHistory";
 import { confirmLeave, hasUnsaved, LEAVE_MESSAGE, migrateBrowserDrafts } from "./unsaved";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Toast from "./components/Toast";
@@ -33,6 +34,8 @@ type Route =
   // 다년도 과제 로드맵 (TODO 174)
   | { name: "roadmap"; query: string }
   | { name: "skills"; query: string }
+  // 사람별 이력 (TODO 238)
+  | { name: "person"; person: string; back: string | null }
   | { name: "settings"; back: string | null }
   | { name: "help" }
   // 과제 접수 풀 (TODO 136)
@@ -76,6 +79,8 @@ function readRoute(): Route {
   if (path.startsWith("roadmap")) return { name: "roadmap", query: queryString ?? "" };
   if (path.startsWith("reports")) return { name: "reports", query: queryString ?? "" };
   if (path.startsWith("skills")) return { name: "skills", query: queryString ?? "" };
+  if (path.startsWith("person/"))
+    return { name: "person", person: safeDecode(path.slice("person/".length)), back: params.get(BACK_PARAM) };
   if (path.startsWith("settings")) return { name: "settings", back: params.get(BACK_PARAM) };
   if (path.startsWith("help")) return { name: "help" };
   if (path.startsWith("intakes/"))
@@ -235,7 +240,7 @@ export default function App() {
   // 브라우저 탭 제목 (TODO 169) — 과제 · 접수를 여러 탭으로 열어도 구분되게. 과제 · 접수 화면은
   // 제목을 알고 나서 스스로 고친다(pageTitle).
   useEffect(() => {
-    if (route.name === "project" || route.name === "intake") return;
+    if (route.name === "project" || route.name === "intake" || route.name === "person") return;
     setPageTitle(SCREEN_TITLES[route.name] ?? "");
   }, [route.name]);
 
@@ -333,7 +338,8 @@ export default function App() {
         <div className="readonly-band member-band" role="status">
           <b>{meInfo.name}</b> 님으로 접속 — 담당 과제 <b>{meInfo.projects.length}건</b>의 진행일지 · 첨부 · 개요를 고칠 수 있습니다.
           다른 것은 보기만 됩니다.
-          {meInfo.projects.length > 0 && <a href={listLink({ owner: meInfo.name, year: "all" })}>내 과제 보기 →</a>}
+          {meInfo.projects.length > 0 && <a href={listLink({ owner: meInfo.name, year: "all" })}>내 과제 보기 →</a>}{" "}
+          <a href={personLink(meInfo.name)}>내 이력 →</a>
         </div>
       ) : meta.readonly ? (
         <div className="readonly-band" role="status">
@@ -381,6 +387,7 @@ export default function App() {
         {route.name === "list" && <ProjectList meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "home" && <Home meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}
+        {route.name === "person" && <PersonHistory key={route.person} meta={meta} name={route.person} back={route.back} />}
         {route.name === "help" && <Help />}
         {route.name === "intakes" && <IntakePool meta={meta} query={route.query} onMetaChange={loadMeta} />}
         {route.name === "intake" && (

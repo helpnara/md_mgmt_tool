@@ -672,7 +672,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           근거 자료(엑셀·PPT)는 개요의 [파일 첨부]로 붙일 수 있습니다.
         </p>
       </div>
-      {/* 금액 아닌 성과 한 줄 (TODO 237 A4) — 효과 비대상이어도 적는다. 경력기술서의 "성과" 칸이 된다 */}
+      {/* 금액 아닌 성과 한 줄 (TODO 237 A4) — 효과 비대상이어도 적는다. 업무 이력의 "성과" 칸이 된다 */}
       <div className="form-row">
         <label className="outcome-label">
           그 밖의 성과 <span className="muted">(금액이 아닌 숫자 · 한 줄)</span>

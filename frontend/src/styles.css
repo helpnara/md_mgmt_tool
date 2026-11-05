@@ -2264,3 +2264,28 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
   .contrib-main { grid-template-columns: minmax(70px, auto) 52px minmax(0, 1fr) 52px; }
   .contrib-main .contrib-period, .contrib-main .retro-state { grid-column: span 2; }
 }
+
+/* ── 사람별 이력 (TODO 238) ───────────────────────────────────────────────────── */
+.person-link { margin-left: 6px; font-size: 12px; color: var(--muted-strong); }
+.person-head h1 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
+.person-head-sub { font-size: 16px; font-weight: 400; }
+.person-stats { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 14px; margin-bottom: 6px; }
+.person-stats b { font-size: 18px; }
+.person-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.person-tools .inline-label { flex-direction: row; align-items: center; gap: 6px; }
+.person-year h3 { margin: 14px 0 6px; font-size: 14px; color: var(--muted-strong); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.person-project-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.person-project { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.person-project.former { background: #f8f9fb; }
+.person-project-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.person-project-head .grow { flex: 1; }
+.person-project-title { font-weight: 600; }
+.person-project-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: 13px; padding-left: 24px; }
+.person-project .contrib-retro { padding-left: 24px; }
+.person-retro-missing { margin: 6px 0 0 24px; font-size: 13px; color: var(--warn); }
+.person-activity-list .person-takeaway { flex-basis: 100%; font-size: 13px; color: var(--muted-strong); padding-left: 4px; }
+.person-project-head input[type="checkbox"] { width: auto; margin: 0; flex: none; }
+.person-tools .inline-label { white-space: nowrap; }
+.person-tools select { width: auto; }
+.person-project-title { text-decoration: none; color: var(--accent-strong); }
+.person-project-title:hover { text-decoration: underline; }

@@ -86,7 +86,7 @@ def _rewrite_links(body: str, doc_dir: str, mode: str, directory: Path, dir_name
 
 
 def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[str]:
-    """담당과 역할 · 회고 · 금액 아닌 성과 (TODO 237) — 경력기술서의 재료. 적은 것이 없으면 절째 뺀다."""
+    """담당과 역할 · 회고 · 금액 아닌 성과 (TODO 237) — 업무 이력 정리의 재료. 적은 것이 없으면 절째 뺀다."""
     from .projects import contributions_of
 
     rows = contributions_of(conn, project["id"])

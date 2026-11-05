@@ -1,6 +1,6 @@
 import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
-import type { Contribution, EditItem, Health, Me, RetroDue, Visitor } from "./types";
+import type { Contribution, EditItem, Health, Me, PersonHistory, RetroDue, Visitor } from "./types";
 import { notifyError } from "./notify";
 
 /**
@@ -216,6 +216,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  /** 사람별 이력 — 맡은 과제(역할 · 기간 · 회고) · 교육 이력 (TODO 238) */
+  personHistory: (name: string) => request<PersonHistory>(`/api/person-history?name=${encodeURIComponent(name)}`),
   /** 회고를 적을 과제 — 내 것, 끝난 지 1년 안 (TODO 237) */
   retroDue: () => request<RetroDue>("/api/projects/retro-due"),
   archiveProject: (id: string) => invalidating(request<void>(`/api/projects/${id}/archive`, { method: "POST" })),

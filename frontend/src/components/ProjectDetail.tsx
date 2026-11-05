@@ -1163,7 +1163,7 @@ export default function ProjectDetail({
         )}
       </div>
 
-      {/* 담당과 역할 · 회고 (TODO 237) — 경력기술서의 재료. 팀원은 자기 줄만 */}
+      {/* 담당과 역할 · 회고 (TODO 237) — 업무 이력 정리의 재료. 팀원은 자기 줄만 */}
       <ContributionsCard
         project={project}
         meta={meta}

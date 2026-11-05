@@ -5905,6 +5905,16 @@ async function main() {
         expect(row.role === "참여" && row.did === "현장 데이터 수집", `저장된 줄: ${JSON.stringify(row)}`);
         expect((await card.locator('[data-person="가팀원"]').innerText()).includes("회고 ✓"), "회고 ✓");
       });
+      await check("팀원 화면 — [내보내기]에 과제 폴더 백업이 없고 · 머리 띠 [내 이력] 은 자기 이력 (238 ① ③)", async () => {
+        await member.getByRole("button", { name: "내보내기" }).click();
+        const panel = member.locator(".export-panel");
+        equal(await panel.getByText("과제 폴더 백업 (zip)").filter({ visible: true }).count(), 0, "백업 항목");
+        equal(await panel.getByText("마크다운 한 파일").filter({ visible: true }).count(), 1, "md 항목은 그대로");
+        await member.locator(".member-band").getByRole("link", { name: "내 이력 →" }).click();
+        await member.waitForSelector(".person-history", { timeout: 5000 });
+        const text = await member.locator(".person-projects").innerText();
+        expect(text.includes("둘이 하는 과제") && text.includes("현장 데이터 수집"), `내 이력: ${text.slice(0, 200)}`);
+      });
     } finally {
       await member.close();
       await relay.close();
@@ -5999,6 +6009,51 @@ async function main() {
     } finally {
       await api.put("/api/people", { people: before.map((person) => ({ ...person, leader: false })) });
     }
+  }
+
+  console.log("\n[57] 사람별 이력 · 이력 정리 복사 · 내보내기 백업 항목 (TODO 238)");
+  {
+    await check("홈 팀원별 표의 [이력] → 맡은 과제를 맡기 시작한 해별로 · 역할 · 회고 · 교육 (238 ①)", async () => {
+      await go("#/?tab=status");
+      await page.reload(); await page.waitForTimeout(900);
+      await page.locator("tr", { hasText: "권경락" }).locator(".person-link").first().click();
+      await page.waitForSelector(".person-history", { timeout: 5000 });
+      expect((await page.locator(".person-head h1").innerText()).includes("권경락"), "이름");
+      const item = page.locator(".person-project", { hasText: "회고 시험 과제" });
+      const text = await item.innerText();
+      expect(text.includes("주관") && text.includes("집계 자동화 설계") && text.includes("주 4시간 → 30분") && text.includes("작업 시간 40% 단축"), `과제 줄: ${text}`);
+      equal(await item.locator('input[type="checkbox"]').isChecked(), true, "회고를 적은 과제는 처음부터 고름");
+      expect((await page.locator(".person-year h3").allInnerTexts()).length >= 1, "연도 머리");
+    });
+    await check("[글로 복사] · [표로 복사] — 고른 과제만, 금액은 넣지 않는다 (238 ②)", async () => {
+      await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
+      await page.getByRole("button", { name: "글로 복사" }).click();
+      const text = await page.evaluate(() => navigator.clipboard.readText());
+      expect(text.includes("■ 회고 시험 과제") && text.includes("결과: 주 4시간 → 30분") && text.includes("그 밖의 성과: 작업 시간 40% 단축"), `글: ${text}`);
+      expect(!text.includes("억"), "금액이 없다");
+      await page.getByRole("button", { name: "표로 복사" }).click();
+      const table = await page.evaluate(() => navigator.clipboard.readText());
+      expect(table.startsWith("과제 번호\t과제명\t기간\t역할") && table.includes("회고 시험 과제"), `표: ${table.slice(0, 120)}`);
+      // 아무것도 고르지 않으면 단추가 잠긴다
+      for (const box of await page.locator('.person-project input[type="checkbox"]:checked').all()) await box.uncheck();
+      equal(await page.getByRole("button", { name: "글로 복사" }).isDisabled(), true, "고른 것이 없으면 잠김");
+    });
+    await check("과제 [담당과 역할]의 이름 → 그 사람 이력 · [← 과제]로 돌아온다 (238 ①)", async () => {
+      const made = (await api.get("/api/projects?year=all")).find((p) => p.title === "회고 시험 과제");
+      await go(`#/projects/${made.id}`);
+      await page.reload(); await page.waitForTimeout(900);
+      await page.locator("[data-contributions] .contrib-name a", { hasText: "권경락" }).click();
+      await page.waitForSelector(".person-history", { timeout: 5000 });
+      const back = page.locator(".person-history a.back");
+      expect((await back.innerText()).includes("과제"), `돌아가기: ${await back.innerText()}`);
+      await back.click(); await page.waitForTimeout(700);
+      expect(page.url().includes(`projects/${made.id}`), `돌아온 곳: ${page.url()}`);
+    });
+    await check("팀장 PC 의 [내보내기]에는 과제 폴더 백업이 그대로 (238 ③)", async () => {
+      await page.getByRole("button", { name: "내보내기" }).click();
+      equal(await page.locator(".export-panel").getByText("과제 폴더 백업 (zip)").filter({ visible: true }).count(), 1, "백업 항목");
+      await page.getByRole("button", { name: "내보내기" }).click();
+    });
   }
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

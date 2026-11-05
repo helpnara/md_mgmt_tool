@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { getMe } from "../me";
+import { personLink } from "../nav";
 import { isLeader, leftLabel } from "../people";
 import type { Contribution, Meta, Project } from "../types";
 import Explain from "./Explain";
@@ -8,7 +9,7 @@ import Explain from "./Explain";
 /**
  * 담당과 역할 (TODO 237) — 사람마다 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄.
  *
- * 팀원이 나중에 이력서 · 경력기술서를 쓸 때의 재료다. 경력기술서 한 줄은 **과제 · 기간 · 내 역할 · 내가 한 일 · 성과**인데,
+ * 팀원이 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료다. 업무 이력 한 줄은 **과제 · 기간 · 내 역할 · 내가 한 일 · 성과**인데,
  * 담당자 명단만으로는 셋을 알 수 없다. 화면 · 내보내기는 나중에 붙여도 되지만 **기록은 지금부터 쌓지 않으면 되살릴 수 없다.**
  *
  * * 팀장은 누구 줄이든, 팀원은 **자기 줄만** 고친다(담당 기간은 팀장). 숨기는 것은 편의 — 막는 것은 서버다.
@@ -87,7 +88,7 @@ export default function ContributionsCard({
       </div>
       <Explain
         id="contributions"
-        lead={<>사람마다 <b>역할 · 맡은 부분 · 담당 기간 · 회고</b>를 남깁니다 — 나중에 이력서 · 경력기술서를 쓸 때의 재료입니다.</>}
+        lead={<>사람마다 <b>역할 · 맡은 부분 · 담당 기간 · 회고</b>를 남깁니다 — 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료입니다.</>}
       >
         담당 기간은 담당자를 바꾸면 저절로 적힙니다(든 사람은 그날부터, 빠진 사람은 그날까지). 기록이 없던 담당자는 시작일부터로 읽습니다.
         팀원은 자기 줄의 역할 · 맡은 부분 · 회고를 고치고, 담당 기간은 팀장이 고칩니다. 과제 [내보내기]에도 이 내용이 함께 나갑니다.
@@ -100,7 +101,7 @@ export default function ContributionsCard({
             <li key={row.name} className={row.current ? "contrib-row" : "contrib-row former"} data-person={row.name}>
               <div className="contrib-main">
                 <span className="contrib-name">
-                  {row.name}
+                  <a href={personLink(row.name)} title={`${row.name} — 이력`}>{row.name}</a>
                   {isLeader(meta, row.name) && <span className="tag leader-tag">팀장</span>}
                   {!row.current && <span className="tag former-tag">예전 담당</span>}
                   {leftLabel(meta, row.name) && <span className="tag left-tag">{leftLabel(meta, row.name)}</span>}

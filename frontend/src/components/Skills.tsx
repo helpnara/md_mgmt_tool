@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { Activity, ActivitySummary, Meta } from "../types";
-import { backTarget, useAddressBar } from "../nav";
+import { backTarget, personLink, useAddressBar } from "../nav";
 import { leftLabel, splitPeople } from "../people";
 import { isReadonly } from "../readonly";
 import { getMe, isMember } from "../me";
@@ -525,6 +525,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                       {item.name}
                     </button>
                     {item.leader && <span className="tag leader-tag" title="명부의 팀장 — 면담 대상에서 빠집니다">팀장</span>}
+                    {/* 사람별 이력 (TODO 238) — 과제 · 역할 · 회고까지 한 화면 */}
+                    <a className="person-link" href={personLink(item.name)} title={`${item.name} — 맡은 과제 · 역할 · 회고 · 교육 이력`}>이력</a>
                     {item.left && (
                       <span className="tag left-tag" title={item.left_on ? `${item.left_on} 부터` : undefined}>
                         {leftLabel(meta, item.name) || "떠남"}
