@@ -66,6 +66,9 @@ def recent(conn: sqlite3.Connection, days: int = 7, role: str | None = "member")
     items.sort(key=lambda item: item.get("at", ""), reverse=True)
     titles: dict[str, str | None] = {}
     grouped: list[dict[str, Any]] = []
+    from . import settings as settings_service
+
+    leader = settings_service.leader_name()
     for item in items:
         last = grouped[-1] if grouped else None
         if last and (last["name"], last["project_id"], last["action"]) == (item.get("name"), item.get("project_id"), item.get("action")) \
@@ -78,6 +81,8 @@ def recent(conn: sqlite3.Connection, days: int = 7, role: str | None = "member")
             titles[project_id] = row["title"] if row else None
         grouped.append({
             "at": item.get("at", ""), "name": item.get("name", ""), "action": item.get("action", ""),
+            # 팀장이 노트북 IP 를 명부 자기 줄에 적고 쓴 것 (TODO 235 ②) — 팀원 권한이지만 "팀장" 으로 따로 보인다
+            "leader": bool(leader) and item.get("name") == leader,
             "project_id": project_id, "project_title": titles.get(project_id) if project_id else None,
             "entry_id": item.get("entry_id"), "count": 1,
         })

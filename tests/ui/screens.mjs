@@ -5898,6 +5898,34 @@ async function main() {
     }
   }
 
+  console.log("\n[55] 명부의 팀장 — 작성자가 따라가고 면담 대상에서 빠진다 (TODO 235)");
+  {
+    const before = (await api.get("/api/people")).people;
+    try {
+      await check("명부에서 팀장을 고르면 작성자 칸 대신 '팀장 ○○' · 딱지 · 면담 상대에서 빠짐 (235)", async () => {
+        const pick = before.find((person) => person.name === "김현우") ?? before[0];
+        await go("#/settings");
+        equal(await page.locator(".leader-missing").count(), 1, "팀장을 고르지 않았다는 안내");
+        await page.locator(".people-table tr", { has: page.locator(`input[value="${pick.name}"]`) }).locator(".leader-pick").check();
+        await page.getByRole("button", { name: "명부 저장" }).click();
+        await page.waitForTimeout(1200);
+        expect((await page.locator(".author-card").innerText()).includes(`팀장 ${pick.name}`), `작성자 칸: ${await page.locator(".author-card").innerText()}`);
+        equal((await api.get("/api/meta")).leader, pick.name, "meta 의 팀장");
+        // 팀원역량 — 사람별 표에 딱지, 면담 상대 목록에서 빠짐
+        await go("#/skills");
+        await page.reload(); await page.waitForTimeout(900);
+        equal(await page.locator(".skills-table tr", { hasText: pick.name }).locator(".leader-tag").count(), 1, "사람별 표의 팀장 딱지");
+        await go("#/skills?tab=meetings");
+        await page.locator(".meeting-panel").getByRole("button", { name: "면담 추가" }).click();
+        const options = await page.locator(".meeting-form datalist option").evaluateAll((els) => els.map((el) => el.value));
+        expect(options.length > 0 && !options.includes(pick.name), `면담 상대 목록: ${options}`);
+        await page.locator(".meeting-form").getByRole("button", { name: "취소" }).click();
+      });
+    } finally {
+      await api.put("/api/people", { people: before.map((person) => ({ ...person, leader: false })) });
+    }
+  }
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

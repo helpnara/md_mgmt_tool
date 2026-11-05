@@ -23,3 +23,8 @@ export function leftLabel(meta: { people_left?: { name: string; left_reason?: st
   const found = meta.people_left?.find((person) => person.name === name);
   return found ? found.left_reason || "떠남" : "";
 }
+
+/** 명부의 팀장인가 (TODO 235) */
+export function isLeader(meta: { leader?: string }, name: string): boolean {
+  return Boolean(meta.leader) && meta.leader === name.trim();
+}

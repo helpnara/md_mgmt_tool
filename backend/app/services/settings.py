@@ -273,6 +273,10 @@ def check_people(value: Any) -> None:
     seen: set[str] = set()
     ids: dict[str, str] = {}
     owners_of_ip: dict[str, str] = {}
+    leaders = [rules.clean_text((raw if isinstance(raw, dict) else {}).get("name")) for raw in value
+               if isinstance(raw, dict) and raw.get("leader") and rules.clean_text(raw.get("name"))]
+    if len(leaders) > 1:
+        raise ValueError(f"팀장은 한 명입니다: {' · '.join(leaders)}")
     for raw in value:
         item = raw if isinstance(raw, dict) else {"name": raw}
         name = rules.clean_text(item.get("name"))
@@ -297,6 +301,8 @@ def check_people(value: Any) -> None:
             if employee_id in ids:
                 raise ValueError(f"같은 사번({employee_id})이 두 사람에게 있습니다: {ids[employee_id]} · {name}")
             ids[employee_id] = name
+        if item.get("leader") and has_left({"left_on": str(item.get("left_on") or "")}):
+            raise ValueError(f"{name}: 떠난 사람은 팀장이 될 수 없습니다 — 팀장을 다른 사람으로 옮긴 뒤 떠난 날을 적어 주세요.")
         # PC 주소 (TODO 233) — 모양 · 서버 PC 자신의 주소가 아닌가 · **한 주소에 두 사람은 안 된다**(공용 PC 가 잘못 등록되지 않게)
         raw_ips = item.get("ips")
         if raw_ips is None:
@@ -375,16 +381,31 @@ def meeting_cycle_days() -> int:
         return int(DEFAULTS["meeting_cycle_days"])
 
 
-def current_author(explicit: str | None = None) -> str:
-    """요청이 작성자를 지정했으면 그것을, 아니면 설정값을 쓴다.
+def leader_name(stored: dict[str, Any] | None = None) -> str:
+    """팀장 (TODO 235) — 명부에서 [팀장] 으로 고른 사람(떠나지 않은). 아직 고르지 않았으면 **설정의 작성자가 명부에 있는 이름일 때 그 사람**
+    (옮겨 오기 — 예전에는 작성자 칸이 팀장 이름이었다). 둘 다 아니면 빈칸."""
+    data = stored or load()
+    roster = normalize_people(data["people"])
+    for person in roster:
+        if person.get("leader") and not has_left(person):
+            return person["name"]
+    author = str(data.get("author") or "").strip()
+    if author and any(person["name"] == author and not has_left(person) for person in roster):
+        return author
+    return ""
 
-    로그인이 생기면 explicit 자리에 로그인 사용자가 들어온다.
+
+def current_author(explicit: str | None = None) -> str:
+    """요청이 작성자를 지정했으면 그것을, 아니면 **명부의 팀장**(235), 그도 없으면 설정의 작성자.
+
+    서버 PC(팀장)에서 쓴 진행일지 · 면담 · 접수 기록의 작성자다. 팀원 PC 에서 쓴 것은 그 사람(233, api/entries).
     """
     # TODO 214 F13 — 요청이 보낸 작성자도 작성자 규칙(한 줄 · 40자)을 거친다. 틀리면 ValueError → 400
     text = rules.clean_author(explicit) if explicit else ""
     if text:
         return text
-    return load()["author"]
+    data = load()
+    return leader_name(data) or data["author"]
 
 
 def entry_template(project_type: str | None) -> str:
@@ -527,10 +548,12 @@ def normalize_people(value: object) -> list[dict[str, str]]:
                 # 이 사람의 PC 주소 (TODO 233) — 여기서 온 요청은 이 사람으로 본다(담당 과제를 고칠 수 있다).
                 # 손으로 고친 파일의 틀린 값은 말없이 뺀다(읽기는 멈추지 않는다) — 저장할 때의 검사는 check_people
                 "ips": _ips(item.get("ips")),
+                # 팀장 (TODO 235) — 명부에 **한 명**. 손으로 고친 파일에 둘이면 먼저 나온 사람만
+                "leader": bool(item.get("leader")) and not any(person.get("leader") for person in people),
             }
         )
-    # 떠난 사람은 아래로. 자동완성·고르기에서 지금 있는 사람이 먼저 보여야 한다.
-    people.sort(key=lambda person: (has_left(person), person["name"]))
+    # 떠난 사람은 아래로. 자동완성·고르기에서 지금 있는 사람이 먼저 보여야 한다. 팀장은 맨 위 (TODO 235)
+    people.sort(key=lambda person: (has_left(person), not person.get("leader"), person["name"]))
     return people
 
 
@@ -570,8 +593,18 @@ def _left_reason(value: object) -> str:
     return text if text in LEFT_REASONS else ""
 
 
-def people() -> list[dict[str, str]]:
-    return normalize_people(load()["people"])
+def people() -> list[dict[str, Any]]:
+    data = load()
+    roster = normalize_people(data["people"])
+    # 옮겨 오기 (TODO 235) — 팀장을 아직 고르지 않았고 설정의 작성자가 명부에 있으면 그 사람을 팀장으로 보인다.
+    # 명부를 한 번 저장하면 파일에도 그렇게 남는다(화면이 받은 그대로 보내므로)
+    if not any(person.get("leader") for person in roster):
+        author = str(data.get("author") or "").strip()
+        for person in roster:
+            if author and person["name"] == author and not has_left(person):
+                person["leader"] = True
+                break
+    return roster
 
 
 def has_left(person: dict[str, Any], today: str | None = None) -> bool:
@@ -621,7 +654,7 @@ def add_person(name: str) -> list[dict[str, str]]:
     current = people()
     if any(person["name"] == name for person in current):
         return current
-    current.append({"name": name, "employee_id": "", "account": "", "left_on": "", "left_reason": "", "ips": []})
+    current.append({"name": name, "employee_id": "", "account": "", "left_on": "", "left_reason": "", "ips": [], "leader": False})
     return save({"people": current})["people"]
 
 

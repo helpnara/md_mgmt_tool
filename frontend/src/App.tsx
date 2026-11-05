@@ -221,7 +221,8 @@ export default function App() {
         // 작성자를 정하지 않으면 기록에 작성자가 비어 쌓인다. 한 번 알려 준다. 바깥(읽기 전용)에는 설정이 닫혀 있으니 묻지 않는다.
         if (loaded.readonly) setAuthor(null);
         else {
-          api.settings().then((settings) => setAuthor(settings.author)).catch(() => setAuthor(null));
+          // 명부의 팀장이 있으면 작성자가 정해진 것이다 (TODO 235)
+          api.settings().then((settings) => setAuthor(settings.leader || settings.author)).catch(() => setAuthor(null));
           // 162 때 브라우저 안에 남은 쓰던 글을 데이터 폴더로 옮긴다 — 한 번, 조용히 (TODO 170). 바깥에서는 올릴 수 없다
           void migrateBrowserDrafts();
         }

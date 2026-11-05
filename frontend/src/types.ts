@@ -32,6 +32,8 @@ export interface Meta {
   build?: { name: string; built?: string; source?: string } | null;
   /** 명부에서 떠난 사람 — 딱지와 자동완성 순서에 쓴다 (TODO 122) */
   people_left?: Person[];
+  /** 명부의 팀장 (TODO 235) — "팀장" 딱지 · 면담 상대에서 뺀다. 고르지 않았으면 빈칸 */
+  leader?: string;
   /** 지금까지 적어 둔 유관부서와 그쪽 담당자 — 자동완성과 거르기에 쓴다 (TODO 92) */
   partner_teams: string[];
   partner_people: string[];
@@ -334,6 +336,8 @@ export interface Person {
   left_on?: string;
   /** 전배 · 퇴사 (TODO 122) */
   left_reason?: string;
+  /** 팀장 (TODO 235) — 명부에 한 명 */
+  leader?: boolean;
   /** 이 사람의 PC 주소 (TODO 233) — 여기서 연 화면은 이 사람으로 본다(담당 과제의 진행일지 · 첨부 · 개요를 고친다) */
   ips?: string[];
 }
@@ -364,11 +368,15 @@ export interface EditItem {
   project_title: string | null;
   entry_id: number | null;
   count: number;
+  /** 팀장이 노트북 IP 로 고친 것 (TODO 235 ②) */
+  leader?: boolean;
 }
 
 export interface AppSettings {
-  /** 지금은 설정에서 정한 사용자, 나중에는 로그인한 사용자가 된다. */
+  /** 설정의 작성자 칸 — 명부에서 팀장을 고르면 쓰지 않는다 (TODO 235) */
   author: string;
+  /** 명부의 팀장 (TODO 235). 있으면 서버 PC 에서 쓴 기록의 작성자는 이 이름 */
+  leader?: string;
   /** 설정 파일에서 읽지 못해 기본값을 쓰는 열쇠 — "*" 는 파일 전체 (TODO 163, 읽을 때만 온다) */
   unreadable?: string[];
   /** 과제 속성별 진행일지 서식. "" 키가 공통 서식. */
@@ -930,6 +938,8 @@ export interface ActivityPerson {
   quiet: boolean;
   /** 명부에서 떠난 사람 (TODO 122 · 194) — 줄은 남고 면담 대상에서는 빠진다 */
   left?: boolean;
+  /** 명부의 팀장 (TODO 235) — 면담 대상에서 빠진다(면담 칸은 비어 온다) */
+  leader?: boolean;
   left_on?: string | null;
   left_reason?: string;
   /** 면담 (TODO 182) — 역량 이력과 따로 센다 */

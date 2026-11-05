@@ -204,3 +204,67 @@ def test_visitors_list_shows_who_was_recognized(team):
     assert items[MEMBER_IP]["name"] == "가팀원"
     assert items["10.0.0.9"]["name"] == ""
     assert team["member"].get("/api/people/visitors").status_code == 403
+
+
+# ── 명부의 팀장 (TODO 235) ─────────────────────────────────────────────
+
+def test_one_leader_and_the_author_follows(team):
+    owner = team["owner"]
+    two = owner.put("/api/people", json={"people": [{"name": "가팀원", "leader": True}, {"name": "나팀원", "leader": True}]})
+    assert two.status_code == 400 and "한 명" in two.json()["detail"]
+    left = owner.put("/api/people", json={"people": [{"name": "나팀원", "leader": True, "left_on": "2026-09-30", "left_reason": "전배"}]})
+    assert left.status_code == 400 and "떠난 사람" in left.json()["detail"]
+    assert owner.put("/api/people", json={"people": [{"name": "팀장님", "leader": True}, {"name": "가팀원"}, {"name": "나팀원"}]}).status_code == 200
+    people = owner.get("/api/people").json()["people"]
+    assert people[0]["name"] == "팀장님" and people[0]["leader"] is True  # 맨 위
+    # 리더 칸을 보내지 않으면 물려준다
+    assert owner.put("/api/people", json={"people": [{"name": "팀장님"}, {"name": "가팀원"}, {"name": "나팀원"}]}).status_code == 200
+    assert owner.get("/api/meta").json()["leader"] == "팀장님"
+    assert owner.get("/api/settings").json()["leader"] == "팀장님"
+    # 서버 PC 에서 쓴 기록의 작성자는 명부의 팀장 — 설정의 작성자 칸과 달라도
+    owner.put("/api/settings", json={"author": "옛 이름"})
+    made = owner.post(f"/api/projects/{team['mine']}/entries", json={"title": "팀장 기록"}).json()
+    assert made["author"] == "팀장님"
+
+
+def test_author_in_roster_becomes_leader_until_chosen(team):
+    owner = team["owner"]
+    owner.put("/api/settings", json={"author": "나팀원"})
+    assert owner.get("/api/meta").json()["leader"] == "나팀원"
+    owner.put("/api/settings", json={"author": "명부에 없는 이름"})
+    assert owner.get("/api/meta").json()["leader"] == ""
+    made = owner.post(f"/api/projects/{team['mine']}/entries", json={"title": "옛 방식"}).json()
+    assert made["author"] == "명부에 없는 이름"  # 고르기 전에는 지금처럼
+
+
+def test_leader_is_not_a_meeting_target(team):
+    owner = team["owner"]
+    owner.put("/api/people", json={"people": [{"name": "가팀원", "ips": [MEMBER_IP]}, {"name": "나팀원", "leader": True}]})
+    owner.post("/api/meetings", json={"person": "나팀원", "date": "2026-03-01", "summary": "예전 면담"})
+    rows = {p["name"]: p for p in owner.get("/api/activities/summary").json()["people"]}
+    assert rows["나팀원"]["leader"] is True and rows["나팀원"]["quiet"] is False and rows["나팀원"]["meeting_due"] is False
+    assert rows["나팀원"]["last_meeting"] is None
+    assert rows["가팀원"]["leader"] is False
+
+
+def test_leader_laptop_is_member_rights_but_marked(team):
+    owner = team["owner"]
+    # 팀장 줄에 노트북 IP — 권한은 팀원(담당 과제만), 고친 것은 "팀장" 으로 표시
+    owner.put("/api/people", json={"people": [{"name": "가팀원", "ips": [MEMBER_IP], "leader": True}, {"name": "나팀원"}]})
+    member = team["member"]
+    assert member.get("/api/me").json()["role"] == "member"
+    assert member.put("/api/settings", json={"author": "x"}).status_code == 403
+    member.post(f"/api/projects/{team['mine']}/entries", json={"title": "노트북에서"})
+    items = owner.get("/api/edits/recent").json()["items"]
+    assert items[0]["name"] == "가팀원" and items[0]["leader"] is True
+
+
+def test_roster_shows_the_migrated_leader(team):
+    owner = team["owner"]
+    owner.put("/api/settings", json={"author": "나팀원"})
+    rows = {p["name"]: p for p in owner.get("/api/people").json()["people"]}
+    assert rows["나팀원"]["leader"] is True and rows["가팀원"]["leader"] is False
+    # 화면이 받은 그대로 저장하면 파일에 남는다 — 작성자를 바꿔도 팀장은 그대로
+    owner.put("/api/people", json={"people": list(rows.values())})
+    owner.put("/api/settings", json={"author": "가팀원"})
+    assert owner.get("/api/meta").json()["leader"] == "나팀원"

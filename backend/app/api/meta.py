@@ -155,6 +155,8 @@ def _meta(conn: sqlite3.Connection) -> dict:
         # 그중 떠난 사람 (TODO 122). 화면이 딱지를 붙이고 자동완성에서 뒤로 민다.
         # 떠난 날이 아직 오지 않은 사람(전배 예정)은 그날까지 여기 없다 (TODO 214 D8)
         "people_left": settings_service.left_people(),
+        # 명부의 팀장 (TODO 235) — 화면이 "팀장" 딱지를 붙이고 면담 상대에서 뺀다. 이름뿐이라 바깥에 보여도 된다
+        "leader": settings_service.leader_name(),
         "project_code": settings_service.project_code(),
         "vault": str(get_settings().vault_dir),
         "report_cycle_days": get_settings().report_cycle_days,

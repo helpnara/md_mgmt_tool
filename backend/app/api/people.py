@@ -32,6 +32,8 @@ class Person(BaseModel):
     left_reason: str = ""
     # 이 사람의 PC 주소 (TODO 233). **보내지 않으면 지금 값을 물려준다** — IP 칸이 없는 옛 화면이 저장해도 지워지지 않게
     ips: list[str] | None = None
+    # 팀장 (TODO 235) — 한 명. 보내지 않으면 지금 값을 물려준다
+    leader: bool | None = None
 
 
 class PeopleUpdate(BaseModel):
@@ -74,6 +76,8 @@ def replace_people(payload: PeopleUpdate, conn: sqlite3.Connection = Depends(get
             row["account"] = kept.get("account", "")
         if row.get("ips") is None:
             row["ips"] = list(kept.get("ips") or [])
+        if row.get("leader") is None:
+            row["leader"] = bool(kept.get("leader"))
         rows.append(row)
     try:
         return {"people": settings_service.save({"people": rows})["people"]}

@@ -22,7 +22,7 @@ import ReportEditor from "./ReportEditor";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import ProjectForm from "./ProjectForm";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
-import { leftLabel } from "../people";
+import { isLeader, leftLabel } from "../people";
 import StageBand from "./StageBand";
 import { FORM_SHOWN_WARNING, REPORT_DRAFT_DAYS, addDays, reportDateProblem, warningList } from "../inputRules";
 
@@ -530,6 +530,7 @@ export default function ProjectDetail({
                     <span key={name}>
                       {i > 0 && ", "}
                       {name}
+                      {isLeader(meta, name) && <span className="tag leader-tag">팀장</span>}
                       {/* 떠난 사람이면 딱지. 이름은 지우지 않는다 (TODO 122) */}
                       {leftLabel(meta, name) && (
                         <span className="tag left-tag">{leftLabel(meta, name)}</span>

@@ -10,6 +10,7 @@ import CopyTableButton from "./CopyTableButton";
 import TotalRow from "./TotalRow";
 import { dropDraft, useDrafts } from "../unsaved";
 import ProblemsBanner from "./ProblemsBanner";
+import { isLeader } from "../people";
 import ViewTabs from "./ViewTabs";
 import Explain from "./Explain";
 
@@ -561,13 +562,14 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       {teamEdits.length > 0 && (
         <>
           <p className="hint">
-            <b>팀원이 고친 것</b> — 최근 7일, 팀원 PC 에서 담당 과제의 진행일지 · 첨부 · 개요를 고친 기록입니다.
+            <b>팀원이 고친 것</b> — 최근 7일, 명부에 IP 를 적은 PC 에서 담당 과제의 진행일지 · 첨부 · 개요를 고친 기록입니다.
           </p>
           <ul className="home-stale home-edits">
             {teamEdits.slice(0, 8).map((item, index) => (
               <li key={`${item.at}-${index}`}>
                 <span className="due">{item.at.slice(5, 16).replace("T", " ")}</span>
                 <b>{item.name}</b>
+                {item.leader && <span className="tag leader-tag" title="명부의 팀장 — 서버 PC 가 아닌 곳(팀장 줄에 적은 IP)에서 고친 것">팀장</span>}
                 {item.project_id ? (
                   <a href={projectLink(item.project_id, item.entry_id && item.action !== "진행일지 삭제" ? { entry: item.entry_id } : {})}>
                     {item.project_title ?? item.project_id}
@@ -979,6 +981,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
                     <tr key={member.name}>
                       <td>
                         <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
+                        {isLeader(meta, member.name) && <span className="tag leader-tag">팀장</span>}
                       </td>
                       <td>{member.total || DASH}</td>
                       <StatusCells

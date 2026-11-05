@@ -13,7 +13,7 @@ import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
 import CopyTableButton from "./CopyTableButton";
-import { leftLabel } from "../people";
+import { isLeader, leftLabel } from "../people";
 import { TypeBadge, YearStatusBadge, shownStatus } from "./StatusBadge";
 import StageBand from "./StageBand";
 
@@ -501,6 +501,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                           {i > 0 && ", "}
                           <span className="owner-name">
                           {name}
+                          {isLeader(meta, name) && <span className="tag leader-tag">팀장</span>}
                           {/* 떠난 사람은 이름 옆에 딱지. 이름 자체는 지우지 않는다 (TODO 122) */}
                           {leftLabel(meta, name) && (
                             <span className="tag left-tag">{leftLabel(meta, name)}</span>

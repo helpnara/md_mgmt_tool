@@ -189,7 +189,9 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
       personNameProblem(person.name) ??
       ((nameCount.get(person.name.trim()) ?? 0) > 1 ? "같은 이름이 명부에 둘 있습니다." : null),
     id: (idCount.get((person.employee_id ?? "").trim()) ?? 0) > 1 ? "같은 사번이 둘 있습니다." : null,
-    left: dateProblem(person.left_on, "떠난 날"),
+    left:
+      dateProblem(person.left_on, "떠난 날") ??
+      (person.leader && person.left_on && isDeparted(person) ? "팀장은 떠난 사람이 될 수 없습니다 — 팀장을 먼저 옮기세요." : null),
   }));
   // PC 주소 (TODO 233) — 모양 · 한 주소에 두 사람(공용 PC 가 잘못 등록되지 않게)
   const ipOwners = new Map<string, string[]>();
@@ -204,6 +206,9 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
   });
   const problemCount = rowProblems.filter((row) => row.name || row.id || row.left).length + ipProblems.filter(Boolean).length;
   const setIps = (index: number, ips: string[]) => setPeople((prev) => prev.map((p, i) => (i === index ? { ...p, ips } : p)));
+  // 팀장 (TODO 235) — 한 명. 고르면 다른 사람의 표시는 풀린다
+  const setLeader = (index: number) => setPeople((prev) => prev.map((p, i) => ({ ...p, leader: i === index })));
+  const leaderRow = people.find((person) => person.leader);
   const registered = new Set([...ipOwners.keys()]);
   const attachIp = (ip: string, name: string) =>
     setPeople((prev) => prev.map((p) => (p.name === name ? { ...p, ips: [...(p.ips ?? []).filter((item) => item !== ip), ip] } : p)));
@@ -242,6 +247,9 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         <br />
         이름은 한 칸에 한 사람 — 쉼표 · <code>/ \</code> 없이 40자까지. 사번은 비워 두거나, 적으면 사람마다 달라야 합니다.
         <br />
+        <b>팀장</b> — 이름 왼쪽 동그라미로 <b>한 명</b>을 고릅니다. 고르면 이 PC(서버 PC)에서 쓴 기록의 작성자가 그 이름이 되고, 면담 대상에서 빠지며,
+        화면 곳곳에 "팀장" 딱지가 붙습니다(과제 · 숫자는 그대로 셉니다). 팀장이 바뀌면 동그라미를 옮기면 됩니다.
+        <br />
         <b>PC 주소</b> — 팀원 <b>개인 PC 의 IP</b> 를 적으면, 그 PC 에서 공유 주소로 연 화면은 그 사람으로 보고{" "}
         <b>담당 과제의 진행일지 · 첨부 · 개요</b>를 고칠 수 있습니다. 본인 면담은 보기만 됩니다. 가상 PC · 공용 PC 는 적지 마세요 —
         적지 않은 PC 는 지금처럼 보기만 됩니다. IP 가 바뀌면 여기서 고치면 됩니다.
@@ -260,6 +268,9 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         </label>
       )}
 
+      {people.length > 0 && !leaderRow && (
+        <p className="hint warn-text leader-missing">아직 팀장을 고르지 않았습니다 — 이름 왼쪽 동그라미로 고르면 작성자 · 면담 대상이 따라갑니다.</p>
+      )}
       {/* 인원이 늘어도 카드 키가 자라지 않게 목록 안에서만 스크롤한다 (TODO 121) */}
       {people.length > 0 && (
         <div className="people-scroll">
@@ -278,7 +289,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
           </colgroup>
           <thead>
             <tr>
-              <th>이름</th>
+              <th title="이름 왼쪽 동그라미 — 팀장 한 명 (TODO 235)">이름 · 팀장</th>
               <th>사번</th>
               <th>과제</th>
               <th title="이 사람 PC 의 IP — 여기서 연 화면은 담당 과제를 고칠 수 있습니다 (TODO 233)">PC 주소</th>
@@ -296,12 +307,25 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                 data-name={person.name}
               >
                 <td>
+                  <div className="name-with-leader">
+                  {/* 팀장 한 명 (TODO 235) — 작성자 · 면담 대상 · 딱지가 이것을 따른다 */}
+                  <input
+                    type="radio"
+                    name="people-leader"
+                    className="leader-pick"
+                    checked={Boolean(person.leader)}
+                    onChange={() => setLeader(index)}
+                    aria-label={`${person.name || "이 사람"} 을(를) 팀장으로`}
+                    title="팀장으로 고르기 — 한 명만"
+                  />
                   <input
                     value={person.name}
                     onChange={(e) => update(index, "name", e.target.value)}
                     aria-invalid={rowProblems[index]?.name ? true : undefined}
                     title={rowProblems[index]?.name ?? undefined}
                   />
+                  </div>
+                  {person.leader && <span className="tag leader-tag">팀장</span>}
                   {rowProblems[index]?.name && <span className="field-error person-name-error">{rowProblems[index].name}</span>}
                 </td>
                 <td>

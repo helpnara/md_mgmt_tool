@@ -431,7 +431,14 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
     met = meetings_service.by_person(conn, year)
     blank = {"meetings": 0, "last_meeting": None, "meeting_days_since": None, "open_followups": 0,
              "next_meeting": None, "meeting_due": False}
+    leader = settings_service.leader_name()
     for item in people:
+        # 팀장 (TODO 235 ③④) — 딱지를 붙이고, 면담 대상(먼저 볼 사람 · 면담 칸)에서 뺀다. 역량 숫자는 그대로 센다
+        item["leader"] = item["name"] == leader
+        if item["leader"]:
+            item["quiet"] = False
+            item.update(blank)
+            continue
         info = met.get(item["name"], blank)
         if item["left"]:
             # 떠난 사람과는 더 면담하지 않는다 — 지난 면담은 남기되 "때가 지났다" 로 세우지 않는다 (194)

@@ -524,6 +524,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                     >
                       {item.name}
                     </button>
+                    {item.leader && <span className="tag leader-tag" title="명부의 팀장 — 면담 대상에서 빠집니다">팀장</span>}
                     {item.left && (
                       <span className="tag left-tag" title={item.left_on ? `${item.left_on} 부터` : undefined}>
                         {leftLabel(meta, item.name) || "떠남"}
@@ -644,7 +645,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         meta={meta}
         person={readonly ? getMe().name : person}
         // 떠난 날이 오늘 이후면 아직 있는 사람이다 — 전배 예정자와도 면담한다 (TODO 214 D8)
+        // 팀장은 면담 상대가 아니다 (TODO 235 ③)
         people={summary.people
+          .filter((item) => !item.leader)
           .filter((item) => !item.left || (item.left_on ? !isDeparted({ left_on: item.left_on }) : false))
           .map((item) => item.name)
           .filter((name) => splitPeople(name).length === 1)}

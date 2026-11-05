@@ -53,8 +53,11 @@ class SettingsUpdate(BaseModel):
 def read_settings() -> dict:
     from ..vault import versions
 
+    stored = svc.load()
     return {
-        **svc.load(),
+        **stored,
+        # 명부의 팀장 (TODO 235) — 있으면 작성자는 이 이름을 따라간다(설정의 작성자 칸은 쓰지 않는다)
+        "leader": svc.leader_name(stored),
         # 설정 파일에서 읽지 못해 기본값을 쓰는 열쇠 — 설정 화면이 한 줄로 알린다 (TODO 163)
         "unreadable": svc.unreadable_keys(),
         # 이전 버전을 남기지 못한 문서 (TODO 206 ㉕) — 긴 경로 등. 점검 자리가 보일 재료, 저장 자체는 됐다.

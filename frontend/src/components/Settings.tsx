@@ -38,6 +38,8 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
   const [error, setError] = useState<string | null>(null);
   // 설정 파일에서 읽지 못해 기본값을 쓰는 값 (TODO 163)
   const [unreadable, setUnreadable] = useState<string[]>([]);
+  // 명부의 팀장 (TODO 235) — 있으면 작성자는 이 이름을 따라간다
+  const [leader, setLeader] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -46,6 +48,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
       .then((settings) => {
         setAuthor(settings.author);
         setSavedAuthor(settings.author);
+        setLeader(settings.leader ?? "");
         setUnreadable(settings.unreadable ?? []);
         setLoadError(null);
       })
@@ -133,10 +136,18 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           <div className="card author-card" onKeyDown={enterToSave(() => void save(), canSaveAuthor)}>
             <h2>작성자</h2>
             <p className="hint">
-              진행일지와 보고 문서에 <strong>누가 작성했는지</strong>를 함께 남깁니다. 여기서 정한 이름이 쓰입니다.
-              <br />
-              나중에 여러 명이 함께 쓰게 되면, 이 설정 대신 로그인한 사용자가 작성자가 됩니다.
+              진행일지와 보고 문서에 <strong>누가 작성했는지</strong>를 함께 남깁니다. 이 PC(서버 PC)에서 쓴 기록에 붙는 이름입니다.
+              팀원 PC 에서 쓴 기록에는 그 팀원의 이름이 붙습니다.
             </p>
+            {leader ? (
+              // 명부에서 팀장을 골랐다 (TODO 235) — 이름이 한 곳에만 있게 칸을 세우지 않는다
+              <p className="leader-author">
+                팀장 <b>{leader}</b> <span className="tag leader-tag">팀장</span>
+                <span className="hint"> — 아래 명부의 [팀장] 을 따라갑니다. 바꾸려면 명부에서 동그라미를 옮기세요.</span>
+              </p>
+            ) : (
+            <>
+            <p className="hint">아래 명부에서 <b>팀장</b>을 고르면 그 이름을 따라가고 이 칸은 사라집니다.</p>
             <div className="form-row">
               <label className="grow">
                 이름
@@ -174,9 +185,11 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
                 {busy ? "저장 중…" : "저장"}
               </button>
             </div>
+            </>
+            )}
           </div>
 
-          <PeopleCard onChanged={onSaved} />
+          <PeopleCard onChanged={() => { onSaved(); load(); }} />
           {/* 팀원 면담의 구분 · 주기 (TODO 182) — 명부 곁에 */}
           <MeetingSettingsCard meta={meta} onSaved={onSaved} />
           <ProjectTypeCard onSaved={onSaved} />
