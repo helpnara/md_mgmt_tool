@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
-import type { ActivityBrief, BackupStatus, EditItem, Home as HomeData, HomeSlice, Meta, StatusInfo } from "../types";
+import type { ActivityBrief, BackupStatus, EditItem, Home as HomeData, RetroDue, HomeSlice, Meta, StatusInfo } from "../types";
 import { listLink, projectLink, screenLink, useAddressBar } from "../nav";
 import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
@@ -329,6 +329,11 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const drafts = useDrafts();
   // 팀원이 고친 것 — 최근 7일 (TODO 233 ⑥). 팀장만 본다(바깥에는 막혀 있다)
   const [teamEdits, setTeamEdits] = useState<EditItem[]>([]);
+  // 회고를 적을 과제 — 내 것, 끝난 지 1년 안 (TODO 237 A3). 팀원 PC 에서도 본다(그 사람 것)
+  const [retroDue, setRetroDue] = useState<RetroDue["items"]>([]);
+  useEffect(() => {
+    api.retroDue().then((data) => setRetroDue(data.items)).catch(() => setRetroDue([]));
+  }, []);
   useEffect(() => {
     // 읽기 전용 공유(191)에는 설정이 닫혀 있다 — 백업 상태는 주인만 본다
     if (document.body.classList.contains("readonly")) return;
@@ -448,7 +453,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
 
   // ── [할 일] 탭 — 매일 여는 이유 (TODO 232 ①) ─────────────────────────────
   const scheduleSide = (week.team_upcoming?.items.length ?? 0) > 0 || (week.team_missed?.length ?? 0) > 0 || teamEdits.length > 0;
-  const reportSide = drafts.length > 0 || week.drafts > 0 || week.stale.length > 0 || week.owner_gaps_total > 0 || week.plans.length > 0;
+  const reportSide = retroDue.length > 0 || drafts.length > 0 || week.drafts > 0 || week.stale.length > 0 || week.owner_gaps_total > 0 || week.plans.length > 0;
   const todo = (
     <div className="card home-week">
       <h2>
@@ -587,6 +592,24 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       )}
       </div>}
       {reportSide && <div className="home-week-col">
+      {/* 회고를 적을 과제 (TODO 237 A3) — 기억이 생생할 때. 나중에 경력기술서의 "내가 한 일 · 결과" 가 된다 */}
+      {retroDue.length > 0 && (
+        <>
+          <p className="hint">
+            <b>회고를 적을 과제 {retroDue.length}건</b> — 내가 담당한 끝난 과제(1년 안)에서 회고 세 줄이 비어 있습니다. 누르면 그 과제의 양식이 열립니다.
+          </p>
+          <ul className="home-stale home-retro">
+            {retroDue.slice(0, 5).map((item) => (
+              <li key={item.id}>
+                <span className="due">완료 {item.completed_at}</span>
+                <a href={projectLink(item.id, { retro: "me" })}>{item.title}</a>
+                <span className="muted">{item.id}</span>
+              </li>
+            ))}
+          </ul>
+          {retroDue.length > 5 && <p className="hint">그 밖에 {retroDue.length - 5}건 — 과제 상세의 [담당과 역할]에서 적습니다.</p>}
+        </>
+      )}
       {/* 쓰다 만 글 (TODO 170) — 어느 과제에서 쓰다 말았는지 기억하지 않아도 되게, 누르면 그 편집기로 */}
       {drafts.length > 0 && (
         <>

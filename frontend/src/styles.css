@@ -2232,3 +2232,35 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
 .name-with-leader .leader-pick { width: auto; flex: 0 0 auto; margin: 0; }
 .name-with-leader input:not(.leader-pick) { flex: 1 1 auto; min-width: 0; }
 .tag.leader-tag { background: #ede9fe; color: #5b21b6; margin-left: 4px; margin-right: 0; }
+
+/* ── 담당과 역할 (TODO 237) — 사람마다 역할 · 맡은 부분 · 담당 기간 · 회고 ───────────────── */
+.contrib-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.contrib-row { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.contrib-row.former { background: var(--surface-alt, #f8f9fb); }
+/* 한 줄 — 이름 · 역할 · 맡은 부분(남는 폭) · 기간 · 회고 · 단추. 왼쪽 단(600px 남짓)에서도 줄이 접히지 않게 칸으로 */
+.contrib-main { display: grid; grid-template-columns: 96px 52px minmax(0, 1fr) auto 84px 52px; align-items: center; gap: 4px 12px; font-size: 13px; }
+.contrib-main > button { justify-self: end; }
+.contrib-name { font-weight: 600; display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.contrib-part { min-width: 0; overflow-wrap: anywhere; }
+.contrib-period { color: var(--muted-strong); white-space: nowrap; }
+.retro-state { font-size: 12px; white-space: nowrap; }
+.retro-state.retro-written { color: #15803d; }
+.retro-state.retro-missing { color: var(--warn); }
+.former-tag { background: #eef0f3; color: var(--muted-strong); }
+.contrib-retro { margin: 8px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-size: 13px; }
+.contrib-retro dt { font-size: 12px; color: var(--muted); }
+.contrib-retro dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.contrib-form { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.contrib-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.contrib-form-row .contrib-part-label { flex: 1 1 220px; }
+.contrib-period-hint { margin: 0 0 6px; }
+.contrib-retro-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.contrib-retro-fields textarea { width: 100%; min-height: 0; height: 76px; resize: vertical; }
+.contrib-done-note { margin: 0; padding: 6px 10px; border-radius: 6px; background: var(--accent-soft); font-size: 13px; }
+.outcome-line { margin-top: 2px; font-size: 13px; font-weight: 400; }
+.outcome-label { flex: 1 1 100%; }
+@media (max-width: 900px) {
+  .contrib-retro, .contrib-retro-fields { grid-template-columns: 1fr; }
+  .contrib-main { grid-template-columns: minmax(70px, auto) 52px minmax(0, 1fr) 52px; }
+  .contrib-main .contrib-period, .contrib-main .retro-state { grid-column: span 2; }
+}

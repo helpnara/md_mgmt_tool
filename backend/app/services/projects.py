@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterable, Any
 
 from .. import clock
+from .. import contributions as contrib
 from ..config import CLASSIFICATION_KEYS, DEFAULT_STATUS, STATUS_KEYS, LEGACY_STATUS_MAP, get_settings, normalize_status
 from .. import schemas as rules
 from ..vault import markdown as md
@@ -93,6 +94,8 @@ META_ORDER = [
     "nature", "category", "delivery", "cost_kind",
     "group", "tags", "owners",
     "start_date", "due_date", "completed_at", "effect_expected", "effect_verified",
+    # 금액 아닌 성과 한 줄 (TODO 237 A4)
+    "outcome",
     "no_report", "no_effect", "partners",
     # 이 과제가 어느 접수에서 승격됐는가 (TODO 136). 직접 만든 과제는 비어 있다.
     "intake_id",
@@ -335,6 +338,7 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any], warnings: lis
     effect_expected = normalize_effect_field(data.get("effect_expected"), "effect_expected")
     effect_verified = normalize_effect_field(data.get("effect_verified"), "effect_verified")
     no_effect = bool(data.get("no_effect"))
+    outcome = contrib.clean_outcome(data.get("outcome"))  # 금액 아닌 성과 한 줄 (TODO 237)
     created_by = settings_service.current_author(rules.clean_author(data.get("created_by"))) or None  # F13
 
     # TODO 201 — **모든 검증을 폴더 만들기 앞에.** 효과 금액 · 완료일 · 담당자 · 유관부서 … 가 400 으로
@@ -358,6 +362,7 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any], warnings: lis
         "completed_at": completed_at,
         "effect_expected": effect_expected,
         "effect_verified": effect_verified,
+        **({"outcome": outcome} if outcome else {}),
         # 과제 분류 넷 (TODO 136). 주로 스마트과제에서 쓴다 — 다른 과제는 비어 있어도 된다.
         **{key: normalize_label(data.get(key)) for key in CLASSIFICATION_KEYS},
         # 접수에서 승격된 과제면 그 접수 번호 (TODO 136)
@@ -788,7 +793,14 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         updates["owners"] = normalize_owners(updates.pop("owners", None) or updates.pop("owner", None))
     if "completed_at" in updates:
         updates["completed_at"] = normalize_day(updates["completed_at"])
+    if "outcome" in updates:
+        updates["outcome"] = contrib.clean_outcome(updates["outcome"])
     changes = {k: v for k, v in updates.items() if k in META_ORDER or k == "group"}
+    # 담당 기간 (TODO 237 A2) — 담당자가 바뀌면 든 사람은 오늘부터, 빠진 사람은 오늘까지
+    if "owners" in changes:
+        followed = contrib.follow_owners(doc.meta, changes["owners"], date_today())
+        if followed is not None:
+            changes["contributions"] = contrib.to_meta(followed)
     start_now = _day_or_none(changes["start_date"] if "start_date" in changes else doc.meta.get("start_date"))
     # 기간 — 보낸 쪽과 파일에 있던 쪽을 합쳐서 본다 (TODO 205 ㉞). **시작일 · 마감일을 보낼 때만** 따진다 —
     # 손으로 거꾸로 적은 파일이 다른 칸 저장까지 막지 않게 (TODO 214 D18). 그 파일은 문제 목록에 뜬다.
@@ -874,6 +886,49 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
     index_project(conn, directory)
     conn.commit()
     return warnings
+
+
+class NotYourRowError(PermissionError):
+    """팀원이 남의 줄 또는 담당 기간을 고치려 했다 — 403."""
+
+
+def contributions_of(conn: sqlite3.Connection, project_id: str) -> list[dict[str, Any]]:
+    """담당과 역할 (TODO 237) — 색인에서. 지금 담당이 먼저."""
+    return [
+        {"name": row["name"], "role": row["role"] or "", "part": row["part"] or "",
+         "from": row["from_date"], "to": row["to_date"],
+         "problem": row["problem"] or "", "did": row["did"] or "", "result": row["result"] or "",
+         "derived": bool(row["derived"]), "current": bool(row["current"])}
+        for row in conn.execute(
+            "SELECT * FROM project_contribution WHERE project_id = ? ORDER BY position", (project_id,))
+    ]
+
+
+def update_contribution(
+    conn: sqlite3.Connection, project_id: str, name: str, data: dict[str, Any], *, member: str | None = None
+) -> None:
+    """한 사람 줄을 고친다 (TODO 237). `member` 가 있으면 팀원 — **자기 줄만**, 담당 기간은 못 고친다(팀장이 고친다)."""
+    directory = project_dir(conn, project_id)
+    index_md = directory / "index.md"
+    known = conn.execute("SELECT file_mtime FROM project WHERE id = ?", (project_id,)).fetchone()
+    md.ensure_unchanged(index_md, known["file_mtime"] if known else None)
+    doc = md.load(index_md)
+    rows = contrib.materialize(doc.meta)
+    found = next((row for row in rows if row["name"] == name), None)
+    if found is None:
+        raise LookupError(f"{name} 님은 이 과제의 담당자가 아닙니다 — 담당자를 먼저 더해 주세요.")
+    if member is not None:
+        if member != name:
+            raise NotYourRowError("자기 줄만 고칠 수 있습니다 — 다른 사람의 역할 · 회고는 그 사람이나 팀장이 고칩니다.")
+        for key in ("from", "to"):
+            if key in data and (rules.strict_day(data[key], contrib.LABELS[key]) or None) != found.get(key):
+                raise NotYourRowError("담당 기간은 팀장이 고칩니다 — 역할 · 맡은 부분 · 회고만 고칠 수 있습니다.")
+    updated = contrib.check_update(found, data)
+    rows = [updated if row["name"] == name else row for row in rows]
+    meta = md.merge_meta(doc.meta, {"contributions": contrib.to_meta(rows), "updated_at": now_iso()})
+    md.save(index_md, md.MarkdownDoc(meta, doc.body))
+    index_project(conn, directory)
+    conn.commit()
 
 
 def _as_ids(value: object) -> list[str]:

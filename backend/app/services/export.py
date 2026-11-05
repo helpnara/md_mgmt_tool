@@ -85,6 +85,31 @@ def _rewrite_links(body: str, doc_dir: str, mode: str, directory: Path, dir_name
     return LINK_PATTERN.sub(replace, body or "")
 
 
+def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[str]:
+    """담당과 역할 · 회고 · 금액 아닌 성과 (TODO 237) — 경력기술서의 재료. 적은 것이 없으면 절째 뺀다."""
+    from .projects import contributions_of
+
+    rows = contributions_of(conn, project["id"])
+    written = [row for row in rows if row["role"] or row["part"] or row["problem"] or row["did"] or row["result"]
+               or not row["derived"]]
+    outcome = project["outcome"] if "outcome" in project.keys() else None
+    if not written and not outcome:
+        return []
+    end_of_project = {"done": project["completed_at"], "dropped": "중단"}.get(project["status"])
+    lines = ["## 담당과 역할", ""]
+    if outcome:
+        lines += [f"**그 밖의 성과** — {outcome}", ""]
+    for row in rows:
+        period = f"{row['from'] or '?'} ~ {row['to'] or end_of_project or '지금'}"
+        head = " · ".join(filter(None, [f"**{row['name']}**", row["role"], row["part"], period]))
+        lines.append(f"- {head}")
+        for key, label in (("problem", "무엇이 문제였나"), ("did", "내가 한 일"), ("result", "결과")):
+            if row[key]:
+                text = row[key].strip().replace("\n", "\n    ")
+                lines.append(f"  - {label}: {text}")
+    return lines + [""]
+
+
 def merged_markdown(
     conn: sqlite3.Connection, project_id: str, mode: str = "zip", include_reports_full: bool = False
 ) -> tuple[str, str, list[str]]:
@@ -129,6 +154,7 @@ def merged_markdown(
         "",
         convert(project["body"] or "", PROJECT_DOC_DIR).strip(),
         "",
+        *_contribution_lines(conn, project),
         "---",
         "",
         "# 수행 이력",

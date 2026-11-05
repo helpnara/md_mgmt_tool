@@ -5,7 +5,7 @@ import re as _re
 from datetime import date as _date
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .vault.paths import InvalidDateError
 
@@ -37,6 +37,8 @@ class ProjectCreate(BaseModel):
     # 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다.
     effect_expected: float | None = None
     effect_verified: float | None = None
+    # 금액 아닌 성과 한 줄 (TODO 237 A4) — "작업 시간 40% 단축" 처럼
+    outcome: str | None = None
     # 별도 보고가 필요 없는 과제 (단순 현황 관리). 보고 대상 후보에서만 빠진다.
     no_report: bool = False
     # 효과 금액으로 관리하지 않는 과제 (TODO 125)
@@ -66,6 +68,7 @@ class ProjectUpdate(BaseModel):
     completed_at: str | None = None
     effect_expected: float | None = None
     effect_verified: float | None = None
+    outcome: str | None = None
     no_report: bool | None = None
     no_effect: bool | None = None
     tags: list[str] | None = None
@@ -381,3 +384,20 @@ def clean_author(value: object) -> str:
     if len(text) > AUTHOR_MAX:
         raise ValueError(f"작성자는 {AUTHOR_MAX}자까지입니다.")
     return text
+
+
+class ContributionUpdate(BaseModel):
+    """담당과 역할 한 사람 줄 (TODO 237). 보낸 칸만 바꾼다. `from` 은 파이썬 낱말이라 이름을 바꿔 받는다."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    role: str | None = None
+    part: str | None = None
+    start: str | None = Field(default=None, alias="from")
+    end: str | None = Field(default=None, alias="to")
+    problem: str | None = None
+    did: str | None = None
+    result: str | None = None
+    base_updated_at: str | None = None
+
+    def changes(self) -> dict[str, Any]:
+        return self.model_dump(exclude_unset=True, by_alias=True, exclude={"base_updated_at"})

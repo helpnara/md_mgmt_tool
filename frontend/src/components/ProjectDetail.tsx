@@ -17,6 +17,7 @@ import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import VersionPanel from "./VersionPanel";
 import ExportMenu from "./ExportMenu";
+import ContributionsCard, { myName } from "./ContributionsCard";
 import LoadError from "./LoadError";
 import ReportEditor from "./ReportEditor";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
@@ -135,6 +136,8 @@ export default function ProjectDetail({
   }, [memberEdit]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [editingProject, setEditingProject] = useState(Boolean(edit));
+  // 완료로 바꾼 직후 회고 양식을 열 사람 (TODO 237 A3) — 담당인 "나" 일 때만
+  const [retroFor, setRetroFor] = useState<string | null>(null);
   const [editingOverview, setEditingOverview] = useState(false);
   const [showOverviewVersions, setShowOverviewVersions] = useState(false);
   const [preview, togglePreview] = usePreview();
@@ -233,6 +236,15 @@ export default function ProjectDetail({
     const next = projectLink(projectId, extra);
     if (decodeURIComponent(window.location.hash) !== decodeURIComponent(next)) window.history.replaceState(window.history.state, "", next);
   }, [openReport, projectId]);
+  // 홈 "회고를 적을 과제" 에서 왔으면(`?retro=me`) 내 줄의 양식을 열어 둔다 (TODO 237) — 과제마다 한 번
+  const retroOpened = useRef<string | null>(null);
+  useEffect(() => {
+    if (!project || retroOpened.current === project.id) return;
+    retroOpened.current = project.id;
+    if (queryOf(currentLocation()).get("retro") !== "me") return;
+    const me = myName(meta);
+    if (me && (project.contributions ?? []).some((row) => row.name === me)) setRetroFor(me);
+  }, [project, meta]);
   // 브라우저 탭 제목 (TODO 169)
   useEffect(() => {
     if (project) setPageTitle(`${project.id} ${project.title}`);
@@ -941,6 +953,13 @@ export default function ProjectDetail({
                   </span>
                 );
               })()}
+              {/* 금액 아닌 성과 한 줄 (TODO 237 A4) */}
+              {project.outcome && (
+                <div className="outcome-line" title="그 밖의 성과 — 금액이 아닌 숫자">
+                  <span className="muted">그 밖의 성과 · </span>
+                  {project.outcome}
+                </div>
+              )}
             </dd>
           </div>
           <div>
@@ -961,6 +980,11 @@ export default function ProjectDetail({
             onCancel={() => setEditingProject(false)}
             onSubmit={async (payload) => {
               const saved = await api.updateProject(project.id, payload);
+              // 완료로 **바뀌는** 순간 — 내가 담당이면 회고 세 줄 양식을 연다 (TODO 237 A3). 비워 두고 닫아도 된다
+              if (payload.status === "done" && project.status !== "done") {
+                const me = myName(meta);
+                if (me && saved.owners.includes(me)) setRetroFor(me);
+              }
               // 서버가 막지 않고 알린 것 — 폼이 저장 전에 이미 보인 것(같은 이름 · 효과 · 선행 과제 연도)은 빼고 (TODO 214)
               for (const warning of warningList(saved, FORM_SHOWN_WARNING)) notifyError(`저장했습니다 — ${warning}`);
               setEditingProject(false);
@@ -1138,6 +1162,15 @@ export default function ProjectDetail({
           <MarkdownBody text={project.body ?? ""} base={base} />
         )}
       </div>
+
+      {/* 담당과 역할 · 회고 (TODO 237) — 경력기술서의 재료. 팀원은 자기 줄만 */}
+      <ContributionsCard
+        project={project}
+        meta={meta}
+        onSaved={(saved) => setProject(saved)}
+        openFor={retroFor}
+        onOpened={() => setRetroFor(null)}
+      />
 
       {/* 보고는 팀장의 일 (TODO 233 ④) — 팀원이 담당 과제를 고칠 때도 이 칸은 읽기 전용 그대로 */}
       <div className="card reports-card readonly-zone">

@@ -20,9 +20,10 @@ from urllib.parse import unquote
 
 from .who import MEMBER, User
 
-DENIED = "담당 과제의 진행일지 · 첨부 · 개요만 고칠 수 있습니다."
+DENIED = "담당 과제의 진행일지 · 첨부 · 개요 · 자기 역할과 회고만 고칠 수 있습니다."
 NOT_YOURS = "남이 쓴 진행일지는 고치거나 지울 수 없습니다 — 쓴 사람이나 팀장에게 말해 주세요."
 NOT_OWNER = "담당 과제만 고칠 수 있습니다 — 이 과제의 담당자가 아닙니다."
+NOT_YOUR_ROW = "자기 줄만 고칠 수 있습니다 — 다른 사람의 역할 · 회고는 그 사람이나 팀장이 고칩니다."
 PROJECT_FIELDS_DENIED = "팀원은 과제 개요 본문만 고칠 수 있습니다 — 상태 · 일정 · 효과 · 담당자 같은 칸은 팀장이 고칩니다."
 
 # 팀원이 PATCH /api/projects/{id} 로 보낼 수 있는 칸
@@ -37,6 +38,8 @@ _RULES: list[tuple[str, re.Pattern[str], str]] = [
     ("POST", re.compile(r"^/api/projects/(?P<project>[^/]+)/attachments$"), "첨부 추가"),
     ("DELETE", re.compile(r"^/api/attachments/(?P<attachment>\d+)$"), "첨부 삭제"),
     ("PATCH", re.compile(r"^/api/projects/(?P<project>[^/]+)$"), "개요 수정"),
+    # 담당과 역할 · 회고 (TODO 237) — 자기 줄만(`person` 이 자기 이름)
+    ("PUT", re.compile(r"^/api/projects/(?P<project>[^/]+)/contributions/(?P<person>[^/]+)$"), "역할 · 회고 수정"),
 ]
 # 쓰다 만 글 — 사람마다 따로 둔다(drafts 가 사람 폴더로 나눈다). 쓰기 기록에는 남기지 않는다
 _DRAFTS = re.compile(r"^/api/drafts(/[^/]+)?$")
@@ -81,6 +84,8 @@ def check(conn: sqlite3.Connection, user: User, method: str, path: str) -> Decis
             project_id = unquote(groups["project"])
             if not owns(conn, project_id, user.name):
                 return Decision(False, NOT_OWNER)
+            if "person" in groups and unquote(groups["person"]).strip() != user.name:
+                return Decision(False, NOT_YOUR_ROW)
             return Decision(True, action=action, project_id=project_id)
         if "entry" in groups:
             entry_id = int(groups["entry"])

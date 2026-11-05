@@ -82,10 +82,15 @@ def _replace_in_projects(
 
 
 def _rename_in_projects(
-    conn: sqlite3.Connection, project_ids: list[str], old: str, new: str | None
+    conn: sqlite3.Connection, project_ids: list[str], old: str, new: str | None, *, handover: bool = False
 ) -> list[tuple[str, bool, bool]]:
-    """과제마다 (번호, 담당이 바뀌었나, 유관부서가 바뀌었나). 바뀐 것이 없는 과제는 파일을 건드리지 않는다."""
-    from .projects import normalize_partners
+    """과제마다 (번호, 담당이 바뀌었나, 유관부서가 바뀌었나). 바뀐 것이 없는 과제는 파일을 건드리지 않는다.
+
+    담당과 역할 (TODO 237) — **넘기기**(`handover`)는 다른 사람에게 일을 넘기는 것이라 담당 기간이 따라 적힌다
+    (옛 사람은 오늘까지, 받은 사람은 오늘부터). **표기 통일**은 같은 사람이라 줄의 이름만 바꾼다.
+    """
+    from .. import contributions as contrib
+    from .projects import date_today, normalize_partners
 
     out: list[tuple[str, bool, bool]] = []
     for project_id in project_ids:
@@ -103,6 +108,10 @@ def _rename_in_projects(
         if not owners_changed and not partners_changed:
             continue
         if owners_changed:
+            rows = (contrib.follow_owners(doc.meta, new_owners, date_today()) if handover or new is None
+                    else contrib.rename(doc.meta, old, new))
+            if rows is not None:
+                doc.meta["contributions"] = contrib.to_meta(rows)
             doc.meta["owners"] = new_owners
         if partners_changed:
             # 넘기기(new=None 은 쓰지 않음)든 통일이든 팀 줄은 그대로, 사람만 바꾼다
@@ -211,7 +220,7 @@ def handover(
     """
     old, new = _names(old, new, "넘길 사람과 받을 사람을 모두 고르세요.")
     targets = _projects_naming(conn, old, include_finished)
-    changes = _rename_in_projects(conn, targets, old, new)
+    changes = _rename_in_projects(conn, targets, old, new, handover=True)
     intakes = _rename_intake_leaders(conn, old, new, pool_only=True)
     conn.commit()
     changed = [project_id for project_id, _, _ in changes]

@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS project (
   -- 과제 효과 (억원/년). 기대효과는 착수 시, 실증효과는 끝난 뒤 채운다.
   effect_expected  REAL,
   effect_verified  REAL,
+  -- 금액 아닌 성과 한 줄 (TODO 237 A4) — "작업 시간 40% 단축" 처럼. 효과 금액 옆에 둔다.
+  outcome          TEXT,
   -- 별도 보고가 필요 없는 과제 (단순 현황 관리를 과제로 세운 경우).
   -- 보고 대상 후보에서만 빠진다 — 손으로 보고를 남기는 길은 그대로 열려 있다.
   no_report  INTEGER NOT NULL DEFAULT 0,
@@ -150,6 +152,25 @@ CREATE TABLE IF NOT EXISTS project_owner (
   position   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(project_id, name)
 );
+
+-- 담당과 역할 (TODO 237) — 사람마다 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄. 원본은 index.md 의 `contributions`.
+-- 기록이 없는 담당자도 시작일부터 한 줄로 든다(derived = 1). 지금 담당이 아니면 current = 0 (예전 담당).
+CREATE TABLE IF NOT EXISTS project_contribution (
+  project_id TEXT REFERENCES project(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  role       TEXT,
+  part       TEXT,
+  from_date  TEXT,
+  to_date    TEXT,
+  problem    TEXT,
+  did        TEXT,
+  result     TEXT,
+  derived    INTEGER NOT NULL DEFAULT 0,
+  current    INTEGER NOT NULL DEFAULT 1,
+  position   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(project_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_contribution_name ON project_contribution(name);
 
 -- 유관부서와 그 담당자 (TODO 92).
 --

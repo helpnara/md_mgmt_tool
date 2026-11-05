@@ -99,6 +99,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
     completed_at: initial?.completed_at ?? "",
     effect_expected: initial?.effect_expected?.toString() ?? "",
     effect_verified: initial?.effect_verified?.toString() ?? "",
+    outcome: initial?.outcome ?? "",
     tags: (initial?.tags ?? []).join(", "),
   });
   /**
@@ -271,6 +272,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
         ...(form.status === "done" ? { completed_at: form.completed_at || null } : {}),
         effect_expected: effect(form.effect_expected),
         effect_verified: effect(form.effect_verified),
+        outcome: form.outcome.trim() || null,
         no_report: noReport,
         no_effect: noEffect,
         nature: classes.nature || null,
@@ -669,6 +671,19 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           정성적 효과와 산출 근거는 <b>과제 개요</b>에 적습니다.
           근거 자료(엑셀·PPT)는 개요의 [파일 첨부]로 붙일 수 있습니다.
         </p>
+      </div>
+      {/* 금액 아닌 성과 한 줄 (TODO 237 A4) — 효과 비대상이어도 적는다. 경력기술서의 "성과" 칸이 된다 */}
+      <div className="form-row">
+        <label className="outcome-label">
+          그 밖의 성과 <span className="muted">(금액이 아닌 숫자 · 한 줄)</span>
+          <input
+            value={form.outcome}
+            maxLength={200}
+            onChange={(event) => update("outcome", event.target.value)}
+            placeholder="예: 작업 시간 40% 단축 · 불량 12건 → 3건"
+            aria-label="그 밖의 성과"
+          />
+        </label>
       </div>
 
       <div className="form-row">

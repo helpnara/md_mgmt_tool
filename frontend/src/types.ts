@@ -1185,3 +1185,31 @@ export interface Project {
   effect_counted_expected?: number | null;
   effect_counted_verified?: number | null;
 }
+
+// ── TODO 237 — 담당과 역할 · 금액 아닌 성과 ─────────────────────────────────────
+/** 한 사람의 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄. 팀원이 나중에 경력기술서를 쓸 재료 */
+export interface Contribution {
+  name: string;
+  /** 주관 · 참여 · 지원, 비어 있을 수 있다 */
+  role: string;
+  part: string;
+  from: string | null;
+  to: string | null;
+  problem: string;
+  did: string;
+  result: string;
+  /** 기록이 없어 시작일부터로 읽은 줄 */
+  derived: boolean;
+  /** 지금 담당인가 — 아니면 예전 담당 */
+  current: boolean;
+}
+export interface Project {
+  /** 금액 아닌 성과 한 줄 — "작업 시간 40% 단축" */
+  outcome?: string | null;
+  /** 상세 조회에서만 */
+  contributions?: Contribution[];
+}
+export interface RetroDue {
+  name: string;
+  items: { id: string; title: string; completed_at: string }[];
+}

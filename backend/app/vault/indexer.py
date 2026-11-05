@@ -194,6 +194,21 @@ def _sync_owners(conn: sqlite3.Connection, project_id: str, owners: list[str]) -
         )
 
 
+def _sync_contributions(conn: sqlite3.Connection, project_id: str, meta: dict) -> None:
+    """담당과 역할 (TODO 237) — 기록 없는 담당자도 시작일부터 한 줄로(derived)."""
+    from .. import contributions
+
+    conn.execute("DELETE FROM project_contribution WHERE project_id = ?", (project_id,))
+    for position, row in enumerate(contributions.read(meta)):
+        conn.execute(
+            "INSERT OR IGNORE INTO project_contribution(project_id, name, role, part, from_date, to_date,"
+            " problem, did, result, derived, current, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (project_id, row["name"], row["role"] or None, row["part"] or None, row["from"], row["to"],
+             row["problem"] or None, row["did"] or None, row["result"] or None,
+             1 if row["derived"] else 0, 1 if row["current"] else 0, position),
+        )
+
+
 def _sync_predecessors(conn: sqlite3.Connection, project_id: str, predecessors: list[str]) -> None:
     """선행 과제 (TODO 172) — 여럿일 수 있다. 자기 자신은 건너뛴다(손으로 고친 파일)."""
     conn.execute("DELETE FROM project_predecessor WHERE project_id = ?", (project_id,))
@@ -436,16 +451,16 @@ def index_project(
     conn.execute(
         """
         INSERT INTO project(id, dir_name, title, status, type, grp, owner, start_date, due_date,
-                            effect_expected, effect_verified, no_report, no_effect, created_by,
+                            effect_expected, effect_verified, outcome, no_report, no_effect, created_by,
                             completed_at, nature, category, delivery, cost_kind, intake_id,
                             created_at, updated_at, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
           type=excluded.type, grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
           due_date=excluded.due_date,
           effect_expected=excluded.effect_expected, effect_verified=excluded.effect_verified,
-          no_report=excluded.no_report,
+          outcome=excluded.outcome, no_report=excluded.no_report,
           no_effect=excluded.no_effect,
           created_by=excluded.created_by, completed_at=excluded.completed_at,
           nature=excluded.nature, category=excluded.category, delivery=excluded.delivery,
@@ -465,6 +480,7 @@ def index_project(
             due_date,
             _checked_effect(doc.meta, "effect_expected", rel_index, problems),  # TODO 214 D18
             _checked_effect(doc.meta, "effect_verified", rel_index, problems),
+            _as_str(doc.meta.get("outcome")),  # 금액 아닌 성과 한 줄 (TODO 237)
             1 if _as_bool(doc.meta.get("no_report")) else 0,
             1 if _as_bool(doc.meta.get("no_effect")) else 0,
             _as_str(doc.meta.get("created_by")),
@@ -482,6 +498,7 @@ def index_project(
     )
     _sync_tags(conn, "project_tag", "project_id", project_id, _as_list(doc.meta.get("tags")))
     _sync_owners(conn, project_id, owners)
+    _sync_contributions(conn, project_id, doc.meta)
     _sync_partners(conn, project_id, _as_partners(doc.meta.get("partners")))
     _sync_predecessors(conn, project_id, _as_list(doc.meta.get("predecessors")))
 

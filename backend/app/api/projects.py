@@ -13,7 +13,7 @@ from ..services import projects as svc
 from ..services import renumber as renumber_service
 from ..services import search as search_svc
 from ..services import settings as settings_service
-from ..schemas import ProjectCreate, ProjectUpdate
+from ..schemas import ContributionUpdate, ProjectCreate, ProjectUpdate
 from .. import permissions, who
 from ..services import conflicts
 
@@ -205,6 +205,8 @@ def _serialize(
         # 효과 금액 (억원/년). 실증효과는 과제가 끝나야 나오므로 대개 비어 있다.
         "effect_expected": row["effect_expected"],
         "effect_verified": row["effect_verified"],
+        # 금액 아닌 성과 한 줄 (TODO 237 A4)
+        "outcome": row["outcome"],
         "completed_at": row["completed_at"],
         # 별도 보고가 필요 없는 과제 — 보고 대상 후보에서만 빠진다 (TODO 80).
         "no_report": bool(row["no_report"]),
@@ -406,6 +408,31 @@ def create_project(payload: ProjectCreate, conn: sqlite3.Connection = Depends(ge
     return data
 
 
+@router.get("/retro-due")
+def retro_due(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """회고를 적을 과제 (TODO 237 A3) — **내 것**, 끝난 지 1년 안, 회고 세 줄이 모두 빈 것. 홈 [할 일] 이 그린다.
+
+    나 = 팀원 PC 면 그 사람, 서버 PC 면 명부의 팀장(없으면 설정의 작성자). 읽기 전용(누군지 모름)은 빈 목록.
+    """
+    user = who.of(request)
+    if user.role == who.MEMBER:
+        name = user.name
+    elif user.role == who.VIEWER:
+        name = ""
+    else:
+        name = settings_service.current_author("")
+    if not name:
+        return {"name": "", "items": []}
+    rows = conn.execute(
+        "SELECT p.id, p.title, p.completed_at FROM project p JOIN project_contribution c ON c.project_id = p.id"
+        " WHERE c.name = ? AND p.status = 'done' AND p.completed_at >= DATE(app_today(), '-365 day')"
+        " AND COALESCE(c.problem, '') = '' AND COALESCE(c.did, '') = '' AND COALESCE(c.result, '') = ''"
+        " ORDER BY p.completed_at DESC, p.id DESC",
+        (name,),
+    ).fetchall()
+    return {"name": name, "items": [dict(row) for row in rows]}
+
+
 @router.get("/title-check")
 def title_check(
     title: str = Query(""), exclude: str | None = Query(None), conn: sqlite3.Connection = Depends(get_db)
@@ -470,7 +497,36 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     data["intakes"] = related_to_project(conn, project_id)
     # 다년도 과제의 줄기 — 앞 단계들 · 다음 단계 · 단계 번호 (TODO 172)
     data["lineage"] = svc.lineage(conn, project_id)
+    # 담당과 역할 — 사람마다 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄 (TODO 237)
+    data["contributions"] = svc.contributions_of(conn, project_id)
     return data
+
+
+@router.put("/{project_id}/contributions/{name}")
+def update_contribution(
+    project_id: str, name: str, payload: ContributionUpdate, request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    """한 사람의 역할 · 맡은 부분 · 담당 기간 · 회고 (TODO 237). 팀원은 자기 줄만, 기간은 팀장만."""
+    user = who.of(request)
+    current = conn.execute("SELECT updated_at FROM project WHERE id = ?", (project_id,)).fetchone()
+    if current is None:
+        raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.")
+    conflicts.check(payload.base_updated_at, current["updated_at"], project_id, None)
+    try:
+        svc.update_contribution(conn, project_id, name.strip(), payload.changes(),
+                                member=user.name if user.role == who.MEMBER else None)
+    except svc.NotYourRowError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ExternalChangeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except FileInUseError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return get_project(project_id, conn)
 
 
 @router.patch("/{project_id}")

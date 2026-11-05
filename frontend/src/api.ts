@@ -1,6 +1,6 @@
 import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
-import type { EditItem, Health, Me, Visitor } from "./types";
+import type { Contribution, EditItem, Health, Me, RetroDue, Visitor } from "./types";
 import { notifyError } from "./notify";
 
 /**
@@ -206,6 +206,18 @@ export const api = {
   getProject: (id: string) => request<Project>(`/api/projects/${id}`),
   updateProject: (id: string, payload: Partial<Project> & { base_updated_at?: string }) =>
     invalidating(request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) })),
+  /** 담당과 역할 한 사람 줄 (TODO 237) — 보낸 칸만 바뀐다. 팀원은 자기 줄만, 기간은 팀장만 */
+  updateContribution: (
+    id: string,
+    name: string,
+    payload: Partial<Pick<Contribution, "role" | "part" | "from" | "to" | "problem" | "did" | "result">> & { base_updated_at?: string },
+  ) =>
+    request<Project>(`/api/projects/${encodeURIComponent(id)}/contributions/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  /** 회고를 적을 과제 — 내 것, 끝난 지 1년 안 (TODO 237) */
+  retroDue: () => request<RetroDue>("/api/projects/retro-due"),
   archiveProject: (id: string) => invalidating(request<void>(`/api/projects/${id}/archive`, { method: "POST" })),
   /** 접수로 되돌리기 (TODO 171) — 미리보기 · 실행 */
   toIntakePlan: (id: string) => request<DemotePlan>(`/api/projects/${encodeURIComponent(id)}/to-intake`),

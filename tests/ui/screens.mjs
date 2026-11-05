@@ -5890,6 +5890,21 @@ async function main() {
           await owner.close();
         }
       });
+      await check("팀원은 [담당과 역할]에서 자기 줄만 적는다 — 남의 줄 단추 없음 · 담당 기간 칸 잠김 (237)", async () => {
+        const both = await call("POST", "/api/projects", { title: "둘이 하는 과제", owners: ["가팀원", "나팀원"], status: "in_progress", start_date: "2026-03-02" });
+        await member.goto(`${outside}/#/projects/${both.id}`); await member.reload(); await member.waitForTimeout(1200);
+        const card = member.locator("[data-contributions]");
+        equal(await card.locator('[data-person="나팀원"] button').filter({ visible: true }).count(), 0, "남의 줄 단추");
+        await card.locator('[data-person="가팀원"]').getByRole("button", { name: "적기" }).click();
+        equal(await card.getByLabel("담당 시작").isDisabled(), true, "담당 시작 칸 잠김");
+        await card.getByLabel("역할").selectOption("참여");
+        await card.getByLabel("내가 한 일").fill("현장 데이터 수집");
+        await card.getByRole("button", { name: "저장", exact: true }).click();
+        await member.waitForTimeout(1000);
+        const row = (await call("GET", `/api/projects/${both.id}`)).contributions.find((item) => item.name === "가팀원");
+        expect(row.role === "참여" && row.did === "현장 데이터 수집", `저장된 줄: ${JSON.stringify(row)}`);
+        expect((await card.locator('[data-person="가팀원"]').innerText()).includes("회고 ✓"), "회고 ✓");
+      });
     } finally {
       await member.close();
       await relay.close();
@@ -5920,6 +5935,66 @@ async function main() {
         const options = await page.locator(".meeting-form datalist option").evaluateAll((els) => els.map((el) => el.value));
         expect(options.length > 0 && !options.includes(pick.name), `면담 상대 목록: ${options}`);
         await page.locator(".meeting-form").getByRole("button", { name: "취소" }).click();
+      });
+    } finally {
+      await api.put("/api/people", { people: before.map((person) => ({ ...person, leader: false })) });
+    }
+  }
+
+  console.log("\n[56] 담당과 역할 — 역할 · 담당 기간 · 끝날 때 회고 세 줄 · 금액 아닌 성과 (TODO 237)");
+  {
+    const before = (await api.get("/api/people")).people;
+    const leader = before.find((person) => person.name === "권경락") ?? before[0];
+    try {
+      await api.put("/api/people", { people: before.map((person) => ({ ...person, leader: person.name === leader.name })) });
+      const made = await api.post("/api/projects", {
+        title: "회고 시험 과제", status: "in_progress", owners: [leader.name, "김현우"], start_date: "2026-03-02",
+      });
+      await check("과제 상세의 [담당과 역할] — 담당자마다 한 줄, 기록이 없으면 '시작일부터' · 회고 비어 있음 (237)", async () => {
+        await go(`#/projects/${made.id}`);
+        await page.reload(); await page.waitForTimeout(900);
+        const card = page.locator("[data-contributions]");
+        equal(await card.locator(".contrib-row").count(), 2, "줄 수");
+        const text = await card.locator(`[data-person="${leader.name}"]`).innerText();
+        expect(text.includes("2026-03-02 ~ 지금") && text.includes("시작일부터") && text.includes("회고 비어 있음"), `팀장 줄: ${text}`);
+        equal(await card.locator(`[data-person="${leader.name}"] .leader-tag`).count(), 1, "팀장 딱지");
+      });
+      await check("담당자를 바꾸면 기간이 따라 적힌다 — 빠진 사람은 '예전 담당' · 오늘까지 (237 A2)", async () => {
+        await api.patch(`/api/projects/${made.id}`, { owners: [leader.name, "이수진"] });
+        await page.reload(); await page.waitForTimeout(900);
+        const former = await page.locator('[data-person="김현우"]').innerText();
+        expect(former.includes("예전 담당") && former.includes(`~ ${FIXED_TODAY}`), `빠진 사람: ${former}`);
+        expect((await page.locator('[data-person="이수진"]').innerText()).includes(`${FIXED_TODAY} ~ 지금`), "든 사람은 오늘부터");
+      });
+      await check("[과제 정보 수정]에서 그 밖의 성과 한 줄 · 완료로 바꾸면 내 줄의 회고 양식이 열린다 (237 A3 · A4)", async () => {
+        await page.getByRole("button", { name: "과제 정보 수정" }).click();
+        await page.getByLabel("그 밖의 성과").fill("작업 시간 40% 단축");
+        await page.locator(".project-form select").first().selectOption("done");
+        await page.locator(".project-form button[type=submit]").click();
+        await page.waitForSelector(".contrib-done-note", { timeout: 5000 });
+        equal(await page.locator(".contrib-form").evaluate((el) => el.closest("li").dataset.person), leader.name, "양식이 열린 줄");
+        expect((await page.locator(".outcome-line").innerText()).includes("작업 시간 40% 단축"), "그 밖의 성과 표시");
+        await page.locator(".contrib-form").getByRole("button", { name: "나중에" }).click();
+      });
+      await check("홈 [할 일]의 '회고를 적을 과제' → 누르면 내 줄의 양식 · 저장하면 홈에서 내려간다 (237)", async () => {
+        await go("#/");
+        await page.reload(); await page.waitForTimeout(900);
+        const due = page.locator(".home-retro");
+        expect((await due.innerText()).includes("회고 시험 과제"), `회고를 적을 과제: ${await due.innerText()}`);
+        await due.getByRole("link", { name: "회고 시험 과제" }).click();
+        await page.waitForSelector(".contrib-form", { timeout: 5000 });
+        await page.locator(".contrib-form").getByLabel("역할").selectOption("주관");
+        await page.locator(".contrib-form").getByLabel("맡은 부분").fill("집계 자동화 설계");
+        await page.locator(".contrib-form").getByLabel("결과").fill("주 4시간 → 30분");
+        await page.locator(".contrib-form").getByRole("button", { name: "저장", exact: true }).click();
+        await page.waitForTimeout(900);
+        const row = await page.locator(`[data-person="${leader.name}"]`).innerText();
+        expect(row.includes("주관") && row.includes("집계 자동화 설계") && row.includes("주 4시간 → 30분"), `저장 뒤 줄: ${row}`);
+        equal((await api.get("/api/projects/retro-due")).items.some((item) => item.id === made.id), false, "홈 목록에서 내려감");
+      });
+      await check("과제 [내보내기] 에 담당과 역할 · 회고 · 그 밖의 성과가 함께 나간다 (237)", async () => {
+        const text = await (await fetch(`${BASE}/api/projects/${made.id}/export?format=md`)).text();
+        expect(text.includes("## 담당과 역할") && text.includes("작업 시간 40% 단축") && text.includes("결과: 주 4시간 → 30분"), "내보낸 md");
       });
     } finally {
       await api.put("/api/people", { people: before.map((person) => ({ ...person, leader: false })) });
