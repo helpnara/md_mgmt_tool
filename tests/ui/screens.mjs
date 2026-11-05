@@ -6039,7 +6039,7 @@ async function main() {
       equal(await page.getByRole("button", { name: "글로 복사" }).isDisabled(), true, "고른 것이 없으면 잠김");
     });
     await check("과제 [담당과 역할]의 이름 → 그 사람 이력 · [← 과제]로 돌아온다 (238 ①)", async () => {
-      const made = (await api.get("/api/projects?year=all")).find((p) => p.title === "회고 시험 과제");
+      const made = (await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제");
       await go(`#/projects/${made.id}`);
       await page.reload(); await page.waitForTimeout(900);
       await page.locator("[data-contributions] .contrib-name a", { hasText: "권경락" }).click();
