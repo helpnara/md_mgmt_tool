@@ -13,8 +13,9 @@ import Help from "./components/Help";
 import IntakeDetail from "./components/IntakeDetail";
 import IntakePool from "./components/IntakePool";
 import SearchResults from "./components/SearchResults";
-import type { Meta } from "./types";
-import { BACK_PARAM, SCREEN_TITLES, setPageTitle } from "./nav";
+import type { Me, Meta } from "./types";
+import { getMe, setMe } from "./me";
+import { BACK_PARAM, SCREEN_TITLES, listLink, setPageTitle } from "./nav";
 import { confirmLeave, hasUnsaved, LEAVE_MESSAGE, migrateBrowserDrafts } from "./unsaved";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Toast from "./components/Toast";
@@ -92,6 +93,8 @@ function readRoute(): Route {
 
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
+  // 지금 누구인가 (TODO 233) — 머리 띠에 쓰고, 바뀌면 화면을 다시 그린다(단추는 me.ts 에서 읽는다)
+  const [meInfo, setMeInfo] = useState<Me>(getMe());
   const [route, setRoute] = useState<Route>(readRoute());
   const [term, setTerm] = useState(() => {
     const initial = readRoute();
@@ -206,11 +209,14 @@ export default function App() {
   }, []);
 
   const loadMeta = useCallback(() => {
-    api
-      .meta()
-      .then((loaded) => {
+    // 지금 누구인가 (TODO 233) — meta 와 함께 받아 화면이 서기 전에 둔다. 못 받으면(옛 서버) 읽기 전용이면 읽기, 아니면 팀장
+    Promise.all([api.meta(), api.me().catch(() => null)])
+      .then(([loaded, who]) => {
+        setMe(who ?? { role: loaded.readonly ? "viewer" : "owner", name: "", projects: [] });
+        setMeInfo(getMe());
         // 읽기 전용 공유 (191) — 화면이 서기 **전에** body 에 건다. 자식 화면의 effect 가 부모보다 먼저 돌기 때문이다.
-        document.body.classList.toggle("readonly", Boolean(loaded.readonly));
+        // 팀원이 담당 과제를 고치는 중이면(ProjectDetail 이 readonly 를 뗐다, TODO 233) 다시 걸지 않는다 — 저장 뒤 meta 를 다시 읽어도 단추가 사라지지 않게
+        document.body.classList.toggle("readonly", Boolean(loaded.readonly) && !document.body.classList.contains("member-editing"));
         setMeta(loaded);
         // 작성자를 정하지 않으면 기록에 작성자가 비어 쌓인다. 한 번 알려 준다. 바깥(읽기 전용)에는 설정이 닫혀 있으니 묻지 않는다.
         if (loaded.readonly) setAuthor(null);
@@ -321,11 +327,18 @@ export default function App() {
           </span>
         )}
       </header>
-      {meta.readonly && (
+      {meta.readonly && meInfo.role === "member" ? (
+        // 팀원 PC (TODO 233) — 누구로 알아봤는지 · 무엇을 고칠 수 있는지
+        <div className="readonly-band member-band" role="status">
+          <b>{meInfo.name}</b> 님으로 접속 — 담당 과제 <b>{meInfo.projects.length}건</b>의 진행일지 · 첨부 · 개요를 고칠 수 있습니다.
+          다른 것은 보기만 됩니다.
+          {meInfo.projects.length > 0 && <a href={listLink({ owner: meInfo.name, year: "all" })}>내 과제 보기 →</a>}
+        </div>
+      ) : meta.readonly ? (
         <div className="readonly-band" role="status">
           <b>읽기 전용</b>으로 보고 있습니다 — 고치거나 더하려면 서버 PC 에서 여세요. 면담 기록 · 설정 · 삭제 보관함은 여기서 보이지 않습니다.
         </div>
-      )}
+      ) : null}
       {author === "" && !authorNoticeClosed && route.name !== "settings" && !meta.readonly && (
         <div className="author-notice">
           <span>

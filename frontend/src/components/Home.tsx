@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
-import type { ActivityBrief, BackupStatus, Home as HomeData, HomeSlice, Meta, StatusInfo } from "../types";
+import type { ActivityBrief, BackupStatus, EditItem, Home as HomeData, HomeSlice, Meta, StatusInfo } from "../types";
 import { listLink, projectLink, screenLink, useAddressBar } from "../nav";
 import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
@@ -326,10 +326,13 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const [backup, setBackup] = useState<BackupStatus | null>(null);
   // 작성 중이던 글 (TODO 170) — 창으로 돌아올 때마다 다시 읽는다
   const drafts = useDrafts();
+  // 팀원이 고친 것 — 최근 7일 (TODO 233 ⑥). 팀장만 본다(바깥에는 막혀 있다)
+  const [teamEdits, setTeamEdits] = useState<EditItem[]>([]);
   useEffect(() => {
     // 읽기 전용 공유(191)에는 설정이 닫혀 있다 — 백업 상태는 주인만 본다
     if (document.body.classList.contains("readonly")) return;
     api.backupStatus().then(setBackup).catch(() => setBackup(null));
+    api.recentEdits().then((data) => setTeamEdits(data.items)).catch(() => setTeamEdits([]));
   }, []);
 
   // 연도를 빨리 두 번 바꾸면 앞 요청이 늦게 와 다른 해 숫자가 남을 수 있다 — 마지막 것만 받는다 (TODO 210 ①).
@@ -443,6 +446,8 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const statClass = (count: number, alert = "") => ["home-stat go", count ? alert : "zero-stat"].filter(Boolean).join(" ");
 
   // ── [할 일] 탭 — 매일 여는 이유 (TODO 232 ①) ─────────────────────────────
+  const scheduleSide = (week.team_upcoming?.items.length ?? 0) > 0 || (week.team_missed?.length ?? 0) > 0 || teamEdits.length > 0;
+  const reportSide = drafts.length > 0 || week.drafts > 0 || week.stale.length > 0 || week.owner_gaps_total > 0 || week.plans.length > 0;
   const todo = (
     <div className="card home-week">
       <h2>
@@ -484,6 +489,9 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         </a>
       </div>
 
+      {/* 넓으면 두 단 — 왼쪽은 팀원 일정, 오른쪽은 보고 · 과제 (232 뒤 사용자: "가득 차 보이게"). 한쪽이 비면 한 단 */}
+      <div className={scheduleSide && reportSide ? "home-week-cols two" : "home-week-cols"}>
+      {scheduleSide && <div className="home-week-col">
       {/* 다가오는 팀원 일정 · 지난 예정 확인 (TODO 221) — 팀원 역량에 예정으로 적은 교육 · 행사. 30일 안 모두(232 ⑦ 그대로) */}
       {(week.team_upcoming?.items.length ?? 0) > 0 && (
         <>
@@ -549,6 +557,34 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         </>
       )}
 
+      {/* 팀원이 고친 것 — 최근 7일 (TODO 233 ⑥). 등록한 IP 의 팀원이 담당 과제에서 고친 것 — 같은 날 같은 일은 한 줄로 */}
+      {teamEdits.length > 0 && (
+        <>
+          <p className="hint">
+            <b>팀원이 고친 것</b> — 최근 7일, 팀원 PC 에서 담당 과제의 진행일지 · 첨부 · 개요를 고친 기록입니다.
+          </p>
+          <ul className="home-stale home-edits">
+            {teamEdits.slice(0, 8).map((item, index) => (
+              <li key={`${item.at}-${index}`}>
+                <span className="due">{item.at.slice(5, 16).replace("T", " ")}</span>
+                <b>{item.name}</b>
+                {item.project_id ? (
+                  <a href={projectLink(item.project_id, item.entry_id && item.action !== "진행일지 삭제" ? { entry: item.entry_id } : {})}>
+                    {item.project_title ?? item.project_id}
+                  </a>
+                ) : null}
+                <span className="edit-action">
+                  {item.action}
+                  {item.count > 1 ? ` ${item.count}번` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {teamEdits.length > 8 && <p className="hint">그 앞 {teamEdits.length - 8}줄은 접어 두었습니다.</p>}
+        </>
+      )}
+      </div>}
+      {reportSide && <div className="home-week-col">
       {/* 쓰다 만 글 (TODO 170) — 어느 과제에서 쓰다 말았는지 기억하지 않아도 되게, 누르면 그 편집기로 */}
       {drafts.length > 0 && (
         <>
@@ -695,6 +731,8 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
           )}
         </>
       )}
+      </div>}
+      </div>
     </div>
   );
 

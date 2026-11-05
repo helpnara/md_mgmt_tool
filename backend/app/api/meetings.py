@@ -4,11 +4,12 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from ..deps import RowId, get_db
 from ..services import meetings as svc
+from .. import who
 from ..vault.paths import FileInUseError, InvalidDateError
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
@@ -30,10 +31,18 @@ class MeetingIn(BaseModel):
 
 @router.get("")
 def list_meetings(
+    request: Request,
     conn: sqlite3.Connection = Depends(get_db),
     person: str | None = None,
     year: str | None = Query(None, pattern=r"^(\d{4})?$"),
 ) -> dict:
+    user = who.of(request)
+    if user.role == who.MEMBER:
+        # 팀원은 **자기 면담만** (TODO 233 ⑤ — 182 · 191 의 "팀장만" 을 본인에게는 연다). 다른 사람을 물어도 자기 것만 준다
+        return {
+            "items": svc.listing(conn, person=user.name, year=year or None),
+            "open_followups": [item for item in svc.open_followups(conn) if item["person"] == user.name],
+        }
     return {
         "items": svc.listing(conn, person=person or None, year=year or None),
         # 팀 전체의 아직 닫지 않은 "하기로 한 것" — 사람을 고르지 않았을 때 화면이 세운다

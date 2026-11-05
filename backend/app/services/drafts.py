@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -47,22 +48,30 @@ def valid_key(key: str) -> bool:
     return bool(KEY_PATTERN.match(key))
 
 
-def _dir() -> Path:
-    return get_settings().drafts_dir
+def _dir(person: str | None = None) -> Path:
+    """팀장 것은 `.drafts/` 바로 아래, 팀원 것은 `.drafts/people/<이름 지문>/` (TODO 233 R8).
+
+    열쇠(`entry:12`)에 사람이 없어서, 팀원이 쓰기 시작하면 두 사람이 같은 기록을 고치다 서로의 쓰다 만 글을 덮었다.
+    폴더를 사람마다 나누면 열쇠 모양 · 화면은 그대로다. 이름 대신 지문을 쓰는 것은 폴더 이름에 사람 이름을 남기지 않으려는 것.
+    """
+    base = get_settings().drafts_dir
+    if not person:
+        return base
+    return base / "people" / hashlib.sha1(person.encode("utf-8")).hexdigest()[:16]
 
 
-def _file(key: str) -> Path:
+def _file(key: str, person: str | None = None) -> Path:
     if not valid_key(key):
         raise ValueError("임시 보관 열쇠가 올바르지 않습니다.")
-    return _dir() / f"{key.replace(':', '__')}.json"
+    return _dir(person) / f"{key.replace(':', '__')}.json"
 
 
 def _key_of(path: Path) -> str:
     return path.stem.replace("__", ":", 1)
 
 
-def _read(key: str) -> dict[str, Any] | None:
-    path = _file(key)
+def _read(key: str, person: str | None = None) -> dict[str, Any] | None:
+    path = _file(key, person)
     if path in _pending:
         return None  # 지운 것으로 본다 (TODO 215)
     try:
@@ -72,10 +81,10 @@ def _read(key: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) and "content" in data else None
 
 
-def get(key: str) -> dict[str, Any] | None:
+def get(key: str, person: str | None = None) -> dict[str, Any] | None:
     _file(key)  # 열쇠 검사
     with _lock:
-        return _read(key)
+        return _read(key, person)
 
 
 def _retry_pending() -> None:
@@ -90,8 +99,8 @@ def _retry_pending() -> None:
         _pending.discard(path)
 
 
-def put(key: str, content: Any) -> dict[str, Any]:
-    path = _file(key)
+def put(key: str, content: Any, person: str | None = None) -> dict[str, Any]:
+    path = _file(key, person)
     record = {"key": key, "content": content, "updated_at": datetime.now().isoformat(timespec="seconds")}
     text = json.dumps(record, ensure_ascii=False)
     if len(text.encode("utf-8")) > MAX_BYTES:
@@ -117,12 +126,12 @@ def put(key: str, content: Any) -> dict[str, Any]:
     return record
 
 
-def drop(key: str) -> bool:
+def drop(key: str, person: str | None = None) -> bool:
     """지운다. **실패해도 오류로 내지 않는다** (TODO 215) — 임시 보관 지우기는 "치우는 일" 이라, 기록 저장은 이미 끝났다.
 
     윈도우의 일시적 거부는 몇 번 다시 시도하고, 그래도 안 되면 지운 것으로 표시해 두었다가 다음 목록 · 쓰기 · 지우기 때 다시 지운다.
     """
-    path = _file(key)
+    path = _file(key, person)
     with _lock:
         try:
             paths.retry_os(path.unlink)
@@ -181,9 +190,9 @@ def _describe(conn: sqlite3.Connection, key: str) -> dict[str, Any]:
     return out
 
 
-def listing(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """남아 있는 임시 보관 전부 — 새 것부터. 글 내용은 싣지 않는다(목록에는 무엇 · 어디만)."""
-    folder = _dir()
+def listing(conn: sqlite3.Connection, person: str | None = None) -> list[dict[str, Any]]:
+    """남아 있는 임시 보관 전부 — 새 것부터. 글 내용은 싣지 않는다(목록에는 무엇 · 어디만). 그 사람(없으면 팀장)의 것만."""
+    folder = _dir(person)
     records = []
     with _lock:
         _retry_pending()
@@ -191,7 +200,7 @@ def listing(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             key = _key_of(path)
             if not valid_key(key):
                 continue
-            record = _read(key)
+            record = _read(key, person)
             if record is not None:
                 records.append((key, record))
     # 색인 조회(_describe)는 잠금 밖에서 — 파일은 이미 다 읽었다

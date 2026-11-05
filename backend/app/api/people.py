@@ -30,6 +30,8 @@ class Person(BaseModel):
     # 떠난 날과 사유 (TODO 122). 비어 있으면 지금 있는 사람이다.
     left_on: str = ""
     left_reason: str = ""
+    # 이 사람의 PC 주소 (TODO 233). **보내지 않으면 지금 값을 물려준다** — IP 칸이 없는 옛 화면이 저장해도 지워지지 않게
+    ips: list[str] | None = None
 
 
 class PeopleUpdate(BaseModel):
@@ -62,18 +64,40 @@ def list_people(conn: sqlite3.Connection = Depends(get_db)) -> dict:
 
 @router.put("")
 def replace_people(payload: PeopleUpdate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    # 화면이 안 보내는 칸(account, TODO 126)은 지금 값을 물려준다.
-    kept = {person["name"]: person.get("account", "") for person in settings_service.people()}
+    # 화면이 안 보내는 칸(account, TODO 126 · ips, TODO 233)은 지금 값을 물려준다.
+    current = {person["name"]: person for person in settings_service.people()}
     rows = []
     for person in payload.people:
         row = person.model_dump()
+        kept = current.get(row["name"].strip(), {})
         if row.get("account") is None:
-            row["account"] = kept.get(row["name"].strip(), "")
+            row["account"] = kept.get("account", "")
+        if row.get("ips") is None:
+            row["ips"] = list(kept.get("ips") or [])
         rows.append(row)
     try:
         return {"people": settings_service.save({"people": rows})["people"]}
     except ValueError as exc:  # 틀린 떠난 날 · 겹친 이름 (TODO 205)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/visitors")
+def visitors() -> dict:
+    """오늘 바깥에서 접속한 주소 · 누구로 알아봤는지 (TODO 233) — 설정 → 명부에서 등록 안 된 주소를 사람에게 붙인다.
+
+    `/api/people` 아래라 바깥(팀원 · 읽기)에는 막혀 있다(share.BLOCKED_PREFIXES).
+    """
+    from .. import share, who
+
+    mapping = who.ip_map()
+    items = []
+    for item in share.visitor_list():
+        try:
+            ip = who.normalize_ip(item["ip"])
+        except ValueError:
+            continue
+        items.append({**item, "ip": ip, "name": mapping.get(ip, "")})
+    return {"items": items}
 
 
 @router.post("", status_code=201)

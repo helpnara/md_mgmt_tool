@@ -1,6 +1,6 @@
 import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
-import type { Health } from "./types";
+import type { EditItem, Health, Me, Visitor } from "./types";
 import { notifyError } from "./notify";
 
 /**
@@ -204,7 +204,7 @@ export const api = {
     return projectOptionsCache;
   },
   getProject: (id: string) => request<Project>(`/api/projects/${id}`),
-  updateProject: (id: string, payload: Partial<Project>) =>
+  updateProject: (id: string, payload: Partial<Project> & { base_updated_at?: string }) =>
     invalidating(request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) })),
   archiveProject: (id: string) => invalidating(request<void>(`/api/projects/${id}/archive`, { method: "POST" })),
   /** 접수로 되돌리기 (TODO 171) — 미리보기 · 실행 */
@@ -234,7 +234,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  updateEntry: (id: number, payload: Partial<Entry>) =>
+  updateEntry: (id: number, payload: Partial<Entry> & { base_updated_at?: string }) =>
     request<Entry>(`/api/entries/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteEntry: (id: number) => request<void>(`/api/entries/${id}`, { method: "DELETE" }),
   listEntryAttachments: (entryId: number) =>
@@ -259,6 +259,12 @@ export const api = {
   /** 이 보고를 AI 에게 넘길 글. **서버가 AI 를 부르지는 않는다** (TODO 71). */
   aiPrompt: (reportId: number) => request<{ text: string }>(`/api/reports/${reportId}/ai-prompt`),
   people: () => request<{ people: Person[]; unregistered: { name: string; used: number }[] }>("/api/people"),
+  // 오늘 바깥에서 접속한 주소 (TODO 233)
+  peopleVisitors: () => request<{ items: Visitor[] }>("/api/people/visitors"),
+  // 지금 누구인가 (TODO 233)
+  me: () => request<Me>("/api/me"),
+  // 팀원이 고친 것 — 팀장 홈 (TODO 233 ⑥)
+  recentEdits: () => request<{ days: number; items: EditItem[] }>("/api/edits/recent"),
   savePeople: (people: Person[]) =>
     request<{ people: Person[] }>("/api/people", { method: "PUT", body: JSON.stringify({ people }) }),
   addPerson: (name: string) =>

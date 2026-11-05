@@ -334,6 +334,36 @@ export interface Person {
   left_on?: string;
   /** 전배 · 퇴사 (TODO 122) */
   left_reason?: string;
+  /** 이 사람의 PC 주소 (TODO 233) — 여기서 연 화면은 이 사람으로 본다(담당 과제의 진행일지 · 첨부 · 개요를 고친다) */
+  ips?: string[];
+}
+
+/** 지금 누구인가 (TODO 233) — `/api/me` */
+export interface Me {
+  role: "owner" | "member" | "viewer";
+  name: string;
+  /** 팀원이면 담당인 과제 번호 — 그 과제에서만 [수정] 이 선다 */
+  projects: string[];
+}
+
+/** 오늘 바깥에서 접속한 주소 (TODO 233) — 설정 → 명부 */
+export interface Visitor {
+  ip: string;
+  last_at: string;
+  requests: number;
+  /** 등록한 IP 면 그 사람, 아니면 빈칸 */
+  name: string;
+}
+
+/** 팀원이 고친 것 한 줄 (TODO 233 ⑥) — 같은 날 같은 사람 · 과제 · 무엇은 묶어 횟수로 */
+export interface EditItem {
+  at: string;
+  name: string;
+  action: string;
+  project_id: string | null;
+  project_title: string | null;
+  entry_id: number | null;
+  count: number;
 }
 
 export interface AppSettings {

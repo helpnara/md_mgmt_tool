@@ -1,11 +1,49 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import type { Person } from "../types";
+import type { Person, Visitor } from "../types";
 import { splitPeople } from "../people";
 import { useEditedUnsaved } from "../util";
 import { DATE_MAX, DATE_MIN, LEFT_REASONS, dateProblem, isDeparted, isFuture, personNameProblem } from "../inputRules";
 import NameDialog, { changeCounts } from "./NameDialog";
 import { enterToSave } from "./enterSave";
+
+/** IP 칸의 글 → 주소 목록 (TODO 233). 쉼표 · 띄어쓰기로 여럿 */
+function parseIps(text: string): string[] {
+  return text.split(/[\s,;]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+/** 화면에서 먼저 보는 IP 모양 — 정확한 검사는 서버(who.check_ip)가 한다 */
+function ipProblem(ip: string): string | null {
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+  if (v4) return v4.slice(1).every((part) => Number(part) <= 255) ? null : `${ip} — 0~255 를 넘는 칸이 있습니다`;
+  return ip.includes(":") ? null : `${ip} — IP 주소 모양이 아닙니다(예: 10.1.2.31)`;
+}
+
+/** PC 주소 칸 — 쓰는 동안의 글자는 그대로 두고(쉼표를 막 친 순간), 주소 목록만 위로 올린다 */
+function IpCell({ ips, onChange, problem }: { ips: string[]; onChange: (ips: string[]) => void; problem: string | null }) {
+  const [text, setText] = useState(ips.join(", "));
+  useEffect(() => {
+    // 바깥(오늘 접속한 주소 [붙이기] · 다시 읽기)에서 바뀌었으면 글자를 따라간다
+    if (parseIps(text).join(",") !== ips.join(",")) setText(ips.join(", "));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ips.join(",")]);
+  return (
+    <>
+      <input
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          onChange(parseIps(event.target.value));
+        }}
+        placeholder="개인 PC 만"
+        aria-label="PC 주소"
+        aria-invalid={problem ? true : undefined}
+        title={problem ?? "이 사람 PC 의 IP. 여기서 연 화면은 이 사람으로 보고, 담당 과제의 진행일지 · 첨부 · 개요를 고칠 수 있습니다. 여럿이면 쉼표로"}
+      />
+      {problem && <span className="field-error ip-error">{problem}</span>}
+    </>
+  );
+}
 
 /** 이름 창 — [넘기기] 또는 [다른 이름으로 통일] (TODO 214 D9 · F6) */
 type Asking = { kind: "handover"; from: string; unfinished: number } | { kind: "rename"; from: string };
@@ -31,6 +69,9 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState<Asking | null>(null);
+  // 오늘 바깥에서 접속한 주소 (TODO 233) — 등록 안 된 주소를 골라 사람에게 붙인다
+  const [visitors, setVisitors] = useState<Visitor[]>([]);
+  const [pickFor, setPickFor] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     api
@@ -41,6 +82,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         setUnregistered(data.unregistered);
       })
       .catch((err: Error) => setError(err.message));
+    api.peopleVisitors().then((data) => setVisitors(data.items)).catch(() => setVisitors([]));
   }, []);
 
   useEffect(load, [load]);
@@ -149,7 +191,22 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
     id: (idCount.get((person.employee_id ?? "").trim()) ?? 0) > 1 ? "같은 사번이 둘 있습니다." : null,
     left: dateProblem(person.left_on, "떠난 날"),
   }));
-  const problemCount = rowProblems.filter((row) => row.name || row.id || row.left).length;
+  // PC 주소 (TODO 233) — 모양 · 한 주소에 두 사람(공용 PC 가 잘못 등록되지 않게)
+  const ipOwners = new Map<string, string[]>();
+  for (const person of people) for (const ip of person.ips ?? []) ipOwners.set(ip, [...(ipOwners.get(ip) ?? []), person.name.trim()]);
+  const ipProblems = people.map((person) => {
+    for (const ip of person.ips ?? []) {
+      const shape = ipProblem(ip);
+      if (shape) return shape;
+      if ((ipOwners.get(ip) ?? []).length > 1) return `${ip} — 두 사람에게 있습니다(공용 PC 는 적지 않습니다)`;
+    }
+    return null;
+  });
+  const problemCount = rowProblems.filter((row) => row.name || row.id || row.left).length + ipProblems.filter(Boolean).length;
+  const setIps = (index: number, ips: string[]) => setPeople((prev) => prev.map((p, i) => (i === index ? { ...p, ips } : p)));
+  const registered = new Set([...ipOwners.keys()]);
+  const attachIp = (ip: string, name: string) =>
+    setPeople((prev) => prev.map((p) => (p.name === name ? { ...p, ips: [...(p.ips ?? []).filter((item) => item !== ip), ip] } : p)));
   const dupIds = [...idCount.entries()].filter(([, count]) => count > 1).map(([id]) => id);
 
   return (
@@ -184,6 +241,10 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         <b>그날부터</b> 떠난 사람으로 봅니다.
         <br />
         이름은 한 칸에 한 사람 — 쉼표 · <code>/ \</code> 없이 40자까지. 사번은 비워 두거나, 적으면 사람마다 달라야 합니다.
+        <br />
+        <b>PC 주소</b> — 팀원 <b>개인 PC 의 IP</b> 를 적으면, 그 PC 에서 공유 주소로 연 화면은 그 사람으로 보고{" "}
+        <b>담당 과제의 진행일지 · 첨부 · 개요</b>를 고칠 수 있습니다. 본인 면담은 보기만 됩니다. 가상 PC · 공용 PC 는 적지 마세요 —
+        적지 않은 PC 는 지금처럼 보기만 됩니다. IP 가 바뀌면 여기서 고치면 됩니다.
       </p>
 
       {people.length > 8 && (
@@ -211,6 +272,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
             <col className="col-name" />
             <col className="col-id" />
             <col className="col-used" />
+            <col className="col-ip" />
             <col className="col-left" />
             <col className="col-act" />
           </colgroup>
@@ -219,6 +281,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
               <th>이름</th>
               <th>사번</th>
               <th>과제</th>
+              <th title="이 사람 PC 의 IP — 여기서 연 화면은 담당 과제를 고칠 수 있습니다 (TODO 233)">PC 주소</th>
               <th>떠난 날</th>
               <th />
             </tr>
@@ -257,6 +320,9 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                   {(person.unfinished ?? 0) > 0 && person.left_on && isDeparted(person) && (
                     <span className="warn-text">남은 {person.unfinished}건</span>
                   )}
+                </td>
+                <td className="person-ip-cell">
+                  <IpCell ips={person.ips ?? []} onChange={(ips) => setIps(index, ips)} problem={ipProblems[index]} />
                 </td>
                 <td className="person-left-cell">
                   {/* 나란히 놓는 일은 안쪽 div 가 한다 — `<td>` 에 display:flex 를 걸면
@@ -315,6 +381,58 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
             })}
           </tbody>
         </table>
+        </div>
+      )}
+
+      {/* 오늘 접속한 주소 (TODO 233) — IP 를 묻고 받아 적지 않아도 되게. 팀원이 공유 주소로 한 번 들어오면 여기 선다 */}
+      {visitors.length > 0 && (
+        <div className="people-visitors">
+          <p className="hint">
+            <b>오늘 접속한 주소</b> — 다른 PC 에서 공유 주소로 들어온 기록입니다. 등록 안 된 주소는 사람을 골라 <b>[붙이기]</b> 한 뒤{" "}
+            <b>[명부 저장]</b> 하면, 그 PC 에서 연 화면이 그 사람의 담당 과제를 고칠 수 있게 됩니다.
+          </p>
+          <ul className="visitor-list">
+            {visitors.map((item) => (
+              <li key={item.ip}>
+                <code>{item.ip}</code>
+                <span className="muted">
+                  마지막 {item.last_at.slice(11, 16)} · {item.requests}회
+                </span>
+                {item.name ? (
+                  <span>
+                    → <b>{item.name}</b> 님으로 알아봤습니다
+                  </span>
+                ) : registered.has(item.ip) ? (
+                  <span className="muted">명부에 적었습니다 — [명부 저장] 뒤부터 알아봅니다</span>
+                ) : (
+                  <>
+                    <select
+                      value={pickFor[item.ip] ?? ""}
+                      onChange={(event) => setPickFor((prev) => ({ ...prev, [item.ip]: event.target.value }))}
+                      aria-label={`${item.ip} 를 붙일 사람`}
+                    >
+                      <option value="">사람 고르기</option>
+                      {people
+                        .filter((person) => person.name.trim() && !isDeparted(person))
+                        .map((person) => (
+                          <option key={person.name} value={person.name}>
+                            {person.name}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      className="ghost small"
+                      disabled={!pickFor[item.ip]}
+                      onClick={() => attachIp(item.ip, pickFor[item.ip])}
+                    >
+                      붙이기
+                    </button>
+                    <span className="muted">공용 · 가상 PC 면 붙이지 마세요(보기만)</span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

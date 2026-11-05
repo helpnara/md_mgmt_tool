@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ..deps import get_db, RowId
 from ..services import activities as svc
+from .. import who
 from ..vault.paths import FileInUseError, InvalidDateError
 
 router = APIRouter(prefix="/api/activities", tags=["activities"])
@@ -57,8 +58,13 @@ def summary(
 ) -> dict:
     data = svc.summary(conn, year=year or None)
     if getattr(request.state, "readonly", False):
-        # 읽기 전용 공유 (TODO 191) — 면담은 팀장만 본다(182). 사람 줄의 면담 칸을 비운다
+        # 읽기 전용 공유 (TODO 191) — 면담은 팀장만 본다(182). 사람 줄의 면담 칸을 비운다.
+        # 팀원은 **자기 줄의 면담 칸만** 남는다 (TODO 233 ⑤)
+        user = who.of(request)
         for item in data["people"]:
+            if user.role == who.MEMBER and item["name"] == user.name:
+                item["meeting_due"] = False  # "면담할 때가 지났다" 는 팀장의 일정이다
+                continue
             item.update({"meetings": 0, "last_meeting": None, "meeting_days_since": None, "open_followups": 0,
                          "next_meeting": None, "meeting_due": False})
     return data

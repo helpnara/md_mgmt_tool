@@ -82,6 +82,7 @@ def is_local_host(host: str | None) -> bool:
 BLOCKED_PREFIXES = (
     "/api/folders", "/api/backup", "/api/settings", "/api/errors", "/api/trash",
     "/api/versions", "/api/drafts", "/api/maintenance", "/api/health", "/api/people",  # maintenance = 링크 점검 (TODO 220)
+    "/api/edits",  # 누가 무엇을 고쳤나 — 팀장의 홈 (TODO 233)
     # API 문서 — 끝점 전체 · 스키마 필드명이 보인다 (TODO 206 ㉘)
     "/openapi.json", "/docs", "/redoc",
 )
@@ -105,8 +106,42 @@ def is_remote(request: Request) -> bool:
     return client is None or not is_local_host(client.host)
 
 
-def blocked_path(path: str) -> bool:
-    return any(path == prefix or path.startswith(prefix + "/") or path.startswith(prefix + "?") for prefix in BLOCKED_PREFIXES)
+# 팀원(등록한 IP, TODO 233)에게는 열리는 것 — 자기 쓰다 만 글(사람마다 따로 둔다)
+MEMBER_OPEN_PREFIXES = ("/api/drafts",)
+
+
+def blocked_path(path: str, member: bool = False) -> bool:
+    def hit(prefix: str) -> bool:
+        return path == prefix or path.startswith(prefix + "/") or path.startswith(prefix + "?")
+    if member and any(hit(prefix) for prefix in MEMBER_OPEN_PREFIXES):
+        return False
+    return any(hit(prefix) for prefix in BLOCKED_PREFIXES)
+
+
+# ── 다른 사이트에서 온 쓰기를 막는다 (TODO 233 R5) ──────────────────────────
+# 권한이 "어디서"(주소)에 붙으면, 그 PC 의 브라우저가 연 **아무 페이지나** 같은 권한을 갖는다 — 사내 다른 사이트의 글이
+# 이 서버로 몰래 쓰기를 보낼 수 있다(CSRF). 첨부 올리기 같은 폼 전송은 브라우저가 미리 묻지도 않는다. **서버 PC 에도 있던 틈**이다.
+# 브라우저는 쓰기 요청에 `Origin` 을 붙인다 — 그것이 이 서버(이 PC 의 이름 · 주소)가 아니면 받지 않는다.
+# Origin 이 없는 요청(시험 · 스크립트 · 아주 옛 브라우저)은 받는다 — 브라우저가 남의 페이지에서 보낸 쓰기에는 늘 붙는다.
+FOREIGN_ORIGIN = "다른 사이트에서 보낸 쓰기 요청은 받지 않습니다. 이 도구의 화면에서 다시 해 주세요."
+_DEV_ORIGINS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def origin_ok(origin: str | None) -> bool:
+    if origin is None:
+        return True
+    from urllib.parse import urlsplit
+
+    try:
+        host = (urlsplit(origin).hostname or "").lower()
+    except ValueError:
+        return False
+    if not host:
+        return False  # "null" — 파일 · 샌드박스에서 연 페이지
+    if host in _DEV_ORIGINS or is_local_host(host):
+        return True
+    # 사내 DNS 의 긴 이름(pc01.corp.local)도 이 PC 의 이름이면 받는다
+    return host.split(".")[0] == socket.gethostname().lower().split(".")[0]
 
 
 def share_url(port: int | None) -> str:
@@ -117,17 +152,23 @@ def share_url(port: int | None) -> str:
 # ── 접속 기록 — 바깥에서 온 요청만, 내용 없이 ────────────────────────────────
 _lock = threading.Lock()
 _today: dict[str, Any] = {"date": None, "ips": set(), "requests": 0}
+# 오늘 접속한 주소마다 마지막 시각 · 요청 수 (TODO 233) — 설정 → 명부에서 등록 안 된 주소를 골라 사람에게 붙인다
+_seen: dict[str, dict[str, Any]] = {}
 
 
-def record_access(ip: str, method: str, path: str, status: int) -> None:
+def record_access(ip: str, method: str, path: str, status: int, name: str = "") -> None:
     today = date.today().isoformat()
-    line = json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "ip": ip, "method": method,
-                       "path": path.split("?")[0], "status": status}, ensure_ascii=False)
+    # 팀원(등록한 IP)이면 누구인지도 (TODO 233) — 내용은 여전히 적지 않는다
+    line = json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "ip": ip, **({"name": name} if name else {}),
+                       "method": method, "path": path.split("?")[0], "status": status}, ensure_ascii=False)
     with _lock:
         if _today["date"] != today:
             _today.update({"date": today, "ips": set(), "requests": 0})
+            _seen.clear()
         _today["ips"].add(ip)
         _today["requests"] += 1
+        seen = _seen.setdefault(ip, {"ip": ip, "requests": 0})
+        seen.update({"last_at": datetime.now().isoformat(timespec="seconds"), "requests": seen["requests"] + 1})
         try:
             logs = get_settings().logs_dir
             logs.mkdir(parents=True, exist_ok=True)
@@ -135,6 +176,16 @@ def record_access(ip: str, method: str, path: str, status: int) -> None:
                 handle.write(line + "\n")
         except OSError:
             pass  # 기록에 실패해도 서비스를 멈추지 않는다 (errorlog 와 같은 원칙)
+
+
+def visitor_list() -> list[dict[str, Any]]:
+    """오늘 바깥에서 접속한 주소 — 마지막 접속이 늦은 것부터."""
+    with _lock:
+        if _today["date"] != date.today().isoformat():
+            return []
+        items = [dict(item) for item in _seen.values()]
+    items.sort(key=lambda item: item.get("last_at", ""), reverse=True)
+    return items
 
 
 def visitors_today() -> dict[str, int]:

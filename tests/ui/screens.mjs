@@ -2784,7 +2784,8 @@ async function main() {
         return { cls: c.className || "(없음)", x: Math.round(r.x), right: Math.round(r.right) };
       });
     });
-    expect(cells !== null && cells.length === 5, `줄의 칸 수: ${cells ? cells.length : "없음"}`);
+    // 칸 여섯 — 이름 · 사번 · 과제 · PC 주소(TODO 233) · 떠난 날 · 단추
+    expect(cells !== null && cells.length === 6, `줄의 칸 수: ${cells ? cells.length : "없음"}`);
     for (let i = 1; i < cells.length; i += 1) {
       expect(
         cells[i].x >= cells[i - 1].right - 1,
@@ -2793,7 +2794,8 @@ async function main() {
     }
     // 마지막 칸이 상자 안에 있어야 보인다
     const edge = await box.evaluate((el) => Math.round(el.getBoundingClientRect().right));
-    expect(cells[4].right <= edge + 1, `맨 오른쪽 칸이 상자 밖이다: ${cells[4].right} > ${edge}`);
+    const last = cells[cells.length - 1];
+    expect(last.right <= edge + 1, `맨 오른쪽 칸이 상자 밖이다: ${last.right} > ${edge}`);
   });
 
   console.log("\n[21] 홈에서 간 화면에서 돌아오는 길 (TODO 127)");
@@ -5809,6 +5811,90 @@ async function main() {
       });
     } finally {
       for (const id of made) await fetch(`${BASE}/api/activities/${id}`, { method: "DELETE" });
+    }
+  }
+
+  console.log("\n[54] 팀원 PC — 등록한 IP 로 알아보고 담당 과제의 진행일지 · 개요만 고친다 (TODO 233)");
+  {
+    const { networkInterfaces } = await import("node:os");
+    const lan = Object.values(networkInterfaces()).flat().find((n) => n && n.family === "IPv4" && !n.internal)?.address;
+    const teamVault = await mkdtemp(join(tmpdir(), "md-mgmt-team-"));
+    const shared = await startServer(teamVault, PORT + 6, { host: "0.0.0.0", env: { MD_MGMT_SHARE: "1" } });
+    // 팀원 PC 흉내 — 보낸 쪽 127.0.0.2 를 명부에 그 사람의 IP 로 적는다
+    const relay = await teammateRelay(lan, PORT + 7, PORT + 6);
+    const inside = `http://127.0.0.1:${PORT + 6}`, outside = relay.url;
+    const call = async (method, path, body) => {
+      const r = await fetch(inside + path, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+      return r.status === 204 ? null : r.json();
+    };
+    const member = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    member.on("dialog", (dialog) => dialog.accept());
+    try {
+      await call("PUT", "/api/people", { people: [{ name: "가팀원", ips: ["127.0.0.2"] }, { name: "나팀원" }] });
+      const mine = await call("POST", "/api/projects", { title: "가팀원 담당 과제", owners: ["가팀원"], status: "in_progress" });
+      const theirs = await call("POST", "/api/projects", { title: "나팀원 담당 과제", owners: ["나팀원"], status: "in_progress" });
+      await call("POST", `/api/projects/${mine.id}/entries`, { title: "팀장이 쓴 기록", body: "팀장 본문", author: "팀장" });
+      await call("POST", "/api/meetings", { person: "가팀원", date: "2026-09-15", summary: "가팀원 면담", followups: [{ text: "교육 신청", done: null }] });
+      await call("POST", "/api/meetings", { person: "나팀원", date: "2026-09-16", summary: "나팀원 면담" });
+
+      await check("등록한 IP 의 화면은 그 사람으로 — 머리 띠에 이름과 담당 과제 수 (233)", async () => {
+        await member.goto(`${outside}/#/`); await member.waitForTimeout(1200);
+        const band = await member.locator(".member-band").innerText();
+        expect(band.includes("가팀원") && band.includes("1건"), `머리 띠: ${band}`);
+      });
+      await check("담당 과제에서는 [기록 추가] · 개요 [수정] · [파일 첨부], 팀장 단추와 남이 쓴 기록의 [수정] · [삭제] 는 없다 (233 ② ③)", async () => {
+        await member.goto(`${outside}/#/projects/${mine.id}`); await member.waitForTimeout(1200);
+        const visible = async (name) => member.getByRole("button", { name, exact: true }).filter({ visible: true }).count();
+        equal(await visible("기록 추가"), 1, "[기록 추가]");
+        expect(await visible("수정") >= 1, "개요 [수정]");
+        for (const name of ["과제 정보 수정", "이 과제로 새 과제", "이전 버전", "삭제"]) equal(await visible(name), 0, `팀장 단추 ${name}`);
+        const ownerEntry = member.locator("li.entry", { hasText: "팀장이 쓴 기록" });
+        equal(await ownerEntry.getByRole("button", { name: "수정", exact: true }).filter({ visible: true }).count(), 0, "남이 쓴 기록의 [수정]");
+        equal(await ownerEntry.getByRole("button", { name: "이어쓰기" }).filter({ visible: true }).count(), 1, "남이 쓴 기록도 [이어쓰기]");
+      });
+      await check("팀원이 쓴 기록의 작성자는 그 사람 · 자기 기록은 [수정] 이 선다 (233 R9)", async () => {
+        await member.getByRole("button", { name: "기록 추가" }).click();
+        await member.waitForTimeout(500);
+        await member.locator(".entry-editor label", { hasText: "제목" }).locator("input").fill("팀원이 쓴 기록");
+        await member.locator(".entry-editor").getByRole("button", { name: "저장", exact: true }).click();
+        await member.waitForTimeout(1200);
+        const entries = await call("GET", `/api/projects/${mine.id}/entries`);
+        const made = entries.find((item) => item.title === "팀원이 쓴 기록");
+        expect(made && made.author === "가팀원", `팀원이 쓴 기록: ${JSON.stringify(entries.map((item) => [item.title, item.author]))}`);
+        const row = member.locator("li.entry", { hasText: made.title });
+        equal(await row.getByRole("button", { name: "수정", exact: true }).filter({ visible: true }).count(), 1, "자기 기록의 [수정]");
+      });
+      await check("담당이 아닌 과제는 보기만 · 상태 같은 칸은 서버가 막는다 (233 ②)", async () => {
+        await member.goto(`${outside}/#/projects/${theirs.id}`); await member.waitForTimeout(1200);
+        equal(await member.getByRole("button", { name: "기록 추가" }).filter({ visible: true }).count(), 0, "남의 과제의 [기록 추가]");
+        const r = await member.evaluate(async (id) => (await fetch(`/api/projects/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "done" }) })).status, mine.id);
+        equal(r, 403, "담당 과제라도 상태는 팀장");
+      });
+      await check("본인 면담은 [면담] 탭에서 보기만 — 다른 사람 면담은 없다 (233 ⑤)", async () => {
+        await member.goto(`${outside}/#/skills?tab=meetings`); await member.waitForTimeout(1200);
+        const items = await member.locator(".meeting-item").allInnerTexts();
+        equal(items.length, 1, "면담 한 건");
+        expect(items[0].includes("가팀원 면담"), `자기 면담: ${items[0]}`);
+        equal(await member.getByRole("button", { name: "면담 추가" }).filter({ visible: true }).count(), 0, "[면담 추가] 없음");
+      });
+      await check("팀장 홈에 '팀원이 고친 것' · 설정 명부에 오늘 접속한 주소 (233 ⑥)", async () => {
+        const owner = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+        try {
+          await owner.goto(`${inside}/#/`); await owner.waitForTimeout(1200);
+          const edits = await owner.locator(".home-edits").innerText();
+          expect(edits.includes("가팀원") && edits.includes("진행일지 추가") && edits.includes("가팀원 담당 과제"), `팀원이 고친 것: ${edits}`);
+          await owner.goto(`${inside}/#/settings`); await owner.waitForTimeout(1200);
+          const visitors = await owner.locator(".visitor-list").innerText();
+          expect(visitors.includes("127.0.0.2") && visitors.includes("가팀원"), `오늘 접속한 주소: ${visitors}`);
+        } finally {
+          await owner.close();
+        }
+      });
+    } finally {
+      await member.close();
+      await relay.close();
+      shared.server.kill();
+      await rm(teamVault, { recursive: true, force: true });
     }
   }
 

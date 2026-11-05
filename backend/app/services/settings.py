@@ -272,6 +272,7 @@ def check_people(value: Any) -> None:
     stored = {person["name"] for person in normalize_people(load()["people"])}
     seen: set[str] = set()
     ids: dict[str, str] = {}
+    owners_of_ip: dict[str, str] = {}
     for raw in value:
         item = raw if isinstance(raw, dict) else {"name": raw}
         name = rules.clean_text(item.get("name"))
@@ -296,6 +297,29 @@ def check_people(value: Any) -> None:
             if employee_id in ids:
                 raise ValueError(f"같은 사번({employee_id})이 두 사람에게 있습니다: {ids[employee_id]} · {name}")
             ids[employee_id] = name
+        # PC 주소 (TODO 233) — 모양 · 서버 PC 자신의 주소가 아닌가 · **한 주소에 두 사람은 안 된다**(공용 PC 가 잘못 등록되지 않게)
+        raw_ips = item.get("ips")
+        if raw_ips is None:
+            continue
+        if not isinstance(raw_ips, list):
+            raise ValueError(f"{name}: IP 는 목록으로 보내야 합니다.")
+        from ..who import MAX_IPS, check_ip
+
+        mine: list[str] = []
+        for raw in raw_ips:
+            if not str(raw or "").strip():
+                continue
+            try:
+                ip = check_ip(raw)
+            except ValueError as exc:
+                raise ValueError(f"{name}: {exc}") from exc
+            if ip in owners_of_ip and owners_of_ip[ip] != name:
+                raise ValueError(f"같은 IP({ip})가 두 사람에게 있습니다: {owners_of_ip[ip]} · {name} — 공용 PC 는 등록하지 않습니다(보기만).")
+            owners_of_ip[ip] = name
+            if ip not in mine:
+                mine.append(ip)
+        if len(mine) > MAX_IPS:
+            raise ValueError(f"{name}: IP 는 한 사람에 {MAX_IPS}개까지입니다.")
 
 
 # 사람 이름 하나 (TODO 214 F6 · D14) — 명부 · 면담 · 역량 · [다른 이름으로 통일] · [넘기기] 가 같은 규칙.
@@ -500,6 +524,9 @@ def normalize_people(value: object) -> list[dict[str, str]]:
                 # 명부에서 지우면 지난 성과가 "명부에 없는 이름" 이 되어 오타와 뒤섞인다.
                 "left_on": _left_on(item.get("left_on")),
                 "left_reason": _left_reason(item.get("left_reason")),
+                # 이 사람의 PC 주소 (TODO 233) — 여기서 온 요청은 이 사람으로 본다(담당 과제를 고칠 수 있다).
+                # 손으로 고친 파일의 틀린 값은 말없이 뺀다(읽기는 멈추지 않는다) — 저장할 때의 검사는 check_people
+                "ips": _ips(item.get("ips")),
             }
         )
     # 떠난 사람은 아래로. 자동완성·고르기에서 지금 있는 사람이 먼저 보여야 한다.
@@ -508,6 +535,20 @@ def normalize_people(value: object) -> list[dict[str, str]]:
 
 
 LEFT_REASONS = ("전배", "퇴사")
+
+
+def _ips(value: object) -> list[str]:
+    from ..who import MAX_IPS, normalize_ip
+
+    out: list[str] = []
+    for raw in value if isinstance(value, list) else []:
+        try:
+            ip = normalize_ip(raw)
+        except ValueError:
+            continue
+        if ip not in out:
+            out.append(ip)
+    return out[:MAX_IPS]
 
 
 def _left_on(value: object) -> str:
@@ -580,7 +621,7 @@ def add_person(name: str) -> list[dict[str, str]]:
     current = people()
     if any(person["name"] == name for person in current):
         return current
-    current.append({"name": name, "employee_id": "", "account": "", "left_on": "", "left_reason": ""})
+    current.append({"name": name, "employee_id": "", "account": "", "left_on": "", "left_reason": "", "ips": []})
     return save({"people": current})["people"]
 
 

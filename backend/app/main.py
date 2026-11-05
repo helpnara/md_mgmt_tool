@@ -14,11 +14,14 @@ import anyio
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (activities, attachments, dashboard, drafts, entries, errors, export, folders, home, intakes,
+from .api import (activities, attachments, dashboard, drafts, edits, entries, errors, export, folders, home, intakes,
                   linkfix, meetings, meta, people, projects, reports, roadmap, search, settings, trash,
                   versions)
-from . import readcache, share
+from . import permissions, readcache, share, who
+from .db import connect
+from .services import edits as edits_service
 from .services import errorlog
+from .services import settings as settings_service
 from .config import REPO_ROOT, get_settings
 from .db import reset_index
 from .vault.markdown import ExternalChangeError
@@ -147,7 +150,8 @@ async def shared_reads(request: Request, call_next):
             readcache.bump()
     if request.method != "GET" or not readcache.cacheable(path) or "if-none-match" in request.headers:
         return await call_next(request)
-    key = (path, request.url.query, bool(share.is_remote(request)))
+    # 열쇠에 **사람**을 넣는다 (TODO 233 R12) — 팀원은 자기 면담처럼 사람마다 다른 답을 받는다. 팀장 · 읽기는 지금처럼 하나씩
+    key = (path, request.url.query, who.of(request).key)
     hit = readcache.get(key)
     if hit is not None:
         status, body, headers = hit
@@ -180,20 +184,54 @@ async def shared_reads(request: Request, call_next):
 
 @app.middleware("http")
 async def readonly_share(request: Request, call_next):
-    """읽기 전용 공유 (TODO 191). 바깥에서 온 요청은 읽기만 — 규칙은 `share.py`, 지키는 곳은 여기 하나."""
-    remote = share.is_remote(request)
-    request.state.readonly = remote
-    if not remote:
-        return await call_next(request)
+    """누가 무엇을 할 수 있나 — 지키는 곳은 여기 하나 (TODO 191 · 233). 규칙은 `share.py` · `who.py` · `permissions.py`.
+
+    * 팀장(서버 PC 안) — 모두. 읽기 전용 공유 전에도 지금도 같다.
+    * 팀원(명부에 등록한 IP) — 읽기는 읽기 전용과 같고(막힌 것도 같다, 자기 쓰다 만 글만 열린다), 쓰기는 **허용 목록**(담당 과제의
+      진행일지 · 첨부 · 개요)만. 고친 것은 쓰기 기록(edits)에 남는다 — 팀장 홈의 "팀원이 고친 것".
+    * 그 밖(등록 안 한 사내 PC · 가상 PC · 공용 PC) — 읽기만 (191).
+    * 누구든 — 다른 사이트에서 온 쓰기(Origin 이 이 서버가 아님)는 받지 않는다 (233 R5).
+    """
+    user = who.identify(request)
+    request.state.user = user
+    request.state.readonly = user.role != who.OWNER
     path = request.url.path
-    if request.method not in share.SAFE_METHODS or share.blocked_path(path):
+    writing = request.method not in share.SAFE_METHODS
+    if writing and not share.origin_ok(request.headers.get("origin")):
+        return JSONResponse({"detail": share.FOREIGN_ORIGIN}, status_code=403)
+    if user.role == who.OWNER:
+        response = await call_next(request)
+        if writing and response.status_code < 400:
+            _record_edit(user, request.method, path)
+        return response
+    member = user.role == who.MEMBER
+    decision = None
+    if writing and member:
+        conn = connect()
+        try:
+            decision = permissions.check(conn, user, request.method, path)
+        finally:
+            conn.close()
+        response = await call_next(request) if decision.allowed else JSONResponse({"detail": decision.reason}, status_code=403)
+    elif writing or share.blocked_path(path, member=member):
         response = JSONResponse({"detail": share.READONLY_DETAIL}, status_code=403)
-    elif path in share.EMPTY_RESPONSES:
+    elif path in share.EMPTY_RESPONSES and not member:
         response = JSONResponse(share.EMPTY_RESPONSES[path])
     else:
         response = await call_next(request)
-    share.record_access(request.client.host if request.client else "?", request.method, path, response.status_code)
+    if decision is not None and decision.allowed and decision.record and response.status_code < 400:
+        edits_service.record(user.name, user.role, decision.action, decision.project_id, decision.entry_id)
+    share.record_access(request.client.host if request.client else "?", request.method, path, response.status_code, user.name)
     return response
+
+
+def _record_edit(user: "who.User", method: str, path: str) -> None:
+    """팀장의 쓰기도 진행일지 · 첨부 · 개요라면 한 줄 — 409 의 "누가 먼저 고쳤나" 에 쓴다(홈의 "팀원이 고친 것" 에는 들지 않는다)."""
+    action = permissions.action_of(method, path)
+    if action is None:
+        return
+    name = settings_service.current_author() or "팀장"
+    edits_service.record(name, user.role, action[0], action[1], action[2])
 
 
 @app.middleware("http")
@@ -399,6 +437,7 @@ app.include_router(drafts.router)
 app.include_router(roadmap.router)
 # 팀원 면담 (TODO 182)
 app.include_router(meetings.router)
+app.include_router(edits.router)
 
 if FRONTEND_DIST.exists():
     @app.get("/assets/{name}")

@@ -4,6 +4,7 @@ import type { Activity, ActivitySummary, Meta } from "../types";
 import { backTarget, useAddressBar } from "../nav";
 import { leftLabel, splitPeople } from "../people";
 import { isReadonly } from "../readonly";
+import { getMe, isMember } from "../me";
 import LoadError from "./LoadError";
 import ActivityForm from "./ActivityForm";
 import MeetingPanel from "./MeetingPanel";
@@ -71,6 +72,8 @@ function groupEvents(rows: Activity[]): Activity[][] {
 
 export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const readonly = isReadonly(); // 읽기 전용 공유 (191) — 면담 칸 · 면담 열을 뺀다. 설정 링크는 글자로 (208)
+  // 팀원 PC 는 **본인 면담을 보기만** (TODO 233 ⑤) — 면담 탭이 서고, 서버가 그 사람 것만 준다
+  const meetingsOpen = !readonly || isMember();
   const initial = useMemo(() => new URLSearchParams(query), [query]);
   const [year, setYear] = useState(initial.get("year") ?? THIS_YEAR);
   // 어디서 왔는지 (TODO 128). 조건이 아니라 돌아갈 곳이다.
@@ -80,7 +83,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const [find, setFind] = useState(initial.get("q") ?? "");
   // 예정만 · 지난 것만 (TODO 221). 비우면 모두
   const [when, setWhen] = useState(initial.get("when") ?? "");
-  const [tab, setTab] = useState<SkillsTab>(() => tabFrom(initial, readonly));
+  const [tab, setTab] = useState<SkillsTab>(() => tabFrom(initial, !meetingsOpen));
   const [plannedAll, setPlannedAll] = useState(false);
   // 기록 목록은 처음에 최근 행사 몇 건만 (TODO 227) — 행사가 쌓이자 화면이 한없이 길어졌다. 조건을 바꾸면 다시 처음부터
   const [shown, setShown] = useState(EVENT_PAGE);
@@ -134,7 +137,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         .filter(([, value]) => value),
     ) as Record<string, string>,
     (params) => {
-      setTab(tabFrom(params, readonly));
+      setTab(tabFrom(params, !meetingsOpen));
       setYear(params.get("year") ?? THIS_YEAR);
       setPerson(params.get("person") ?? ALL);
       setKind(params.get("kind") ?? ALL);
@@ -187,15 +190,15 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const cols = {
     hours: summary.people.some((item) => item.hours),
     cost: summary.people.some((item) => item.cost),
-    meeting: !readonly && summary.people.some((item) => item.last_meeting),
-    followups: !readonly && summary.people.some((item) => item.open_followups),
+    meeting: meetingsOpen && summary.people.some((item) => item.last_meeting),
+    followups: meetingsOpen && summary.people.some((item) => item.open_followups),
   };
   const hiddenCols = [
     ...meta.activity_kinds.filter((kindInfo) => !shownKinds.includes(kindInfo)).map((kindInfo) => kindInfo.label),
     ...(cols.hours ? [] : ["시간"]),
     ...(cols.cost ? [] : ["비용"]),
-    ...(!readonly && !cols.meeting ? ["마지막 면담"] : []),
-    ...(!readonly && !cols.followups ? ["하기로 한 것"] : []),
+    ...(meetingsOpen && !cols.meeting ? ["마지막 면담"] : []),
+    ...(meetingsOpen && !cols.followups ? ["하기로 한 것"] : []),
   ];
 
   /** 사람을 고른다 — 그 사람의 기록(또는 면담)으로 넘어간다. 고른 사람은 탭을 옮겨도 남는다.
@@ -311,7 +314,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const tabs = [
     { key: "", label: "사람별", title: "합계 · 면담에서 먼저 볼 사람 · 사람별 표" },
     { key: "records", label: "기록", title: "교육 · 행사 기록 — 예정과 지난 기록" },
-    ...(readonly ? [] : [{ key: "meetings", label: "면담", title: "면담 기록 · 하기로 한 것 (팀장만)" }]),
+    ...(!meetingsOpen ? [] : [{ key: "meetings", label: "면담", title: readonly ? "내 면담 기록 — 보기만" : "면담 기록 · 하기로 한 것 (팀장만)" }]),
   ];
 
   return (
@@ -381,6 +384,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       <div role="tabpanel" className={`skills-panel skills-panel-${tab || "people"}`}>
       {tab === "" && (
         <>
+      {/* 합계와 먼저 볼 사람을 넓으면 나란히 (232 뒤 사용자: "가득 차 보이게") */}
+      <div className={quiet.length > 0 ? "skills-top two" : "skills-top"}>
       {/* ── 팀 합계 ─────────────────────────────────────────────────── */}
       <div className="card">
         <h2>{year === ALL_YEARS ? "전체" : `${year}년`} 합계</h2>
@@ -463,6 +468,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           </div>
         </div>
       )}
+      </div>
 
       {/* ── 사람별 ─────────────────────────────────────────────────── */}
       <div className="card wide">
@@ -631,9 +637,12 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
 
       {/* ── 면담 (TODO 182) — 사람을 고르면 그 사람의 면담, 아니면 팀 전체의 하기로 한 것. 읽기 전용 공유에선 탭째 없다 (191).
             떠난 사람과는 새 면담을 잡지 않는다 (194) — 지난 면담은 그 사람을 고르면 그대로 보인다 ── */}
-      {tab === "meetings" && !readonly && <MeetingPanel
+      {tab === "meetings" && readonly && (
+        <p className="hint member-meetings-note">{getMe().name} 님의 면담 기록입니다 — 보기만 됩니다. 고칠 것이 있으면 팀장에게 말해 주세요.</p>
+      )}
+      {tab === "meetings" && meetingsOpen && <MeetingPanel
         meta={meta}
-        person={person}
+        person={readonly ? getMe().name : person}
         // 떠난 날이 오늘 이후면 아직 있는 사람이다 — 전배 예정자와도 면담한다 (TODO 214 D8)
         people={summary.people
           .filter((item) => !item.left || (item.left_on ? !isDeparted({ left_on: item.left_on }) : false))

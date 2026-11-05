@@ -181,6 +181,19 @@ def _meta(conn: sqlite3.Connection) -> dict:
     }
 
 
+@router.get("/me")
+def me(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """지금 누구인가 (TODO 233). 화면이 머리 띠("가팀원으로 접속") 와 과제마다의 [수정] 단추를 정한다.
+
+    `/api/meta` 와 따로 둔다 — meta 는 모두에게 같은 답이라 나눠 쓰고(readcache), 이것은 사람마다 다르다.
+    """
+    from .. import permissions, who
+
+    user = who.of(request)
+    projects = permissions.member_projects(conn, user.name) if user.role == who.MEMBER else []
+    return {"role": user.role, "name": user.name, "projects": projects}
+
+
 @router.post("/reindex")
 def reindex(conn: sqlite3.Connection = Depends(get_db)) -> dict:
     indexed, problems = reindex_all(conn)

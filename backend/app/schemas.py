@@ -76,11 +76,14 @@ class ProjectUpdate(BaseModel):
     cost_kind: str | None = None
     # 선행 과제들 (TODO 172). [] 을 보내면 모두 끊는다.
     predecessors: list[str] | None = None
+    # 화면이 **연 때의** 최근 수정 시각 (TODO 233 R7). 그 뒤 누가 먼저 고쳤으면 409 — 나중 저장이 말없이 이기지 않게.
+    # 보내지 않으면(시험 · 옛 화면) 따지지 않는다
+    base_updated_at: str | None = None
 
     def changes(self) -> dict[str, Any]:
         # 보내지 않은 항목만 건너뛴다. 보낸 값이 null 이면 그 항목을 비우겠다는 뜻이다
         # (효과 금액을 지우려면 이 구분이 반드시 필요하다).
-        return self.model_dump(exclude_unset=True)
+        return self.model_dump(exclude_unset=True, exclude={"base_updated_at"})
 
 
 class EntryCreate(BaseModel):
@@ -96,9 +99,11 @@ class EntryUpdate(BaseModel):
     title: str | None = None
     body: str | None = None
     tags: list[str] | None = None
+    # 화면이 연 때의 최근 수정 시각 (TODO 233 R7) — ProjectUpdate 와 같은 뜻
+    base_updated_at: str | None = None
 
     def changes(self) -> dict[str, Any]:
-        return {k: v for k, v in self.model_dump().items() if v is not None}
+        return {k: v for k, v in self.model_dump(exclude={"base_updated_at"}).items() if v is not None}
 
 
 # ══ 입력 검증 — 한 곳 (TODO 205) ════════════════════════════════════════════════

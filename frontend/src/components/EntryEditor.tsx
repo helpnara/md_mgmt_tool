@@ -132,6 +132,9 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
   const fileInputRef = useRef<HTMLInputElement>(null);
   // 자동 저장 타이머가 항상 최신 값을 보게 한다.
   const stateRef = useRef({ entryId, date, title, body, tags });
+  // 연 때의 최근 수정 시각 (TODO 233 R7) — 저장할 때 함께 보내, 그 뒤 다른 사람이 먼저 고쳤으면 서버가 409 로 알린다.
+  // 저장할 때마다 새 시각으로 바꾼다(자동 저장 · 첨부 저장이 제 자신과 부딪히지 않게)
+  const baseRef = useRef<string | null>(initial?.updated_at ?? null);
   stateRef.current = { entryId, date, title, body, tags };
 
   // 진행일지는 logs/ 안에 있으므로 첨부 링크(../assets/…)의 기준도 logs/ 다.
@@ -192,8 +195,9 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
       };
       const created = !current.entryId;
       const entry = current.entryId
-        ? await api.updateEntry(current.entryId, payload)
+        ? await api.updateEntry(current.entryId, { ...payload, ...(baseRef.current ? { base_updated_at: baseRef.current } : {}) })
         : await api.createEntry(projectId, payload);
+      baseRef.current = entry.updated_at ?? null;
       stateRef.current = { ...stateRef.current, entryId: entry.id };
       setEntryId(entry.id);
       if (origin === "attach") {

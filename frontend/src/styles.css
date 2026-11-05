@@ -92,10 +92,10 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color:
 }
 
 main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px; }
-/* 넓은 화면에서는 본문을 넓게 쓴다 (좌우 여백 낭비 방지) */
+/* 넓은 화면에서는 본문을 **브라우저 폭 그대로** 쓴다 (TODO 232 뒤 — 1720px 에서 멈추면 1920 화면 좌우가 100px 씩 비고
+   맨 위 메뉴 줄과 본문의 왼쪽 끝이 어긋났다). 좌우 여백은 머리줄과 같은 28px */
 @media (min-width: 1440px) {
-  main { max-width: 1720px; }
-  .author-notice { max-width: 1720px; }
+  main { max-width: none; }
 }
 
 .app-loading, .app-error { padding: 40px; color: var(--muted); }
@@ -452,7 +452,7 @@ button { white-space: nowrap; }
 
 /* ── 작성자 안내 · 백업 버튼 ─────────────────────── */
 .author-notice { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  max-width: 1180px; margin: 16px auto -8px; padding: 10px 16px;
+  max-width: 1124px; margin: 16px auto -8px; padding: 10px 16px;
   background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius); font-size: 13px; }
 .author-notice a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .author-notice button { margin-left: auto; }
@@ -2156,7 +2156,24 @@ a.bar-col.on .bar { box-shadow: 0 0 0 2px var(--text); }
 .home-stat.zero-stat strong { color: var(--muted-strong); font-weight: 600; }
 
 /* [할 일] 탭은 한 칸 — 줄 목록이 너무 넓어지지 않게 */
-.home-panel-todo .home-week { max-width: 1100px; }
+/* 작성자 안내 띠도 본문과 같은 폭 — 전에는 넓은 화면 규칙보다 뒤에 적힌 1180px 이 이겨 가운데에 좁게 떴다 */
+@media (min-width: 1440px) {
+  .author-notice { max-width: none; margin-left: 28px; margin-right: 28px; }
+}
+/* [할 일] 은 한 칸을 가득 — 숫자 칸은 줄을 나눠 채우고, 목록은 넓으면 두 단(일정 · 보고)으로 */
+.home-week-row > .home-stat { flex: 1 1 140px; }
+.home-week-cols { display: grid; gap: 4px 28px; }
+@media (min-width: 1100px) {
+  .home-week-cols.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+.home-week-col { min-width: 0; }
+/* 팀원역량 [사람별] — 합계와 먼저 볼 사람을 나란히, 숫자 칸은 줄을 채운다 */
+.skills-top { display: grid; gap: 14px; align-items: stretch; margin-bottom: 16px; }
+.skills-top > .card { margin: 0; }
+@media (min-width: 1100px) {
+  .skills-top.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+.skills-top .home-stats > .home-stat { flex: 1 1 110px; }
 .home-status-top { margin-bottom: 14px; }
 
 /* 팀원역량 기록 — 한 줄로 (주관 · 장소 · 시간 · 비용을 제목 줄 끝에) */
@@ -2166,3 +2183,33 @@ a.bar-col.on .bar { box-shadow: 0 0 0 2px var(--text); }
 .activity-section h3 { font-size: 13px; margin: 6px 0 6px; }
 .form-actions .grow { flex: 1 1 auto; }
 .form-actions .activity-delete { color: var(--danger); }
+
+/* ── 233 팀원 PC — 등록한 IP 로 알아본 사람 ─────────────────────────────────────
+   화면 전체는 읽기 전용(body.readonly) 그대로. 담당 과제 상세에서만 ProjectDetail 이 readonly 를 떼고 member-editing 을 건다.
+   그때도 팀장만 하는 단추([data-owner-only])와 보고 · 첨부 묶음(.readonly-zone)은 읽기 전용과 같이 숨긴다. */
+body.member-editing [data-owner-only] { display: none !important; }
+body.member-editing .readonly-zone button:not([class]), body.member-editing .readonly-zone button.commit,
+body.member-editing .readonly-zone button.report, body.member-editing .readonly-zone button.ghost.danger,
+body.member-editing .readonly-zone [data-write], body.member-editing .readonly-zone .attach-button { display: none !important; }
+/* 본인 면담은 보기만 (233 ⑤) — 면담 칸은 서되 쓰기 단추는 읽기 전용 규칙이 숨기고, 하기로 한 것 체크도 누를 수 없다 */
+body.readonly.member .meeting-panel { display: block !important; }
+body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
+.member-band { display: block; }
+.member-band a { margin-left: 8px; color: #8a5a0a; font-weight: 600; }
+
+/* 명부의 PC 주소 칸 · 오늘 접속한 주소 (233) */
+/* 칸을 하나 더했으니 나머지를 줄여 카드 안에 든다 (TODO 134 — 가로로 밀리면 맨 오른쪽 [빼기] 가 안 보였다) */
+/* 떠난 날 · 사유는 좁으면 두 줄로 접힌다(cell-row 가 줄을 바꾼다) — 이름 칸에 자리를 남긴다 */
+.people-table .col-ip { width: 120px; }
+.people-table .col-id { width: 72px; }
+.people-table .col-used { width: 52px; }
+.people-table .col-left { width: 140px; }
+.people-table .col-act { width: 64px; }
+.people-table td .ip-error { display: block; }
+.visitor-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.visitor-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd; }
+.visitor-list code { font-size: 12px; }
+.visitor-list select { font-size: 12px; padding: 3px 6px; }
+
+/* 홈 — 팀원이 고친 것 (233 ⑥) */
+.home-edits li .edit-action { color: var(--muted-strong); font-size: 12px; }

@@ -4,6 +4,7 @@ import { filesBase, renderMarkdown } from "../markdown";
 import { BACK_PARAM, backTarget, currentLocation, intakeBackLink, listLink, projectLink, queryOf, screenLink, setPageTitle } from "../nav";
 import { attempt, notifyError } from "../notify";
 import { isReadonly } from "../readonly";
+import { canEditEntry, canEditProject, isMember } from "../me";
 import { discardQuestion, dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
 import type { DemotePlan, Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
@@ -120,6 +121,18 @@ export default function ProjectDetail({
   openDraft,
 }: Props) {
   const [project, setProject] = useState<Project | null>(null);
+  // 팀원 PC 에서 연 **담당 과제** (TODO 233) — 이 화면에서만 읽기 전용을 풀고, 팀장만 하는 단추([data-owner-only])와
+  // 보고 · 첨부 칸(.readonly-zone)은 그대로 숨긴다. 숨기는 것은 편의 — 막는 것은 서버다(permissions.py)
+  const memberEdit = isMember() && project !== null && canEditProject(project.id);
+  useEffect(() => {
+    if (!memberEdit) return;
+    document.body.classList.remove("readonly");
+    document.body.classList.add("member-editing");
+    return () => {
+      document.body.classList.add("readonly");
+      document.body.classList.remove("member-editing");
+    };
+  }, [memberEdit]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [editingProject, setEditingProject] = useState(Boolean(edit));
   const [editingOverview, setEditingOverview] = useState(false);
@@ -236,8 +249,11 @@ export default function ProjectDetail({
   useDrafts();
 
   /** 개요 [수정] — 남은 글이 있으면 되살린다 */
+  // 개요를 연 때의 최근 수정 시각 (TODO 233 R7) — 그 뒤 다른 사람이 먼저 고쳤으면 [저장] 이 409 로 알린다
+  const overviewBase = useRef<string | null>(null);
   async function startOverviewEdit() {
     if (!project) return;
+    overviewBase.current = project.updated_at ?? null;
     const original = project.body ?? "";
     const kept = await loadDraft<string>(overviewKey, (content) => content === original);
     setOverviewDraft(typeof kept === "string" ? kept : original);
@@ -265,7 +281,9 @@ export default function ProjectDetail({
   async function saveOverview() {
     if (!project || savingOverview) return;
     setSavingOverview(true);
-    const saved = await attempt(() => api.updateProject(project.id, { body: overviewDraft }));
+    const saved = await attempt(() =>
+      api.updateProject(project.id, { body: overviewDraft, ...(overviewBase.current ? { base_updated_at: overviewBase.current } : {}) }),
+    );
     setSavingOverview(false);
     if (!saved) return; // 실패 — 편집기를 열어 둔 채 알림만 (쓰던 글은 그대로 남는다)
     // 편집 중에 올린 첨부는 이제 저장된 개요의 것이다 (TODO 213)
@@ -561,12 +579,12 @@ export default function ProjectDetail({
           </div>
           <div className="detail-actions">
             <ExportMenu projectId={project.id} />
-            <button data-write className="ghost" onClick={() => setEditingProject((value) => !value)}>
+            <button data-write data-owner-only className="ghost" onClick={() => setEditingProject((value) => !value)}>
               {editingProject ? "닫기" : "과제 정보 수정"}
             </button>
             {/* 끝난 과제의 후속 과제 (TODO 109). 개요·담당자·태그가 넘어오고 이력은 남지 않는다.
                 누르면 **미리 채운 새 과제 칸**만 연다 — [만들기] 를 눌러야 생긴다 (TODO 173). */}
-            <button data-write
+            <button data-write data-owner-only
               className={cloneDraft ? "ghost on" : "ghost"}
               title="이 과제의 개요·담당자·태그를 가져와 새 과제 칸을 엽니다. 진행일지·보고는 넘어오지 않습니다."
               onClick={async () => {
@@ -586,7 +604,7 @@ export default function ProjectDetail({
             </button>
             {/* 접수를 거치지 않고 만든 스마트과제를 풀로 (TODO 171) — 무엇이 어디로 가는지 판에서 먼저 보인다 */}
             {(project.intakes ?? []).length === 0 && project.type === meta.classified_type && (
-              <button data-write // 쓰기 — 읽기 전용 공유에서는 숨긴다 (TODO 208)
+              <button data-write data-owner-only // 쓰기 — 읽기 전용 공유에서는 숨긴다 (TODO 208)
                 className={demotePlan ? "ghost on" : "ghost"}
                 title="이 과제를 접수로 되돌려 풀에서 검토 · 사전점검 · 판정을 받게 합니다"
                 onClick={async () => {
@@ -606,6 +624,7 @@ export default function ProjectDetail({
             )}
             <button
               className="ghost danger"
+              data-owner-only
               onClick={async () => {
                 // 접수에서 온 과제면 확인창 대신 판을 연다 — 지우면 접수가 풀로 돌아간다는 것과
                 // 그만둔 과제는 [중단]이 맞다는 것을 함께 말해야 한다 (TODO 145)
@@ -811,15 +830,15 @@ export default function ProjectDetail({
           </div>
         )}
 
-        {/* 번호의 연도가 시작일과 어긋났으면 여기서 알린다 (TODO 95) */}
-        <YearFixNote
+        {/* 번호의 연도가 시작일과 어긋났으면 여기서 알린다 (TODO 95) — 번호를 옮기는 것은 팀장 (233) */}
+        {!memberEdit && <YearFixNote
           project={project}
           onMoved={(newId) => {
             // projectLink 가 지금 주소의 back 을 그대로 실어 준다 — 온 곳을 잃지 않는다.
             window.location.hash = projectLink(newId);
             onMetaChange();
           }}
-        />
+        />}
 
         {/* 지난 보고에서 받고 아직 답하지 않은 지시 (TODO 107). 다음 초안이 이것을 맨 위에 문다. */}
         {(project.open_feedback?.length ?? 0) > 0 && (
@@ -998,7 +1017,7 @@ export default function ProjectDetail({
             >
               {uploading ? `올리는 중… ${uploading}` : "📎 파일 첨부"}
             </button>
-            <button data-write
+            <button data-write data-owner-only
               className={showOverviewVersions ? "ghost on" : "ghost"}
               onClick={() => setShowOverviewVersions((value) => !value)}
               title="과제 개요의 이전 내용으로 되돌립니다."
@@ -1119,7 +1138,8 @@ export default function ProjectDetail({
         )}
       </div>
 
-      <div className="card reports-card">
+      {/* 보고는 팀장의 일 (TODO 233 ④) — 팀원이 담당 과제를 고칠 때도 이 칸은 읽기 전용 그대로 */}
+      <div className="card reports-card readonly-zone">
         <div className="card-head">
           <h2>
             보고 이력 {reports.length}건
@@ -1226,6 +1246,7 @@ export default function ProjectDetail({
       </div>
 
       {openReport !== null && reports.some((report) => report.id === openReport) && (
+        <div className="readonly-zone">
         <ReportEditorLoader
           reportId={openReport}
           dirName={project.dir_name}
@@ -1244,9 +1265,11 @@ export default function ProjectDetail({
             load();
           }}
         />
+        </div>
       )}
 
-      <div className="card">
+      {/* 첨부 자료 묶음 — 정리 · 지우기는 팀장 (233). 팀원은 기록 · 개요 편집기 안에서 붙이고 뗀다 */}
+      <div className="card readonly-zone">
         <div className="card-head">
           <h2>
             첨부 자료 {files.items.length}건 · {formatBytes(files.total_bytes)}
@@ -1491,11 +1514,13 @@ export default function ProjectDetail({
                       작성 중
                     </span>
                   )}
-                  <button data-write className="ghost" onClick={() => setEditingEntryId(entry.id)}>
+                  {/* 팀원은 본인이 쓴 기록만 고치고 지운다 (TODO 233 ③) */}
+                  <button data-write data-owner-only={canEditEntry(projectId, entry.author) ? undefined : true} className="ghost" onClick={() => setEditingEntryId(entry.id)}>
                     수정
                   </button>
                   <button
                     className="ghost danger"
+                    data-owner-only={canEditEntry(projectId, entry.author) ? undefined : true}
                     onClick={async () => {
                       if (!window.confirm("이 기록을 삭제 보관함으로 옮길까요?\n이 기록에만 쓰인 첨부도 함께 옮기고, 되돌리면 함께 돌아옵니다.")) return;
                       if (!(await attempt(() => api.deleteEntry(entry.id)))) return;

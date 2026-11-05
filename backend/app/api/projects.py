@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..config import CLASSIFICATION_KEYS, FINISHED_STATUSES, STATUS_KEYS, get_settings
 from ..deps import get_db
@@ -14,6 +14,8 @@ from ..services import renumber as renumber_service
 from ..services import search as search_svc
 from ..services import settings as settings_service
 from ..schemas import ProjectCreate, ProjectUpdate
+from .. import permissions, who
+from ..services import conflicts
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -473,9 +475,15 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
 
 @router.patch("/{project_id}")
 def update_project(
-    project_id: str, payload: ProjectUpdate, conn: sqlite3.Connection = Depends(get_db)
+    project_id: str, payload: ProjectUpdate, request: Request, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     changes = payload.changes()
+    # 팀원은 개요 본문만 (TODO 233 ②) — 담당인지는 미들웨어(permissions.check)가 이미 봤다
+    if who.of(request).role == who.MEMBER and not permissions.member_fields_ok(changes):
+        raise HTTPException(status_code=403, detail=permissions.PROJECT_FIELDS_DENIED)
+    current = conn.execute("SELECT updated_at FROM project WHERE id = ?", (project_id,)).fetchone()
+    if current is not None:
+        conflicts.check(payload.base_updated_at, current["updated_at"], project_id, None)
     before = conn.execute("SELECT title FROM project WHERE id = ?", (project_id,)).fetchone()
     try:
         warnings = svc.update_project(conn, project_id, changes) or []

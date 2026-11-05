@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..deps import get_db, RowId
 from ..vault.markdown import ExternalChangeError
 from ..vault.paths import FileInUseError
 from ..schemas import EntryCreate, EntryUpdate
 from ..services import entries as svc
+from .. import who
+from ..services import conflicts
 
 router = APIRouter(tags=["entries"])
 
@@ -64,10 +66,15 @@ def list_entries(project_id: str, conn: sqlite3.Connection = Depends(get_db)) ->
 
 @router.post("/api/projects/{project_id}/entries", status_code=201)
 def create_entry(
-    project_id: str, payload: EntryCreate, conn: sqlite3.Connection = Depends(get_db)
+    project_id: str, payload: EntryCreate, request: Request, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
+    data = payload.model_dump()
+    user = who.of(request)
+    if user.role == who.MEMBER:
+        # 팀원 PC 에서 쓴 진행일지의 작성자는 **그 사람** — 화면이 보낸 작성자 · 설정의 작성자(팀장)를 쓰지 않는다 (TODO 233 R9)
+        data["author"] = user.name
     try:
-        entry_id = svc.create_entry(conn, project_id, payload.model_dump())
+        entry_id = svc.create_entry(conn, project_id, data)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc
     except ValueError as exc:  # 날짜(InvalidDateError) · 길이 · 제어문자 · 작성자 (TODO 214)
@@ -92,6 +99,9 @@ def update_entry(
     entry_id: RowId, payload: EntryUpdate, conn: sqlite3.Connection = Depends(get_db)
 ) -> dict:
     changes = payload.changes()
+    current = conn.execute("SELECT project_id, updated_at FROM entry WHERE id = ?", (entry_id,)).fetchone()
+    if current is not None:
+        conflicts.check(payload.base_updated_at, current["updated_at"], current["project_id"], entry_id)
     try:
         svc.update_entry(conn, entry_id, changes)
     except KeyError as exc:
