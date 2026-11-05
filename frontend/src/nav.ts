@@ -246,7 +246,15 @@ export function setPageTitle(text: string): void {
   document.title = text ? `${text} · 느린 나이테` : "느린 나이테";
 }
 
-/** 사람별 이력 화면의 주소 (TODO 238) — 온 곳을 실어 [← 돌아가기] 가 그리로 */
+/**
+ * 사람별 이력 화면의 주소 (TODO 238) — 온 곳을 실어 [← 돌아가기] 가 그리로.
+ *
+ * 과제 상세에서 열면 **그 과제**가 돌아갈 곳이다. `backValue()` 는 상세 → 상세를 위해 상세가 물려받은 back 을 주므로
+ * (과제 목록 등) 여기서는 쓰지 않는다 — 접수 링크(`intakeBackLink`)와 같은 까닭이다.
+ */
 export function personLink(name: string): string {
-  return screenLink(`person/${encodeURIComponent(name)}`);
+  const path = `person/${encodeURIComponent(name)}`;
+  const here = currentLocation().split("?")[0];
+  if (here.startsWith("projects/")) return `#/${path}?${new URLSearchParams({ [BACK_PARAM]: here }).toString()}`;
+  return screenLink(path);
 }
