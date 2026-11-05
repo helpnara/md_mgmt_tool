@@ -303,7 +303,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
               return (
               <tr
                 key={index}
-                className={isDeparted(person) ? "person-left" : person.left_on ? "person-leaving" : undefined}
+                className={[isDeparted(person) ? "person-left" : person.left_on ? "person-leaving" : "", person.leader ? "person-leader" : ""].filter(Boolean).join(" ") || undefined}
                 data-name={person.name}
               >
                 <td>
@@ -316,7 +316,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                     checked={Boolean(person.leader)}
                     onChange={() => setLeader(index)}
                     aria-label={`${person.name || "이 사람"} 을(를) 팀장으로`}
-                    title="팀장으로 고르기 — 한 명만"
+                    title={person.leader ? "팀장" : "팀장으로 고르기 — 한 명만"}
                   />
                   <input
                     value={person.name}
@@ -325,7 +325,6 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                     title={rowProblems[index]?.name ?? undefined}
                   />
                   </div>
-                  {person.leader && <span className="tag leader-tag">팀장</span>}
                   {rowProblems[index]?.name && <span className="field-error person-name-error">{rowProblems[index].name}</span>}
                 </td>
                 <td>

@@ -2199,12 +2199,25 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
 
 /* 명부의 PC 주소 칸 · 오늘 접속한 주소 (233) */
 /* 칸을 하나 더했으니 나머지를 줄여 카드 안에 든다 (TODO 134 — 가로로 밀리면 맨 오른쪽 [빼기] 가 안 보였다) */
-/* 떠난 날 · 사유는 좁으면 두 줄로 접힌다(cell-row 가 줄을 바꾼다) — 이름 칸에 자리를 남긴다 */
-.people-table .col-ip { width: 120px; }
-.people-table .col-id { width: 72px; }
-.people-table .col-used { width: 52px; }
-.people-table .col-left { width: 140px; }
-.people-table .col-act { width: 64px; }
+/* 칸의 비율 (TODO 236) — 이름 칸이 남은 폭을 다 가져가 길어지고, 떠난 날 · 사유가 두 줄로 접혀 줄마다 높이가 달랐다.
+   이제 **비율로** 나눈다: 넓은 화면에서도 이름이 혼자 늘어나지 않고, 떠난 날(날짜 + 사유)은 한 줄에 든다.
+   카드가 아주 좁을 때만(1280px 화면의 두 단) 떠난 날 · 사유가 두 줄로 접힌다 — 그래도 가로로 밀리지는 않는다 (134) */
+.people-table .col-name { width: 21%; }
+.people-table .col-id { width: 12%; }
+.people-table .col-used { width: 7%; }
+.people-table .col-ip { width: 19%; }
+.people-table .col-left { width: 32%; }
+.people-table .col-act { width: 9%; }
+.people-table .person-left-cell .cell-row { flex-wrap: nowrap; }
+.people-table .person-left-cell input[type="date"] { flex: 0 0 136px; width: 136px; }
+.people-table .person-left-cell select { flex: 0 1 84px; width: 84px; min-width: 60px; }
+.people-table th { white-space: nowrap; }
+.people-table .person-actions .cell-row { justify-content: flex-end; }
+@media (max-width: 1399px) {
+  .people-table .person-left-cell .cell-row { flex-wrap: wrap; }
+}
+/* 팀장 줄 — 딱지 대신 이름 칸을 보라 테두리로(줄 높이가 늘지 않게) */
+.people-table tr.person-leader .name-with-leader input:not(.leader-pick) { border-color: #a78bfa; font-weight: 600; }
 .people-table td .ip-error { display: block; }
 .visitor-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .visitor-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fcfcfd; }
