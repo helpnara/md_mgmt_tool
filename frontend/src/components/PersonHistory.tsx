@@ -9,6 +9,8 @@ import type { Meta, PersonHistory as History, PersonProject } from "../types";
 import { effectText } from "../util";
 import Explain from "./Explain";
 import { RetroText } from "./RetroText";
+import { ContributionForm } from "./ContributionsCard";
+import type { Project } from "../types";
 import StatusBadge from "./StatusBadge";
 
 /**
@@ -117,6 +119,24 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   const [copied, setCopied] = useState<string | null>(null);
   // 다듬기 프롬프트 — 열면 고른 과제로 만든 글을 먼저 보인다 (TODO 239 ③)
   const [showPrompt, setShowPrompt] = useState(false);
+  // 이력 화면에서 바로 고치기 (TODO 243 B4) — 과제를 받아 와 같은 양식을 그 자리에 연다
+  const [editing, setEditing] = useState<{ id: string; project: Project } | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+
+  async function openEdit(id: string) {
+    setOpening(id);
+    try {
+      setEditing({ id, project: await api.getProject(id) });
+    } catch (err) {
+      notifyError((err as Error).message);
+    } finally {
+      setOpening(null);
+    }
+  }
+
+  function reload() {
+    api.personHistory(name).then((loaded) => setData(loaded)).catch((err: Error) => notifyError(err.message));
+  }
 
   useEffect(() => {
     setPageTitle(`${name} — 이력`);
@@ -141,6 +161,19 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   const me = getMe();
   const mine = (me.role === "member" && me.name === name) || (me.role === "owner" && meta.leader === name);
   const canWrite = me.role === "owner" || mine;
+  const canEditRow = (id: string) => me.role === "owner" || (mine && me.projects.includes(id));
+  // 팀원 PC 의 **자기** 이력 (TODO 243 B4) — 과제 상세(233)처럼 이 화면에서만 읽기 전용을 풀어 [적기] 가 보이게.
+  // 팀장 단추([data-owner-only])는 그대로 숨는다. 숨기는 것은 편의 — 막는 것은 서버(자기 줄만, 담당 과제만)
+  const memberOwn = me.role === "member" && mine && me.projects.length > 0;
+  useEffect(() => {
+    if (!memberOwn) return;
+    document.body.classList.remove("readonly");
+    document.body.classList.add("member-editing");
+    return () => {
+      document.body.classList.add("readonly");
+      document.body.classList.remove("member-editing");
+    };
+  }, [memberOwn]);
   const kindLabel = (key: string) => meta.activity_kinds.find((item) => item.key === key)?.label ?? key;
 
   async function copy(kind: "text" | "table" | "prompt") {
@@ -316,8 +349,39 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                           );
                         })()}
                         <span className="contrib-period">{period(item)}{item.derived && <span className="muted"> · 시작일부터</span>}</span>
+                        {canEditRow(item.id) && editing?.id !== item.id && (
+                          <button data-write className="ghost small" disabled={opening === item.id} onClick={() => void openEdit(item.id)}>
+                            {opening === item.id ? "여는 중…" : item.role || item.part || hasRetro(item) ? "고치기" : "적기"}
+                          </button>
+                        )}
                       </div>
-                      <div className="person-project-meta">
+                      {(item.milestones?.length ?? 0) > 0 && editing?.id !== item.id && (
+                        <ul className="milestone-list">
+                          {item.milestones!.map((m) => (
+                            <li key={`${m.date}-${m.text}`}><span className="due">{m.date}</span>{m.text}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {editing?.id === item.id && (() => {
+                        const row = (editing.project.contributions ?? []).find((c) => c.name === name);
+                        return row ? (
+                          <ContributionForm
+                            project={editing.project}
+                            row={row}
+                            ownerView={me.role === "owner"}
+                            praiseEditable={me.role === "owner" && !data.leader}
+                            justDone={false}
+                            onCancel={() => setEditing(null)}
+                            onSaved={() => {
+                              setEditing(null);
+                              reload();
+                            }}
+                          />
+                        ) : (
+                          <p className="error">이 과제의 담당자 줄을 찾지 못했습니다 — 담당자가 바뀌었을 수 있습니다.</p>
+                        );
+                      })()}
+                      <div className="person-project-meta" hidden={editing?.id === item.id}>
                         <span className={item.role ? undefined : "muted"}>{item.role || "역할 미정"}</span>
                         {item.part && <span>{item.part}</span>}
                         {item.skills.map((skill) => (
@@ -333,7 +397,7 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                           {item.praise_at && <span className="muted"> · {item.praise_at}</span>}
                         </p>
                       )}
-                      {hasRetro(item) ? (
+                      {editing?.id === item.id ? null : hasRetro(item) ? (
                         <dl className="contrib-retro">
                           {RETRO_LINES.map((line) =>
                             item[line.key] ? (
@@ -347,11 +411,11 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                       ) : item.status === "done" ? (
                         <p className="person-retro-missing">
                           회고 비어 있음
-                          {canWrite && (
-                            <a href={projectLink(item.id, mine ? { retro: "me" } : {})}>
-                              {mine ? " · 적기 →" : " · 과제에서 적기 →"}
-                            </a>
-                          )}
+                          {canEditRow(item.id) ? (
+                            <button type="button" className="linkish" onClick={() => void openEdit(item.id)}> · 적기</button>
+                          ) : canWrite ? (
+                            <a href={projectLink(item.id, { retro: "me" })}> · 과제에서 적기 →</a>
+                          ) : null}
                         </p>
                       ) : null}
                     </li>

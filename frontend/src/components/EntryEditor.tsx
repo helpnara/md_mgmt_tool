@@ -16,6 +16,9 @@ import { scrollEditorIntoView, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import TagSuggestions from "./TagSuggestions";
+
+/** 성과 후보 일지의 예약 태그 (TODO 243) — 서버 `contributions.STAR_TAG` 와 같다 */
+export const STAR_TAG = "★성과";
 import { DATE_MIN, LIMITS, dateProblem, lengthHint, titleProblem, today, warningList } from "../inputRules";
 
 const AUTOSAVE_DELAY_MS = 10_000;
@@ -454,6 +457,25 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
             }}
             placeholder="측정, 분석"
           />
+          {/* 성과 후보 (TODO 243 B3) — 예약 태그 ★성과. 회고 쓸 때 이 일지만 모아 보인다 */}
+          {(() => {
+            const list = tags.split(",").map((item) => item.trim()).filter(Boolean);
+            const starred = list.includes(STAR_TAG);
+            return (
+              <button
+                type="button"
+                className={starred ? "star-toggle on" : "star-toggle"}
+                aria-pressed={starred}
+                title="성과 후보로 표시합니다 — 회고를 쓸 때 이 일지만 모아 보입니다"
+                onClick={() => {
+                  setTags((starred ? list.filter((item) => item !== STAR_TAG) : [...list, STAR_TAG]).join(", "));
+                  markDirty();
+                }}
+              >
+                {starred ? "★ 성과 후보" : "☆ 성과 후보로"}
+              </button>
+            );
+          })()}
           <TagSuggestions
             known={knownTags}
             value={tags}

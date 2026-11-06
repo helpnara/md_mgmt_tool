@@ -27,6 +27,11 @@ PART_MAX = 100
 SKILL_MAX = 30
 # 팀장의 인정 한 줄 (TODO 242 A2) — 팀장만 적고, 그 사람과 팀장만 본다
 PRAISE_MAX = 200
+# 중간 성과 (TODO 243 B2) — 날짜 + 한 줄, 여럿. 진행 중에 분기 · 반기마다
+MILESTONE_MAX = 200
+MILESTONES_MAX = 24
+# 성과 후보 일지의 예약 태그 (TODO 243 B3) — 새 칸 없이 태그로
+STAR_TAG = "★성과"
 SKILLS_MAX = 10
 RETRO_MAX = 1000
 OUTCOME_MAX = 200
@@ -34,7 +39,7 @@ OUTCOME_MAX = 200
 LABELS = {
     "role": "역할", "part": "맡은 부분", "from": "담당 시작", "to": "담당 끝",
     "did": "내가 한 일", "result": "결과", "outcome": "그 밖의 성과",
-    "skills": "기술 · 도구", "praise": "인정 한 줄",
+    "skills": "기술 · 도구", "praise": "인정 한 줄", "milestones": "중간 성과",
 }
 
 
@@ -67,7 +72,22 @@ def _row(raw: dict[str, Any]) -> dict[str, Any] | None:
         "skills": rules.split_list(raw.get("skills"))[:SKILLS_MAX],
         "praise": _text(raw.get("praise")),
         "praise_at": _day(raw.get("praise_at")),
+        "milestones": _milestones(raw.get("milestones")),
     }
+
+
+def _milestones(value: object) -> list[dict[str, str]]:
+    """중간 성과 — `[{date, text}]`. 손으로 적은 이상한 줄(날짜 없음 · 글 없음)은 건너뛴다. 날짜 순."""
+    if not isinstance(value, list):
+        return []
+    out = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            continue
+        day, text = _day(raw.get("date")), " ".join(_text(raw.get("text")).split())
+        if day and text:
+            out.append({"date": day, "text": text})
+    return sorted(out, key=lambda item: item["date"])[:MILESTONES_MAX]
 
 
 def stored(meta: dict[str, Any]) -> list[dict[str, Any]]:
@@ -104,7 +124,7 @@ def read(meta: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _blank(name: str) -> dict[str, Any]:
-    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in RETRO_KEYS}, "skills": [], "praise": "", "praise_at": None}
+    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in RETRO_KEYS}, "skills": [], "praise": "", "praise_at": None, "milestones": []}
 
 
 def materialize(meta: dict[str, Any]) -> list[dict[str, Any]]:
@@ -117,7 +137,7 @@ def to_meta(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for row in rows:
         item: dict[str, Any] = {"name": row["name"]}
-        for key in ("role", "part", "skills", "from", "to", *RETRO_KEYS, "praise", "praise_at"):
+        for key in ("role", "part", "skills", "from", "to", *RETRO_KEYS, "praise", "praise_at", "milestones"):
             if row.get(key):
                 item[key] = row[key]
         out.append(item)
@@ -198,6 +218,8 @@ def check_update(row: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"담당 끝({out['to']})이 담당 시작({out['from']})보다 빠릅니다.")
     if "skills" in data:
         out["skills"] = clean_skills(data["skills"])
+    if "milestones" in data:
+        out["milestones"] = clean_milestones(data["milestones"])
     if "praise" in data:
         praise = rules.one_line(data["praise"], LABELS["praise"], PRAISE_MAX)
         if praise != out.get("praise"):
@@ -228,3 +250,43 @@ def clean_skills(value: object) -> list[str]:
     if len(items) > SKILLS_MAX:
         raise ValueError(f"기술 · 도구는 {SKILLS_MAX}개까지입니다 (지금 {len(items)}개).")
     return items
+
+
+def clean_milestones(value: object) -> list[dict[str, str]]:
+    """중간 성과 (TODO 243 B2) — 날짜는 실제 있는 날, 글은 한 줄 200자, 24개까지. 빈 줄은 버린다, 날짜 순."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("중간 성과는 목록으로 보내 주세요.")
+    out = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise ValueError("중간 성과 한 줄은 날짜와 글입니다.")
+        text = rules.one_line(raw.get("text"), LABELS["milestones"], MILESTONE_MAX)
+        day = rules.strict_day(raw.get("date"), "date")
+        if not text and not day:
+            continue
+        if not day:
+            raise ValueError("중간 성과의 날짜를 적어 주세요.")
+        if not text:
+            raise ValueError(f"{day} 중간 성과의 내용이 비어 있습니다.")
+        out.append({"date": day, "text": text})
+    if len(out) > MILESTONES_MAX:
+        raise ValueError(f"중간 성과는 {MILESTONES_MAX}개까지입니다 (지금 {len(out)}개).")
+    return sorted(out, key=lambda item: item["date"])
+
+
+def star_entries(conn, project_id: str) -> list[dict[str, Any]]:
+    """성과 후보 일지 (TODO 243 B3) — `★성과` 태그가 붙은 진행일지, 날짜 순. 날짜 · 제목 · 작성자 · 본문 첫 줄."""
+    rows = conn.execute(
+        "SELECT e.id, e.date, e.title, e.author, e.body FROM entry e JOIN entry_tag et ON et.entry_id = e.id"
+        " JOIN tag t ON t.id = et.tag_id WHERE e.project_id = ? AND t.name = ? ORDER BY e.date, e.id",
+        (project_id, STAR_TAG),
+    ).fetchall()
+    out = []
+    for row in rows:
+        first = next((line.strip().lstrip("-*# ").strip() for line in (row["body"] or "").splitlines()
+                      if line.strip() and not line.strip().startswith("#")), "")
+        out.append({"id": row["id"], "date": row["date"], "title": row["title"], "author": row["author"] or "",
+                    "first_line": first[:120]})
+    return out

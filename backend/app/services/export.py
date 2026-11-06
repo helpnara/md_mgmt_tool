@@ -169,7 +169,7 @@ def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[
     from .projects import contributions_of
 
     rows = contributions_of(conn, project["id"])
-    written = [row for row in rows if row["role"] or row["part"] or row["skills"] or row["did"]
+    written = [row for row in rows if row["role"] or row["part"] or row["skills"] or row["milestones"] or row["did"]
                or row["result"] or not row["derived"]]
     if not written:
         return []
@@ -181,6 +181,9 @@ def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[
         lines.append(f"- {head}")
         if row["skills"]:
             lines.append(f"  - 기술 · 도구: {', '.join(row['skills'])}")
+        if row["milestones"]:
+            lines.append("  - 중간 성과:")
+            lines += [f"    - {item['date']} {item['text']}" for item in row["milestones"]]
         for key, label in (("did", "내가 한 일"), ("result", "결과")):
             if row[key]:
                 items = [line.strip() for line in row[key].strip().split("\n") if line.strip()]

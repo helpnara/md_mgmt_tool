@@ -169,6 +169,8 @@ CREATE TABLE IF NOT EXISTS project_contribution (
   -- 팀장의 인정 한 줄과 적은 날 (TODO 242) — 그 사람과 팀장만 본다(API 가 빼고 준다)
   praise     TEXT,
   praise_at  TEXT,
+  -- 중간 성과 (TODO 243) — JSON `[{date, text}]`
+  milestones TEXT,
   derived    INTEGER NOT NULL DEFAULT 0,
   current    INTEGER NOT NULL DEFAULT 1,
   position   INTEGER NOT NULL DEFAULT 0,

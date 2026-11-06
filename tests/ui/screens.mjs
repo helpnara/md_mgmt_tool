@@ -5935,6 +5935,18 @@ async function main() {
         expect((await mine.innerText()).includes("현장 데이터를 꼼꼼히 모음"), "본인 줄의 인정 한 줄");
         equal(await member.locator('[data-contributions] [data-person="나팀원"] .praise-line').count(), 0, "남의 줄");
       });
+      await check("팀원 PC 의 내 이력 — 자기 과제 줄에 [적기]/[고치기] 가 보이고 그 자리에서 저장된다 (243 B4)", async () => {
+        await member.goto(`${outside}/#/person/${encodeURIComponent("가팀원")}`); await member.reload(); await member.waitForTimeout(1200);
+        const item = member.locator(".person-project", { hasText: "둘이 하는 과제" });
+        await item.getByRole("button", { name: /적기|고치기/ }).filter({ visible: true }).click();
+        await item.locator(".contrib-form").waitFor({ timeout: 5000 });
+        equal(await item.getByLabel("담당 시작").isDisabled(), true, "기간은 팀장");
+        equal(await item.getByLabel("팀장의 인정 한 줄").count(), 0, "인정 한 줄 칸은 팀장만");
+        await item.getByLabel("결과").fill("현장에서 바로 씀");
+        await item.getByRole("button", { name: "저장", exact: true }).click();
+        await member.waitForTimeout(1000);
+        expect((await item.innerText()).includes("현장에서 바로 씀"), "저장 반영");
+      });
     } finally {
       await member.close();
       await relay.close();
@@ -6215,6 +6227,52 @@ async function main() {
       const roles = await page.locator(".person-project .person-project-meta").allInnerTexts();
       expect(roles.length > 0 && roles.every((text) => text.includes("역할 미정")), `역할 빈 과제만: ${roles}`);
       await page.getByRole("button", { name: "모두 보기" }).click();
+    });
+  }
+
+  console.log("\n[61] 중간 성과 · 성과 후보 일지 · 이력 화면에서 바로 고치기 (TODO 243)");
+  {
+    const made = (await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제");
+    await check("일지 편집기의 [☆ 성과 후보로] → 태그 ★성과 · 회고 양식에 ★ 성과 후보 일지 (243 B3)", async () => {
+      await go(`#/projects/${made.id}`);
+      await page.reload(); await page.waitForTimeout(900);
+      await page.getByRole("button", { name: "기록 추가" }).click();
+      await page.waitForTimeout(400);
+      await page.locator(".entry-editor label", { hasText: "제목" }).locator("input").fill("시범 운영 결과");
+      await page.locator(".entry-editor").getByRole("button", { name: "☆ 성과 후보로" }).click();
+      expect((await page.locator(".entry-editor label", { hasText: "태그" }).locator("input").first().inputValue()).includes("★성과"), "태그에 ★성과");
+      await page.locator(".entry-editor").getByRole("button", { name: "저장", exact: true }).click();
+      await page.waitForTimeout(1000);
+      const row = page.locator('[data-contributions] [data-person="권경락"]');
+      await row.getByRole("button", { name: /적기|고치기/ }).click();
+      expect((await row.locator(".star-entries").innerText()).includes("시범 운영 결과"), "★ 성과 후보 일지");
+    });
+    await check("중간 성과 — 날짜 + 한 줄 여럿, 저장하면 줄에 날짜 순으로 (243 B2)", async () => {
+      const row = page.locator('[data-contributions] [data-person="권경락"]');
+      await row.getByRole("button", { name: "+ 중간 성과" }).click();
+      await row.getByLabel("중간 성과 1 날짜").fill("2026-06-30");
+      await row.getByLabel("중간 성과 1", { exact: true }).fill("상반기 — 재작업 38 → 23건");
+      await row.getByRole("button", { name: "+ 중간 성과" }).click();
+      await row.getByLabel("중간 성과 2 날짜").fill("2026-03-31");
+      await row.getByLabel("중간 성과 2", { exact: true }).fill("1분기 — 데이터 정제 끝");
+      await row.getByRole("button", { name: "저장", exact: true }).click();
+      await page.waitForTimeout(900);
+      const items = await row.locator(".milestone-list li").allInnerTexts();
+      expect(items.length === 2 && items[0].startsWith("2026-03-31") && items[1].startsWith("2026-06-30"), `중간 성과: ${items}`);
+    });
+    await check("이력 화면에서 바로 고치기 — [고치기] 로 같은 양식이 그 자리에, 저장하면 바로 반영 (243 B4)", async () => {
+      await go(`#/person/${encodeURIComponent("권경락")}`);
+      await page.reload(); await page.waitForSelector(".person-projects");
+      const item = page.locator(".person-project", { hasText: "회고 시험 과제" });
+      expect((await item.locator(".milestone-list").innerText()).includes("1분기"), "이력 화면의 중간 성과");
+      await item.getByRole("button", { name: "고치기" }).click();
+      await item.locator(".contrib-form").waitFor({ timeout: 5000 });
+      await item.getByLabel("맡은 부분").fill("이력 화면에서 고침");
+      await item.getByRole("button", { name: "저장", exact: true }).click();
+      await page.waitForTimeout(900);
+      equal(await item.locator(".contrib-form").count(), 0, "양식이 닫힌다");
+      expect((await item.innerText()).includes("이력 화면에서 고침"), "바로 반영");
+      expect(!page.url().includes("projects/"), "과제로 가지 않았다");
     });
   }
 

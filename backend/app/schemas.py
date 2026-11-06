@@ -400,6 +400,8 @@ class ContributionUpdate(BaseModel):
     skills: list[str] | str | None = None
     # 팀장의 인정 한 줄 (TODO 242) — 팀장만
     praise: str | None = None
+    # 중간 성과 (TODO 243) — [{date, text}], 보내면 통째로 바꾼다
+    milestones: list[dict[str, Any]] | None = None
     base_updated_at: str | None = None
 
     def changes(self) -> dict[str, Any]:

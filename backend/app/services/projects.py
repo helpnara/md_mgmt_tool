@@ -892,6 +892,16 @@ class NotYourRowError(PermissionError):
     """팀원이 남의 줄 또는 담당 기간을 고치려 했다 — 403."""
 
 
+def _milestones_of(raw: str | None) -> list[dict[str, str]]:
+    import json
+
+    try:
+        value = json.loads(raw) if raw else []
+    except ValueError:
+        return []
+    return contrib._milestones(value)
+
+
 def contributions_of(conn: sqlite3.Connection, project_id: str) -> list[dict[str, Any]]:
     """담당과 역할 (TODO 237) — 색인에서. 지금 담당이 먼저."""
     return [
@@ -900,6 +910,7 @@ def contributions_of(conn: sqlite3.Connection, project_id: str) -> list[dict[str
          "did": row["did"] or "", "result": row["result"] or "",
          "skills": rules.split_list(row["skills"]),
          "praise": row["praise"] or "", "praise_at": row["praise_at"],
+         "milestones": _milestones_of(row["milestones"]),
          "derived": bool(row["derived"]), "current": bool(row["current"])}
         for row in conn.execute(
             "SELECT * FROM project_contribution WHERE project_id = ? ORDER BY position", (project_id,))

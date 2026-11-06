@@ -69,3 +69,33 @@ def test_history_counts_reports_of_my_projects(team):  # noqa: F811
     data = member.get("/api/person-history", params={"name": "가팀원"}).json()
     assert data["summary"]["reports_this_year"] == 2 and data["summary"]["reports_last_year"] == 0
     assert data["projects"][0]["reports"] == 2
+
+
+def test_milestones_and_star_entries(team):  # noqa: F811
+    """중간 성과 · 성과 후보 일지 (TODO 243 B2 · B3) — 규칙 · 이력 · 내보내기."""
+    owner, member, viewer, pid = team["owner"], team["member"], team["viewer"], team["shared"]
+    url = f"/api/projects/{pid}/contributions/가팀원"
+    done = member.put(url, json={"milestones": [{"date": "2026-06-30", "text": "상반기: 시범 운영 재작업 38 → 23건"},
+                                                {"date": "2026-03-31", "text": " 1분기:  데이터 정제 끝 "}, {"date": "", "text": ""}]})
+    assert done.status_code == 200, done.text
+    row = {r["name"]: r for r in done.json()["contributions"]}["가팀원"]
+    assert row["milestones"] == [{"date": "2026-03-31", "text": "1분기: 데이터 정제 끝"},
+                                 {"date": "2026-06-30", "text": "상반기: 시범 운영 재작업 38 → 23건"}]  # 날짜 순 · 공백 정리 · 빈 줄 버림
+    assert member.put(url, json={"milestones": [{"date": "2026-13-01", "text": "x"}]}).status_code == 400
+    assert member.put(url, json={"milestones": [{"date": "", "text": "날짜 없음"}]}).status_code == 400
+    assert member.put(url, json={"milestones": [{"date": "2026-01-01", "text": "가" * 201}]}).status_code == 400
+    assert member.put(f"/api/projects/{pid}/contributions/나팀원", json={"milestones": []}).status_code == 403
+    # 다른 칸을 고쳐도 남는다
+    member.put(url, json={"part": "데이터"})
+    assert len(_row(member, pid, "가팀원")["milestones"]) == 2
+    # 성과 후보 일지 — ★성과 태그
+    made = member.post(f"/api/projects/{pid}/entries", json={"date": "2026-06-20", "title": "시범 결과", "tags": ["★성과", "현장"],
+                                                             "body": "## 내용\n\n- 재작업 38 → 23건\n"}).json()
+    member.post(f"/api/projects/{pid}/entries", json={"date": "2026-06-21", "title": "그냥 일지"})
+    stars = owner.get(f"/api/projects/{pid}").json()["star_entries"]
+    assert [(item["id"], item["first_line"], item["author"]) for item in stars] == [(made["id"], "재작업 38 → 23건", "가팀원")]
+    history = viewer.get("/api/person-history", params={"name": "가팀원"}).json()
+    mine = next(item for item in history["projects"] if item["id"] == pid)
+    assert len(mine["milestones"]) == 2 and mine["star_entries"][0]["title"] == "시범 결과"
+    text = owner.get(f"/api/projects/{pid}/export?format=md").text
+    assert "  - 중간 성과:\n    - 2026-03-31 1분기: 데이터 정제 끝\n    - 2026-06-30 상반기" in text

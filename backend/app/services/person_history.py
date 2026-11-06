@@ -10,7 +10,9 @@ import sqlite3
 from typing import Any
 
 from .. import clock
+from .. import contributions
 from .. import schemas as rules
+from .projects import _milestones_of
 from . import settings as settings_service
 
 
@@ -43,6 +45,8 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             "did": row["did"] or "", "result": row["result"] or "",
             "skills": rules.split_list(row["skills"]),
             "praise": row["praise"] or "", "praise_at": row["praise_at"],
+            "milestones": _milestones_of(row["milestones"]),
+            "star_entries": contributions.star_entries(conn, row["project_id"]),
             "outcome": row["outcome"] or "",
             "effect_expected": row["effect_expected"], "effect_verified": row["effect_verified"],
             "no_effect": bool(row["no_effect"]),

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { getMe } from "../me";
-import { personLink } from "../nav";
+import { personLink, projectLink } from "../nav";
 import { isLeader, leftLabel } from "../people";
-import type { Contribution, Meta, Project } from "../types";
+import type { Contribution, Meta, Milestone, Project } from "../types";
 import Explain from "./Explain";
 import { RetroField, RetroText } from "./RetroText";
 
@@ -118,7 +118,7 @@ export default function ContributionsCard({
                 </span>
                 {canEdit(row.name) && editing !== row.name && (
                   <button data-write className="ghost" onClick={() => setEditing(row.name)}>
-                    {hasRetro(row) || row.role || row.part || row.skills.length > 0 ? "고치기" : "적기"}
+                    {hasRetro(row) || row.role || row.part || row.skills.length > 0 || (row.milestones?.length ?? 0) > 0 ? "고치기" : "적기"}
                   </button>
                 )}
               </div>
@@ -128,6 +128,13 @@ export default function ContributionsCard({
                     <span key={item} className="skill-chip">{item}</span>
                   ))}
                 </div>
+              )}
+              {(row.milestones?.length ?? 0) > 0 && editing !== row.name && (
+                <ul className="milestone-list">
+                  {row.milestones!.map((item) => (
+                    <li key={`${item.date}-${item.text}`}><span className="due">{item.date}</span>{item.text}</li>
+                  ))}
+                </ul>
               )}
               {/* 팀장의 인정 한 줄 (TODO 242 A2) — 서버가 그 사람과 팀장에게만 준다 */}
               {row.praise && editing !== row.name && (
@@ -176,7 +183,7 @@ export default function ContributionsCard({
   );
 }
 
-function ContributionForm({
+export function ContributionForm({
   project,
   row,
   ownerView,
@@ -209,6 +216,11 @@ function ContributionForm({
   const [from, setFrom] = useState(ownerView ? defaultFrom : row.from ?? "");
   const [to, setTo] = useState(ownerView ? defaultTo : row.to ?? "");
   const [praise, setPraise] = useState(row.praise ?? "");
+  // 중간 성과 (TODO 243 B2) — 날짜 + 한 줄, 여럿. 빈 줄은 저장할 때 버린다
+  const [milestones, setMilestones] = useState<Milestone[]>(() => [...(row.milestones ?? [])]);
+  const setMilestone = (index: number, key: keyof Milestone, value: string) =>
+    setMilestones((prev) => prev.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
+  const stars = project.star_entries ?? [];
   const filledFromProject = ownerView && ((!row.from && Boolean(defaultFrom)) || (!row.to && Boolean(defaultTo)));
   const [retro, setRetro] = useState<Record<RetroKey, string>>({ did: row.did, result: row.result });
   const [busy, setBusy] = useState(false);
@@ -225,6 +237,7 @@ function ContributionForm({
         part,
         skills: chosenSkills,
         ...(praiseEditable ? { praise: praise.trim() } : {}),
+        milestones: milestones.filter((item) => item.date || item.text.trim()),
         ...retro,
         // 팀원은 기간을 보내지 않는다(서버가 막는다 — 팀장이 고친다)
         ...(ownerView ? { from: from || null, to: to || null } : {}),
@@ -300,6 +313,40 @@ function ContributionForm({
         {!ownerView && <p className="hint contrib-period-hint">담당 기간은 팀장이 고칩니다.</p>}
         {filledFromProject && <p className="hint contrib-period-hint">빈 칸은 과제 기간으로 채워 두었습니다 — 저장하면 그대로 남습니다.</p>}
       </div>
+      {/* 중간 성과 (TODO 243 B2) — 진행 중에 분기 · 반기마다 한 줄. 끝날 때 회고의 재료 */}
+      <div className="milestone-fields">
+        <span className="milestone-head">
+          중간 성과 <span className="muted">(날짜 + 한 줄 · 진행 중에 분기 · 반기마다 적어 두면 끝날 때 회고가 쉽습니다)</span>
+        </span>
+        {milestones.map((item, index) => (
+          <div key={index} className="milestone-row">
+            <input type="date" value={item.date} onChange={(event) => setMilestone(index, "date", event.target.value)} aria-label={`중간 성과 ${index + 1} 날짜`} />
+            <input value={item.text} maxLength={200} onChange={(event) => setMilestone(index, "text", event.target.value)}
+                   placeholder="예: 상반기 시범 운영 — 재작업 월 38건 → 23건" aria-label={`중간 성과 ${index + 1}`} />
+            <button type="button" className="ghost small" onClick={() => setMilestones((prev) => prev.filter((_, i) => i !== index))} aria-label={`중간 성과 ${index + 1} 빼기`}>
+              빼기
+            </button>
+          </div>
+        ))}
+        <button type="button" className="ghost small milestone-add" onClick={() => setMilestones((prev) => [...prev, { date: "", text: "" }])}>
+          + 중간 성과
+        </button>
+      </div>
+      {/* 성과 후보 일지 (TODO 243 B3) — ★성과 태그가 붙은 일지. 회고 쓸 때 다시 찾지 않게 */}
+      {stars.length > 0 && (
+        <div className="star-entries">
+          <span className="milestone-head">★ 성과 후보 일지 <span className="muted">— 회고를 쓸 때 보세요</span></span>
+          <ul>
+            {stars.map((entry) => (
+              <li key={entry.id}>
+                <a href={projectLink(project.id, { entry: entry.id })}>{entry.date} {entry.title}</a>
+                {entry.first_line && <span className="muted"> — {entry.first_line}</span>}
+                {entry.author && <span className="muted"> · {entry.author}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {/* 회고 두 칸은 위아래로 · 글에 맞춰 자라는 칸 · 글자 수 · 붙여넣기 정리 (TODO 240) */}
       <div className="contrib-retro-fields">
         {RETRO.map((item) => (

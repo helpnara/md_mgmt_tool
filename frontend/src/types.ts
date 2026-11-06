@@ -1271,8 +1271,28 @@ export interface Contribution {
   /** 팀장의 인정 한 줄 — 그 사람과 팀장에게만 온다(다른 사람에게는 빈 글) */
   praise?: string;
   praise_at?: string | null;
+  /** 중간 성과 — 날짜 + 한 줄, 날짜 순 (TODO 243) */
+  milestones?: Milestone[];
+}
+export interface Milestone {
+  date: string;
+  text: string;
+}
+/** 성과 후보 일지 — `★성과` 태그가 붙은 진행일지 (TODO 243) */
+export interface StarEntry {
+  id: number;
+  date: string;
+  title: string;
+  author: string;
+  first_line: string;
+}
+export interface Project {
+  /** 상세 조회에서만 — 성과 후보 일지 */
+  star_entries?: StarEntry[];
 }
 export interface PersonProject {
+  milestones?: Milestone[];
+  star_entries?: StarEntry[];
   praise?: string;
   praise_at?: string | null;
   /** 확정한 보고에 올라간 횟수 */
