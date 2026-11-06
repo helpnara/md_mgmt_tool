@@ -6056,7 +6056,7 @@ async function main() {
     });
   }
 
-  console.log("\n[58] 이름 옆 [이력] 모양 · 기술 · 도구 · 다듬기 프롬프트 (TODO 239)");
+  console.log("\n[58] 이름 옆 [이력] 모양 · 기술 · 도구 · 다듬기 프롬프트 · 담당 기간 기본값 (TODO 239)");
   {
     const made = (await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제");
     await check("이름 옆 [이력] 은 이름과 다른 모양 — 회색 글자 · 테두리 있는 알약 (239 ①)", async () => {
@@ -6085,6 +6085,9 @@ async function main() {
       await other.getByRole("button", { name: "적기" }).click();
       await other.locator(".contrib-skill-suggest").getByRole("button", { name: "SQL" }).click();
       equal(await other.getByLabel("기술 · 도구").inputValue(), "SQL", "골라 넣기");
+      // 담당 기간의 빈 칸은 과제 기간으로 채워 둔다 (239 ④) — 끝난 과제라 끝은 완료일
+      equal(await other.getByLabel("담당 끝").inputValue(), FIXED_TODAY, "담당 끝 기본값 = 완료일");
+      expect((await other.innerText()).includes("과제 기간으로 채워 두었습니다"), "채워 두었다는 안내");
       await other.getByRole("button", { name: "취소" }).click();
     });
     await check("이력 화면 — 많이 쓴 기술 · 도구 · 과제 줄 딱지 · 표 복사에 기술 칸 (239 ②)", async () => {

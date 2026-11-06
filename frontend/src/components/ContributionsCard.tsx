@@ -187,8 +187,15 @@ function ContributionForm({
   const chosenSkills = skills.split(",").map((item) => item.trim()).filter(Boolean);
   const chosenKeys = new Set(chosenSkills.map((item) => item.toLowerCase()));
   const suggestions = (project.known_skills ?? []).filter((item) => !chosenKeys.has(item.toLowerCase())).slice(0, 12);
-  const [from, setFrom] = useState(row.from ?? "");
-  const [to, setTo] = useState(row.to ?? "");
+  // 담당 기간의 기본값 = 과제 수행 기간 (TODO 239 ④) — 비어 있는 칸만 채운다. 끝은 완료한 과제면 완료일, 아니면 마감일.
+  // 팀장 양식에서만 — 팀원은 기간을 저장하지 않으므로(서버가 막는다) 채워 보이면 저장된 값으로 오해한다.
+  // 시작보다 빠른 끝(마감이 지난 과제에 오늘 든 사람)은 채우지 않는다 — 그대로 저장하면 400 이다.
+  const defaultFrom = row.from ?? project.start_date ?? "";
+  const projectEnd = (project.status === "done" ? project.completed_at : project.due_date) ?? "";
+  const defaultTo = row.to ?? (row.current && projectEnd && (!defaultFrom || projectEnd >= defaultFrom) ? projectEnd : "");
+  const [from, setFrom] = useState(ownerView ? defaultFrom : row.from ?? "");
+  const [to, setTo] = useState(ownerView ? defaultTo : row.to ?? "");
+  const filledFromProject = ownerView && ((!row.from && Boolean(defaultFrom)) || (!row.to && Boolean(defaultTo)));
   const [retro, setRetro] = useState<Record<RetroKey, string>>({ problem: row.problem, did: row.did, result: row.result });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -276,6 +283,7 @@ function ContributionForm({
                  aria-label="담당 끝" />
         </label>
         {!ownerView && <p className="hint contrib-period-hint">담당 기간은 팀장이 고칩니다.</p>}
+        {filledFromProject && <p className="hint contrib-period-hint">빈 칸은 과제 기간으로 채워 두었습니다 — 저장하면 그대로 남습니다.</p>}
       </div>
       <div className="contrib-retro-fields">
         {RETRO.map((item) => (
