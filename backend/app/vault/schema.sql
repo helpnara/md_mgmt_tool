@@ -162,7 +162,6 @@ CREATE TABLE IF NOT EXISTS project_contribution (
   part       TEXT,
   from_date  TEXT,
   to_date    TEXT,
-  problem    TEXT,
   did        TEXT,
   result     TEXT,
   -- 기술 · 도구 (TODO 239) — 쉼표 + 공백으로 이어 적는다

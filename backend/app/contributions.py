@@ -18,10 +18,9 @@ from typing import Any
 from . import schemas as rules
 
 ROLES = ("주관", "참여", "지원")
+# 회고는 둘 — "무엇이 문제였나" 는 239 ⑤ 에서 없앴다(과제 개요의 배경 · 목적과 겹치고 담당자마다 같은 말이 된다 — 사용자).
+# 적힌 기록이 없어 남길 것도 없다 — 읽지도 적지도 않는다(손으로 적어 두었으면 다음 저장에서 빠진다).
 RETRO_KEYS = ("did", "result")
-# "무엇이 문제였나" 는 239 ⑤ 에서 뺐다 — 과제 개요의 배경 · 목적과 겹치고 담당자마다 같은 말이 된다(사용자).
-# 이미 적힌 값은 **파일에 그대로 둔다**(지우지 않는다) — 화면 · 복사 · 내보내기 · 회고 여부에서만 뺀다.
-LEGACY_KEYS = ("problem",)
 TEXT_KEYS = ("role", "part", *RETRO_KEYS)
 PART_MAX = 100
 # 기술 · 도구 (TODO 239 ②) — 태그와 같은 쉼표 규칙, 하나에 30자 · 10개까지
@@ -32,7 +31,7 @@ OUTCOME_MAX = 200
 
 LABELS = {
     "role": "역할", "part": "맡은 부분", "from": "담당 시작", "to": "담당 끝",
-    "problem": "무엇이 문제였나", "did": "내가 한 일", "result": "결과", "outcome": "그 밖의 성과",
+    "did": "내가 한 일", "result": "결과", "outcome": "그 밖의 성과",
     "skills": "기술 · 도구",
 }
 
@@ -62,7 +61,7 @@ def _row(raw: dict[str, Any]) -> dict[str, Any] | None:
         "part": _text(raw.get("part")),
         "from": _day(raw.get("from")),
         "to": _day(raw.get("to")),
-        **{key: _text(raw.get(key)) for key in (*LEGACY_KEYS, *RETRO_KEYS)},
+        **{key: _text(raw.get(key)) for key in RETRO_KEYS},
         "skills": rules.split_list(raw.get("skills"))[:SKILLS_MAX],
     }
 
@@ -101,7 +100,7 @@ def read(meta: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _blank(name: str) -> dict[str, Any]:
-    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in (*LEGACY_KEYS, *RETRO_KEYS)}, "skills": []}
+    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in RETRO_KEYS}, "skills": []}
 
 
 def materialize(meta: dict[str, Any]) -> list[dict[str, Any]]:
@@ -114,7 +113,7 @@ def to_meta(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for row in rows:
         item: dict[str, Any] = {"name": row["name"]}
-        for key in ("role", "part", "skills", "from", "to", *LEGACY_KEYS, *RETRO_KEYS):
+        for key in ("role", "part", "skills", "from", "to", *RETRO_KEYS):
             if row.get(key):
                 item[key] = row[key]
         out.append(item)
