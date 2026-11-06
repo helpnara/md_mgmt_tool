@@ -187,7 +187,7 @@ def test_export_carries_roles_retro_and_outcome(team):
     text = owner.get(f"/api/projects/{pid}/export?format=md").text
     assert "## 담당과 역할" in text and "불량 12건 → 3건" in text
     assert "**가팀원** · 주관 · 2026-03-02 ~ 지금" in text
-    assert "내가 한 일: 원인 분석\n    개선안 적용" in text
+    assert "  - 내가 한 일:\n    - 원인 분석\n    - 개선안 적용" in text  # 여러 줄은 아래로 목록 (TODO 241)
     # 적은 것이 없는 과제는 절째 빠진다
     plain = owner.post("/api/projects", json={"title": "빈 과제", "owners": ["나팀원"]}).json()["id"]
     assert "담당과 역할" not in owner.get(f"/api/projects/{plain}/export?format=md").text

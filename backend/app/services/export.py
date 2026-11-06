@@ -14,7 +14,7 @@ import zipfile
 from pathlib import Path
 from typing import BinaryIO
 
-from ..config import STATUS_LABELS
+from ..config import CLASSIFICATION_KEYS, CLASSIFICATION_LABELS, STATUS_LABELS
 from . import settings as settings_service
 from .attachments import ENTRY_DOC_DIR, PROJECT_DOC_DIR, resolve_link, link_target
 from .projects import project_dir
@@ -85,6 +85,85 @@ def _rewrite_links(body: str, doc_dir: str, mode: str, directory: Path, dir_name
     return LINK_PATTERN.sub(replace, body or "")
 
 
+_FENCE = re.compile(r"^\s*(```|~~~)")
+_HEADING = re.compile(r"^(#{1,5})(\s)")
+
+
+def demote_headings(text: str) -> str:
+    """본문의 제목을 한 단계 내린다 (TODO 241) — `## 과제 개요` 아래의 개요 `## 배경` 이 같은 단계라 문서 차례가 납작했다.
+
+    코드 블록 안은 건드리지 않는다. `######` 는 더 내릴 수 없어 그대로.
+    """
+    out, fenced = [], False
+    for line in text.split("\n"):
+        if _FENCE.match(line):
+            fenced = not fenced
+        elif not fenced:
+            line = _HEADING.sub(lambda m: "#" + m.group(1) + m.group(2), line)
+        out.append(line)
+    return "\n".join(out)
+
+
+def _number(value: float | None) -> str | None:
+    return None if value is None else f"{value:,.2f}".rstrip("0").rstrip(".")
+
+
+def _info_table(conn: sqlite3.Connection, project: sqlite3.Row, tags: list[str], type_labels: dict) -> list[str]:
+    """과제 정보 표 (TODO 241) — 면담 · 팀원 역량 말고는 모두. 과제 상세의 머리 · [과제 정보 수정] 에 있는 칸들.
+
+    빈 칸은 줄째 뺀다. 효과 금액 · 완료일 · 분류 넷 · 유관부서 · 선행 · 후속 과제 · 접수 · 등록 · 보고 대상 여부.
+    """
+    from .projects import _predecessors_of, _successors_of
+
+    def titled(ids: list[str]) -> str:
+        out = []
+        for project_id in ids:
+            row = conn.execute("SELECT title FROM project WHERE id = ?", (project_id,)).fetchone()
+            out.append(f"{project_id} {row['title']}" if row else project_id)
+        return " · ".join(out)
+
+    status = STATUS_LABELS.get(project["status"], project["status"])
+    if project["status"] == "done" and project["completed_at"]:
+        status += f" (완료일 {project['completed_at']})"
+    classes = " · ".join(
+        f"{CLASSIFICATION_LABELS[key]}: {project[key]}" for key in CLASSIFICATION_KEYS if project[key])
+    partners: dict[str, list[str]] = {}
+    for row in conn.execute(
+            "SELECT team, person FROM project_partner WHERE project_id = ? ORDER BY position", (project["id"],)):
+        partners.setdefault(row["team"], [])
+        if row["person"]:
+            partners[row["team"]].append(row["person"])
+    partner_text = " · ".join(f"{team} ({', '.join(people)})" if people else team for team, people in partners.items())
+    if project["no_effect"]:
+        effect = "효과 금액으로 관리하지 않는 과제"
+    else:
+        expected, verified = _number(project["effect_expected"]), _number(project["effect_verified"])
+        effect = " · ".join(filter(None, [f"기대 {expected}" if expected else None, f"실증 {verified}" if verified else None])) or None
+    created = " · ".join(filter(None, [project["created_by"], (project["created_at"] or "")[:10] or None])) or None
+    rows = [
+        ("과제 번호", project["id"]),
+        ("상태", status),
+        ("속성", type_labels.get(project["type"]) if project["type"] else None),
+        ("기간", f"{project['start_date'] or '—'} ~ {project['due_date'] or '—'}"),
+        ("분류", classes or None),
+        ("그룹", project["grp"]),
+        ("태그", ", ".join(tags) or None),
+        ("담당", project["owner"]),
+        ("유관부서", partner_text or None),
+        ("효과 (억원/년)", effect),
+        ("그 밖의 성과", project["outcome"]),
+        ("선행 과제", titled(_predecessors_of(conn, project["id"])) or None),
+        ("후속 과제", titled(_successors_of(conn, project["id"])) or None),
+        ("접수", project["intake_id"]),
+        ("등록", created),
+        ("보고", "별도 보고 대상 아님" if project["no_report"] else None),
+    ]
+    cell = lambda text: str(text).replace("|", "\\|").replace("\n", " ")  # noqa: E731
+    lines = ["## 과제 정보", "", "| 항목 | 내용 |", "|---|---|"]
+    lines += [f"| {label} | {cell(value)} |" for label, value in rows if value]
+    return lines + [""]
+
+
 def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[str]:
     """담당과 역할 · 회고 · 금액 아닌 성과 (TODO 237) — 업무 이력 정리의 재료. 적은 것이 없으면 절째 뺀다."""
     from .projects import contributions_of
@@ -92,13 +171,10 @@ def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[
     rows = contributions_of(conn, project["id"])
     written = [row for row in rows if row["role"] or row["part"] or row["skills"] or row["did"]
                or row["result"] or not row["derived"]]
-    outcome = project["outcome"] if "outcome" in project.keys() else None
-    if not written and not outcome:
+    if not written:
         return []
     end_of_project = {"done": project["completed_at"], "dropped": "중단"}.get(project["status"])
     lines = ["## 담당과 역할", ""]
-    if outcome:
-        lines += [f"**그 밖의 성과** — {outcome}", ""]
     for row in rows:
         period = f"{row['from'] or '?'} ~ {row['to'] or end_of_project or '지금'}"
         head = " · ".join(filter(None, [f"**{row['name']}**", row["role"], row["part"], period]))
@@ -107,8 +183,13 @@ def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[
             lines.append(f"  - 기술 · 도구: {', '.join(row['skills'])}")
         for key, label in (("did", "내가 한 일"), ("result", "결과")):
             if row[key]:
-                text = row[key].strip().replace("\n", "\n    ")
-                lines.append(f"  - {label}: {text}")
+                items = [line.strip() for line in row[key].strip().split("\n") if line.strip()]
+                if len(items) == 1 and not items[0].startswith("- "):
+                    lines.append(f"  - {label}: {items[0]}")
+                else:
+                    # 여러 줄 · 글머리표는 아래로 한 단계 들여 쓴 목록 (TODO 241) — "내가 한 일: - …" 처럼 붙지 않게
+                    lines.append(f"  - {label}:")
+                    lines += [f"    - {item[2:].strip() if item.startswith('- ') else item}" for item in items]
     return lines + [""]
 
 
@@ -152,9 +233,10 @@ def merged_markdown(
             )
         ),
         "",
+        *_info_table(conn, project, tags, type_labels),
         "## 과제 개요",
         "",
-        convert(project["body"] or "", PROJECT_DOC_DIR).strip(),
+        demote_headings(convert(project["body"] or "", PROJECT_DOC_DIR).strip()),
         "",
         *_contribution_lines(conn, project),
         "---",
@@ -166,7 +248,15 @@ def merged_markdown(
     for entry in conn.execute(
         "SELECT * FROM entry WHERE project_id = ? ORDER BY date ASC, id ASC", (project_id,)
     ):
-        header += [f"## {entry['date']} {entry['title']}", "", convert(entry["body"] or "", ENTRY_DOC_DIR).strip(), ""]
+        header += [f"## {entry['date']} {entry['title']}", ""]
+        # 누가 썼나 · 일지 태그 (TODO 241) — 233 뒤로는 팀원이 쓴 일지도 있다. 업무 이력을 요약할 때 "누가 한 일" 을 가른다
+        entry_tags = [row["name"] for row in conn.execute(
+            "SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = ? ORDER BY t.name", (entry["id"],))]
+        meta_line = " · ".join(filter(None, [f"작성: {entry['author']}" if entry["author"] else None,
+                                             f"태그: {', '.join(entry_tags)}" if entry_tags else None]))
+        if meta_line:
+            header += [f"> {meta_line}", ""]
+        header += [demote_headings(convert(entry["body"] or "", ENTRY_DOC_DIR).strip()), ""]
 
     reports = conn.execute(
         "SELECT * FROM report WHERE project_id = ? ORDER BY report_date ASC", (project_id,)
@@ -179,8 +269,9 @@ def merged_markdown(
             first_line = next((line for line in summary if line.strip() and not line.startswith("#")), "")
             files = _report_files(conn, report["id"])
             note = f" · 보고 자료: {', '.join(files)}" if files else ""
+            audience = f" · 보고 대상: {report['audience']}" if report["audience"] else ""
             header += [
-                f"- **{report['report_date']}** {_report_label(report)} ({state}) — "
+                f"- **{report['report_date']}** {_report_label(report)} ({state}{audience}) — "
                 f"{first_line.lstrip('- ').strip()}{note}"
             ]
         header += [""]
@@ -190,7 +281,7 @@ def merged_markdown(
                 header += [
                     f"## [보고] {report['report_date']} {_report_label(report)}",
                     "",
-                    convert(report["body"] or "", report_doc_dir(report["rel_path"])).strip(),
+                    demote_headings(convert(report["body"] or "", report_doc_dir(report["rel_path"])).strip()),
                     "",
                 ]
 
