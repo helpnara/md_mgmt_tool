@@ -205,3 +205,27 @@ def test_hand_written_contributions_are_read_leniently(team):
     assert rows["가팀원"]["did"] == "손으로 적음" and rows["가팀원"]["derived"] is False
     assert rows["옛사람"]["current"] is False and rows["옛사람"]["role"] == ""
     assert rows["나팀원"]["derived"] is True
+
+
+def test_skills_per_person_row(team):
+    """기술 · 도구 (TODO 239 ②) — 쉼표 규칙 · 30자 · 10개, 팀원은 자기 줄, 이력 · 내보내기에 함께."""
+    owner, member, pid = team["owner"], team["member"], team["shared"]
+    url = f"/api/projects/{pid}/contributions/가팀원"
+    done = member.put(url, json={"skills": "Python, SQL,  python 회귀 , SQL"})
+    assert done.status_code == 200, done.text
+    row = {r["name"]: r for r in done.json()["contributions"]}["가팀원"]
+    assert row["skills"] == ["Python", "SQL", "python 회귀"]  # 겹친 것 · 빈 것은 버린다
+    assert md.load(_index_md(pid)).meta["contributions"][0]["skills"] == ["Python", "SQL", "python 회귀"]
+    assert owner.put(url, json={"skills": ["가" * 31]}).status_code == 400
+    assert owner.put(url, json={"skills": [f"기술{i}" for i in range(11)]}).status_code == 400
+    assert member.put(f"/api/projects/{pid}/contributions/나팀원", json={"skills": ["Excel"]}).status_code == 403
+    owner.put(f"/api/projects/{pid}/contributions/나팀원", json={"skills": ["SQL", "Excel"]})
+    assert owner.get(f"/api/projects/{pid}").json()["known_skills"][:1] == ["SQL"]  # 많이 쓴 것부터
+    history = owner.get("/api/person-history", params={"name": "가팀원"}).json()
+    assert history["projects"][0]["skills"] == ["Python", "SQL", "python 회귀"]
+    assert {"name": "SQL", "count": 1} in history["skills"]
+    text = owner.get(f"/api/projects/{pid}/export?format=md").text
+    assert "기술 · 도구: Python, SQL, python 회귀" in text
+    # 비우기
+    assert owner.put(url, json={"skills": []}).json()["contributions"][0]["skills"] == []
+    assert "skills" not in md.load(_index_md(pid)).meta["contributions"][0]

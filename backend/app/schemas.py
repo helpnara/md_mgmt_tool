@@ -397,6 +397,8 @@ class ContributionUpdate(BaseModel):
     problem: str | None = None
     did: str | None = None
     result: str | None = None
+    # 기술 · 도구 (TODO 239) — 목록이든 쉼표 글이든
+    skills: list[str] | str | None = None
     base_updated_at: str | None = None
 
     def changes(self) -> dict[str, Any]:

@@ -21,12 +21,16 @@ ROLES = ("주관", "참여", "지원")
 RETRO_KEYS = ("problem", "did", "result")
 TEXT_KEYS = ("role", "part", *RETRO_KEYS)
 PART_MAX = 100
+# 기술 · 도구 (TODO 239 ②) — 태그와 같은 쉼표 규칙, 하나에 30자 · 10개까지
+SKILL_MAX = 30
+SKILLS_MAX = 10
 RETRO_MAX = 1000
 OUTCOME_MAX = 200
 
 LABELS = {
     "role": "역할", "part": "맡은 부분", "from": "담당 시작", "to": "담당 끝",
     "problem": "무엇이 문제였나", "did": "내가 한 일", "result": "결과", "outcome": "그 밖의 성과",
+    "skills": "기술 · 도구",
 }
 
 
@@ -56,6 +60,7 @@ def _row(raw: dict[str, Any]) -> dict[str, Any] | None:
         "from": _day(raw.get("from")),
         "to": _day(raw.get("to")),
         **{key: _text(raw.get(key)) for key in RETRO_KEYS},
+        "skills": rules.split_list(raw.get("skills"))[:SKILLS_MAX],
     }
 
 
@@ -93,7 +98,7 @@ def read(meta: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _blank(name: str) -> dict[str, Any]:
-    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in RETRO_KEYS}}
+    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in RETRO_KEYS}, "skills": []}
 
 
 def materialize(meta: dict[str, Any]) -> list[dict[str, Any]]:
@@ -106,7 +111,7 @@ def to_meta(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for row in rows:
         item: dict[str, Any] = {"name": row["name"]}
-        for key in ("role", "part", "from", "to", *RETRO_KEYS):
+        for key in ("role", "part", "skills", "from", "to", *RETRO_KEYS):
             if row.get(key):
                 item[key] = row[key]
         out.append(item)
@@ -144,7 +149,7 @@ def follow_owners(meta: dict[str, Any], new_owners: list[str], today: str) -> li
             continue
         row = rows[name]
         begun = (row["from"] or "") <= today if row["from"] else True
-        if not begun and not row["role"] and not row["part"] and not has_retro(row):
+        if not begun and not row["role"] and not row["part"] and not row.get("skills") and not has_retro(row):
             rows.pop(name)
             continue
         row["to"] = today if begun else row["from"]
@@ -185,6 +190,8 @@ def check_update(row: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
             out[key] = rules.strict_day(data[key], LABELS[key])
     if out.get("from") and out.get("to") and out["to"] < out["from"]:
         raise ValueError(f"담당 끝({out['to']})이 담당 시작({out['from']})보다 빠릅니다.")
+    if "skills" in data:
+        out["skills"] = clean_skills(data["skills"])
     for key in RETRO_KEYS:
         if key in data:
             text = rules.check_body(_text(data[key]), LABELS[key]) or ""
@@ -198,3 +205,13 @@ def clean_outcome(value: object) -> str | None:
     """금액 아닌 성과 한 줄 (A4) — 비우면 None."""
     text = rules.one_line(value, LABELS["outcome"], OUTCOME_MAX)
     return text or None
+
+
+def clean_skills(value: object) -> list[str]:
+    """기술 · 도구 (TODO 239 ②) — 쉼표로 나누고(태그와 같은 규칙), 하나에 30자 · 10개까지. 넘치면 400."""
+    items = rules.split_list(value)
+    for item in items:
+        rules.one_line(item, LABELS["skills"], SKILL_MAX)
+    if len(items) > SKILLS_MAX:
+        raise ValueError(f"기술 · 도구는 {SKILLS_MAX}개까지입니다 (지금 {len(items)}개).")
+    return items

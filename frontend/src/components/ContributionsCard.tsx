@@ -88,7 +88,7 @@ export default function ContributionsCard({
       </div>
       <Explain
         id="contributions"
-        lead={<>사람마다 <b>역할 · 맡은 부분 · 담당 기간 · 회고</b>를 남깁니다 — 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료입니다.</>}
+        lead={<>사람마다 <b>역할 · 맡은 부분 · 기술 · 도구 · 담당 기간 · 회고</b>를 남깁니다 — 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료입니다.</>}
       >
         담당 기간은 담당자를 바꾸면 저절로 적힙니다(든 사람은 그날부터, 빠진 사람은 그날까지). 기록이 없던 담당자는 시작일부터로 읽습니다.
         팀원은 자기 줄의 역할 · 맡은 부분 · 회고를 고치고, 담당 기간은 팀장이 고칩니다. 과제 [내보내기]에도 이 내용이 함께 나갑니다.
@@ -117,10 +117,17 @@ export default function ContributionsCard({
                 </span>
                 {canEdit(row.name) && editing !== row.name && (
                   <button data-write className="ghost" onClick={() => setEditing(row.name)}>
-                    {hasRetro(row) || row.role || row.part ? "고치기" : "적기"}
+                    {hasRetro(row) || row.role || row.part || row.skills.length > 0 ? "고치기" : "적기"}
                   </button>
                 )}
               </div>
+              {row.skills.length > 0 && editing !== row.name && (
+                <div className="skill-chips">
+                  {row.skills.map((item) => (
+                    <span key={item} className="skill-chip">{item}</span>
+                  ))}
+                </div>
+              )}
               {hasRetro(row) && editing !== row.name && (
                 <dl className="contrib-retro">
                   {RETRO.map((item) =>
@@ -175,6 +182,11 @@ function ContributionForm({
 }) {
   const [role, setRole] = useState(row.role);
   const [part, setPart] = useState(row.part);
+  // 기술 · 도구 (TODO 239) — 쉼표로. 팀에서 쓴 것을 골라 넣을 수 있다
+  const [skills, setSkills] = useState(row.skills.join(", "));
+  const chosenSkills = skills.split(",").map((item) => item.trim()).filter(Boolean);
+  const chosenKeys = new Set(chosenSkills.map((item) => item.toLowerCase()));
+  const suggestions = (project.known_skills ?? []).filter((item) => !chosenKeys.has(item.toLowerCase())).slice(0, 12);
   const [from, setFrom] = useState(row.from ?? "");
   const [to, setTo] = useState(row.to ?? "");
   const [retro, setRetro] = useState<Record<RetroKey, string>>({ problem: row.problem, did: row.did, result: row.result });
@@ -190,6 +202,7 @@ function ContributionForm({
       const saved = await api.updateContribution(project.id, row.name, {
         role,
         part,
+        skills: chosenSkills,
         ...retro,
         // 팀원은 기간을 보내지 않는다(서버가 막는다 — 팀장이 고친다)
         ...(ownerView ? { from: from || null, to: to || null } : {}),
@@ -234,6 +247,23 @@ function ContributionForm({
                  placeholder="예: 데이터 수집 · 분석 모델" aria-label="맡은 부분" />
         </label>
       </div>
+      <div className="contrib-form-row">
+        <label className="contrib-skills-label">
+          <span>기술 · 도구 <span className="muted">(쉼표로 여러 개 · 10개까지)</span></span>
+          <input value={skills} onChange={(event) => setSkills(event.target.value)}
+                 placeholder="예: Python, SQL, 회귀 분석, 현장 인터뷰" aria-label="기술 · 도구" />
+        </label>
+      </div>
+      {suggestions.length > 0 && (
+        <div className="tag-suggest contrib-skill-suggest">
+          <span className="muted">팀에서 쓴 것</span>
+          {suggestions.map((item) => (
+            <button key={item} type="button" className="tag-pick" onClick={() => setSkills([...chosenSkills, item].join(", "))}>
+              {item}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="contrib-form-row">
         <label>
           담당 시작

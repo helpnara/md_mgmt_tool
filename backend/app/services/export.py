@@ -90,8 +90,8 @@ def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[
     from .projects import contributions_of
 
     rows = contributions_of(conn, project["id"])
-    written = [row for row in rows if row["role"] or row["part"] or row["problem"] or row["did"] or row["result"]
-               or not row["derived"]]
+    written = [row for row in rows if row["role"] or row["part"] or row["skills"] or row["problem"] or row["did"]
+               or row["result"] or not row["derived"]]
     outcome = project["outcome"] if "outcome" in project.keys() else None
     if not written and not outcome:
         return []
@@ -103,6 +103,8 @@ def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[
         period = f"{row['from'] or '?'} ~ {row['to'] or end_of_project or '지금'}"
         head = " · ".join(filter(None, [f"**{row['name']}**", row["role"], row["part"], period]))
         lines.append(f"- {head}")
+        if row["skills"]:
+            lines.append(f"  - 기술 · 도구: {', '.join(row['skills'])}")
         for key, label in (("problem", "무엇이 문제였나"), ("did", "내가 한 일"), ("result", "결과")):
             if row[key]:
                 text = row[key].strip().replace("\n", "\n    ")

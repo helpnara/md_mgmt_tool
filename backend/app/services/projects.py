@@ -898,10 +898,20 @@ def contributions_of(conn: sqlite3.Connection, project_id: str) -> list[dict[str
         {"name": row["name"], "role": row["role"] or "", "part": row["part"] or "",
          "from": row["from_date"], "to": row["to_date"],
          "problem": row["problem"] or "", "did": row["did"] or "", "result": row["result"] or "",
+         "skills": rules.split_list(row["skills"]),
          "derived": bool(row["derived"]), "current": bool(row["current"])}
         for row in conn.execute(
             "SELECT * FROM project_contribution WHERE project_id = ? ORDER BY position", (project_id,))
     ]
+
+
+def known_skills(conn: sqlite3.Connection) -> list[str]:
+    """팀 안에서 쓴 기술 · 도구 — 많이 쓴 것부터 (TODO 239). [담당과 역할] 양식이 골라 넣기로 보인다."""
+    counts: dict[str, int] = {}
+    for row in conn.execute("SELECT skills FROM project_contribution WHERE skills IS NOT NULL"):
+        for item in rules.split_list(row["skills"]):
+            counts[item] = counts.get(item, 0) + 1
+    return [name for name, _ in sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))]
 
 
 def update_contribution(

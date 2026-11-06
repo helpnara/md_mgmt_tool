@@ -38,6 +38,7 @@ export function historyText(items: PersonProject[]): string {
     .map((item) => {
       const head = [`${item.title} (${period(item)})`, item.role, item.part].filter(Boolean).join(" · ");
       const lines = [`■ ${head}`];
+      if (item.skills.length > 0) lines.push(`  - 기술 · 도구: ${item.skills.join(", ")}`);
       for (const line of RETRO_LINES) if (item[line.key]) lines.push(`  - ${line.label}: ${item[line.key].replace(/\s*\n\s*/g, " / ")}`);
       if (item.outcome) lines.push(`  - 그 밖의 성과: ${item.outcome}`);
       return lines.join("\n");
@@ -45,10 +46,40 @@ export function historyText(items: PersonProject[]): string {
     .join("\n\n") + "\n";
 }
 
-export const HISTORY_HEADERS = ["과제 번호", "과제명", "기간", "역할", "맡은 부분", "무엇이 문제였나", "내가 한 일", "결과", "그 밖의 성과"];
+export const HISTORY_HEADERS = ["과제 번호", "과제명", "기간", "역할", "맡은 부분", "기술 · 도구", "무엇이 문제였나", "내가 한 일", "결과", "그 밖의 성과"];
 
 export function historyRows(items: PersonProject[]): string[][] {
-  return items.map((item) => [item.id, item.title, period(item), item.role, item.part, item.problem, item.did, item.result, item.outcome]);
+  return items.map((item) => [
+    item.id, item.title, period(item), item.role, item.part, item.skills.join(", "), item.problem, item.did, item.result, item.outcome,
+  ]);
+}
+
+/**
+ * 다듬기 프롬프트 (TODO 239 ③) — 고른 과제로 업무 이력 문장을 다듬어 달라는 글. **먼저 보여 주고** 복사한다(71 과 같은 원칙).
+ * 사람 이름 · 효과 금액은 넣지 않는다. 기록에 없는 내용 · 숫자를 만들지 말라고 적는다.
+ */
+export function refinePrompt(items: PersonProject[]): string {
+  const head = [
+    "아래는 한 사람이 맡았던 과제의 기록입니다. 업무 이력 · 성과 정리에 쓸 문장으로 다듬어 주세요.",
+    "",
+    "[부탁]",
+    "- 과제마다 2~3줄로, 무엇을 · 어떻게 · 결과(숫자)가 드러나게 써 주세요.",
+    "- 기록에 없는 내용이나 숫자는 만들지 마세요. 모르는 것은 비워 두세요.",
+    "- 사내 시스템 이름 · 금액 · 다른 사람 이름은 쓰지 마세요.",
+    "- 문장 끝은 \"~함 · ~했음\" 같은 짧은 개조식으로 써 주세요.",
+    "",
+    "[기록]",
+  ];
+  const body = items.map((item, index) => {
+    const lines = [`${index + 1}. 과제: ${item.title} (${period(item)})`];
+    const facts = [item.role && `역할: ${item.role}`, item.part && `맡은 부분: ${item.part}`,
+      item.skills.length > 0 && `기술 · 도구: ${item.skills.join(", ")}`].filter(Boolean);
+    if (facts.length > 0) lines.push(`   ${facts.join(" / ")}`);
+    for (const line of RETRO_LINES) if (item[line.key]) lines.push(`   ${line.label}: ${item[line.key].replace(/\s*\n\s*/g, " / ")}`);
+    if (item.outcome) lines.push(`   그 밖의 성과: ${item.outcome}`);
+    return lines.join("\n");
+  });
+  return [...head, ...body].join("\n") + "\n";
 }
 
 export default function PersonHistory({ meta, name, back }: { meta: Meta; name: string; back: string | null }) {
@@ -58,6 +89,8 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   // 고른 과제 — 처음에는 회고를 적은 과제 전부
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState<string | null>(null);
+  // 다듬기 프롬프트 — 열면 고른 과제로 만든 글을 먼저 보인다 (TODO 239 ③)
+  const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
     setPageTitle(`${name} — 이력`);
@@ -79,9 +112,11 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   const canWrite = me.role === "owner" || mine;
   const kindLabel = (key: string) => meta.activity_kinds.find((item) => item.key === key)?.label ?? key;
 
-  async function copy(kind: "text" | "table") {
+  async function copy(kind: "text" | "table" | "prompt") {
     if (chosen.length === 0) return;
-    const ok = await copyText(kind === "text" ? historyText(chosen) : toTsv(HISTORY_HEADERS, historyRows(chosen)));
+    const text =
+      kind === "text" ? historyText(chosen) : kind === "table" ? toTsv(HISTORY_HEADERS, historyRows(chosen)) : refinePrompt(chosen);
+    const ok = await copyText(text);
     if (!ok) {
       notifyError(COPY_FAILED);
       return;
@@ -117,6 +152,17 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
           {data.left_on && <span className="tag left-tag">떠남 {data.left_on}</span>}
           <span className="muted person-head-sub"> — 이력</span>
         </h1>
+        {data.skills.length > 0 && (
+          <div className="skill-chips person-top-skills" title="많이 쓴 기술 · 도구 — 숫자는 과제 수">
+            <span className="muted">많이 쓴 기술 · 도구</span>
+            {data.skills.map((item) => (
+              <span key={item.name} className="skill-chip">
+                {item.name}
+                {item.count > 1 && <span className="skill-count">{item.count}</span>}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="person-stats">
           <span><b>{data.summary.projects}</b> 과제</span>
           <span><b>{data.summary.current}</b> 진행 중</span>
@@ -155,8 +201,28 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
             <button className="ghost" disabled={chosen.length === 0} onClick={() => void copy("table")}>
               {copied === "table" ? "복사됨 ✓" : "표로 복사"}
             </button>
+            <button
+              className={showPrompt ? "ghost on" : "ghost"}
+              disabled={chosen.length === 0}
+              aria-expanded={showPrompt}
+              onClick={() => setShowPrompt((value) => !value)}
+              title="고른 과제로 업무 이력 문장을 다듬어 달라는 글을 만듭니다 — 먼저 보고 복사합니다"
+            >
+              다듬기 프롬프트
+            </button>
           </div>
         </div>
+        {showPrompt && chosen.length > 0 && (
+          <div className="refine-panel">
+            <p className="hint">
+              사내 AI 에 붙여넣을 글입니다 — <b>무엇이 담기는지 읽어 보고</b> 복사하세요. 이름 · 효과 금액은 넣지 않았습니다. 과제명에 대외비가 있으면 고친 뒤 붙이세요.
+            </p>
+            <textarea className="refine-text" readOnly value={refinePrompt(chosen)} aria-label="다듬기 프롬프트" />
+            <div className="form-actions">
+              <button onClick={() => void copy("prompt")}>{copied === "prompt" ? "복사됨 ✓" : "복사"}</button>
+            </div>
+          </div>
+        )}
         {shown.length === 0 ? (
           <p className="muted">맡은 과제가 없습니다.</p>
         ) : (
@@ -184,6 +250,9 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                       <div className="person-project-meta">
                         <span className={item.role ? undefined : "muted"}>{item.role || "역할 미정"}</span>
                         {item.part && <span>{item.part}</span>}
+                        {item.skills.map((skill) => (
+                          <span key={skill} className="skill-chip">{skill}</span>
+                        ))}
                         {!item.current && <span className="tag former-tag">예전 담당</span>}
                         {item.outcome && <span>그 밖의 성과 · {item.outcome}</span>}
                         {effect && <span className="muted">효과 {effect.text}{effect.verified ? "" : " · 기대"}</span>}

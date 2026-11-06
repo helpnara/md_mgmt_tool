@@ -165,6 +165,8 @@ CREATE TABLE IF NOT EXISTS project_contribution (
   problem    TEXT,
   did        TEXT,
   result     TEXT,
+  -- 기술 · 도구 (TODO 239) — 쉼표 + 공백으로 이어 적는다
+  skills     TEXT,
   derived    INTEGER NOT NULL DEFAULT 0,
   current    INTEGER NOT NULL DEFAULT 1,
   position   INTEGER NOT NULL DEFAULT 0,

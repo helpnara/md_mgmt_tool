@@ -6056,6 +6056,58 @@ async function main() {
     });
   }
 
+  console.log("\n[58] 이름 옆 [이력] 모양 · 기술 · 도구 · 다듬기 프롬프트 (TODO 239)");
+  {
+    const made = (await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제");
+    await check("이름 옆 [이력] 은 이름과 다른 모양 — 회색 글자 · 테두리 있는 알약 (239 ①)", async () => {
+      await go("#/?tab=status");
+      await page.reload(); await page.waitForTimeout(900);
+      const row = page.locator(".home-member-table tr", { hasText: "권경락" }).first();
+      const name = await row.locator("td a").first().evaluate((el) => getComputedStyle(el).color);
+      const pill = await row.locator(".person-link").evaluate((el) => {
+        const style = getComputedStyle(el);
+        return { color: style.color, border: style.borderTopStyle, radius: parseFloat(style.borderTopLeftRadius) };
+      });
+      expect(pill.color !== name, `이름 ${name} · [이력] ${pill.color} — 같은 색`);
+      expect(pill.border === "solid" && pill.radius >= 9, `알약 모양: ${JSON.stringify(pill)}`);
+    });
+    await check("[담당과 역할]에 기술 · 도구 — 쉼표로 · 팀에서 쓴 것 골라 넣기 · 줄에 딱지 (239 ②)", async () => {
+      await go(`#/projects/${made.id}`);
+      await page.reload(); await page.waitForTimeout(900);
+      const row = page.locator('[data-contributions] [data-person="권경락"]');
+      await row.getByRole("button", { name: "고치기" }).click();
+      await row.getByLabel("기술 · 도구").fill("Python, SQL");
+      await row.getByRole("button", { name: "저장", exact: true }).click();
+      await page.waitForTimeout(800);
+      equal((await row.locator(".skill-chip").allInnerTexts()).join(","), "Python,SQL", "딱지");
+      // 다른 줄의 양식에서 팀에서 쓴 것을 눌러 넣는다
+      const other = page.locator('[data-contributions] [data-person="이수진"]');
+      await other.getByRole("button", { name: "적기" }).click();
+      await other.locator(".contrib-skill-suggest").getByRole("button", { name: "SQL" }).click();
+      equal(await other.getByLabel("기술 · 도구").inputValue(), "SQL", "골라 넣기");
+      await other.getByRole("button", { name: "취소" }).click();
+    });
+    await check("이력 화면 — 많이 쓴 기술 · 도구 · 과제 줄 딱지 · 표 복사에 기술 칸 (239 ②)", async () => {
+      await page.locator('[data-contributions] .contrib-name a', { hasText: "권경락" }).click();
+      await page.waitForSelector(".person-history", { timeout: 5000 });
+      expect((await page.locator(".person-top-skills").innerText()).includes("Python"), "많이 쓴 기술 · 도구");
+      const item = page.locator(".person-project", { hasText: "회고 시험 과제" });
+      equal((await item.locator(".skill-chip").allInnerTexts()).join(","), "Python,SQL", "과제 줄 딱지");
+      await item.locator('input[type="checkbox"]').check();
+      await page.getByRole("button", { name: "표로 복사" }).click();
+      const table = await page.evaluate(() => navigator.clipboard.readText());
+      expect(table.startsWith("과제 번호\t과제명\t기간\t역할\t맡은 부분\t기술 · 도구") && table.includes("Python, SQL"), `표: ${table.slice(0, 160)}`);
+    });
+    await check("[다듬기 프롬프트] — 먼저 보여 주고 [복사], 이름 · 금액은 없다 (239 ③)", async () => {
+      await page.getByRole("button", { name: "다듬기 프롬프트" }).click();
+      const shown = await page.locator(".refine-text").inputValue();
+      expect(shown.includes("[부탁]") && shown.includes("회고 시험 과제") && shown.includes("기술 · 도구: Python, SQL"), `프롬프트: ${shown.slice(0, 200)}`);
+      expect(!shown.includes("권경락") && !shown.includes("억"), "이름 · 금액이 없다");
+      await page.locator(".refine-panel").getByRole("button", { name: "복사" }).click();
+      equal(await page.evaluate(() => navigator.clipboard.readText()), shown, "복사한 글 = 보인 글");
+    });
+  }
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

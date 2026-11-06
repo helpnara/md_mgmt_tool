@@ -10,6 +10,7 @@ import sqlite3
 from typing import Any
 
 from .. import clock
+from .. import schemas as rules
 from . import settings as settings_service
 
 
@@ -40,6 +41,7 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             "from": begin, "to": _end(row), "current": bool(row["current"]), "derived": bool(row["derived"]),
             "role": row["role"] or "", "part": row["part"] or "",
             "problem": row["problem"] or "", "did": row["did"] or "", "result": row["result"] or "",
+            "skills": rules.split_list(row["skills"]),
             "outcome": row["outcome"] or "",
             "effect_expected": row["effect_expected"], "effect_verified": row["effect_verified"],
             "no_effect": bool(row["no_effect"]),
@@ -59,6 +61,13 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             " ORDER BY date DESC, id DESC", (name,))
     ]
     finished = [item for item in projects if item["status"] == "done"]
+    # 많이 쓴 기술 · 도구 (TODO 239) — 과제 수로 센다
+    skill_counts: dict[str, int] = {}
+    for item in projects:
+        for skill in item["skills"]:
+            skill_counts[skill] = skill_counts.get(skill, 0) + 1
+    top_skills = [{"name": key, "count": value}
+                  for key, value in sorted(skill_counts.items(), key=lambda pair: (-pair[1], pair[0]))[:12]]
     roster = {person["name"]: person for person in settings_service.people()}
     person = roster.get(name)
     return {
@@ -75,6 +84,7 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             "activities": sum(1 for item in activities if not item["planned"]),
             "entry_only": len(entry_only),
         },
+        "skills": top_skills,
         "projects": projects,
         "activities": activities,
     }

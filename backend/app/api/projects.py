@@ -499,6 +499,8 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     data["lineage"] = svc.lineage(conn, project_id)
     # 담당과 역할 — 사람마다 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄 (TODO 237)
     data["contributions"] = svc.contributions_of(conn, project_id)
+    # 팀 안에서 쓴 기술 · 도구 — 양식의 골라 넣기 (TODO 239)
+    data["known_skills"] = svc.known_skills(conn)
     return data
 
 

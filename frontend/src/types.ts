@@ -1198,6 +1198,8 @@ export interface Contribution {
   problem: string;
   did: string;
   result: string;
+  /** 기술 · 도구 (TODO 239) */
+  skills: string[];
   /** 기록이 없어 시작일부터로 읽은 줄 */
   derived: boolean;
   /** 지금 담당인가 — 아니면 예전 담당 */
@@ -1208,6 +1210,8 @@ export interface Project {
   outcome?: string | null;
   /** 상세 조회에서만 */
   contributions?: Contribution[];
+  /** 팀 안에서 쓴 기술 · 도구 — 많이 쓴 것부터 (상세 조회에서만, TODO 239) */
+  known_skills?: string[];
 }
 export interface RetroDue {
   name: string;
@@ -1231,6 +1235,7 @@ export interface PersonProject {
   problem: string;
   did: string;
   result: string;
+  skills: string[];
   outcome: string;
   effect_expected: number | null;
   effect_verified: number | null;
@@ -1253,6 +1258,8 @@ export interface PersonHistory {
   leader: boolean;
   left_on: string | null;
   summary: { projects: number; current: number; lead: number; done: number; retro_written: number; activities: number; entry_only: number };
+  /** 많이 쓴 기술 · 도구 — 과제 수 (TODO 239) */
+  skills: { name: string; count: number }[];
   projects: PersonProject[];
   activities: PersonActivity[];
 }
