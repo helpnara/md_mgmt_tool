@@ -7,7 +7,8 @@ import type { Contribution, Meta, Project } from "../types";
 import Explain from "./Explain";
 
 /**
- * 담당과 역할 (TODO 237) — 사람마다 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄.
+ * 담당과 역할 (TODO 237 · 239) — 사람마다 역할 · 맡은 부분 · 기술 · 도구 · 담당 기간 · 회고(내가 한 일 · 결과).
+ * "무엇이 문제였나" 는 239 ⑤ 에서 뺐다 — 과제 개요의 배경 · 목적과 겹친다.
  *
  * 팀원이 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료다. 업무 이력 한 줄은 **과제 · 기간 · 내 역할 · 내가 한 일 · 성과**인데,
  * 담당자 명단만으로는 셋을 알 수 없다. 화면 · 내보내기는 나중에 붙여도 되지만 **기록은 지금부터 쌓지 않으면 되살릴 수 없다.**
@@ -20,7 +21,6 @@ import Explain from "./Explain";
 export const ROLES = ["주관", "참여", "지원"] as const;
 
 const RETRO = [
-  { key: "problem", label: "무엇이 문제였나", placeholder: "예: 월말 집계를 손으로 해 주 4시간이 들었다" },
   { key: "did", label: "내가 한 일", placeholder: "예: 집계 스크립트를 만들고 현장 담당자 교육" },
   { key: "result", label: "결과", placeholder: "예: 주 4시간 → 30분, 집계 오류 0건" },
 ] as const;
@@ -36,7 +36,7 @@ export function myName(meta: Meta): string {
 }
 
 function hasRetro(row: Contribution): boolean {
-  return Boolean(row.problem || row.did || row.result);
+  return Boolean(row.did || row.result);
 }
 
 function endText(row: Contribution, project: Project): string {
@@ -196,7 +196,7 @@ function ContributionForm({
   const [from, setFrom] = useState(ownerView ? defaultFrom : row.from ?? "");
   const [to, setTo] = useState(ownerView ? defaultTo : row.to ?? "");
   const filledFromProject = ownerView && ((!row.from && Boolean(defaultFrom)) || (!row.to && Boolean(defaultTo)));
-  const [retro, setRetro] = useState<Record<RetroKey, string>>({ problem: row.problem, did: row.did, result: row.result });
+  const [retro, setRetro] = useState<Record<RetroKey, string>>({ did: row.did, result: row.result });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 연 때의 수정 시각 — 그 사이 누가 먼저 고쳤으면 409 (TODO 233 R7)
@@ -233,7 +233,7 @@ function ContributionForm({
     >
       {justDone && (
         <p className="contrib-done-note">
-          과제가 끝났습니다 — 기억이 생생할 때 <b>회고 세 줄</b>을 남겨 두세요. 비워 두고 닫아도 됩니다(홈 [할 일]에 1년 동안 남습니다).
+          과제가 끝났습니다 — 기억이 생생할 때 <b>회고</b>(내가 한 일 · 결과)를 남겨 두세요. 비워 두고 닫아도 됩니다(홈 [할 일]에 1년 동안 남습니다).
         </p>
       )}
       <div className="contrib-form-row">

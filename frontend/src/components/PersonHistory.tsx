@@ -23,11 +23,10 @@ function period(item: PersonProject): string {
 }
 
 function hasRetro(item: PersonProject): boolean {
-  return Boolean(item.problem || item.did || item.result);
+  return Boolean(item.did || item.result);
 }
 
-const RETRO_LINES: { key: "problem" | "did" | "result"; label: string }[] = [
-  { key: "problem", label: "무엇이 문제였나" },
+const RETRO_LINES: { key: "did" | "result"; label: string }[] = [
   { key: "did", label: "내가 한 일" },
   { key: "result", label: "결과" },
 ];
@@ -46,11 +45,11 @@ export function historyText(items: PersonProject[]): string {
     .join("\n\n") + "\n";
 }
 
-export const HISTORY_HEADERS = ["과제 번호", "과제명", "기간", "역할", "맡은 부분", "기술 · 도구", "무엇이 문제였나", "내가 한 일", "결과", "그 밖의 성과"];
+export const HISTORY_HEADERS = ["과제 번호", "과제명", "기간", "역할", "맡은 부분", "기술 · 도구", "내가 한 일", "결과", "그 밖의 성과"];
 
 export function historyRows(items: PersonProject[]): string[][] {
   return items.map((item) => [
-    item.id, item.title, period(item), item.role, item.part, item.skills.join(", "), item.problem, item.did, item.result, item.outcome,
+    item.id, item.title, period(item), item.role, item.part, item.skills.join(", "), item.did, item.result, item.outcome,
   ]);
 }
 

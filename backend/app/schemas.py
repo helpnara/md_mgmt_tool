@@ -394,7 +394,6 @@ class ContributionUpdate(BaseModel):
     part: str | None = None
     start: str | None = Field(default=None, alias="from")
     end: str | None = Field(default=None, alias="to")
-    problem: str | None = None
     did: str | None = None
     result: str | None = None
     # 기술 · 도구 (TODO 239) — 목록이든 쉼표 글이든

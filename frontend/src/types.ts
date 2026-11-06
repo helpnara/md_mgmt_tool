@@ -1187,7 +1187,7 @@ export interface Project {
 }
 
 // ── TODO 237 — 담당과 역할 · 금액 아닌 성과 ─────────────────────────────────────
-/** 한 사람의 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄. 팀원이 나중에 업무 이력 · 성과를 정리할 재료 */
+/** 한 사람의 역할 · 맡은 부분 · 담당 기간 · 회고(내가 한 일 · 결과). 팀원이 나중에 업무 이력 · 성과를 정리할 재료 */
 export interface Contribution {
   name: string;
   /** 주관 · 참여 · 지원, 비어 있을 수 있다 */
@@ -1195,7 +1195,6 @@ export interface Contribution {
   part: string;
   from: string | null;
   to: string | null;
-  problem: string;
   did: string;
   result: string;
   /** 기술 · 도구 (TODO 239) */
@@ -1232,7 +1231,6 @@ export interface PersonProject {
   derived: boolean;
   role: string;
   part: string;
-  problem: string;
   did: string;
   result: string;
   skills: string[];

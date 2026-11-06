@@ -2251,14 +2251,14 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
 .retro-state.retro-written { color: #15803d; }
 .retro-state.retro-missing { color: var(--warn); }
 .former-tag { background: #eef0f3; color: var(--muted-strong); }
-.contrib-retro { margin: 8px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-size: 13px; }
+.contrib-retro { margin: 8px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 13px; }
 .contrib-retro dt { font-size: 12px; color: var(--muted); }
 .contrib-retro dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .contrib-form { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
 .contrib-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
 .contrib-form-row .contrib-part-label { flex: 1 1 220px; }
 .contrib-period-hint { margin: 0 0 6px; }
-.contrib-retro-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.contrib-retro-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .contrib-retro-fields textarea { width: 100%; min-height: 0; height: 76px; resize: vertical; }
 .contrib-done-note { margin: 0; padding: 6px 10px; border-radius: 6px; background: var(--accent-soft); font-size: 13px; }
 .outcome-line { margin-top: 2px; font-size: 13px; font-weight: 400; }

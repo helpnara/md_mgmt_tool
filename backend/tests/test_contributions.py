@@ -229,3 +229,23 @@ def test_skills_per_person_row(team):
     # 비우기
     assert owner.put(url, json={"skills": []}).json()["contributions"][0]["skills"] == []
     assert "skills" not in md.load(_index_md(pid)).meta["contributions"][0]
+
+
+def test_problem_field_is_dropped_but_kept_in_file(team):
+    """'무엇이 문제였나' 는 뺐다 (TODO 239 ⑤) — 화면 · 회고 여부 · 내보내기에서 빠지고, 이미 적힌 값은 파일에 남는다."""
+    owner, member, pid = team["owner"], team["member"], team["shared"]
+    path = _index_md(pid)
+    doc = md.load(path)
+    doc.meta["contributions"] = [{"name": "가팀원", "problem": "예전에 적은 배경"}]
+    md.save(path, doc)
+    owner.post("/api/reindex")
+    row = _rows(owner, pid)["가팀원"]
+    assert "problem" not in row
+    owner.patch(f"/api/projects/{pid}", json={"status": "done"})
+    # 문제만 적힌 줄은 회고가 빈 것 — 홈에 묻는다
+    assert [item["id"] for item in member.get("/api/projects/retro-due").json()["items"]] == [pid]
+    # 보내도 받지 않는다 · 다른 칸을 고쳐도 옛 값은 파일에 남는다
+    owner.put(f"/api/projects/{pid}/contributions/가팀원", json={"problem": "새 배경", "did": "한 일"})
+    saved = md.load(path).meta["contributions"][0]
+    assert saved["problem"] == "예전에 적은 배경" and saved["did"] == "한 일"
+    assert "예전에 적은 배경" not in owner.get(f"/api/projects/{pid}/export?format=md").text

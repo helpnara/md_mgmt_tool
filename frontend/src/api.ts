@@ -210,7 +210,7 @@ export const api = {
   updateContribution: (
     id: string,
     name: string,
-    payload: Partial<Pick<Contribution, "role" | "part" | "from" | "to" | "problem" | "did" | "result" | "skills">> & { base_updated_at?: string },
+    payload: Partial<Pick<Contribution, "role" | "part" | "from" | "to" | "did" | "result" | "skills">> & { base_updated_at?: string },
   ) =>
     request<Project>(`/api/projects/${encodeURIComponent(id)}/contributions/${encodeURIComponent(name)}`, {
       method: "PUT",

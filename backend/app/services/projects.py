@@ -897,7 +897,7 @@ def contributions_of(conn: sqlite3.Connection, project_id: str) -> list[dict[str
     return [
         {"name": row["name"], "role": row["role"] or "", "part": row["part"] or "",
          "from": row["from_date"], "to": row["to_date"],
-         "problem": row["problem"] or "", "did": row["did"] or "", "result": row["result"] or "",
+         "did": row["did"] or "", "result": row["result"] or "",
          "skills": rules.split_list(row["skills"]),
          "derived": bool(row["derived"]), "current": bool(row["current"])}
         for row in conn.execute(

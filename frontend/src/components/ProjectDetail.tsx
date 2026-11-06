@@ -980,7 +980,7 @@ export default function ProjectDetail({
             onCancel={() => setEditingProject(false)}
             onSubmit={async (payload) => {
               const saved = await api.updateProject(project.id, payload);
-              // 완료로 **바뀌는** 순간 — 내가 담당이면 회고 세 줄 양식을 연다 (TODO 237 A3). 비워 두고 닫아도 된다
+              // 완료로 **바뀌는** 순간 — 내가 담당이면 회고 양식을 연다 (TODO 237 A3). 비워 두고 닫아도 된다
               if (payload.status === "done" && project.status !== "done") {
                 const me = myName(meta);
                 if (me && saved.owners.includes(me)) setRetroFor(me);

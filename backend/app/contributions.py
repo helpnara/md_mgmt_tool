@@ -1,4 +1,4 @@
-"""담당과 역할 — 사람마다의 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄 (TODO 237).
+"""담당과 역할 — 사람마다의 역할 · 맡은 부분 · 담당 기간 · 회고(내가 한 일 · 결과) (TODO 237 · 239).
 
 팀원이 나중에 본인의 업무 이력 · 성과를 정리할 때 쓰는 재료다. 업무 이력 한 줄은 **과제 · 기간 · 내 역할 · 내가 한 일 · 성과**인데,
 담당자 명단만으로는 역할도 기간도 한 일도 알 수 없다. 화면 · 내보내기는 나중에 붙여도 되지만 **기록은 지금부터 쌓지
@@ -18,7 +18,10 @@ from typing import Any
 from . import schemas as rules
 
 ROLES = ("주관", "참여", "지원")
-RETRO_KEYS = ("problem", "did", "result")
+RETRO_KEYS = ("did", "result")
+# "무엇이 문제였나" 는 239 ⑤ 에서 뺐다 — 과제 개요의 배경 · 목적과 겹치고 담당자마다 같은 말이 된다(사용자).
+# 이미 적힌 값은 **파일에 그대로 둔다**(지우지 않는다) — 화면 · 복사 · 내보내기 · 회고 여부에서만 뺀다.
+LEGACY_KEYS = ("problem",)
 TEXT_KEYS = ("role", "part", *RETRO_KEYS)
 PART_MAX = 100
 # 기술 · 도구 (TODO 239 ②) — 태그와 같은 쉼표 규칙, 하나에 30자 · 10개까지
@@ -59,7 +62,7 @@ def _row(raw: dict[str, Any]) -> dict[str, Any] | None:
         "part": _text(raw.get("part")),
         "from": _day(raw.get("from")),
         "to": _day(raw.get("to")),
-        **{key: _text(raw.get(key)) for key in RETRO_KEYS},
+        **{key: _text(raw.get(key)) for key in (*LEGACY_KEYS, *RETRO_KEYS)},
         "skills": rules.split_list(raw.get("skills"))[:SKILLS_MAX],
     }
 
@@ -98,7 +101,7 @@ def read(meta: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _blank(name: str) -> dict[str, Any]:
-    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in RETRO_KEYS}, "skills": []}
+    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in (*LEGACY_KEYS, *RETRO_KEYS)}, "skills": []}
 
 
 def materialize(meta: dict[str, Any]) -> list[dict[str, Any]]:
@@ -111,7 +114,7 @@ def to_meta(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for row in rows:
         item: dict[str, Any] = {"name": row["name"]}
-        for key in ("role", "part", "skills", "from", "to", *RETRO_KEYS):
+        for key in ("role", "part", "skills", "from", "to", *LEGACY_KEYS, *RETRO_KEYS):
             if row.get(key):
                 item[key] = row[key]
         out.append(item)

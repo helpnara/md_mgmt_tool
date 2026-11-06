@@ -596,7 +596,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       {retroDue.length > 0 && (
         <>
           <p className="hint">
-            <b>회고를 적을 과제 {retroDue.length}건</b> — 내가 담당한 끝난 과제(1년 안)에서 회고 세 줄이 비어 있습니다. 누르면 그 과제의 양식이 열립니다.
+            <b>회고를 적을 과제 {retroDue.length}건</b> — 내가 담당한 끝난 과제(1년 안)에서 회고(내가 한 일 · 결과)가 비어 있습니다. 누르면 그 과제의 양식이 열립니다.
           </p>
           <ul className="home-stale home-retro">
             {retroDue.slice(0, 5).map((item) => (

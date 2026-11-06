@@ -410,7 +410,7 @@ def create_project(payload: ProjectCreate, conn: sqlite3.Connection = Depends(ge
 
 @router.get("/retro-due")
 def retro_due(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    """회고를 적을 과제 (TODO 237 A3) — **내 것**, 끝난 지 1년 안, 회고 세 줄이 모두 빈 것. 홈 [할 일] 이 그린다.
+    """회고를 적을 과제 (TODO 237 A3) — **내 것**, 끝난 지 1년 안, 회고(내가 한 일 · 결과)가 모두 빈 것. 홈 [할 일] 이 그린다.
 
     나 = 팀원 PC 면 그 사람, 서버 PC 면 명부의 팀장(없으면 설정의 작성자). 읽기 전용(누군지 모름)은 빈 목록.
     """
@@ -426,7 +426,7 @@ def retro_due(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> d
     rows = conn.execute(
         "SELECT p.id, p.title, p.completed_at FROM project p JOIN project_contribution c ON c.project_id = p.id"
         " WHERE c.name = ? AND p.status = 'done' AND p.completed_at >= DATE(app_today(), '-365 day')"
-        " AND COALESCE(c.problem, '') = '' AND COALESCE(c.did, '') = '' AND COALESCE(c.result, '') = ''"
+        " AND COALESCE(c.did, '') = '' AND COALESCE(c.result, '') = ''"
         " ORDER BY p.completed_at DESC, p.id DESC",
         (name,),
     ).fetchall()
@@ -497,7 +497,7 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     data["intakes"] = related_to_project(conn, project_id)
     # 다년도 과제의 줄기 — 앞 단계들 · 다음 단계 · 단계 번호 (TODO 172)
     data["lineage"] = svc.lineage(conn, project_id)
-    # 담당과 역할 — 사람마다 역할 · 맡은 부분 · 담당 기간 · 회고 세 줄 (TODO 237)
+    # 담당과 역할 — 사람마다 역할 · 맡은 부분 · 기술 · 도구 · 담당 기간 · 회고 (TODO 237 · 239)
     data["contributions"] = svc.contributions_of(conn, project_id)
     # 팀 안에서 쓴 기술 · 도구 — 양식의 골라 넣기 (TODO 239)
     data["known_skills"] = svc.known_skills(conn)
