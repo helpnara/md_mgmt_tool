@@ -6111,6 +6111,63 @@ async function main() {
     });
   }
 
+  console.log("\n[59] 회고 칸 긴 글 — 위아래 · 자라는 칸 · 글자 수 · 붙여넣기 정리 · 목록과 접기 (TODO 240)");
+  {
+    const made = (await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제");
+    const longDid = ["- 설비 로그 8종을 매일 모으는 집계 스크립트를 설계하고 작성함", "- 현장 담당자 12명에게 사용법 교육을 두 차례 진행함",
+      "- 집계 오류 알림과 점검 절차를 만들어 운영 문서로 정리함", "- 월말 보고 서식을 표준화해 공용 폴더에 올림",
+      "- 다른 두 팀에 같은 방식을 소개함", "- 석 달 동안 운영하며 지적 사항 9건을 고침"].join("\n");
+    await check("양식의 두 칸은 위아래 · 글에 맞춰 자라고 · 공백 포함 글자 수 (240 ① ② ③)", async () => {
+      await go(`#/projects/${made.id}`);
+      await page.reload(); await page.waitForTimeout(900);
+      const row = page.locator('[data-contributions] [data-person="권경락"]');
+      await row.getByRole("button", { name: "고치기" }).click();
+      const did = row.getByLabel("내가 한 일"), result = row.getByLabel("결과");
+      const [a, b] = [await did.boundingBox(), await result.boundingBox()];
+      expect(b.y > a.y + a.height - 2 && Math.abs(a.x - b.x) < 2, `위아래: ${JSON.stringify([a, b])}`);
+      const before = a.height;
+      await did.fill(longDid);
+      await page.waitForTimeout(200);
+      const after = (await did.boundingBox()).height;
+      expect(after > before + 30, `칸이 자란다: ${before} → ${after}`);
+      expect(await did.evaluate((el) => el.scrollHeight <= el.clientHeight + 2), "안에서 굴리지 않는다");
+      const count = [...longDid].length;
+      expect((await row.innerText()).includes(`공백 포함 ${count.toLocaleString()}자 / 1,000`), `글자 수 ${count}`);
+      expect(await did.evaluate((el) => !getComputedStyle(el).fontFamily.includes("monospace")), "본문 글꼴");
+    });
+    await check("AI 답을 붙여넣으면 ** · ### · * 글머리표를 정리 · [되돌리기] (240 ⑤)", async () => {
+      const row = page.locator('[data-contributions] [data-person="권경락"]');
+      const result = row.getByLabel("결과");
+      await result.fill("");
+      const pasted = "### 결과\n\n* **주 4시간 → 30분**으로 줄임\n* 오류 **0건**\n\n\n\n> 다른 팀도 씀";
+      await result.evaluate((el, text) => {
+        const dt = new DataTransfer();
+        dt.setData("text/plain", text);
+        el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      }, pasted);
+      await page.waitForTimeout(200);
+      equal(await result.inputValue(), "결과\n\n- 주 4시간 → 30분으로 줄임\n- 오류 0건\n\n다른 팀도 씀", "정리된 글");
+      await row.getByRole("button", { name: "되돌리기" }).click();
+      equal(await result.inputValue(), pasted, "되돌린 글");
+      await result.fill("- 주 4시간 → 30분으로 줄임\n- 오류 0건\n- 다른 두 팀도 같은 방식\n- 보고 준비 절반\n- 만족도 4.6점\n- 압연 공정으로 넓힘");
+      await row.getByRole("button", { name: "저장", exact: true }).click();
+      await page.waitForTimeout(900);
+    });
+    await check("저장한 글은 목록으로 · 5줄 넘으면 접고 [더 보기] · 이력 화면은 다 보인다 (240 ④)", async () => {
+      const row = page.locator('[data-contributions] [data-person="권경락"]');
+      equal(await row.locator(".retro-text li").count(), 12, "글머리표 → 목록");
+      const more = row.locator(".retro-more").first();
+      equal(await more.innerText(), "더 보기 ▾", "[더 보기]");
+      await more.click();
+      equal(await more.innerText(), "접기 ▴", "[접기]");
+      await page.locator('[data-contributions] .contrib-name a', { hasText: "권경락" }).click();
+      await page.waitForSelector(".person-history", { timeout: 5000 });
+      const item = page.locator(".person-project", { hasText: "회고 시험 과제" });
+      equal(await item.locator(".retro-more").count(), 0, "이력 화면은 접지 않는다");
+      equal(await item.locator(".retro-text li").count(), 12, "이력 화면도 목록");
+    });
+  }
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

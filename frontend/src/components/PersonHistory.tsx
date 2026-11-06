@@ -8,6 +8,7 @@ import { toTsv } from "../tsv";
 import type { Meta, PersonHistory as History, PersonProject } from "../types";
 import { effectText } from "../util";
 import Explain from "./Explain";
+import { RetroText } from "./RetroText";
 import StatusBadge from "./StatusBadge";
 
 /**
@@ -38,7 +39,13 @@ export function historyText(items: PersonProject[]): string {
       const head = [`${item.title} (${period(item)})`, item.role, item.part].filter(Boolean).join(" · ");
       const lines = [`■ ${head}`];
       if (item.skills.length > 0) lines.push(`  - 기술 · 도구: ${item.skills.join(", ")}`);
-      for (const line of RETRO_LINES) if (item[line.key]) lines.push(`  - ${line.label}: ${item[line.key].replace(/\s*\n\s*/g, " / ")}`);
+      for (const line of RETRO_LINES) {
+        const text = item[line.key].trim();
+        if (!text) continue;
+        // 여러 줄(글머리표)이면 아래로 들여 쓴다 (TODO 240) — 한 줄로 이으면 긴 글이 읽히지 않는다
+        if (text.includes("\n")) lines.push(`  - ${line.label}:`, ...text.split("\n").filter((row) => row.trim()).map((row) => `      ${row.trim()}`));
+        else lines.push(`  - ${line.label}: ${text}`);
+      }
       if (item.outcome) lines.push(`  - 그 밖의 성과: ${item.outcome}`);
       return lines.join("\n");
     })
@@ -262,7 +269,7 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                             item[line.key] ? (
                               <div key={line.key}>
                                 <dt>{line.label}</dt>
-                                <dd>{item[line.key]}</dd>
+                                <dd><RetroText text={item[line.key]} /></dd>
                               </div>
                             ) : null,
                           )}

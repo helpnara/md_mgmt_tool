@@ -5,6 +5,7 @@ import { personLink } from "../nav";
 import { isLeader, leftLabel } from "../people";
 import type { Contribution, Meta, Project } from "../types";
 import Explain from "./Explain";
+import { RetroField, RetroText } from "./RetroText";
 
 /**
  * 담당과 역할 (TODO 237 · 239) — 사람마다 역할 · 맡은 부분 · 기술 · 도구 · 담당 기간 · 회고(내가 한 일 · 결과).
@@ -134,7 +135,7 @@ export default function ContributionsCard({
                     row[item.key] ? (
                       <div key={item.key}>
                         <dt>{item.label}</dt>
-                        <dd>{row[item.key]}</dd>
+                        <dd><RetroText text={row[item.key]} clamp /></dd>
                       </div>
                     ) : null,
                   )}
@@ -285,19 +286,16 @@ function ContributionForm({
         {!ownerView && <p className="hint contrib-period-hint">담당 기간은 팀장이 고칩니다.</p>}
         {filledFromProject && <p className="hint contrib-period-hint">빈 칸은 과제 기간으로 채워 두었습니다 — 저장하면 그대로 남습니다.</p>}
       </div>
+      {/* 회고 두 칸은 위아래로 · 글에 맞춰 자라는 칸 · 글자 수 · 붙여넣기 정리 (TODO 240) */}
       <div className="contrib-retro-fields">
         {RETRO.map((item) => (
-          <label key={item.key}>
-            {item.label}
-            <textarea
-              rows={2}
-              maxLength={1000}
-              value={retro[item.key]}
-              placeholder={item.placeholder}
-              aria-label={item.label}
-              onChange={(event) => setRetro((prev) => ({ ...prev, [item.key]: event.target.value }))}
-            />
-          </label>
+          <RetroField
+            key={item.key}
+            label={item.label}
+            value={retro[item.key]}
+            placeholder={item.placeholder}
+            onChange={(next) => setRetro((prev) => ({ ...prev, [item.key]: next }))}
+          />
         ))}
       </div>
       {error && <p className="error">{error}</p>}
