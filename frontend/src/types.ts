@@ -1255,9 +1255,45 @@ export interface PersonHistory {
   in_roster: boolean;
   leader: boolean;
   left_on: string | null;
-  summary: { projects: number; current: number; lead: number; done: number; retro_written: number; activities: number; entry_only: number };
+  summary: {
+    projects: number; current: number; lead: number; done: number; retro_written: number; activities: number; entry_only: number;
+    /** 확정한 보고에 올라간 내 과제 — 올해 · 지난해 (TODO 242 A1) */
+    reports_this_year?: number; reports_last_year?: number; year?: string;
+  };
   /** 많이 쓴 기술 · 도구 — 과제 수 (TODO 239) */
   skills: { name: string; count: number }[];
   projects: PersonProject[];
   activities: PersonActivity[];
+}
+
+// ── TODO 242 — 팀원의 내 할 일 · 인정 한 줄 · 보고 횟수 ──────────────────────────
+export interface Contribution {
+  /** 팀장의 인정 한 줄 — 그 사람과 팀장에게만 온다(다른 사람에게는 빈 글) */
+  praise?: string;
+  praise_at?: string | null;
+}
+export interface PersonProject {
+  praise?: string;
+  praise_at?: string | null;
+  /** 확정한 보고에 올라간 횟수 */
+  reports?: number;
+}
+export interface MyWorkProject {
+  id: string;
+  title: string;
+  status: string;
+  role: string;
+  due_date: string | null;
+  days_left: number | null;
+  last_entry: string | null;
+  days_since_entry: number | null;
+  /** 진행중 · 검토중인데 마지막 일지가 stale_days 를 넘었다 */
+  stale: boolean;
+}
+export interface MyWork {
+  name: string;
+  projects: MyWorkProject[];
+  retro_due: { id: string; title: string; completed_at: string }[];
+  praises: { project_id: string; title: string; praise: string; praise_at: string | null; new: boolean }[];
+  stale_days: number;
 }

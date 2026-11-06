@@ -21,7 +21,8 @@ def test_history_collects_projects_roles_retro_and_activities(team):  # noqa: F8
     taken = by_id[later]
     assert taken["from"] == "2026-10-20" and taken["to"] is None and taken["year"] == "2026"  # 맡기 시작한 해
     assert data["summary"] == {"projects": 2, "current": 1, "lead": 1, "done": 1, "retro_written": 1,
-                               "activities": 1, "entry_only": 0}
+                               "activities": 1, "entry_only": 0,
+                               "reports_this_year": 0, "reports_last_year": 0, "year": "2026"}
     assert [item["title"] for item in data["activities"]] == ["데이터 분석 교육"]
     # 예전 담당도 그 사람 이력에 남는다
     former = viewer.get("/api/person-history", params={"name": "나팀원"}).json()

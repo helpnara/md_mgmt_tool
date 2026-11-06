@@ -202,9 +202,10 @@ def _sync_contributions(conn: sqlite3.Connection, project_id: str, meta: dict) -
     for position, row in enumerate(contributions.read(meta)):
         conn.execute(
             "INSERT OR IGNORE INTO project_contribution(project_id, name, role, part, from_date, to_date,"
-            " did, result, skills, derived, current, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " did, result, skills, praise, praise_at, derived, current, position)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (project_id, row["name"], row["role"] or None, row["part"] or None, row["from"], row["to"],
-             row["did"] or None, row["result"] or None, ", ".join(row["skills"]) or None,
+             row["did"] or None, row["result"] or None, ", ".join(row["skills"]) or None, row["praise"] or None, row["praise_at"],
              1 if row["derived"] else 0, 1 if row["current"] else 0, position),
         )
 

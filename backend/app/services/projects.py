@@ -899,6 +899,7 @@ def contributions_of(conn: sqlite3.Connection, project_id: str) -> list[dict[str
          "from": row["from_date"], "to": row["to_date"],
          "did": row["did"] or "", "result": row["result"] or "",
          "skills": rules.split_list(row["skills"]),
+         "praise": row["praise"] or "", "praise_at": row["praise_at"],
          "derived": bool(row["derived"]), "current": bool(row["current"])}
         for row in conn.execute(
             "SELECT * FROM project_contribution WHERE project_id = ? ORDER BY position", (project_id,))
@@ -930,6 +931,8 @@ def update_contribution(
     if member is not None:
         if member != name:
             raise NotYourRowError("자기 줄만 고칠 수 있습니다 — 다른 사람의 역할 · 회고는 그 사람이나 팀장이 고칩니다.")
+        if "praise" in data and (data["praise"] or "") != (found.get("praise") or ""):
+            raise NotYourRowError("인정 한 줄은 팀장이 적습니다.")
         for key in ("from", "to"):
             if key in data and (rules.strict_day(data[key], contrib.LABELS[key]) or None) != found.get(key):
                 raise NotYourRowError("담당 기간은 팀장이 고칩니다 — 역할 · 맡은 부분 · 회고만 고칠 수 있습니다.")

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..deps import get_db
 from ..services import person_history as svc
@@ -16,8 +16,15 @@ router = APIRouter(prefix="/api/person-history", tags=["people"])
 
 
 @router.get("")
-def person_history(name: str = Query(..., min_length=1, max_length=40), conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def person_history(request: Request, name: str = Query(..., min_length=1, max_length=40),
+                   conn: sqlite3.Connection = Depends(get_db)) -> dict:
     name = " ".join(name.split())
     if not name:
         raise HTTPException(status_code=400, detail="사람 이름이 비어 있습니다.")
-    return svc.history(conn, name)
+    data = svc.history(conn, name)
+    # 팀장의 인정 한 줄 (TODO 242 A2) — 그 사람과 팀장만
+    from .. import who
+    from .projects import hide_praise
+
+    data["projects"] = hide_praise([{**item, "name": name} for item in data["projects"]], who.of(request))
+    return data

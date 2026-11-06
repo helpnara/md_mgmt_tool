@@ -13,6 +13,8 @@ import ProblemsBanner from "./ProblemsBanner";
 import { isLeader } from "../people";
 import ViewTabs from "./ViewTabs";
 import Explain from "./Explain";
+import MyWorkCard from "./MyWorkCard";
+import { isMember } from "../me";
 
 /** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
 const PERIODS: [string, string][] = [
@@ -1217,7 +1219,8 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         </p>
       )}
       <div role="tabpanel" className={tab === "status" ? "home-panel home-panel-status" : "home-panel home-panel-todo"}>
-        {tab === "status" ? status : todo}
+        {/* 팀원 PC 의 [할 일] 은 내 할 일 (TODO 242) — 팀장 PC 는 지금처럼 팀 중심 */}
+        {tab === "status" ? status : isMember() ? <MyWorkCard meta={meta} /> : todo}
       </div>
     </section>
   );

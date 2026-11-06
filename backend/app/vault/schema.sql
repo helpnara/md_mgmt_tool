@@ -166,6 +166,9 @@ CREATE TABLE IF NOT EXISTS project_contribution (
   result     TEXT,
   -- 기술 · 도구 (TODO 239) — 쉼표 + 공백으로 이어 적는다
   skills     TEXT,
+  -- 팀장의 인정 한 줄과 적은 날 (TODO 242) — 그 사람과 팀장만 본다(API 가 빼고 준다)
+  praise     TEXT,
+  praise_at  TEXT,
   derived    INTEGER NOT NULL DEFAULT 0,
   current    INTEGER NOT NULL DEFAULT 1,
   position   INTEGER NOT NULL DEFAULT 0,

@@ -129,6 +129,14 @@ export default function ContributionsCard({
                   ))}
                 </div>
               )}
+              {/* 팀장의 인정 한 줄 (TODO 242 A2) — 서버가 그 사람과 팀장에게만 준다 */}
+              {row.praise && editing !== row.name && (
+                <p className="praise-line">
+                  <span className="praise-label">팀장</span>“{row.praise}”
+                  {row.praise_at && <span className="muted"> · {row.praise_at}</span>}
+                  <span className="muted praise-private"> · 이 사람과 팀장만 봅니다</span>
+                </p>
+              )}
               {hasRetro(row) && editing !== row.name && (
                 <dl className="contrib-retro">
                   {RETRO.map((item) =>
@@ -146,6 +154,8 @@ export default function ContributionsCard({
                   project={project}
                   row={row}
                   ownerView={me.role === "owner"}
+                  // 인정 한 줄은 팀장이 팀원에게 — 명부의 팀장 자신의 줄에는 두지 않는다
+                  praiseEditable={me.role === "owner" && !isLeader(meta, row.name)}
                   justDone={justDone}
                   onCancel={() => {
                     setEditing(null);
@@ -170,6 +180,7 @@ function ContributionForm({
   project,
   row,
   ownerView,
+  praiseEditable,
   justDone,
   onCancel,
   onSaved,
@@ -177,6 +188,7 @@ function ContributionForm({
   project: Project;
   row: Contribution;
   ownerView: boolean;
+  praiseEditable: boolean;
   justDone: boolean;
   onCancel: () => void;
   onSaved: (saved: Project) => void;
@@ -196,6 +208,7 @@ function ContributionForm({
   const defaultTo = row.to ?? (row.current && projectEnd && (!defaultFrom || projectEnd >= defaultFrom) ? projectEnd : "");
   const [from, setFrom] = useState(ownerView ? defaultFrom : row.from ?? "");
   const [to, setTo] = useState(ownerView ? defaultTo : row.to ?? "");
+  const [praise, setPraise] = useState(row.praise ?? "");
   const filledFromProject = ownerView && ((!row.from && Boolean(defaultFrom)) || (!row.to && Boolean(defaultTo)));
   const [retro, setRetro] = useState<Record<RetroKey, string>>({ did: row.did, result: row.result });
   const [busy, setBusy] = useState(false);
@@ -211,6 +224,7 @@ function ContributionForm({
         role,
         part,
         skills: chosenSkills,
+        ...(praiseEditable ? { praise: praise.trim() } : {}),
         ...retro,
         // 팀원은 기간을 보내지 않는다(서버가 막는다 — 팀장이 고친다)
         ...(ownerView ? { from: from || null, to: to || null } : {}),
@@ -298,6 +312,15 @@ function ContributionForm({
           />
         ))}
       </div>
+      {praiseEditable && (
+        <label className="praise-field">
+          <span>
+            팀장의 인정 한 줄 <span className="muted">(팀장만 적고, {row.name} 님과 팀장에게만 보입니다 · 200자)</span>
+          </span>
+          <input value={praise} maxLength={200} onChange={(event) => setPraise(event.target.value)}
+                 placeholder="예: 현장 반장님들을 설득해 가이드가 자리 잡게 한 것이 결정적이었음" aria-label="팀장의 인정 한 줄" />
+        </label>
+      )}
       {error && <p className="error">{error}</p>}
       <div className="form-actions">
         <button type="submit" disabled={busy}>

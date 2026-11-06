@@ -16,6 +16,7 @@ from ..services import settings as settings_service
 from ..schemas import ContributionUpdate, ProjectCreate, ProjectUpdate
 from .. import permissions, who
 from ..services import conflicts
+from ..services import my_work as my_work_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -414,23 +415,29 @@ def retro_due(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> d
 
     나 = 팀원 PC 면 그 사람, 서버 PC 면 명부의 팀장(없으면 설정의 작성자). 읽기 전용(누군지 모름)은 빈 목록.
     """
-    user = who.of(request)
-    if user.role == who.MEMBER:
-        name = user.name
-    elif user.role == who.VIEWER:
-        name = ""
-    else:
-        name = settings_service.current_author("")
+    name = _me(request)
     if not name:
         return {"name": "", "items": []}
-    rows = conn.execute(
-        "SELECT p.id, p.title, p.completed_at FROM project p JOIN project_contribution c ON c.project_id = p.id"
-        " WHERE c.name = ? AND p.status = 'done' AND p.completed_at >= DATE(app_today(), '-365 day')"
-        " AND COALESCE(c.did, '') = '' AND COALESCE(c.result, '') = ''"
-        " ORDER BY p.completed_at DESC, p.id DESC",
-        (name,),
-    ).fetchall()
-    return {"name": name, "items": [dict(row) for row in rows]}
+    return {"name": name, "items": my_work_service.retro_due(conn, name)}
+
+
+def _me(request: Request) -> str:
+    """나 = 팀원 PC 면 그 사람, 서버 PC 면 명부의 팀장(없으면 설정의 작성자), 읽기 전용은 아무도 아님."""
+    user = who.of(request)
+    if user.role == who.MEMBER:
+        return user.name
+    if user.role == who.VIEWER:
+        return ""
+    return settings_service.current_author("")
+
+
+@router.get("/my-work")
+def my_work(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """내 할 일 (TODO 242 C1 · C3) — 내 진행 과제(마지막 일지 · 마감) · 회고를 적을 과제 · 팀장의 인정 한 줄. 팀원 PC 의 홈 [할 일] 이 그린다."""
+    name = _me(request)
+    if not name:
+        return {"name": "", "projects": [], "retro_due": [], "praises": [], "stale_days": my_work_service.STALE_DAYS}
+    return {"name": name, **my_work_service.my_work(conn, name)}
 
 
 @router.get("/title-check")
@@ -454,8 +461,17 @@ def next_id(start_date: str | None = Query(None)) -> dict:
     return {"id": svc.next_project_id(year), "year": year}
 
 
+def _praise_visible(user: "who.User", name: str) -> bool:
+    """인정 한 줄을 볼 수 있나 (TODO 242 A2) — 팀장(서버 PC)과 그 사람만. 읽기 전용 · 다른 팀원에게는 빼고 준다."""
+    return user.role == who.OWNER or (user.role == who.MEMBER and user.name == name)
+
+
+def hide_praise(rows: list[dict], user: "who.User") -> list[dict]:
+    return [row if _praise_visible(user, row["name"]) else {**row, "praise": "", "praise_at": None} for row in rows]
+
+
 @router.get("/{project_id}")
-def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def get_project(project_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     row = conn.execute("SELECT * FROM project WHERE id = ?", (project_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.")
@@ -498,7 +514,7 @@ def get_project(project_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
     # 다년도 과제의 줄기 — 앞 단계들 · 다음 단계 · 단계 번호 (TODO 172)
     data["lineage"] = svc.lineage(conn, project_id)
     # 담당과 역할 — 사람마다 역할 · 맡은 부분 · 기술 · 도구 · 담당 기간 · 회고 (TODO 237 · 239)
-    data["contributions"] = svc.contributions_of(conn, project_id)
+    data["contributions"] = hide_praise(svc.contributions_of(conn, project_id), who.of(request))
     # 팀 안에서 쓴 기술 · 도구 — 양식의 골라 넣기 (TODO 239)
     data["known_skills"] = svc.known_skills(conn)
     return data
@@ -528,7 +544,7 @@ def update_contribution(
         raise HTTPException(status_code=423, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return get_project(project_id, conn)
+    return get_project(project_id, request, conn)
 
 
 @router.patch("/{project_id}")
@@ -553,7 +569,7 @@ def update_project(
         raise HTTPException(status_code=423, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    data = get_project(project_id, conn)
+    data = get_project(project_id, request, conn)
     # 제목을 바꿨으면 같은 이름의 과제를 알린다 — 만들 때와 같은 알림 (TODO 214 D11)
     if changes.get("title") and before is not None and data["title"] != before["title"]:
         same = [item["id"] for item in svc.same_title_projects(conn, data["title"], project_id)]

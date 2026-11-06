@@ -398,6 +398,8 @@ class ContributionUpdate(BaseModel):
     result: str | None = None
     # 기술 · 도구 (TODO 239) — 목록이든 쉼표 글이든
     skills: list[str] | str | None = None
+    # 팀장의 인정 한 줄 (TODO 242) — 팀장만
+    praise: str | None = None
     base_updated_at: str | None = None
 
     def changes(self) -> dict[str, Any]:

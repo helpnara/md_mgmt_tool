@@ -42,10 +42,24 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             "role": row["role"] or "", "part": row["part"] or "",
             "did": row["did"] or "", "result": row["result"] or "",
             "skills": rules.split_list(row["skills"]),
+            "praise": row["praise"] or "", "praise_at": row["praise_at"],
             "outcome": row["outcome"] or "",
             "effect_expected": row["effect_expected"], "effect_verified": row["effect_verified"],
             "no_effect": bool(row["no_effect"]),
         })
+    # 보고에 올라간 횟수 (TODO 242 A1) — 확정한 보고만. 233 앞 일지 작성자는 모두 팀장이라 *과제* 기준으로 센다
+    today_year = clock.today().year
+    report_counts: dict[str, dict[str, int]] = {}
+    for r in conn.execute(
+            "SELECT r.project_id, substr(r.report_date, 1, 4) AS y, COUNT(*) AS n FROM report r"
+            " JOIN project_contribution c ON c.project_id = r.project_id AND c.name = ?"
+            " WHERE r.frozen_at IS NOT NULL GROUP BY r.project_id, y", (name,)):
+        report_counts.setdefault(r["project_id"], {})[r["y"]] = r["n"]
+    for item in projects:
+        counts = report_counts.get(item["id"], {})
+        item["reports"] = sum(counts.values())
+    reports_this_year = sum(c.get(str(today_year), 0) for c in report_counts.values())
+    reports_last_year = sum(c.get(str(today_year - 1), 0) for c in report_counts.values())
     owned = {item["id"] for item in projects}
     entry_only = [
         r["project_id"] for r in conn.execute(
@@ -83,6 +97,9 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             "retro_written": sum(1 for item in finished if item["did"] or item["result"]),
             "activities": sum(1 for item in activities if not item["planned"]),
             "entry_only": len(entry_only),
+            "reports_this_year": reports_this_year,
+            "reports_last_year": reports_last_year,
+            "year": str(today_year),
         },
         "skills": top_skills,
         "projects": projects,

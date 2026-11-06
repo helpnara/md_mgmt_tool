@@ -5915,6 +5915,26 @@ async function main() {
         const text = await member.locator(".person-projects").innerText();
         expect(text.includes("둘이 하는 과제") && text.includes("현장 데이터 수집"), `내 이력: ${text.slice(0, 200)}`);
       });
+      await check("팀원 PC 의 홈 [할 일] = 내 할 일 — 진행 과제 · 일지 알림 · [일지 쓰기] · 팀장의 인정 한 줄은 본인만 (242)", async () => {
+        const projects = await call("GET", "/api/projects");
+        const both = projects.find((item) => item.title === "둘이 하는 과제");
+        await call("PUT", `/api/projects/${both.id}/contributions/${encodeURIComponent("가팀원")}`, { praise: "현장 데이터를 꼼꼼히 모음" });
+        await call("PUT", `/api/projects/${both.id}/contributions/${encodeURIComponent("나팀원")}`, { praise: "나팀원에게만" });
+        await member.goto(`${outside}/#/`); await member.reload(); await member.waitForTimeout(1200);
+        const card = member.locator("[data-my-work]");
+        expect((await card.locator("h2").innerText()).includes("가팀원 님의 할 일"), "내 할 일 제목");
+        equal(await member.locator(".home-week").count(), 0, "팀장용 이번 주 할 일은 없다");
+        expect((await card.locator(".my-praise").innerText()).includes("현장 데이터를 꼼꼼히 모음"), "인정 한 줄");
+        expect(!(await card.innerText()).includes("나팀원에게만"), "남의 인정 한 줄은 없다");
+        const row = card.locator(`[data-project="${both.id}"]`);
+        expect((await row.innerText()).includes("일지를 쓸 때가 됐어요"), `일지 알림: ${await row.innerText()}`);
+        await row.getByRole("link", { name: "일지 쓰기" }).click();
+        await member.waitForSelector(".entry-editor", { timeout: 5000 });
+        // 과제 상세 [담당과 역할] — 본인 줄에는 인정 한 줄, 남의 줄에는 없다
+        const mine = member.locator('[data-contributions] [data-person="가팀원"]');
+        expect((await mine.innerText()).includes("현장 데이터를 꼼꼼히 모음"), "본인 줄의 인정 한 줄");
+        equal(await member.locator('[data-contributions] [data-person="나팀원"] .praise-line').count(), 0, "남의 줄");
+      });
     } finally {
       await member.close();
       await relay.close();
@@ -6165,6 +6185,36 @@ async function main() {
       const item = page.locator(".person-project", { hasText: "회고 시험 과제" });
       equal(await item.locator(".retro-more").count(), 0, "이력 화면은 접지 않는다");
       equal(await item.locator(".retro-text li").count(), 12, "이력 화면도 목록");
+    });
+  }
+
+  console.log("\n[60] 팀장의 인정 한 줄 · 이력 채움 · 보고 횟수 (TODO 242)");
+  {
+    const made = (await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제");
+    await check("팀장 양식에 인정 한 줄 — 명부의 팀장 자신의 줄에는 없다 · 저장하면 줄에 보인다 (242 A2)", async () => {
+      await go(`#/projects/${made.id}`);
+      await page.reload(); await page.waitForTimeout(900);
+      const other = page.locator('[data-contributions] [data-person="이수진"]');
+      await other.getByRole("button", { name: /적기|고치기/ }).click();
+      await other.getByLabel("팀장의 인정 한 줄").fill("현장 일정을 끝까지 챙김");
+      await other.getByRole("button", { name: "저장", exact: true }).click();
+      await page.waitForTimeout(800);
+      expect((await other.locator(".praise-line").innerText()).includes("현장 일정을 끝까지 챙김"), "인정 한 줄");
+      const draft = await api.post(`/api/projects/${made.id}/reports/draft`, { report_date: "2026-10-12" });
+      await api.post(`/api/reports/${draft.id}/freeze`);
+    });
+    await check("이력 화면 — 올해 보고 · 과제마다 보고 N회 · 채움 n/m · [채울 칸] 거르기 (242 A1 · B1)", async () => {
+      await go(`#/person/${encodeURIComponent("이수진")}`);
+      await page.reload(); await page.waitForSelector(".person-projects");
+      expect((await page.locator(".person-stats").innerText()).includes("올해 보고 1번"), `요약: ${await page.locator(".person-stats").innerText()}`);
+      const item = page.locator(".person-project", { hasText: "회고 시험 과제" });
+      expect((await item.innerText()).includes("보고 1회"), "과제의 보고 횟수");
+      expect(/채움 \d\/\d/.test(await item.locator(".fill-chip").innerText()), "채움");
+      const chip = page.locator(".gap-chip", { hasText: "역할 빈 과제" });
+      await chip.click();
+      const roles = await page.locator(".person-project .person-project-meta").allInnerTexts();
+      expect(roles.length > 0 && roles.every((text) => text.includes("역할 미정")), `역할 빈 과제만: ${roles}`);
+      await page.getByRole("button", { name: "모두 보기" }).click();
     });
   }
 

@@ -23,6 +23,24 @@ function period(item: PersonProject): string {
   return `${item.from ?? "?"} ~ ${end}`;
 }
 
+/**
+ * 이력 채움 정도 (TODO 242 B1) — 역할 · 맡은 부분 · 기술 · 도구 · 회고 · 그 밖의 성과(끝난 과제만) 가운데 찬 칸.
+ * 진행 중 과제의 회고 · 성과는 아직 쓸 때가 아니라 빈 칸으로 세지 않는다.
+ */
+export function fillOf(item: PersonProject): { filled: number; total: number } {
+  const done = item.status === "done";
+  const slots = [Boolean(item.role), Boolean(item.part), item.skills.length > 0, ...(done ? [hasRetro(item), Boolean(item.outcome)] : [])];
+  return { filled: slots.filter(Boolean).length, total: slots.length };
+}
+
+type Gap = "" | "retro" | "skills" | "role" | "part";
+const GAPS: { key: Exclude<Gap, "">; label: string; test: (item: PersonProject) => boolean }[] = [
+  { key: "retro", label: "회고 빈 과제", test: (item) => item.status === "done" && !hasRetro(item) },
+  { key: "skills", label: "기술 · 도구 빈 과제", test: (item) => item.skills.length === 0 },
+  { key: "role", label: "역할 빈 과제", test: (item) => !item.role },
+  { key: "part", label: "맡은 부분 빈 과제", test: (item) => !item.part },
+];
+
 function hasRetro(item: PersonProject): boolean {
   return Boolean(item.did || item.result);
 }
@@ -92,6 +110,8 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   const [data, setData] = useState<History | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [year, setYear] = useState("all");
+  // 빈 칸 거르기 (TODO 242 B1)
+  const [gap, setGap] = useState<Gap>("");
   // 고른 과제 — 처음에는 회고를 적은 과제 전부
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState<string | null>(null);
@@ -111,7 +131,12 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   }, [name]);
 
   const years = useMemo(() => [...new Set((data?.projects ?? []).map((item) => item.year))].sort().reverse(), [data]);
-  const shown = useMemo(() => (data?.projects ?? []).filter((item) => year === "all" || item.year === year), [data, year]);
+  const gapTest = GAPS.find((item) => item.key === gap)?.test;
+  const shown = useMemo(
+    () => (data?.projects ?? []).filter((item) => (year === "all" || item.year === year) && (!gapTest || gapTest(item))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, year, gap],
+  );
   const chosen = shown.filter((item) => picked.has(item.id));
   const me = getMe();
   const mine = (me.role === "member" && me.name === name) || (me.role === "owner" && meta.leader === name);
@@ -175,7 +200,37 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
           <span><b>{data.summary.lead}</b> 주관</span>
           <span title="끝난 과제 가운데 회고를 적은 것">회고 <b>{data.summary.retro_written}</b> / {data.summary.done}</span>
           <span><b>{data.summary.activities}</b> 교육 · 행사</span>
+          {/* 보고에 올라간 내 과제 (TODO 242 A1) — 비교는 나의 지난해와만 */}
+          <span title="확정한 보고에 내 과제가 올라간 횟수">
+            올해 보고 <b>{data.summary.reports_this_year ?? 0}</b>번
+            {(data.summary.reports_last_year ?? 0) > 0 && <span className="muted"> · 지난해 {data.summary.reports_last_year}번</span>}
+          </span>
         </div>
+        {/* 채울 칸 (TODO 242 B1) — 누르면 그 과제만 */}
+        {GAPS.some((item) => data.projects.some(item.test)) && (
+          <div className="gap-bar">
+            <span className="muted">채울 칸</span>
+            {GAPS.map((item) => {
+              const count = data.projects.filter(item.test).length;
+              return count > 0 ? (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={gap === item.key ? "gap-chip on" : "gap-chip"}
+                  aria-pressed={gap === item.key}
+                  onClick={() => setGap(gap === item.key ? "" : item.key)}
+                >
+                  {item.label} {count}
+                </button>
+              ) : null;
+            })}
+            {gap && (
+              <button type="button" className="linkish" onClick={() => setGap("")}>
+                모두 보기
+              </button>
+            )}
+          </div>
+        )}
         <Explain
           id="person-history"
           lead={<>맡았던 과제(지금 · 예전)를 <b>맡기 시작한 해</b>별로 모았습니다. 과제를 골라 <b>[글로 복사]</b> · <b>[표로 복사]</b>로 업무 이력 · 성과를 정리할 수 있습니다.</>}
@@ -251,6 +306,15 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                         <a href={projectLink(item.id)} className="person-project-title">{item.title}</a>
                         <span className="muted">{item.id}</span>
                         <span className="grow" />
+                        {(item.reports ?? 0) > 0 && <span className="report-count" title="확정한 보고에 올라간 횟수">보고 {item.reports}회</span>}
+                        {(() => {
+                          const fill = fillOf(item);
+                          return (
+                            <span className={fill.filled === fill.total ? "fill-chip full" : "fill-chip"} title="역할 · 맡은 부분 · 기술 · 도구 · (끝난 과제는) 회고 · 그 밖의 성과 가운데 찬 칸">
+                              채움 {fill.filled}/{fill.total}
+                            </span>
+                          );
+                        })()}
                         <span className="contrib-period">{period(item)}{item.derived && <span className="muted"> · 시작일부터</span>}</span>
                       </div>
                       <div className="person-project-meta">
@@ -263,6 +327,12 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                         {item.outcome && <span>그 밖의 성과 · {item.outcome}</span>}
                         {effect && <span className="muted">효과 {effect.text}{effect.verified ? "" : " · 기대"}</span>}
                       </div>
+                      {item.praise && (
+                        <p className="praise-line">
+                          <span className="praise-label">팀장</span>“{item.praise}”
+                          {item.praise_at && <span className="muted"> · {item.praise_at}</span>}
+                        </p>
+                      )}
                       {hasRetro(item) ? (
                         <dl className="contrib-retro">
                           {RETRO_LINES.map((line) =>

@@ -25,6 +25,8 @@ TEXT_KEYS = ("role", "part", *RETRO_KEYS)
 PART_MAX = 100
 # 기술 · 도구 (TODO 239 ②) — 태그와 같은 쉼표 규칙, 하나에 30자 · 10개까지
 SKILL_MAX = 30
+# 팀장의 인정 한 줄 (TODO 242 A2) — 팀장만 적고, 그 사람과 팀장만 본다
+PRAISE_MAX = 200
 SKILLS_MAX = 10
 RETRO_MAX = 1000
 OUTCOME_MAX = 200
@@ -32,7 +34,7 @@ OUTCOME_MAX = 200
 LABELS = {
     "role": "역할", "part": "맡은 부분", "from": "담당 시작", "to": "담당 끝",
     "did": "내가 한 일", "result": "결과", "outcome": "그 밖의 성과",
-    "skills": "기술 · 도구",
+    "skills": "기술 · 도구", "praise": "인정 한 줄",
 }
 
 
@@ -63,6 +65,8 @@ def _row(raw: dict[str, Any]) -> dict[str, Any] | None:
         "to": _day(raw.get("to")),
         **{key: _text(raw.get(key)) for key in RETRO_KEYS},
         "skills": rules.split_list(raw.get("skills"))[:SKILLS_MAX],
+        "praise": _text(raw.get("praise")),
+        "praise_at": _day(raw.get("praise_at")),
     }
 
 
@@ -100,7 +104,7 @@ def read(meta: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _blank(name: str) -> dict[str, Any]:
-    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in RETRO_KEYS}, "skills": []}
+    return {"name": name, "role": "", "part": "", "from": None, "to": None, **{key: "" for key in RETRO_KEYS}, "skills": [], "praise": "", "praise_at": None}
 
 
 def materialize(meta: dict[str, Any]) -> list[dict[str, Any]]:
@@ -113,7 +117,7 @@ def to_meta(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for row in rows:
         item: dict[str, Any] = {"name": row["name"]}
-        for key in ("role", "part", "skills", "from", "to", *RETRO_KEYS):
+        for key in ("role", "part", "skills", "from", "to", *RETRO_KEYS, "praise", "praise_at"):
             if row.get(key):
                 item[key] = row[key]
         out.append(item)
@@ -194,6 +198,13 @@ def check_update(row: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"담당 끝({out['to']})이 담당 시작({out['from']})보다 빠릅니다.")
     if "skills" in data:
         out["skills"] = clean_skills(data["skills"])
+    if "praise" in data:
+        praise = rules.one_line(data["praise"], LABELS["praise"], PRAISE_MAX)
+        if praise != out.get("praise"):
+            from . import clock
+
+            out["praise_at"] = clock.today().isoformat() if praise else None
+        out["praise"] = praise
     for key in RETRO_KEYS:
         if key in data:
             text = rules.check_body(_text(data[key]), LABELS[key]) or ""
