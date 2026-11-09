@@ -12,7 +12,7 @@ from ..config import (
     STATUSES, get_settings,
 )
 from ..deps import get_db
-from .. import share
+from .. import share, who
 from ..services import buildinfo
 from ..services import home as home_service
 from ..services import settings as settings_service
@@ -55,6 +55,11 @@ def meta(request: Request, response: Response, conn: sqlite3.Connection = Depend
             {"name": person.get("name"), "left_reason": person.get("left_reason"), "left_on": person.get("left_on")}
             for person in body.get("people_left") or []
         ]
+    elif who.of(request).role == who.LEADER:
+        # 팀장 PC (TODO 247) — 쓰기는 열지만 서버 폴더 경로 · 공유 접속 수는 관리자(서버 PC)의 것
+        body["readonly"] = False
+        body["vault"] = ""
+        body["share"] = None
     else:
         body["readonly"] = False
         body["share"] = {"url": share.share_url(request.url.port), **share.visitors_today()} if share.enabled() else None
@@ -193,7 +198,10 @@ def me(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
 
     user = who.of(request)
     projects = permissions.member_projects(conn, user.name) if user.role == who.MEMBER else []
-    return {"role": user.role, "name": user.name, "projects": projects}
+    # 팀장 · 팀원 PC 는 머리에 "팀장 · 10.x.x.x" 를 보인다 (TODO 247) — 어느 PC 로 알아봤는지
+    ip = request.client.host if request.client and user.role in (who.LEADER, who.MEMBER) else ""
+    return {"role": user.role, "name": user.name, "projects": projects, "ip": ip,
+            "share": share.enabled()}
 
 
 @router.post("/reindex")

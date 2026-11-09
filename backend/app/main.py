@@ -190,7 +190,8 @@ async def shared_reads(request: Request, call_next):
 async def readonly_share(request: Request, call_next):
     """누가 무엇을 할 수 있나 — 지키는 곳은 여기 하나 (TODO 191 · 233). 규칙은 `share.py` · `who.py` · `permissions.py`.
 
-    * 팀장(서버 PC 안) — 모두. 읽기 전용 공유 전에도 지금도 같다.
+    * 관리자(서버 PC 안) — 모두. 읽기 전용 공유 전에도 지금도 같다(247 전에는 "팀장" 이라 불렀다).
+    * 팀장(명부의 팀장 IP, TODO 247) — 서버 운영(`permissions.ADMIN_ONLY_*`)을 뺀 모두.
     * 팀원(명부에 등록한 IP) — 읽기는 읽기 전용과 같고(막힌 것도 같다, 자기 쓰다 만 글만 열린다), 쓰기는 **허용 목록**(담당 과제의
       진행일지 · 첨부 · 개요)만. 고친 것은 쓰기 기록(edits)에 남는다 — 팀장 홈의 "팀원이 고친 것".
     * 그 밖(등록 안 한 사내 PC · 가상 PC · 공용 PC) — 읽기만 (191).
@@ -198,7 +199,7 @@ async def readonly_share(request: Request, call_next):
     """
     user = who.identify(request)
     request.state.user = user
-    request.state.readonly = user.role != who.OWNER
+    request.state.readonly = not user.manages
     path = request.url.path
     writing = request.method not in share.SAFE_METHODS
     if writing and not share.origin_ok(request.headers.get("origin")):
@@ -207,6 +208,16 @@ async def readonly_share(request: Request, call_next):
         response = await call_next(request)
         if writing and response.status_code < 400:
             _record_edit(user, request.method, path)
+        return response
+    if user.role == who.LEADER:
+        # 팀장 PC (TODO 247) — 서버 운영만 빼고 관리자와 같다. 바깥에서 왔으므로 접속 기록에도 남긴다
+        if permissions.admin_only(path):
+            response = JSONResponse({"detail": permissions.ADMIN_ONLY_DETAIL}, status_code=403)
+        else:
+            response = await call_next(request)
+            if writing and response.status_code < 400:
+                _record_edit(user, request.method, path)
+        share.record_access(request.client.host if request.client else "?", request.method, path, response.status_code, user.name)
         return response
     member = user.role == who.MEMBER
     decision = None
@@ -234,7 +245,7 @@ def _record_edit(user: "who.User", method: str, path: str) -> None:
     action = permissions.action_of(method, path)
     if action is None:
         return
-    name = settings_service.current_author() or "팀장"
+    name = (user.name if user.role == who.LEADER else "") or settings_service.current_author() or "팀장"
     edits_service.record(name, user.role, action[0], action[1], action[2])
 
 

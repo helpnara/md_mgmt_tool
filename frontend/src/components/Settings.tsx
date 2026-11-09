@@ -3,6 +3,7 @@ import { api } from "../api";
 import { backTarget } from "../nav";
 import type { Health, Meta } from "../types";
 import { formatBytes } from "../upload";
+import { isAdmin } from "../me";
 import { useEditedUnsaved } from "../util";
 import AiPromptCard from "./AiPromptCard";
 import ReportTemplateCard from "./ReportTemplateCard";
@@ -247,6 +248,17 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           <span className="hint">어디에 쌓이는가 · 잘못됐을 때 어디서 되찾는가</span>
         </h2>
         <div className="settings-grid">
+          {!isAdmin() && (
+            // 팀장 PC (TODO 247) — 서버 운영 칸은 서버 PC 에만 선다
+            <div className="card admin-only-note" data-admin-note>
+              <h2>서버 운영은 서버 PC 에서</h2>
+              <p className="hint">
+                지금은 <b>팀장 PC</b> 로 열었습니다. <b>데이터 위치 · 자동 백업 폴더 · 백업에서 되살리기 · 팀장 지정과 팀장 PC 주소</b>는
+                서버를 맡은 쪽(서버 PC 에서 연 화면 — 관리자)이 합니다. 전체 백업 내려받기 · 이전 버전 · 삭제 보관함은 여기서도 됩니다.
+              </p>
+            </div>
+          )}
+          {isAdmin() && (
           <div className="card">
             <h2>데이터 위치</h2>
             <p className="hint">
@@ -254,6 +266,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
             </p>
             <code className="vault-box">{meta.vault}</code>
           </div>
+          )}
 
           <div className="card">
             <h2>전체 백업</h2>
@@ -272,8 +285,8 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
             </div>
           </div>
 
-          <RestoreCard />
-          <BackupCard />
+          {isAdmin() && <RestoreCard />}
+          {isAdmin() && <BackupCard />}
           <VersionsCard />
           <TrashCard />
         </div>
@@ -305,6 +318,8 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
               팀원은 읽기만 할 수 있고, 이 PC 의 브라우저는 그대로 씁니다. 접속 기록은 데이터 폴더의 <code>.logs/access-날짜.jsonl</code> 에
               주소 · 시각 · 끝점만 남습니다.
             </>
+          ) : !isAdmin() ? (
+            <>팀장 PC 로 접속 중입니다 — 공유 주소 · 오늘 접속 수는 서버 PC 의 이 자리에 보입니다.</>
           ) : (
             <>팀원에게 읽기 전용으로 보여 주려면 <code>run.bat --share</code> 로 켜세요 (도움말 → "팀원에게 보여 주려면?").</>
           )}

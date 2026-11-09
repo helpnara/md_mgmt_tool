@@ -75,7 +75,10 @@ def export_project(
     - backup: 과제 폴더 원본 구조 그대로 — **읽기 전용 공유의 바깥에는 열지 않는다** (TODO 206 ㉙, 결정 ④):
       화면에 없는 수기 파일까지 통째로 나간다. md · zip · html 내보내기는 바깥에서도 된다.
     """
-    if format == "backup" and share.is_remote(request):
+    from .. import who
+
+    # 팀장 PC(TODO 247)는 팀의 자료를 맡은 쪽이라 연다 — 전체 백업을 내려받을 수 있는 것과 같다
+    if format == "backup" and share.is_remote(request) and not who.of(request).manages:
         raise HTTPException(status_code=403, detail=share.READONLY_DETAIL)
     try:
         if format == "zip":

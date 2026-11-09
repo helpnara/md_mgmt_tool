@@ -344,10 +344,15 @@ export interface Person {
 
 /** 지금 누구인가 (TODO 233) — `/api/me` */
 export interface Me {
-  role: "owner" | "member" | "viewer";
+  /** owner = 관리자(서버 PC) · leader = 팀장(명부의 팀장 IP, TODO 247) · member = 팀원 · viewer = 읽기 */
+  role: "owner" | "leader" | "member" | "viewer";
   name: string;
   /** 팀원이면 담당인 과제 번호 — 그 과제에서만 [수정] 이 선다 */
   projects: string[];
+  /** 팀장 · 팀원 PC 의 주소 — 머리의 "팀장 · 10.x.x.x" (TODO 247) */
+  ip?: string;
+  /** 공유를 켰나 — 켰을 때만 서버 PC 머리에 "관리자" 를 보인다 */
+  share?: boolean;
 }
 
 /** 오늘 바깥에서 접속한 주소 (TODO 233) — 설정 → 명부 */

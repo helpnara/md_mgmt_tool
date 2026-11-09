@@ -6,6 +6,7 @@ import { useEditedUnsaved } from "../util";
 import { DATE_MAX, DATE_MIN, LEFT_REASONS, dateProblem, isDeparted, isFuture, personNameProblem } from "../inputRules";
 import NameDialog, { changeCounts } from "./NameDialog";
 import { enterToSave } from "./enterSave";
+import { isAdmin } from "../me";
 
 /** IP 칸의 글 → 주소 목록 (TODO 233). 쉼표 · 띄어쓰기로 여럿 */
 function parseIps(text: string): string[] {
@@ -20,7 +21,7 @@ function ipProblem(ip: string): string | null {
 }
 
 /** PC 주소 칸 — 쓰는 동안의 글자는 그대로 두고(쉼표를 막 친 순간), 주소 목록만 위로 올린다 */
-function IpCell({ ips, onChange, problem }: { ips: string[]; onChange: (ips: string[]) => void; problem: string | null }) {
+function IpCell({ ips, onChange, problem, locked }: { ips: string[]; onChange: (ips: string[]) => void; problem: string | null; locked?: string }) {
   const [text, setText] = useState(ips.join(", "));
   useEffect(() => {
     // 바깥(오늘 접속한 주소 [붙이기] · 다시 읽기)에서 바뀌었으면 글자를 따라간다
@@ -38,7 +39,8 @@ function IpCell({ ips, onChange, problem }: { ips: string[]; onChange: (ips: str
         placeholder="개인 PC 만"
         aria-label="PC 주소"
         aria-invalid={problem ? true : undefined}
-        title={problem ?? "이 사람 PC 의 IP. 여기서 연 화면은 이 사람으로 보고, 담당 과제의 진행일지 · 첨부 · 개요를 고칠 수 있습니다. 여럿이면 쉼표로"}
+        disabled={Boolean(locked)}
+        title={locked ?? problem ?? "이 사람 PC 의 IP. 여기서 연 화면은 이 사람으로 보고, 담당 과제의 진행일지 · 첨부 · 개요를 고칠 수 있습니다. 여럿이면 쉼표로"}
       />
       {problem && <span className="field-error ip-error">{problem}</span>}
     </>
@@ -58,7 +60,11 @@ type Asking = { kind: "handover"; from: string; unfinished: number } | { kind: "
  * 계정 칸은 TODO 126 에서 뺐다 — 로그인을 *이름 + 사번* 으로 가기로 했기 때문이다.
  * 그때 칸을 새로 만들면 그 전 데이터가 비므로, 자리만 미리 잡아 둔다.
  */
+const LEADER_LOCKED = "팀장 줄의 이름 · PC 주소 · 떠난 날은 서버 PC(관리자)에서만 바꿉니다 (TODO 247)";
+
 export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
+  // 팀장 PC 에서는 팀장 지정 · 팀장 줄을 잠근다 — 서버가 403 으로 지키고, 화면은 미리 잠가 헛걸음을 막는다 (TODO 247)
+  const admin = isAdmin();
   const [people, setPeople] = useState<Person[]>([]);
   // 마지막으로 불러온 명부 — 이것과 다르면 "저장 안 함" (TODO 211 ②). 여러 명의 떠난 날을 고치다 메뉴를 누르면 사라졌다
   const [saved, setSaved] = useState<Person[] | null>(null);
@@ -247,8 +253,11 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         <br />
         이름은 한 칸에 한 사람 — 쉼표 · <code>/ \</code> 없이 40자까지. 사번은 비워 두거나, 적으면 사람마다 달라야 합니다.
         <br />
-        <b>팀장</b> — 이름 왼쪽 동그라미로 <b>한 명</b>을 고릅니다. 고르면 이 PC(서버 PC)에서 쓴 기록의 작성자가 그 이름이 되고, 면담 대상에서 빠지며,
+        <b>팀장</b> — 이름 왼쪽 동그라미로 <b>한 명</b>을 고릅니다. 고르면 서버 PC · 팀장 PC 에서 쓴 기록의 작성자가 그 이름이 되고, 면담 대상에서 빠지며,
         화면 곳곳에 "팀장" 딱지가 붙습니다(과제 · 숫자는 그대로 셉니다). 팀장이 바뀌면 동그라미를 옮기면 됩니다.
+        <br />
+        <b>팀장 PC</b> — 팀장 줄에 적은 IP 는 <b>팀장 PC</b> 입니다. 서버를 따로 두었을 때 그 PC 에서 연 화면은 <b>서버 운영(데이터 위치 · 자동 백업 폴더 ·
+        되살리기)을 뺀 모든 것</b>을 할 수 있습니다. 팀장 지정 · 팀장 PC 주소 · 팀장의 떠난 날은 <b>서버 PC(관리자)에서만</b> 바꿉니다 (TODO 247).
         <br />
         <b>PC 주소</b> — 팀원 <b>개인 PC 의 IP</b> 를 적으면, 그 PC 에서 공유 주소로 연 화면은 그 사람으로 보고{" "}
         <b>담당 과제의 진행일지 · 첨부 · 개요</b>를 고칠 수 있습니다. 본인 면담은 보기만 됩니다. 가상 PC · 공용 PC 는 적지 마세요 —
@@ -315,6 +324,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                     className="leader-pick"
                     checked={Boolean(person.leader)}
                     onChange={() => setLeader(index)}
+                    disabled={!admin}
                     aria-label={`${person.name || "이 사람"} 을(를) 팀장으로`}
                     title={person.leader ? "팀장" : "팀장으로 고르기 — 한 명만"}
                   />
@@ -322,7 +332,8 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                     value={person.name}
                     onChange={(e) => update(index, "name", e.target.value)}
                     aria-invalid={rowProblems[index]?.name ? true : undefined}
-                    title={rowProblems[index]?.name ?? undefined}
+                    disabled={!admin && Boolean(person.leader)}
+                    title={!admin && person.leader ? LEADER_LOCKED : (rowProblems[index]?.name ?? undefined)}
                   />
                   </div>
                   {rowProblems[index]?.name && <span className="field-error person-name-error">{rowProblems[index].name}</span>}
@@ -345,7 +356,12 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                   )}
                 </td>
                 <td className="person-ip-cell">
-                  <IpCell ips={person.ips ?? []} onChange={(ips) => setIps(index, ips)} problem={ipProblems[index]} />
+                  <IpCell
+                    ips={person.ips ?? []}
+                    onChange={(ips) => setIps(index, ips)}
+                    problem={ipProblems[index]}
+                    locked={!admin && person.leader ? LEADER_LOCKED : undefined}
+                  />
                 </td>
                 <td className="person-left-cell">
                   {/* 나란히 놓는 일은 안쪽 div 가 한다 — `<td>` 에 display:flex 를 걸면
@@ -357,6 +373,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                       min={DATE_MIN}
                       max={DATE_MAX}
                       onChange={(e) => update(index, "left_on", e.target.value)}
+                      disabled={!admin && Boolean(person.leader)}
                       title="전배·퇴사한 날. 비워 두면 지금 있는 사람입니다. 앞날을 적으면 그날부터 떠난 사람으로 봅니다."
                       aria-invalid={rowProblems[index]?.left ? true : undefined}
                     />
@@ -393,6 +410,8 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                   )}
                   <button data-write
                     className="ghost small danger"
+                    disabled={!admin && Boolean(person.leader)}
+                    title={!admin && person.leader ? LEADER_LOCKED : undefined}
                     onClick={() => setPeople((prev) => prev.filter((_, i) => i !== index))}
                   >
                     빼기
@@ -436,7 +455,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                     >
                       <option value="">사람 고르기</option>
                       {people
-                        .filter((person) => person.name.trim() && !isDeparted(person))
+                        .filter((person) => person.name.trim() && !isDeparted(person) && (admin || !person.leader))
                         .map((person) => (
                           <option key={person.name} value={person.name}>
                             {person.name}

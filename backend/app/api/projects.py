@@ -463,8 +463,8 @@ def next_id(start_date: str | None = Query(None)) -> dict:
 
 
 def _praise_visible(user: "who.User", name: str) -> bool:
-    """인정 한 줄을 볼 수 있나 (TODO 242 A2) — 팀장(서버 PC)과 그 사람만. 읽기 전용 · 다른 팀원에게는 빼고 준다."""
-    return user.role == who.OWNER or (user.role == who.MEMBER and user.name == name)
+    """인정 한 줄을 볼 수 있나 (TODO 242 A2) — 관리자 · 팀장(247)과 그 사람만. 읽기 전용 · 다른 팀원에게는 빼고 준다."""
+    return user.manages or (user.role == who.MEMBER and user.name == name)
 
 
 def hide_praise(rows: list[dict], user: "who.User") -> list[dict]:

@@ -5954,6 +5954,37 @@ async function main() {
         const done = member.locator("[data-my-work] .my-recent-done");
         expect((await done.innerText()).includes("둘이 하는 과제"), `최근 마친 과제: ${await member.locator("[data-my-work]").innerText()}`);
       });
+      // ── TODO 247 — 같은 PC 를 명부의 팀장으로 바꾸면 '팀장 PC' — 서버 운영만 빼고 모두 ──
+      await call("PUT", "/api/people", { people: [{ name: "가팀원", ips: ["127.0.0.2"], leader: true }, { name: "나팀원" }] });
+      await check("팀장 PC — 머리에 '팀장 · 주소', 읽기 띠 없음, 남의 과제도 [기록 추가] (247)", async () => {
+        await member.goto(`${outside}/#/projects/${theirs.id}`); await member.reload(); await member.waitForTimeout(1200);
+        const chip = await member.locator("[data-role-chip]").innerText();
+        expect(chip.includes("팀장") && chip.includes("127.0.0.2"), `딱지: ${chip}`);
+        equal(await member.locator(".readonly-band").count(), 0, "읽기 띠 없음");
+        equal(await member.getByRole("button", { name: "기록 추가" }).filter({ visible: true }).count(), 1, "남의 과제 [기록 추가]");
+        equal(await member.getByRole("button", { name: "과제 정보 수정" }).filter({ visible: true }).count(), 1, "[과제 정보 수정]");
+      });
+      await check("팀장 PC 의 설정 — 명부 · 면담 설정은 있고, 데이터 위치 · 자동 백업 · 되살리기 대신 '서버 PC 에서' 안내 · 팀장 줄 잠김 (247)", async () => {
+        await member.goto(`${outside}/#/settings`); await member.reload(); await member.waitForTimeout(1500);
+        expect((await member.locator("[data-admin-note]").innerText()).includes("서버 PC"), "서버 운영 안내");
+        equal(await member.locator("[data-restore-card]").count(), 0, "되살리기 없음");
+        equal(await member.locator(".vault-box").count(), 0, "데이터 위치 없음");
+        const leaderRow = member.locator('tr[data-name="가팀원"]');
+        equal(await leaderRow.locator(".leader-pick").isDisabled(), true, "팀장 동그라미 잠김");
+        equal(await leaderRow.getByLabel("PC 주소").isDisabled(), true, "팀장 PC 주소 잠김");
+        equal(await member.locator('tr[data-name="나팀원"]').getByLabel("PC 주소").isDisabled(), false, "팀원 PC 주소는 고칠 수 있다");
+        const r = await member.evaluate(async () => (await fetch("/api/backup/restore", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "0".repeat(32) }) })).status);
+        equal(r, 403, "되살리기는 서버가 막는다");
+      });
+      await check("서버 PC 는 공유 중이면 머리에 '관리자' (247)", async () => {
+        const owner = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+        try {
+          await owner.goto(`${inside}/#/`); await owner.waitForTimeout(1200);
+          equal((await owner.locator("[data-role-chip]").innerText()).trim(), "관리자", "관리자 딱지");
+        } finally {
+          await owner.close();
+        }
+      });
     } finally {
       await member.close();
       await relay.close();

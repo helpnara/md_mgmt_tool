@@ -126,3 +126,39 @@ def action_of(method: str, path: str) -> tuple[str, str | None, int | None] | No
 
 def member_fields_ok(changes: dict) -> bool:
     return set(changes) <= MEMBER_PROJECT_FIELDS
+
+
+# ── 관리자(서버 PC)만 — 서버 운영 (TODO 247) ───────────────────────────────
+# 팀장 PC(명부의 팀장 IP)는 팀을 맡은 일은 모두 하지만, 서버를 다루는 일은 서버 PC 에 남긴다 — 데이터 통째로 바꾸기 ·
+# 서버 폴더 훑기 · 자동 백업 폴더, 그리고 **팀장 지정 · 팀장 PC 주소**(팀장 PC 에서 바꾸면 스스로 잠기거나 다른 PC 를 팀장으로 만든다).
+ADMIN_ONLY_DETAIL = ("서버 PC(관리자)에서만 할 수 있습니다 — 데이터 위치 · 자동 백업 폴더 · 백업에서 되살리기 · "
+                     "팀장 지정과 팀장 PC 주소는 서버를 맡은 쪽의 일입니다.")
+ADMIN_ONLY_PREFIXES = ("/api/backup/restore", "/api/folders")
+ADMIN_SETTINGS_KEYS = frozenset({"backup_dir", "backup_keep", "backup_keep_weekly", "backup_keep_monthly",
+                                 "backup_every_hours", "backup_skip_assets"})
+
+
+def admin_only(path: str) -> bool:
+    return any(path == prefix or path.startswith(prefix + "/") for prefix in ADMIN_ONLY_PREFIXES)
+
+
+def settings_change_denied(changes: dict, stored: dict) -> bool:
+    """팀장이 보낸 설정 저장에 **바뀐** 자동 백업 칸이 있나. 화면이 그대로 실어 보낸 같은 값은 괜찮다."""
+    return any(key in changes and changes[key] != stored.get(key) for key in ADMIN_SETTINGS_KEYS)
+
+
+def leader_signature(people: list[dict]) -> tuple | None:
+    """명부의 팀장 줄 — 이름 · PC 주소 · 떠난 날. 팀장 PC 에서 저장한 명부는 이것이 그대로여야 한다 (TODO 247)."""
+    from .who import normalize_ip
+
+    for person in people:
+        if not person.get("leader"):
+            continue
+        ips = []
+        for raw in person.get("ips") or []:
+            try:
+                ips.append(normalize_ip(raw))
+            except ValueError:
+                ips.append(str(raw))
+        return (str(person.get("name") or "").strip(), tuple(sorted(ips)), str(person.get("left_on") or "").strip())
+    return None

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { getMe } from "../me";
+import { getMe, isManager } from "../me";
 import { personLink, projectLink } from "../nav";
 import { isLeader, leftLabel } from "../people";
 import type { Contribution, Meta, Milestone, Project } from "../types";
@@ -33,7 +33,7 @@ type RetroKey = (typeof RETRO)[number]["key"];
 export function myName(meta: Meta): string {
   const me = getMe();
   if (me.role === "member") return me.name;
-  if (me.role === "owner") return meta.leader || "";
+  if (isManager(me)) return meta.leader || "";
   return "";
 }
 
@@ -84,7 +84,7 @@ export default function ContributionsCard({
   }, [openFor]);
 
   const canEdit = (name: string) =>
-    me.role === "owner" || (me.role === "member" && name === me.name && me.projects.includes(project.id));
+    isManager(me) || (me.role === "member" && name === me.name && me.projects.includes(project.id));
 
   return (
     <div className="card contributions-card" ref={card} data-contributions>
@@ -165,9 +165,9 @@ export default function ContributionsCard({
                 <ContributionForm
                   project={project}
                   row={row}
-                  ownerView={me.role === "owner"}
+                  ownerView={isManager(me)}
                   // 인정 한 줄은 팀장이 팀원에게 — 명부의 팀장 자신의 줄에는 두지 않는다
-                  praiseEditable={me.role === "owner" && !isLeader(meta, row.name)}
+                  praiseEditable={isManager(me) && !isLeader(meta, row.name)}
                   justDone={justDone}
                   onCancel={() => {
                     setEditing(null);

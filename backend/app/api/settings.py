@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, StrictBool
 
 from ..deps import get_db
@@ -66,9 +66,16 @@ def read_settings() -> dict:
 
 
 @router.put("")
-def update_settings(payload: SettingsUpdate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def update_settings(payload: SettingsUpdate, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """설정 저장은 쓰기 잠금 안에서 (TODO 202 ㉓) — 기록 추가가 명부에 이름을 더하는 것과 겹치면 한쪽이 사라졌다."""
     changes = payload.model_dump(exclude_unset=True)
+    # 팀장 PC (TODO 247) — 자동 백업 칸은 관리자(서버 PC)만 바꾼다(명부의 팀장 줄은 /api/people 이 지킨다)
+    from .. import permissions, who
+
+    if who.of(request).role == who.LEADER:
+        stored = svc.load()
+        if permissions.settings_change_denied(changes, stored):
+            raise HTTPException(status_code=403, detail=permissions.ADMIN_ONLY_DETAIL)
     if "project_code" in changes:
         try:
             changes["project_code"] = svc.validate_project_code(changes["project_code"])

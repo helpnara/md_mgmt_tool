@@ -217,7 +217,7 @@ export default function App() {
     // 지금 누구인가 (TODO 233) — meta 와 함께 받아 화면이 서기 전에 둔다. 못 받으면(옛 서버) 읽기 전용이면 읽기, 아니면 팀장
     Promise.all([api.meta(), api.me().catch(() => null)])
       .then(([loaded, who]) => {
-        setMe(who ?? { role: loaded.readonly ? "viewer" : "owner", name: "", projects: [] });
+        setMe(who ?? { role: loaded.readonly ? "viewer" : "owner", name: "", projects: [], ip: "", share: false });
         setMeInfo(getMe());
         // 읽기 전용 공유 (191) — 화면이 서기 **전에** body 에 건다. 자식 화면의 effect 가 부모보다 먼저 돌기 때문이다.
         // 팀원이 담당 과제를 고치는 중이면(ProjectDetail 이 readonly 를 뗐다, TODO 233) 다시 걸지 않는다 — 저장 뒤 meta 를 다시 읽어도 단추가 사라지지 않게
@@ -330,6 +330,17 @@ export default function App() {
         {meta.vault && (
           <span className="vault-path" title={`데이터 위치: ${meta.vault}`}>
             {meta.vault}
+          </span>
+        )}
+        {/* 누구로 열었나 (TODO 247) — 팀장 PC 는 "팀장 · 주소", 공유를 켠 서버 PC 는 "관리자" */}
+        {meInfo.role === "leader" && (
+          <span className="role-chip role-leader" data-role-chip title="명부의 팀장 PC 로 알아봤습니다 — 서버 운영(데이터 위치 · 자동 백업 폴더 · 되살리기 · 팀장 지정)은 서버 PC 에서 합니다">
+            팀장{meInfo.ip ? ` · ${meInfo.ip}` : ""}
+          </span>
+        )}
+        {meInfo.role === "owner" && meInfo.share && (
+          <span className="role-chip role-admin" data-role-chip title="서버 PC 에서 연 화면 — 모든 것 + 서버 운영">
+            관리자
           </span>
         )}
       </header>

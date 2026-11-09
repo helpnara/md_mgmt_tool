@@ -56,7 +56,7 @@ def test_ip_rules_in_the_roster(team):
 
 def test_who_am_i(team):
     me = team["member"].get("/api/me").json()
-    assert me == {"role": "member", "name": "가팀원", "projects": [team["mine"]]}
+    assert me == {"role": "member", "name": "가팀원", "projects": [team["mine"]], "ip": MEMBER_IP, "share": True}
     assert team["viewer"].get("/api/me").json()["role"] == "viewer"
     assert team["owner"].get("/api/me").json()["role"] == "owner"
     # 팀원도 화면 전체로는 읽기 전용이다 — 담당 과제에서만 단추가 선다
@@ -247,16 +247,52 @@ def test_leader_is_not_a_meeting_target(team):
     assert rows["가팀원"]["leader"] is False
 
 
-def test_leader_laptop_is_member_rights_but_marked(team):
-    owner = team["owner"]
-    # 팀장 줄에 노트북 IP — 권한은 팀원(담당 과제만), 고친 것은 "팀장" 으로 표시
+def test_leader_pc_has_team_rights_but_not_server_admin(team):
+    """TODO 247 — 서버를 운영 서버로 따로 두면 팀장 PC 는 바깥이다. 명부의 팀장 IP 는 **팀장**: 서버 운영만 빼고 모두.
+    (235 ② 에서는 팀장 IP 를 팀원 권한으로 두었다 — 팀장 PC 가 곧 서버 PC 이던 때의 결정.)"""
+    owner, leader = team["owner"], team["member"]
     owner.put("/api/people", json={"people": [{"name": "가팀원", "ips": [MEMBER_IP], "leader": True}, {"name": "나팀원"}]})
-    member = team["member"]
-    assert member.get("/api/me").json()["role"] == "member"
-    assert member.put("/api/settings", json={"author": "x"}).status_code == 403
-    member.post(f"/api/projects/{team['mine']}/entries", json={"title": "노트북에서"})
-    items = owner.get("/api/edits/recent").json()["items"]
-    assert items[0]["name"] == "가팀원" and items[0]["leader"] is True
+    me = leader.get("/api/me").json()
+    assert me["role"] == "leader" and me["name"] == "가팀원" and me["ip"] == MEMBER_IP
+    meta = leader.get("/api/meta").json()
+    assert meta["readonly"] is False and meta["vault"] == "" and meta["share"] is None  # 서버 폴더 · 접속 수는 관리자 것
+
+    # 팀을 맡은 일 — 남의 과제 · 설정 · 명부의 팀원 · 면담 · 누가 고쳤나 · 전체 백업
+    assert leader.patch(f"/api/projects/{team['theirs']}", json={"status": "on_hold"}).status_code == 200
+    assert leader.put("/api/settings", json={"report_weekday": 3}).status_code == 200
+    rows = leader.get("/api/people").json()["people"]
+    for row in rows:
+        if row["name"] == "나팀원":
+            row["ips"] = ["10.0.0.7"]
+    assert leader.put("/api/people", json={"people": rows}).status_code == 200
+    assert leader.get("/api/meetings").status_code == 200
+    assert leader.get("/api/edits/recent").status_code == 200
+    assert leader.get("/api/backup?assets=none").status_code == 200
+    assert leader.get("/api/people/visitors").status_code == 200  # 팀원 PC 주소를 붙이는 자리
+
+    # 서버 운영 — 관리자(서버 PC)만
+    assert leader.put("/api/settings", json={"backup_dir": "D:/백업"}).status_code == 403
+    assert leader.post("/api/backup/restore", json={"token": "0" * 32}).status_code == 403
+    assert leader.get("/api/folders").status_code == 403
+    for change in ({"leader": False}, {"ips": ["10.0.0.99"]}, {"left_on": "2026-10-01"}):
+        rows = leader.get("/api/people").json()["people"]
+        for row in rows:
+            if row["name"] == "가팀원":
+                row.update(change)
+        res = leader.put("/api/people", json={"people": rows})
+        assert res.status_code == 403 and "서버 PC" in res.json()["detail"], change
+    rows = leader.get("/api/people").json()["people"]
+    for row in rows:
+        row["leader"] = row["name"] == "나팀원"
+    assert leader.put("/api/people", json={"people": rows}).status_code == 403  # 다른 사람을 팀장으로
+    # 관리자는 그대로 모두
+    assert owner.put("/api/settings", json={"backup_keep": 9}).status_code == 200
+
+    # 팀장이 고친 것은 홈 "팀원이 고친 것" 에 섞이지 않는다 — 작성자는 팀장 이름
+    leader.post(f"/api/projects/{team['theirs']}/entries", json={"title": "팀장 PC 에서"})
+    assert all(item["name"] != "가팀원" for item in owner.get("/api/edits/recent").json()["items"])
+    entries = owner.get(f"/api/projects/{team['theirs']}/entries").json()
+    assert any(item.get("author") == "가팀원" for item in (entries["items"] if isinstance(entries, dict) else entries))
 
 
 def test_roster_shows_the_migrated_leader(team):

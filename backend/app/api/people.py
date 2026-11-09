@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from ..deps import get_db
@@ -65,7 +65,7 @@ def list_people(conn: sqlite3.Connection = Depends(get_db)) -> dict:
 # 잠금 밖이면 명부 저장과 기록 추가(명부에 이름을 더한다)가 겹칠 때 한쪽이 사라졌다.
 
 @router.put("")
-def replace_people(payload: PeopleUpdate, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def replace_people(payload: PeopleUpdate, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     # 화면이 안 보내는 칸(account, TODO 126 · ips, TODO 233)은 지금 값을 물려준다.
     current = {person["name"]: person for person in settings_service.people()}
     rows = []
@@ -79,6 +79,12 @@ def replace_people(payload: PeopleUpdate, conn: sqlite3.Connection = Depends(get
         if row.get("leader") is None:
             row["leader"] = bool(kept.get("leader"))
         rows.append(row)
+    # 팀장 PC 에서는 팀장 지정 · 팀장 PC 주소 · 팀장의 떠난 날을 바꾸지 않는다 (TODO 247) — 관리자(서버 PC)의 일
+    from .. import permissions, who
+
+    if who.of(request).role == who.LEADER and \
+            permissions.leader_signature(rows) != permissions.leader_signature(settings_service.people()):
+        raise HTTPException(status_code=403, detail=permissions.ADMIN_ONLY_DETAIL)
     try:
         return {"people": settings_service.save({"people": rows})["people"]}
     except ValueError as exc:  # 틀린 떠난 날 · 겹친 이름 (TODO 205)

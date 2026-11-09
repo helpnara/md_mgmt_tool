@@ -2,7 +2,9 @@
 
 로그인은 없다(사용자 결정 — 사내 IP 는 사람마다 부여 · 관리되고 입사 뒤 거의 바뀌지 않는다). 셋 중 하나다.
 
-* **owner (팀장)** — 서버 PC 안에서 온 요청(127.0.0.1 · 서버 자신의 주소, `share.is_local_host`). 공유를 켜지 않았으면 언제나.
+* **owner (관리자)** — 서버 PC 안에서 온 요청(127.0.0.1 · 서버 자신의 주소, `share.is_local_host`). 공유를 켜지 않았으면 언제나.
+  처음(233)에는 "팀장 PC = 서버 PC" 라 팀장이라 불렀다. 서버를 운영 서버로 따로 두면서(247) 서버 운영까지 하는 **관리자**가 됐다.
+* **leader (팀장)** — 명부에서 **팀장으로 지정한 사람(235)의 IP** 에서 온 요청 (TODO 247). 서버 운영(`permissions.ADMIN_ONLY`)을 뺀 모두.
 * **member (팀원)** — 설정 → 명부에서 그 사람에게 붙인 IP 에서 온 요청. **떠난 사람은 아니다**(194).
 * **viewer (읽기)** — 그 밖의 사내 PC. 지금(191)의 읽기 전용 그대로다. 가상 PC · 공용 PC 는 등록하지 않으므로 여기다(사용자 결정).
 
@@ -19,6 +21,7 @@ from fastapi import Request
 from . import share
 
 OWNER = "owner"
+LEADER = "leader"
 MEMBER = "member"
 VIEWER = "viewer"
 
@@ -32,6 +35,11 @@ class User:
     def key(self) -> str:
         """답 나눠 쓰기(readcache) · 로그의 열쇠 — 팀원은 사람마다 다른 답(자기 면담)을 받는다."""
         return f"member:{self.name}" if self.role == MEMBER else self.role
+
+    @property
+    def manages(self) -> bool:
+        """팀을 맡은 쪽 — 관리자(서버 PC)와 팀장(팀장 PC). 모든 과제 · 명부 · 면담 · 설정 (TODO 247)."""
+        return self.role in (OWNER, LEADER)
 
 
 THE_OWNER = User(OWNER)
@@ -58,7 +66,7 @@ def check_ip(value: object) -> str:
 
 # IP → 이름. 설정 파일이 바뀌면 다시 만든다(파일 시각으로 안다) — 요청마다 설정 파일을 읽지 않게
 _lock = threading.Lock()
-_cache: dict[str, object] = {"stamp": None, "map": {}}
+_cache: dict[str, object] = {"stamp": None, "map": {}, "leader": ""}
 
 
 def _settings_stamp() -> tuple:
@@ -72,29 +80,36 @@ def _settings_stamp() -> tuple:
         return (str(path), None, None)
 
 
-def ip_map() -> dict[str, str]:
-    """지금 있는 사람의 IP → 이름. 떠난 사람(떠난 날이 오늘이거나 지남)의 IP 는 넣지 않는다."""
+def _load() -> tuple[dict[str, str], str]:
     from .services import settings as settings_service
 
     stamp = _settings_stamp()
     with _lock:
         if _cache["stamp"] == stamp:
-            return dict(_cache["map"])  # type: ignore[arg-type]
+            return dict(_cache["map"]), str(_cache["leader"])  # type: ignore[arg-type]
     mapping: dict[str, str] = {}
+    leader = ""
     for person in settings_service.people():
         if settings_service.has_left(person):
             continue
+        if person.get("leader"):
+            leader = person["name"]
         for ip in person.get("ips") or []:
             mapping.setdefault(ip, person["name"])
     with _lock:
-        _cache.update({"stamp": stamp, "map": mapping})
-    return dict(mapping)
+        _cache.update({"stamp": stamp, "map": mapping, "leader": leader})
+    return dict(mapping), leader
+
+
+def ip_map() -> dict[str, str]:
+    """지금 있는 사람의 IP → 이름. 떠난 사람(떠난 날이 오늘이거나 지남)의 IP 는 넣지 않는다."""
+    return _load()[0]
 
 
 def forget() -> None:
     """시험 · 명부 저장 뒤 — 다음 요청이 다시 읽게."""
     with _lock:
-        _cache.update({"stamp": None, "map": {}})
+        _cache.update({"stamp": None, "map": {}, "leader": ""})
 
 
 def identify(request: Request) -> User:
@@ -107,8 +122,12 @@ def identify(request: Request) -> User:
         ip = normalize_ip(client.host)
     except ValueError:
         return A_VIEWER
-    name = ip_map().get(ip)
-    return User(MEMBER, name) if name else A_VIEWER
+    mapping, leader = _load()
+    name = mapping.get(ip)
+    if not name:
+        return A_VIEWER
+    # 명부의 팀장이면 팀장 (TODO 247) — 팀장 PC 가 서버 PC 와 다를 때
+    return User(LEADER, name) if name == leader else User(MEMBER, name)
 
 
 def of(request: Request) -> User:

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { copyText, COPY_FAILED } from "../clipboard";
-import { getMe } from "../me";
+import { getMe, isManager } from "../me";
 import { backTarget, projectLink, setPageTitle } from "../nav";
 import { notifyError } from "../notify";
 import { toTsv } from "../tsv";
@@ -196,9 +196,9 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   );
   const chosen = shown.filter((item) => picked.has(item.id));
   const me = getMe();
-  const mine = (me.role === "member" && me.name === name) || (me.role === "owner" && meta.leader === name);
-  const canWrite = me.role === "owner" || mine;
-  const canEditRow = (id: string) => me.role === "owner" || (mine && me.projects.includes(id));
+  const mine = (me.role === "member" && me.name === name) || (isManager(me) && meta.leader === name);
+  const canWrite = isManager(me) || mine;
+  const canEditRow = (id: string) => isManager(me) || (mine && me.projects.includes(id));
   // 팀원 PC 의 **자기** 이력 (TODO 243 B4) — 과제 상세(233)처럼 이 화면에서만 읽기 전용을 풀어 [적기] 가 보이게.
   // 팀장 단추([data-owner-only])는 그대로 숨는다. 숨기는 것은 편의 — 막는 것은 서버(자기 줄만, 담당 과제만)
   const memberOwn = me.role === "member" && mine && me.projects.length > 0;
@@ -408,8 +408,8 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                           <ContributionForm
                             project={editing.project}
                             row={row}
-                            ownerView={me.role === "owner"}
-                            praiseEditable={me.role === "owner" && !data.leader}
+                            ownerView={isManager(me)}
+                            praiseEditable={isManager(me) && !data.leader}
                             justDone={false}
                             onCancel={() => setEditing(null)}
                             onSaved={() => {
