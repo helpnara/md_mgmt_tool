@@ -53,6 +53,7 @@
   --danger-500: #C80003;
   --danger-600: #930002;
   --danger-700: #740002;
+  --danger-800: #530001;
   /* 보라 — 보고 · AI (Nimbus AI generative) */
   --ai-50: #F6F3FE;
   --ai-100: #E2DCFA;
@@ -106,9 +107,11 @@
 
   /* 모서리 — 단추 · 칸 6 · 카드 8 · 알약 */
   --radius-sm: 4px;
-  --radius-control: 6px;
+  --radius-control: 8px;
   --radius: 8px;
   --radius-pill: 999px;
+  /* 초점 링 — Nimbus utils-focus */
+  --focus-ring: 0 0 0 3px var(--primary-300);
   /* 그림자 — Nimbus 0 ~ 5 단계 */
   --shadow-1: 0 0 1px 0 var(--neutral-500);
   --shadow-2: 0 0 2px 0 var(--neutral-500);
@@ -2576,3 +2579,95 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
 .author-card .form-row { max-width: 480px; }
 /* 팀원별 표와 아래 속성별 · 그룹별 사이 (TODO 249) */
 .home-members + .home-slices { margin-top: 16px; }
+
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   부품 층 (TODO 251) — Nimbus 의 *부품 생김새* 를 지금 쓰는 이름에 입힌다.
+   수치는 Nimbus 가 npm 에 낸 실제 스타일(@nimbus-ds/styles 9.70, MIT)에서 쟀다. 250 은 값, 이 층은 모양이다.
+   화면 코드는 그대로 — 이 층만 걷으면 250 의 모습으로 돌아간다. 맨 끝에 두어 앞의 규칙을 덮는다.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 단추 — 높이 32 · 모서리 8 · 안쪽 6 · 12 · 글자 500 · 바뀔 때 0.15초 ──────────────────
+   이름 없는 단추 · ghost · small · report · commit 만 — 칩 · 탭 · 링크 모양 단추는 제 모양을 지킨다 */
+:is(button:not([class]), button.ghost, button.small, button.report, button.commit, button.primary, .button-like) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  min-height: 32px; padding: 6px 12px; border-radius: var(--radius-control);
+  font-weight: 500; line-height: 20px; white-space: nowrap; text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+button:hover { filter: none; }
+/* 주 단추(파랑) — 올리면 hover, 누르면 pressed */
+button:not([class]):hover:not(:disabled), button.small:not(.ghost):not(.report):not(.commit):hover:not(:disabled) { background: var(--primary-600); border-color: var(--primary-600); }
+button:not([class]):active:not(:disabled) { background: var(--primary-700); border-color: var(--primary-700); }
+/* 기본 단추(Nimbus neutral) — 회색 바탕 + 회색 테두리 */
+button.ghost, .button-like.ghost { background: var(--neutral-100); border-color: var(--neutral-400); color: var(--neutral-900); }
+button.ghost:hover:not(:disabled), .button-like.ghost:hover { background: var(--neutral-300); border-color: var(--neutral-500); }
+button.ghost.on { background: var(--primary-50); border-color: var(--primary-500); color: var(--primary-600); }
+/* 위험 — 연분홍 바탕 + 빨간 테두리 + 짙은 빨강 글자 */
+button.ghost.danger { background: var(--danger-100); border-color: var(--danger-500); color: var(--danger-800); }
+button.ghost.danger:hover:not(:disabled) { background: var(--danger-200); border-color: var(--danger-600); }
+/* 보고(보라) · 확정(갈색) — 같은 짜임으로 올리면 짙게 */
+button.report:hover:not(:disabled) { background: var(--ai-600); border-color: var(--ai-600); }
+button.report.ghost { background: var(--ai-50); border-color: var(--ai-300); color: var(--ai-600); }
+button.report.ghost:hover:not(:disabled) { background: var(--ai-100); border-color: var(--ai-500); }
+button.commit:hover:not(:disabled) { background: var(--confirm-600); border-color: var(--confirm-600); }
+/* 작은 단추 — 높이 28 · 12px */
+:is(button.small, .button-like.small) { min-height: 28px; padding: 4px 8px; font-size: var(--fs-xs); line-height: 16px; }
+/* 파일 첨부 — 주 단추와 같은 테두리 짜임 */
+.attach-button { background: var(--surface); border-color: var(--primary-500); color: var(--primary-500); }
+.attach-button:hover:not(:disabled) { background: var(--primary-50); }
+/* 링크 모양의 주 단추(.button-like) */
+.button-like:not(.ghost) { background: var(--primary-500); border: 1px solid var(--primary-500); color: var(--neutral-0); }
+.button-like:not(.ghost):hover { background: var(--primary-600); border-color: var(--primary-600); }
+/* 쓸 수 없을 때 — 반투명 대신 Nimbus 의 꺼진 색 */
+button:disabled { opacity: 1; cursor: not-allowed; }
+:is(button:not([class]), button.ghost, button.small, button.report, button.commit):disabled {
+  background: var(--neutral-200); border-color: var(--neutral-300); color: var(--neutral-600);
+}
+/* 초점 — 연파랑 3px 링 (자판으로 옮길 때만) */
+button:focus-visible, a:focus-visible, .button-like:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ── 입력 칸 — 높이 32 · 모서리 8 · 초점 링 ─────────────────────────────────────── */
+:is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]), select) {
+  min-height: 32px; padding: 5px 8px; border-radius: var(--radius-control); line-height: 20px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+textarea { border-radius: var(--radius-control); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+:is(input, select, textarea):hover:not(:disabled):not(:focus) { border-color: var(--neutral-500); }
+:is(input, select, textarea):focus { outline: none; border-color: var(--primary-500); box-shadow: var(--focus-ring); }
+:is(input, select, textarea):disabled { background: var(--neutral-200); border-color: var(--neutral-300); color: var(--neutral-600); }
+input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--warning-500); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); }
+
+/* ── 카드 · 표 — 테두리 대신 2px 그림자 윤곽 ───────────────────────────────────── */
+.card { border-color: transparent; box-shadow: var(--shadow-2); }
+.grid { border-color: transparent; box-shadow: var(--shadow-2); }
+.grid th { font-weight: 500; }
+
+/* ── 딱지(tag) — 높이 20 · 알약 · 같은 색 계열 테두리 ──────────────────────────────── */
+:is(.status, .tag) {
+  display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; line-height: 18px;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+}
+
+/* ── 거르기 칩(chip) — 높이 24 · 모서리 4 · 회색 바탕 + 테두리 ───────────────────────── */
+:is(.dash-chip, .stat-chip, .tag-pick, .people-pill, .skills-quiet-chip) {
+  min-height: 24px; border-radius: var(--radius-sm); background: var(--neutral-100); border: 1px solid var(--neutral-400);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+:is(.dash-chip, .stat-chip, .tag-pick, .people-pill, .skills-quiet-chip):hover:not(.on) { background: var(--neutral-300); border-color: var(--neutral-500); }
+:is(.dash-chip, .stat-chip, .people-pill).on { background: var(--primary-50); border-color: var(--primary-500); color: var(--primary-600); }
+.dash-chip.more { background: transparent; border-style: dashed; }
+.skills-quiet-chip { color: var(--warning-700); border-color: var(--warning-300); background: var(--warning-50); }
+.skills-quiet-chip.on { background: var(--warning-100); border-color: var(--warning-600); }
+
+/* ── 알림(alert) — 연한 바탕 + 같은 계열 테두리 · 모서리 8 ─────────────────────────── */
+:is(.warn-banner, .author-notice, .home-backup-warn) {
+  border-radius: var(--radius); border: 1px solid var(--warning-300); background: var(--warning-100); color: var(--warning-800);
+}
+
+/* ── 탭 — 아래 2px 기준선 · 올리면 연파랑 · 초점 링 ──────────────────────────────── */
+.view-tabs { border-bottom: 2px solid var(--neutral-300); }
+.view-tab { margin-bottom: -2px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; transition: background-color 0.15s ease; }
+.view-tab:hover { background: var(--primary-50); }
+.view-tab:focus-visible { outline: none; box-shadow: var(--focus-ring); }
