@@ -2785,6 +2785,23 @@ async function main() {
     }
   });
 
+  await check("카드 제목 바로 아래 설명은 어느 카드든 같은 간격 (255)", async () => {
+    const gaps = [];
+    for (const hash of ["#/settings", "#/settings?tab=backup", "#/settings?tab=check", "#/settings?tab=report", "#/help"]) {
+      await go(hash);
+      await page.waitForTimeout(500);
+      gaps.push(...(await page.evaluate(() => [...document.querySelectorAll(".card")].flatMap((card) => {
+        const row = [...card.children].find((el) => el.matches("h2, .icon-title, .card-head, .card-title-row"));
+        const next = row?.nextElementSibling;
+        if (!next || !next.matches("p.hint, .card-intro, p.explain") || !next.offsetHeight) return [];
+        return [{ card: row.innerText.trim().slice(0, 16), gap: Math.round(next.getBoundingClientRect().top - row.getBoundingClientRect().bottom) }];
+      }))));
+    }
+    expect(gaps.length >= 15, `잰 카드 수: ${gaps.length}`);
+    const odd = gaps.filter((g) => g.gap !== 8);
+    equal(odd.length, 0, `8px 가 아닌 카드: ${JSON.stringify(odd)}`);
+  });
+
   await check("홈 [할 일] 의 목록은 3줄까지, '나머지 n건 ▾' 로 그 자리에서 편다 (249 ④)", async () => {
     await go("#/");
     for (const list of await page.locator(".home-week ul").all()) {

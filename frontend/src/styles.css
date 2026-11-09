@@ -110,6 +110,8 @@
   --radius-control: 8px;
   --radius: 8px;
   --radius-pill: 999px;
+  /* 카드 제목 → 바로 아래 설명 (TODO 255) — 모든 카드에서 같은 간격 */
+  --title-desc-gap: 8px;
   /* 초점 링 — Nimbus utils-focus */
   --focus-ring: 0 0 0 3px var(--primary-300);
   /* 그림자 — Nimbus 0 ~ 5 단계 */
@@ -2706,3 +2708,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 /* ── 겹침 전수 조사(TODO 252 마무리)에서 고친 것 ─────────────────────────────── */
 /* 홈 [할 일] — 긴 과제 이름이 한 줄로 버티다 카드 밖으로 66px 나가고 화면에 가로 스크롤이 생겼다(1100px). 목록의 이름은 줄을 바꾼다 */
 .home-plans a, .home-week-col li > a { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+
+
+/* ── 카드 제목과 바로 아래 설명의 간격 (TODO 255) ─────────────────────────────────
+   전수 측정(62 카드)에서 0 · 12 · 20 · 24px 로 제각각이었다 — 단추가 있는 머리줄(.card-head)은 0, 아이콘 제목은 12,
+   도움말 · 보고 기준처럼 맨 문단이면 브라우저 기본 여백이 더해져 20 ~ 24. 설명은 제목에 딸린 글이라 **8px 하나로** 맞춘다.
+   표 · 목록 · 폼처럼 설명이 아닌 것이 오면 지금 간격 그대로다. */
+.card > :is(h2, .icon-title, .card-head, .card-title-row):has(+ :is(p.hint, .card-intro, p.explain)) { margin-bottom: 0; }
+.card > :is(h2, .icon-title, .card-head, .card-title-row) + :is(p.hint, .card-intro, p.explain) { margin-top: var(--title-desc-gap); }
+/* 팀원역량 [기록] 의 면담 한 줄(248) — 설명이 아니라 상자라, 거르기 줄 밑에 붙지 않게 12px */
+.card-head + .skills-meeting-line { margin-top: 12px; }
