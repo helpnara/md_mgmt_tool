@@ -15,6 +15,16 @@ from ..services import person_history as svc
 router = APIRouter(prefix="/api/person-history", tags=["people"])
 
 
+@router.get("/year")
+def year_review(name: str = Query(..., min_length=1, max_length=40), year: str = Query(..., pattern=r"^\d{4}$"),
+                conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """나의 한 해 (TODO 244 A3) — 누구나(이력 화면과 같다). 인정 한 줄 · 면담은 넣지 않는다."""
+    name = " ".join(name.split())
+    if not name:
+        raise HTTPException(status_code=400, detail="사람 이름이 비어 있습니다.")
+    return svc.year_review(conn, name, year)
+
+
 @router.get("")
 def person_history(request: Request, name: str = Query(..., min_length=1, max_length=40),
                    conn: sqlite3.Connection = Depends(get_db)) -> dict:

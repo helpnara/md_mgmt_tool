@@ -472,6 +472,9 @@ def normalize_day(value: object, field: str = "completed_at") -> str | None:
 
 # 상태 변경 기록에 붙는 태그. 화면이 이 태그로 알아보고 흐리게 세운다.
 STATUS_CHANGE_TAG = "상태변경"
+# 도구가 남긴 줄(상태 변경 · 접수 연결)을 빼는 조건 (TODO 244) — 일지 수 · 마지막 일지에 세지 않는다. `e` 는 entry 별칭
+NOT_SYSTEM_ENTRY = ("NOT EXISTS (SELECT 1 FROM entry_tag et JOIN tag t ON t.id = et.tag_id"
+                    f" WHERE et.entry_id = e.id AND t.name = '{STATUS_CHANGE_TAG}')")
 
 
 def _log_status_change(directory: Path, old: str, new: str) -> None:
@@ -915,6 +918,33 @@ def contributions_of(conn: sqlite3.Connection, project_id: str) -> list[dict[str
         for row in conn.execute(
             "SELECT * FROM project_contribution WHERE project_id = ? ORDER BY position", (project_id,))
     ]
+
+
+def done_summary(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
+    """마친 과제 (TODO 244 A4) — 기간(몇 달) · 일지 · 확정 보고 · 담당 · 중간 성과 · 그 밖의 성과 · 실증 효과."""
+    row = conn.execute("SELECT * FROM project WHERE id = ?", (project_id,)).fetchone()
+    if row is None or row["status"] != DONE_STATUS:
+        return None
+    months = None
+    if row["start_date"] and row["completed_at"]:
+        from datetime import date as _d
+
+        try:
+            a, b = _d.fromisoformat(row["start_date"][:10]), _d.fromisoformat(row["completed_at"][:10])
+            months = max(1, round(((b - a).days + 1) / 30.4))
+        except ValueError:
+            months = None
+    count = lambda sql: conn.execute(sql, (project_id,)).fetchone()[0]  # noqa: E731
+    contribs = contributions_of(conn, project_id)
+    return {
+        "start": row["start_date"], "end": row["completed_at"], "months": months,
+        "entries": count(f"SELECT COUNT(*) FROM entry e WHERE e.project_id = ? AND {NOT_SYSTEM_ENTRY}"),
+        "reports": count("SELECT COUNT(*) FROM report WHERE project_id = ? AND frozen_at IS NOT NULL"),
+        "people": sum(1 for item in contribs if item["current"]) or len(contribs),
+        "milestones": sum(len(item["milestones"]) for item in contribs),
+        "outcome": row["outcome"] or "",
+        "effect_verified": None if row["no_effect"] else row["effect_verified"],
+    }
 
 
 def known_skills(conn: sqlite3.Connection) -> list[str]:

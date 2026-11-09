@@ -436,7 +436,8 @@ def my_work(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dic
     """내 할 일 (TODO 242 C1 · C3) — 내 진행 과제(마지막 일지 · 마감) · 회고를 적을 과제 · 팀장의 인정 한 줄. 팀원 PC 의 홈 [할 일] 이 그린다."""
     name = _me(request)
     if not name:
-        return {"name": "", "projects": [], "retro_due": [], "praises": [], "stale_days": my_work_service.STALE_DAYS}
+        return {"name": "", "projects": [], "retro_due": [], "praises": [], "stale_days": my_work_service.STALE_DAYS,
+                "recent_done": []}
     return {"name": name, **my_work_service.my_work(conn, name)}
 
 
@@ -519,6 +520,8 @@ def get_project(project_id: str, request: Request, conn: sqlite3.Connection = De
     from .. import contributions as contrib
 
     data["star_entries"] = contrib.star_entries(conn, project_id)
+    # 마친 과제 (TODO 244 A4) — 완료된 과제의 [담당과 역할] 위 띠
+    data["done_summary"] = svc.done_summary(conn, project_id) if data["status"] == "done" else None
     # 팀 안에서 쓴 기술 · 도구 — 양식의 골라 넣기 (TODO 239)
     data["known_skills"] = svc.known_skills(conn)
     return data

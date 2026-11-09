@@ -1,6 +1,6 @@
 import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
-import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RetroDue, Visitor } from "./types";
+import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
 
 /**
@@ -218,6 +218,9 @@ export const api = {
     }),
   /** 사람별 이력 — 맡은 과제(역할 · 기간 · 회고) · 교육 이력 (TODO 238) */
   personHistory: (name: string) => request<PersonHistory>(`/api/person-history?name=${encodeURIComponent(name)}`),
+  /** 나의 한 해 (TODO 244) */
+  yearReview: (name: string, year: string) =>
+    request<YearReview>(`/api/person-history/year?name=${encodeURIComponent(name)}&year=${year}`),
   /** 내 할 일 — 내 진행 과제 · 일지 알림 · 회고를 적을 과제 · 인정 한 줄 (TODO 242) */
   myWork: () => request<MyWork>("/api/projects/my-work"),
   /** 회고를 적을 과제 — 내 것, 끝난 지 1년 안 (TODO 237) */

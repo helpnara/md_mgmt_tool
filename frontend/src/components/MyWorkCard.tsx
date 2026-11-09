@@ -86,6 +86,22 @@ export default function MyWorkCard({ meta }: { meta: Meta }) {
         </ul>
       )}
 
+      {/* 최근 마친 내 과제 (TODO 244 A4) — 끝난 지 30일 안 */}
+      {(work.recent_done?.length ?? 0) > 0 && (
+        <>
+          <p className="hint">
+            <b>최근 마친 과제 {work.recent_done!.length}건</b> — 수고하셨습니다. 과제의 [담당과 역할]에 마친 과제 요약이 있습니다.
+          </p>
+          <ul className="home-stale my-recent-done">
+            {work.recent_done!.map((item) => (
+              <li key={item.id}>
+                <span className="due">완료 {item.completed_at}</span>
+                <a href={projectLink(item.id)}>{item.title}</a>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {work.retro_due.length > 0 && (
         <>
           <p className="hint">

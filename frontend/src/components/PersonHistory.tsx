@@ -10,6 +10,7 @@ import { effectText } from "../util";
 import Explain from "./Explain";
 import { RetroText } from "./RetroText";
 import { ContributionForm } from "./ContributionsCard";
+import YearCard from "./YearCard";
 import type { Project } from "../types";
 import StatusBadge from "./StatusBadge";
 
@@ -81,31 +82,67 @@ export function historyRows(items: PersonProject[]): string[][] {
 }
 
 /**
- * 다듬기 프롬프트 (TODO 239 ③) — 고른 과제로 업무 이력 문장을 다듬어 달라는 글. **먼저 보여 주고** 복사한다(71 과 같은 원칙).
- * 사람 이름 · 효과 금액은 넣지 않는다. 기록에 없는 내용 · 숫자를 만들지 말라고 적는다.
+ * 업무 이력 · 성과 정리 프롬프트 — STAR (TODO 244 B6, 239 ③ 을 고도화). 241 실험의 v2 를 화면 자료로 옮겼다.
+ * **먼저 보여 주고** 복사한다(71 과 같은 원칙). 사람 이름 · 효과 금액은 넣지 않는다 — 기록에 없는 숫자를 만들지 말라고 적는다.
+ * 고른 과제가 여럿이면 과제마다 한 묶음씩 정리해 달라고 한다(사람 · 숫자가 섞이지 않게).
  */
 export function refinePrompt(items: PersonProject[]): string {
   const head = [
-    "아래는 한 사람이 맡았던 과제의 기록입니다. 업무 이력 · 성과 정리에 쓸 문장으로 다듬어 주세요.",
+    "[역할]",
+    "당신은 제조 · 데이터 분석 업무를 잘 아는 업무 성과 정리 코치입니다.",
+    "아래 [기록]은 사내 과제 관리 도구에 한 사람이 남긴 과제 기록입니다. 이 사람이 직접 한 일을 STAR(상황 · 과제 · 행동 · 결과)로 정리해 주세요.",
+    items.length > 1 ? `과제가 ${items.length}개입니다 — 과제마다 아래 [출력 형식]을 한 묶음씩 따로 써 주세요.` : "",
     "",
-    "[부탁]",
-    "- 과제마다 2~3줄로, 무엇을 · 어떻게 · 결과(숫자)가 드러나게 써 주세요.",
-    "- 기록에 없는 내용이나 숫자는 만들지 마세요. 모르는 것은 비워 두세요.",
-    "- 사내 시스템 이름 · 금액 · 다른 사람 이름은 쓰지 마세요.",
-    "- 문장 끝은 \"~함 · ~했음\" 같은 짧은 개조식으로 써 주세요.",
+    "[기록 읽는 법]",
+    "- 배경 → S(상황), 목표 → T(과제). 역할 · 맡은 부분 · 내가 한 일 → A(행동). 결과 · 중간 성과 · 그 밖의 성과 → R(결과).",
+    "- 성과 후보 일지는 본인이 성과로 표시한 진행일지입니다. 행동 · 결과의 근거로 쓰세요.",
+    "- 기간이 '~ 지금'이면 진행 중인 과제입니다. 끝난 성과처럼 쓰지 마세요.",
+    "",
+    "[반드시 지킬 것]",
+    "1. 기록에 있는 사실과 숫자만 씁니다. 숫자를 만들거나 부풀리지 않습니다. 필요한데 없는 숫자는 [확인 필요]에 적습니다.",
+    "2. 결과는 가능하면 전 → 후(건수 · % · 시간)로. 비율을 계산했다면 계산식을 [확인 필요]에 함께 적습니다.",
+    "3. 팀 성과와 본인 몫을 가릅니다. 팀 결과를 쓸 때는 \"팀 성과 중 본인 담당: …\" 처럼 본인 몫을 밝힙니다.",
+    "4. 사람 이름 · 부서명 · 라인 번호 · 사내 시스템명은 일반화합니다(예: \"냉연 2라인\" → \"냉연 공정 라인\"). 금액은 쓰지 않습니다.",
+    "5. 업무 나열이 아니라 성과 중심으로. \"~ 담당\" · \"~ 참여\" 로 끝나는 불릿, \"기여함\" · \"효과가 있었다\" 같은 막연한 말은 쓰지 않습니다.",
+    "6. 불릿은 명사형 개조식(~구축, ~단축, ~달성), 한 줄 50~80자, 과제당 3~5개. 형식은 \"[무엇을] [어떻게(방법 · 도구)] → [결과(수치)]\".",
+    "",
+    "[출력 형식] — 마크다운으로, 과제마다",
+    "1. 한 줄 요약 (50자 이내 — 무엇을 해서 어떤 숫자를 바꿨는지)",
+    "2. 머리 표 (프로젝트명 · 기간 · 역할 · 기술 · 도구)",
+    "3. STAR 표 (단계 | 내용 1~2줄 | 근거 — 기록의 어느 칸)",
+    "4. 불릿 3~5개",
+    "5. 말로 설명할 때 (60~90초 분량, 말하듯이)",
+    "6. 확인 필요 (기록만으로 확정할 수 없는 것 · 계산한 비율의 식 · 일반화한 이름)",
+    "",
+    "[출력 전 점검] 모든 숫자가 기록에 있는가 · 남의 일을 본인 행동으로 쓰지 않았는가 · 이름 · 금액이 남지 않았는가 · 불릿이 \"~담당 · ~참여\" 로 끝나지 않는가",
     "",
     "[기록]",
-  ];
+  ].filter((line, index, all) => line !== "" || all[index - 1] !== "");
   const body = items.map((item, index) => {
-    const lines = [`${index + 1}. 과제: ${item.title} (${period(item)})`];
-    const facts = [item.role && `역할: ${item.role}`, item.part && `맡은 부분: ${item.part}`,
-      item.skills.length > 0 && `기술 · 도구: ${item.skills.join(", ")}`].filter(Boolean);
-    if (facts.length > 0) lines.push(`   ${facts.join(" / ")}`);
-    for (const line of RETRO_LINES) if (item[line.key]) lines.push(`   ${line.label}: ${item[line.key].replace(/\s*\n\s*/g, " / ")}`);
-    if (item.outcome) lines.push(`   그 밖의 성과: ${item.outcome}`);
+    const lines = [`## 과제 ${index + 1}. ${item.title}`, `- 기간: ${period(item)}${item.status === "done" ? " (완료)" : ""}`];
+    if (item.context?.background) lines.push(`- 배경: ${item.context.background}`);
+    if (item.context?.goal) lines.push(`- 목표: ${item.context.goal}`);
+    if (item.role) lines.push(`- 역할: ${item.role}`);
+    if (item.part) lines.push(`- 맡은 부분: ${item.part}`);
+    if (item.skills.length > 0) lines.push(`- 기술 · 도구: ${item.skills.join(", ")}`);
+    if ((item.milestones?.length ?? 0) > 0) {
+      lines.push("- 중간 성과:");
+      for (const m of item.milestones!) lines.push(`  - ${m.date} ${m.text}`);
+    }
+    if ((item.star_entries?.length ?? 0) > 0) {
+      lines.push("- 성과 후보 일지:");
+      for (const e of item.star_entries!) lines.push(`  - ${e.date} ${e.title}${e.first_line ? ` — ${e.first_line}` : ""}`);
+    }
+    for (const line of RETRO_LINES) {
+      const text = item[line.key].trim();
+      if (!text) continue;
+      if (text.includes("\n")) lines.push(`- ${line.label}:`, ...text.split("\n").filter((row) => row.trim()).map((row) => `  ${row.trim().startsWith("- ") ? row.trim() : `- ${row.trim()}`}`));
+      else lines.push(`- ${line.label}: ${text}`);
+    }
+    if (item.outcome) lines.push(`- 그 밖의 성과: ${item.outcome}`);
     return lines.join("\n");
   });
-  return [...head, ...body].join("\n") + "\n";
+  return [...head, ...body].join("\n").replace(/\n{3,}/g, "\n\n") + "\n";
 }
 
 export default function PersonHistory({ meta, name, back }: { meta: Meta; name: string; back: string | null }) {
@@ -117,7 +154,7 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   // 고른 과제 — 처음에는 회고를 적은 과제 전부
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState<string | null>(null);
-  // 다듬기 프롬프트 — 열면 고른 과제로 만든 글을 먼저 보인다 (TODO 239 ③)
+  // STAR 정리 프롬프트 — 열면 고른 과제로 만든 글을 먼저 보인다 (TODO 239 ③ · 244 B6)
   const [showPrompt, setShowPrompt] = useState(false);
   // 이력 화면에서 바로 고치기 (TODO 243 B4) — 과제를 받아 와 같은 양식을 그 자리에 연다
   const [editing, setEditing] = useState<{ id: string; project: Project } | null>(null);
@@ -273,6 +310,9 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
         </Explain>
       </div>
 
+      {/* 나의 한 해 (TODO 244 A3) */}
+      <YearCard name={data.name} years={[...years, ...data.activities.map((item) => item.date.slice(0, 4))]} />
+
       <div className="card person-projects">
         <div className="card-head">
           <h2>맡은 과제 {shown.length}건</h2>
@@ -300,9 +340,9 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
               disabled={chosen.length === 0}
               aria-expanded={showPrompt}
               onClick={() => setShowPrompt((value) => !value)}
-              title="고른 과제로 업무 이력 문장을 다듬어 달라는 글을 만듭니다 — 먼저 보고 복사합니다"
+              title="고른 과제를 STAR(상황 · 과제 · 행동 · 결과)로 정리해 달라는 글을 만듭니다 — 먼저 보고 복사합니다"
             >
-              다듬기 프롬프트
+              STAR 정리 프롬프트
             </button>
           </div>
         </div>
@@ -311,7 +351,7 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
             <p className="hint">
               사내 AI 에 붙여넣을 글입니다 — <b>무엇이 담기는지 읽어 보고</b> 복사하세요. 이름 · 효과 금액은 넣지 않았습니다. 과제명에 대외비가 있으면 고친 뒤 붙이세요.
             </p>
-            <textarea className="refine-text" readOnly value={refinePrompt(chosen)} aria-label="다듬기 프롬프트" />
+            <textarea className="refine-text" readOnly value={refinePrompt(chosen)} aria-label="STAR 정리 프롬프트" />
             <div className="form-actions">
               <button onClick={() => void copy("prompt")}>{copied === "prompt" ? "복사됨 ✓" : "복사"}</button>
             </div>

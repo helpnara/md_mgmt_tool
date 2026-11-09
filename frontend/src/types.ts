@@ -1317,3 +1317,44 @@ export interface MyWork {
   praises: { project_id: string; title: string; praise: string; praise_at: string | null; new: boolean }[];
   stale_days: number;
 }
+
+// ── TODO 244 — 나의 한 해 · 마친 과제 · STAR 의 상황 · 과제 ─────────────────────────
+export interface YearNumbers {
+  projects: number;
+  done: number;
+  lead: number;
+  entries: number;
+  reports: number;
+  milestones: number;
+  activities: number;
+  hours: number;
+}
+export interface YearReview extends YearNumbers {
+  name: string;
+  year: string;
+  last: YearNumbers;
+  new_skills: string[];
+  outcomes: { id: string; title: string; outcome: string }[];
+  done_projects: { id: string; title: string; completed_at: string | null }[];
+}
+export interface DoneSummary {
+  start: string | null;
+  end: string | null;
+  months: number | null;
+  entries: number;
+  reports: number;
+  people: number;
+  milestones: number;
+  outcome: string;
+  effect_verified: number | null;
+}
+export interface Project {
+  done_summary?: DoneSummary | null;
+}
+export interface PersonProject {
+  /** 과제 개요의 배경 · 목표 — STAR 의 상황 · 과제 */
+  context?: { background: string; goal: string };
+}
+export interface MyWork {
+  recent_done?: { id: string; title: string; completed_at: string }[];
+}

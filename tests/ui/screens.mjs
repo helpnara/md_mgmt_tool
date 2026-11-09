@@ -5947,6 +5947,13 @@ async function main() {
         await member.waitForTimeout(1000);
         expect((await item.innerText()).includes("현장에서 바로 씀"), "저장 반영");
       });
+      await check("팀원 내 할 일에 '최근 마친 과제' — 끝난 지 30일 안 (244 A4)", async () => {
+        const both = (await call("GET", "/api/projects")).find((item) => item.title === "둘이 하는 과제");
+        await call("PATCH", `/api/projects/${both.id}`, { status: "done" });
+        await member.goto(`${outside}/#/`); await member.reload(); await member.waitForTimeout(1200);
+        const done = member.locator("[data-my-work] .my-recent-done");
+        expect((await done.innerText()).includes("둘이 하는 과제"), `최근 마친 과제: ${await member.locator("[data-my-work]").innerText()}`);
+      });
     } finally {
       await member.close();
       await relay.close();
@@ -6133,10 +6140,10 @@ async function main() {
       const table = await page.evaluate(() => navigator.clipboard.readText());
       expect(table.startsWith("과제 번호\t과제명\t기간\t역할\t맡은 부분\t기술 · 도구") && table.includes("Python, SQL"), `표: ${table.slice(0, 160)}`);
     });
-    await check("[다듬기 프롬프트] — 먼저 보여 주고 [복사], 이름 · 금액은 없다 (239 ③)", async () => {
-      await page.getByRole("button", { name: "다듬기 프롬프트" }).click();
+    await check("[STAR 정리 프롬프트] — 먼저 보여 주고 [복사], 이름 · 금액은 없다 (239 ③ · 244 B6)", async () => {
+      await page.getByRole("button", { name: "STAR 정리 프롬프트" }).click();
       const shown = await page.locator(".refine-text").inputValue();
-      expect(shown.includes("[부탁]") && shown.includes("회고 시험 과제") && shown.includes("기술 · 도구: Python, SQL"), `프롬프트: ${shown.slice(0, 200)}`);
+      expect(shown.includes("[반드시 지킬 것]") && shown.includes("STAR") && shown.includes("회고 시험 과제") && shown.includes("기술 · 도구: Python, SQL"), `프롬프트: ${shown.slice(0, 200)}`);
       expect(!shown.includes("권경락") && !shown.includes("억"), "이름 · 금액이 없다");
       await page.locator(".refine-panel").getByRole("button", { name: "복사" }).click();
       equal(await page.evaluate(() => navigator.clipboard.readText()), shown, "복사한 글 = 보인 글");
@@ -6273,6 +6280,49 @@ async function main() {
       equal(await item.locator(".contrib-form").count(), 0, "양식이 닫힌다");
       expect((await item.innerText()).includes("이력 화면에서 고침"), "바로 반영");
       expect(!page.url().includes("projects/"), "과제로 가지 않았다");
+    });
+  }
+
+  console.log("\n[62] 나의 한 해 · 마친 과제 띠 · STAR 정리 프롬프트 (TODO 244)");
+  {
+    await check("과제를 완료로 바꾸면 [담당과 역할] 위에 '과제를 마쳤습니다' 띠 — 기간 · 일지 · 담당 (244 A4)", async () => {
+      const made = await api.post("/api/projects", { title: "마침 시험 과제", status: "in_progress", owners: ["김현우"], start_date: "2026-04-01" });
+      await api.post(`/api/projects/${made.id}/entries`, { date: "2026-05-01", title: "첫 일지" });
+      await go(`#/projects/${made.id}`);
+      await page.reload(); await page.waitForTimeout(900);
+      equal(await page.locator("[data-done-card]").count(), 0, "진행 중에는 띠가 없다");
+      await page.getByRole("button", { name: "과제 정보 수정" }).click();
+      await page.locator(".project-form select").first().selectOption("done");
+      await page.locator(".project-form button[type=submit]").click();
+      await page.waitForSelector("[data-done-card]", { timeout: 5000 });
+      const text = await page.locator("[data-done-card]").innerText();
+      expect(text.includes("과제를 마쳤습니다") && text.includes("일지 1건") && text.includes("담당 1명"), `마친 과제 띠: ${text}`);
+      await page.reload(); await page.waitForTimeout(900);
+      const later = await page.locator("[data-done-card]").innerText();
+      expect(later.startsWith("마친 과제") && !later.includes("수고하셨습니다"), `다시 열면 차분하게: ${later}`);
+    });
+    await check("이력 화면 위 '나의 한 해' — 해 고르기 · 숫자마다 지난해 · [글로 복사] (244 A3)", async () => {
+      await go(`#/person/${encodeURIComponent("권경락")}`);
+      await page.reload(); await page.waitForSelector("[data-year-card] .year-stats", { timeout: 8000 });
+      const card = page.locator("[data-year-card]");
+      equal(await card.locator(".year-stat").count(), 7, "숫자 일곱");
+      expect((await card.innerText()).includes("지난해"), "지난해 비교");
+      expect((await card.locator(".year-pick").inputValue()) === "2026", "올해가 먼저");
+      await card.getByRole("button", { name: "글로 복사" }).click();
+      const text = await page.evaluate(() => navigator.clipboard.readText());
+      expect(text.startsWith("■ 2026년 — 권경락") && text.includes("맡은 과제"), `글: ${text.slice(0, 120)}`);
+    });
+    await check("[STAR 정리 프롬프트] — 배경 · 목표 · 중간 성과 · 성과 후보 일지까지, 이름 · 금액은 없다 (244 B6)", async () => {
+      await api.patch(`/api/projects/${(await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제").id}`, { body: "## 배경\n\n월말 집계를 손으로 함\n\n## 목표\n\n- 주 30분 이하" });
+      await page.reload(); await page.waitForSelector(".person-projects");
+      for (const box of await page.locator('.person-project input[type="checkbox"]:checked').all()) await box.uncheck();
+      await page.locator(".person-project", { hasText: "회고 시험 과제" }).locator('input[type="checkbox"]').check();
+      await page.getByRole("button", { name: "STAR 정리 프롬프트" }).click();
+      const shown = await page.locator(".refine-text").inputValue();
+      for (const part of ["[반드시 지킬 것]", "- 배경: 월말 집계를 손으로 함", "- 목표: 주 30분 이하", "- 중간 성과:", "- 성과 후보 일지:", "말로 설명할 때"]) {
+        expect(shown.includes(part), `프롬프트에 ${part}`);
+      }
+      expect(!shown.includes("권경락") && !shown.includes("억원"), "이름 · 금액이 없다");
     });
   }
 

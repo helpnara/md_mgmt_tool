@@ -6,6 +6,7 @@ import { isLeader, leftLabel } from "../people";
 import type { Contribution, Meta, Milestone, Project } from "../types";
 import Explain from "./Explain";
 import { RetroField, RetroText } from "./RetroText";
+import { DoneCard } from "./YearCard";
 
 /**
  * 담당과 역할 (TODO 237 · 239) — 사람마다 역할 · 맡은 부분 · 기술 · 도구 · 담당 기간 · 회고(내가 한 일 · 결과).
@@ -54,10 +55,13 @@ export default function ContributionsCard({
   onSaved,
   openFor,
   onOpened,
+  celebrate = false,
 }: {
   project: Project;
   meta: Meta;
   onSaved: (saved: Project) => void;
+  /** 방금 완료로 바꿨다 — 마친 과제 띠를 강조 (TODO 244 A4) */
+  celebrate?: boolean;
   /** 이 사람의 양식을 열어 둔다 — 완료로 바꾼 직후 */
   openFor?: string | null;
   onOpened?: () => void;
@@ -87,6 +91,7 @@ export default function ContributionsCard({
       <div className="card-head">
         <h2>담당과 역할</h2>
       </div>
+      {project.done_summary && <DoneCard summary={project.done_summary} fresh={celebrate} />}
       <Explain
         id="contributions"
         lead={<>사람마다 <b>역할 · 맡은 부분 · 기술 · 도구 · 담당 기간 · 회고</b>를 남깁니다 — 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료입니다.</>}

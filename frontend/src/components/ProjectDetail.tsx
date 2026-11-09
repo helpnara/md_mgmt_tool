@@ -138,6 +138,8 @@ export default function ProjectDetail({
   const [editingProject, setEditingProject] = useState(Boolean(edit));
   // 완료로 바꾼 직후 회고 양식을 열 사람 (TODO 237 A3) — 담당인 "나" 일 때만
   const [retroFor, setRetroFor] = useState<string | null>(null);
+  // 방금 완료로 바꿨다 — 마친 과제 띠를 강조 (TODO 244 A4)
+  const [justCompleted, setJustCompleted] = useState(false);
   const [editingOverview, setEditingOverview] = useState(false);
   const [showOverviewVersions, setShowOverviewVersions] = useState(false);
   const [preview, togglePreview] = usePreview();
@@ -982,6 +984,7 @@ export default function ProjectDetail({
               const saved = await api.updateProject(project.id, payload);
               // 완료로 **바뀌는** 순간 — 내가 담당이면 회고 양식을 연다 (TODO 237 A3). 비워 두고 닫아도 된다
               if (payload.status === "done" && project.status !== "done") {
+                setJustCompleted(true);
                 const me = myName(meta);
                 if (me && saved.owners.includes(me)) setRetroFor(me);
               }
@@ -1170,6 +1173,7 @@ export default function ProjectDetail({
         onSaved={(saved) => setProject(saved)}
         openFor={retroFor}
         onOpened={() => setRetroFor(null)}
+        celebrate={justCompleted}
       />
 
       {/* 보고는 팀장의 일 (TODO 233 ④) — 팀원이 담당 과제를 고칠 때도 이 칸은 읽기 전용 그대로 */}

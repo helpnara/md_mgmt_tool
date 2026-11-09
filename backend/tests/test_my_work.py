@@ -50,6 +50,11 @@ def test_my_work_lists_my_projects_stale_logs_retro_and_praise(team):  # noqa: F
     member.post(f"/api/projects/{pid}/entries", json={"date": "2026-10-19", "title": "이번 주"})
     shared = next(item for item in member.get("/api/projects/my-work").json()["projects"] if item["id"] == pid)
     assert shared["stale"] is False and shared["days_since_entry"] == 1
+    # 도구가 남긴 줄(상태 변경)은 마지막 일지로 세지 않는다 (TODO 244)
+    owner.patch(f"/api/projects/{pid}", json={"status": "on_hold"})
+    owner.patch(f"/api/projects/{pid}", json={"status": "in_progress"})
+    shared = next(item for item in member.get("/api/projects/my-work").json()["projects"] if item["id"] == pid)
+    assert shared["last_entry"] == "2026-10-19"
     # 끝난 과제는 회고를 적을 과제로, 인정 한 줄은 새것으로
     owner.patch(f"/api/projects/{pid}", json={"status": "done"})
     owner.put(f"/api/projects/{pid}/contributions/가팀원", json={"praise": "끝까지 챙김"})

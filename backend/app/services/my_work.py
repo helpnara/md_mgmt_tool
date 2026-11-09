@@ -12,6 +12,7 @@ from datetime import date
 from typing import Any
 
 from .. import clock
+from .projects import NOT_SYSTEM_ENTRY
 
 STALE_DAYS = 14
 ACTIVE = ("in_progress", "reviewing")
@@ -41,7 +42,7 @@ def my_work(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
     today = clock.today()
     rows = conn.execute(
         "SELECT p.id, p.title, p.status, p.start_date, p.due_date, c.role,"
-        " (SELECT MAX(e.date) FROM entry e WHERE e.project_id = p.id) AS last_entry"
+        f" (SELECT MAX(e.date) FROM entry e WHERE e.project_id = p.id AND {NOT_SYSTEM_ENTRY}) AS last_entry"
         " FROM project_contribution c JOIN project p ON p.id = c.project_id"
         " WHERE c.name = ? AND c.current = 1 AND p.status NOT IN ('done', 'dropped')",
         (name,),
@@ -68,4 +69,13 @@ def my_work(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             " WHERE c.name = ? AND COALESCE(c.praise, '') <> '' ORDER BY c.praise_at DESC, c.project_id DESC LIMIT ?",
             (name, PRAISE_LIMIT))
     ]
-    return {"projects": projects, "retro_due": retro_due(conn, name), "praises": praises, "stale_days": STALE_DAYS}
+    # 최근 마친 내 과제 (TODO 244 A4) — 끝난 지 30일 안
+    recent_done = [
+        {"id": row["id"], "title": row["title"], "completed_at": row["completed_at"]}
+        for row in conn.execute(
+            "SELECT p.id, p.title, p.completed_at FROM project p JOIN project_contribution c ON c.project_id = p.id"
+            " WHERE c.name = ? AND p.status = 'done' AND p.completed_at >= DATE(app_today(), '-30 day')"
+            " ORDER BY p.completed_at DESC, p.id DESC", (name,))
+    ]
+    return {"projects": projects, "retro_due": retro_due(conn, name), "praises": praises, "stale_days": STALE_DAYS,
+            "recent_done": recent_done}

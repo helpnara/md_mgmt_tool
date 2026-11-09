@@ -2375,3 +2375,21 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
 .star-toggle.on { border-color: #e0b232; background: #fff6d6; color: #7a5a00; font-weight: 600; }
 .person-project .contrib-form { margin: 8px 0 4px 24px; }
 .person-project .milestone-list { padding-left: 24px; }
+
+/* ── 나의 한 해 · 마친 과제 띠 (TODO 244) ─────────────────────────────────────── */
+.year-card h2 { display: flex; align-items: center; gap: 8px; }
+.year-pick { width: auto; font-size: 15px; font-weight: 600; padding: 2px 6px; }
+.year-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 4px 0 10px; }
+.year-stat { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.year-stat-label { font-size: 12px; color: var(--muted); }
+.year-stat strong { font-size: 22px; }
+.year-stat strong small { font-size: 12px; font-weight: 400; margin-left: 2px; color: var(--muted-strong); }
+.year-last { font-size: 11px; color: var(--muted); }
+.year-line { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; margin: 4px 0; }
+.year-outcomes { margin: 4px 0 8px; padding-left: 18px; font-size: 13px; }
+.done-card { margin: 4px 0 10px; padding: 10px 12px; border: 1px solid #cfe3d4; border-radius: 8px; background: #f3faf5; font-size: 13px; }
+.done-card.fresh { border-color: #7bbf8e; background: #e8f6ec; box-shadow: 0 0 0 3px rgba(123, 191, 142, 0.18); }
+.done-card-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.done-card-head b { color: #2f6b3e; }
+.done-card-stats { margin-top: 2px; color: var(--muted-strong); }
+.done-card-outcome { margin-top: 4px; font-weight: 600; color: #2f6b3e; }
