@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -17,7 +16,7 @@ from . import deps
 from .api import (activities, attachments, dashboard, drafts, edits, entries, errors, export, folders, home, intakes,
                   linkfix, meetings, meta, people, person_history, projects, reports, roadmap, search, settings,
                   trash, versions)
-from . import permissions, readcache, share, who
+from . import mimefix, permissions, readcache, share, who
 from .db import connect
 from .services import edits as edits_service
 from .services import errorlog
@@ -29,6 +28,8 @@ from .vault.paths import FileInUseError, safe_join
 from .vault.indexer import reindex_all
 
 FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
+# PC 레지스트리가 .js 를 text/plain 으로 적어 둔 곳에서 흰 화면이 나던 것 (TODO 245) — 프로그램이 종류를 정한다
+MIME_FIXED = mimefix.ensure()
 THREAD_POOL_SIZE = 64
 
 
@@ -38,6 +39,9 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     # 지난 실행의 동작 꼬리가 이번 실행의 오류에 붙으면 맥락이 아니라 잡음이다.
     errorlog.clear_trail()
+    for ext, before, after in MIME_FIXED:
+        print(f"\n  [알림] 이 PC 의 파일 종류 설정이 {ext} → {before or '없음'} 이라 프로그램이 {after} 로 바로잡았습니다.")
+        print("  (그대로 두어도 화면은 정상입니다 — 예전 판이 흰 화면이던 원인, TODO 245)")
     conn, rebuilt = deps.setup()
     if rebuilt:
         print("\n  프로그램이 새 버전으로 바뀌어 검색 색인을 다시 만듭니다.")
@@ -452,7 +456,7 @@ if FRONTEND_DIST.exists():
         if path is None or not path.is_file():
             raise StarletteHTTPException(status_code=404)
         headers = {"Cache-Control": "public, max-age=31536000, immutable", "Vary": "Accept-Encoding"}
-        media_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        media_type = mimefix.media_type(path)
         gz = path.with_name(path.name + ".gz")
         if gz.is_file() and "gzip" in request.headers.get("accept-encoding", ""):
             headers["Content-Encoding"] = "gzip"
@@ -467,8 +471,8 @@ if FRONTEND_DIST.exists():
         except ValueError:
             candidate = None
         if candidate is not None and candidate.is_file():
-            return FileResponse(candidate)
+            return FileResponse(candidate, media_type=mimefix.media_type(candidate))
         # 진입점은 캐시하지 않는다 (TODO 117). 새 배포본을 덮어써도 브라우저가 옛 index.html 을
         # 들고 있으면 옛 묶음(assets/index-<해시>.js)을 계속 부른다 — "새 기능이 안 보인다".
         # 묶음 파일은 이름에 해시가 있어 캐시해도 안전하다. 진입점만 매번 확인하게 한다.
-        return FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})
+        return FileResponse(FRONTEND_DIST / "index.html", media_type="text/html", headers={"Cache-Control": "no-cache"})

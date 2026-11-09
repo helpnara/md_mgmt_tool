@@ -6326,6 +6326,35 @@ async function main() {
     });
   }
 
+  console.log("\n[63] 화면 묶음이 실행되지 않으면 흰 화면 대신 안내 (TODO 245)");
+  {
+    await check("화면 묶음이 '일반 글'(text/plain)로 오면 8초 뒤 '화면을 그리지 못했습니다' 안내 — Ctrl+F5 · IE 모드 · F12", async () => {
+      // 레지스트리가 .js 를 text/plain 으로 적어 둔 옛 판 서버를 흉내 낸다 — 브라우저는 모듈을 실행하지 않는다
+      const broken = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+      try {
+        await broken.route("**/assets/*.js", async (route) => {
+          const res = await route.fetch();
+          await route.fulfill({ response: res, headers: { ...res.headers(), "content-type": "text/plain" } });
+        });
+        await broken.goto(`${BASE}/#/`);
+        await broken.waitForSelector("#boot-fail", { timeout: 15000 });
+        const text = await broken.locator("#boot-fail").innerText();
+        for (const part of ["화면을 그리지 못했습니다", "Ctrl+F5", "IE 모양", "F12"]) expect(text.includes(part), `안내에 ${part}: ${text}`);
+      } finally {
+        await broken.close();
+      }
+    });
+    await check("정상일 때는 안내가 나오지 않는다 — 서버가 화면 묶음을 text/javascript 로 보낸다", async () => {
+      const res = await page.request.get(`${BASE}/`);
+      const js = (await res.text()).match(/\/assets\/[^"]+\.js/)[0];
+      const asset = await page.request.get(`${BASE}${js}`);
+      expect(asset.headers()["content-type"].startsWith("text/javascript"), `종류: ${asset.headers()["content-type"]}`);
+      await go("#/");
+      await page.waitForTimeout(8500);
+      equal(await page.locator("#boot-fail").count(), 0, "정상 화면에 안내가 끼어들지 않는다");
+    });
+  }
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
