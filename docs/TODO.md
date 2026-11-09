@@ -8220,7 +8220,7 @@ md · zip · HTML 세 가지가 같은 문서를 쓴다. 시험 — 백엔드 `t
 | ③ 켤 때 알림 | 브라우저가 받지 못할 값이었으면(`.js` 가 `text/plain` 등 — `application/javascript` 는 정상이라 조용) 검은 창에 *[알림] 이 PC 의 파일 종류 설정이 .js → text/plain 이라 프로그램이 text/javascript 로 바로잡았습니다* |
 
 시험 — 백엔드 `test_mimefix.py` 4건(레지스트리를 흉내 내 `.js` 를 `text/plain` 으로 망가뜨려도 `/assets/*.js` 는 `text/javascript` · 알림은 고칠 것만 · `application/javascript` 는 조용 · 안내 스크립트는 모듈이 아님) → **936 통과**.
-화면 `[63]` 2건(묶음을 `text/plain` 으로 받으면 안내 · 정상일 땐 안 끼어든다) → **UI245_COUNT 통과**. 문서 — README *새 버전으로 업데이트하기* 에 한 단락, DESIGN 5.40.
+화면 `[63]` 2건(묶음을 `text/plain` 으로 받으면 안내 · 정상일 땐 안 끼어든다) → **318 통과**. 문서 — README *새 버전으로 업데이트하기* 에 한 단락, DESIGN 5.40.
 
 ## v41 체크리스트 — 확인 현황 (`느린나이테-20261106-v6`, 243)
 
