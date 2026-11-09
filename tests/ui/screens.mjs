@@ -6308,7 +6308,7 @@ async function main() {
       equal(await card.locator(".year-stat").count(), 7, "숫자 일곱");
       expect((await card.innerText()).includes("지난해"), "지난해 비교");
       expect((await card.locator(".year-pick").inputValue()) === "2026", "올해가 먼저");
-      await card.getByRole("button", { name: "글로 복사" }).click();
+      await card.getByRole("button", { name: "한 해 글로 복사" }).click();
       const text = await page.evaluate(() => navigator.clipboard.readText());
       expect(text.startsWith("■ 2026년 — 권경락") && text.includes("맡은 과제"), `글: ${text.slice(0, 120)}`);
     });

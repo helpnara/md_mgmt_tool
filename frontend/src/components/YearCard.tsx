@@ -71,7 +71,7 @@ export default function YearCard({ name, years }: { name: string; years: string[
             window.setTimeout(() => setCopied(false), 1500);
           }}
         >
-          {copied ? "복사됨 ✓" : "글로 복사"}
+          {copied ? "복사됨 ✓" : "한 해 글로 복사"}
         </button>
       </div>
       {!review ? (
