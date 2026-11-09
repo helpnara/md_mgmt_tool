@@ -5360,13 +5360,15 @@ async function main() {
     equal(await date.getAttribute("max"), dayFromToday(0), "날짜 달력의 상한은 오늘");
     const save = editor.locator(".editor-footer").getByRole("button", { name: "저장", exact: true });
     await date.fill(dayFromToday(3));
-    await page.waitForTimeout(200);
+    // 화면이 바뀔 때까지 기다린다 — 200ms 고정 대기는 바쁜 PC 에서 가끔 모자랐다 (252 때 한 번 · 첫 실행 때 한 번)
+    const settle = async (want) => { for (let i = 0; i < 30 && (await save.isDisabled()) !== want; i += 1) await page.waitForTimeout(100); };
+    await settle(true);
     expect(await save.isDisabled(), "미래 날짜인데 [저장] 이 켜져 있다");
     expect((await editor.locator(".date-warn").innerText()).includes("오늘"), "날짜 경고");
     // 막는 까닭은 단추 바로 위 (U5)
     equal(await editor.locator(".editor-footer .entry-error").count(), 1, "단추 위 오류 줄");
     await date.fill(dayFromToday(-1));
-    await page.waitForTimeout(200);
+    await settle(false);
     expect(!(await save.isDisabled()), "지난 날짜인데 꺼져 있다");
     nextDialog((d) => d.accept());
     await editor.getByRole("button", { name: "닫기", exact: true }).click();
