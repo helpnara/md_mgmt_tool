@@ -2702,3 +2702,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .card-title-row:has(> .icon-title) { margin-bottom: 12px; }
 /* 홈 카드 머리 줄 높이(249 ③) — 아이콘 칸이 있으면 36 */
 .home .card > .icon-title:first-child { min-height: 36px; column-gap: 12px; }
+
+/* ── 겹침 전수 조사(TODO 252 마무리)에서 고친 것 ─────────────────────────────── */
+/* 홈 [할 일] — 긴 과제 이름이 한 줄로 버티다 카드 밖으로 66px 나가고 화면에 가로 스크롤이 생겼다(1100px). 목록의 이름은 줄을 바꾼다 */
+.home-plans a, .home-week-col li > a { white-space: normal; overflow-wrap: anywhere; min-width: 0; }

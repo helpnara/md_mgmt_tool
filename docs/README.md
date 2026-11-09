@@ -66,6 +66,7 @@
 grep -rhoE '@router\.(get|post|put|patch|delete)\("' backend/app/api | wc -l   # 끝점 수 → DESIGN 6절 머리말
 .venv/bin/python -m pytest backend/tests -q --collect-only | tail -1          # 백엔드 시험 수
 node tests/ui/screens.mjs | tail -1                                           # 화면 시험 수
+node tests/ui/overlap.mjs                                                     # 겹침 전수 조사(TODO 252) — 144 화면 × 겹침 · 잘림 · 카드 밖 · 가로 스크롤. {} 이면 깨끗. 디자인을 크게 바꾼 뒤에도
 find docs -name '*.md' | xargs wc -l | tail -1                                # 문서 줄 수
 git log --oneline | wc -l                                                     # 커밋 수 — 웹 세션의 새 클론은 얕아서(최근 50개 남짓) 적게 나온다. 먼저 git fetch --unshallow
 grep -n "SCHEMA_VERSION = " backend/app/db.py                                 # 스키마 버전 → DESIGN 4.7
