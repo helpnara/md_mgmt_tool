@@ -1466,6 +1466,21 @@ async function main() {
     expect(hovered >= AA, `홈 숫자 마우스올림 ${hovered} < ${AA}`);
   });
 
+  await check("색은 토큰에서만 — 스타일 파일의 :root 밖에 #색이 없다, 흰 바탕 · 회색 카드 (TODO 250)", async () => {
+    const css = await readFile(join(REPO, "frontend/src/styles.css"), "utf8");
+    const root = css.indexOf(":root {");
+    const rest = css.slice(css.indexOf("\n}", root) + 2);
+    const stray = (rest.match(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g) || []).filter((hex) => hex !== "#000");
+    equal(stray.length, 0, `토큰 밖의 색: ${[...new Set(stray)].join(" ")}`);
+    await go("#/");
+    const look = await page.evaluate(() => ({
+      body: getComputedStyle(document.body).backgroundColor,
+      card: getComputedStyle(document.querySelector(".card")).backgroundColor,
+    }));
+    equal(look.body, "rgb(255, 255, 255)", "바탕은 흰색");
+    equal(look.card, "rgb(246, 246, 246)", "카드는 Nimbus neutral-surface");
+  });
+
   await check("팀원 역량 화면의 글자가 읽힌다", async () => {
     for (const [label, selector, floor, hash] of [
       ["면담 대상 칩", ".skills-quiet-chip", AA, "#/skills"],
@@ -4464,12 +4479,12 @@ async function main() {
   await check("보고는 어느 화면에서나 보라, 확정은 갈색, 그 자리의 저장은 흰 단추 (189)", async () => {
     await go(`#/projects/${seeded.projectA}`);
     const make = page.getByRole("button", { name: "보고 초안 만들기", exact: true }).first();
-    equal(await bgOf(make), "rgb(109, 40, 217)", "과제 상세의 [보고 초안 만들기] 는 보라");
+    equal(await bgOf(make), "rgb(70, 41, 186)", "과제 상세의 [보고 초안 만들기] 는 보라");
     await readable(make, "[보고 초안 만들기]");
     await go("#/reports");
     const row = page.locator("button.report.ghost", { hasText: "보고 초안" }).first();
     equal(await row.count(), 1, "보고대상 줄의 [보고 초안] 도 보고 갈래");
-    equal(await bgOf(row), "rgb(245, 243, 255)", "줄마다는 연보라");
+    equal(await bgOf(row), "rgb(246, 243, 254)", "줄마다는 연보라");
     await readable(row, "줄의 [보고 초안]");
     // 앞선 시험이 씨앗의 초안을 확정했을 수 있다 — 새 초안을 하나 만들어 연다
     const fresh = await api.post(`/api/projects/${seeded.projectB}/reports/draft`, { report_date: null, audience: null });
@@ -4488,14 +4503,14 @@ async function main() {
     equal(await bgOf(promote), "rgb(111, 67, 30)", "[착수 · 과제로 승격] 은 갈색");
     await readable(promote, "[착수 · 과제로 승격]");
     const del = page.locator("button.ghost.danger").first();
-    equal(await del.evaluate((el) => getComputedStyle(el).borderTopColor), "rgb(254, 202, 202)", "삭제 단추에 빨간 테두리");
+    equal(await del.evaluate((el) => getComputedStyle(el).borderTopColor), "rgb(251, 196, 197)", "삭제 단추에 빨간 테두리");
     await readable(del, "[삭제]");
     await go("#/projects");
     const active = page.locator(".view-switch button.active").first();
-    expect((await bgOf(active)) !== "rgb(47, 111, 235)", "고른 [표] 가 파랑으로 채워져 있다");
+    expect((await bgOf(active)) !== "rgb(0, 89, 213)", "고른 [표] 가 파랑으로 채워져 있다");
     await readable(active, "고른 보기");
     const add = page.getByRole("button", { name: "과제 추가" }).first();
-    equal(await bgOf(add), "rgb(47, 111, 235)", "[과제 추가] 는 파랑 그대로");
+    equal(await bgOf(add), "rgb(0, 89, 213)", "[과제 추가] 는 파랑 그대로");
   });
 
   console.log("\n[38] 명부에서 떠난 사람은 팀원역량 맨 아래에 흐리게, 면담 대상에서 빠진다 (TODO 194)");

@@ -314,10 +314,10 @@ export default function Help() {
             </dd>
             <dt>단추 색은 무엇을 뜻하나요?</dt>
             <dd>
-              색이 채워진 단추는 그 자리의 <b>대표 기능</b>입니다. <span className="help-swatch" style={{ background: "#2f6feb" }} /> <b>파랑</b> 은
-              만들기 · 저장, <span className="help-swatch" style={{ background: "#6d28d9" }} /> <b>보라</b> 는 보고(보고 초안),{" "}
-              <span className="help-swatch" style={{ background: "#6f431e" }} /> <b>갈색</b> 은 보고 확정 · 착수처럼 되돌리기 어려운 결정,{" "}
-              <b style={{ color: "#b91c1c" }}>빨간 글</b> 은 삭제 · 빼기입니다. 연한 파랑은 "지금 고른 것"(표 · 보드, 거르기 칩)이고, 나머지 흰 단추는
+              색이 채워진 단추는 그 자리의 <b>대표 기능</b>입니다. <span className="help-swatch" style={{ background: "var(--primary-500)" }} /> <b>파랑</b> 은
+              만들기 · 저장, <span className="help-swatch" style={{ background: "var(--ai-500)" }} /> <b>보라</b> 는 보고(보고 초안),{" "}
+              <span className="help-swatch" style={{ background: "var(--confirm-500)" }} /> <b>갈색</b> 은 보고 확정 · 착수처럼 되돌리기 어려운 결정,{" "}
+              <b style={{ color: "var(--danger-500)" }}>빨간 글</b> 은 삭제 · 빼기입니다. 연한 파랑은 "지금 고른 것"(표 · 보드, 거르기 칩)이고, 나머지 흰 단추는
               보조 기능입니다. 같은 기능은 어느 화면에서 만나도 같은 색입니다.
             </dd>
             <dt>표에 있는 - 는 무엇인가요?</dt>
