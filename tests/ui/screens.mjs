@@ -1466,7 +1466,7 @@ async function main() {
     expect(hovered >= AA, `홈 숫자 마우스올림 ${hovered} < ${AA}`);
   });
 
-  await check("색은 토큰에서만 — 스타일 파일의 :root 밖에 #색이 없다, 흰 바탕 · 회색 카드 (TODO 250)", async () => {
+  await check("색은 토큰에서만 — 스타일 파일의 :root 밖에 #색이 없다, 연회색 바탕 · 흰 카드 (TODO 250 · 251)", async () => {
     const css = await readFile(join(REPO, "frontend/src/styles.css"), "utf8");
     const root = css.indexOf(":root {");
     const rest = css.slice(css.indexOf("\n}", root) + 2);
@@ -1477,8 +1477,8 @@ async function main() {
       body: getComputedStyle(document.body).backgroundColor,
       card: getComputedStyle(document.querySelector(".card")).backgroundColor,
     }));
-    equal(look.body, "rgb(255, 255, 255)", "바탕은 흰색");
-    equal(look.card, "rgb(246, 246, 246)", "카드는 Nimbus neutral-surface");
+    equal(look.body, "rgb(246, 246, 246)", "바탕은 연회색 (251 — 예시 영상)");
+    equal(look.card, "rgb(255, 255, 255)", "카드는 흰색 + 테두리");
   });
 
   await check("팀원 역량 화면의 글자가 읽힌다", async () => {
