@@ -1,4 +1,4 @@
-import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
+import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -220,6 +220,18 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   /** 사람별 이력 — 맡은 과제(역할 · 기간 · 회고) · 교육 이력 (TODO 238) */
+  // ── 팀원별 경험 (TODO 257) ──────────────────────────
+  experiences: (person: string) => request<ExperienceListing>(`/api/experiences?person=${encodeURIComponent(person)}`),
+  experience: (id: string) => request<Experience>(`/api/experiences/${encodeURIComponent(id)}`),
+  createExperience: (payload: Partial<Experience>) =>
+    request<Experience>("/api/experiences", { method: "POST", body: JSON.stringify(payload) }),
+  updateExperience: (id: string, payload: Partial<Experience> & { base_updated_at?: string }) =>
+    request<Experience>(`/api/experiences/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteExperience: (id: string) => request<void>(`/api/experiences/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  draftExperiences: (person: string, projects?: string[]) =>
+    request<{ made: string[]; skipped: { project: string; reason: string }[] }>("/api/experiences/draft", {
+      method: "POST", body: JSON.stringify({ person, projects }),
+    }),
   personHistory: (name: string) => request<PersonHistory>(`/api/person-history?name=${encodeURIComponent(name)}`),
   /** 나의 한 해 (TODO 244) */
   yearReview: (name: string, year: string) =>

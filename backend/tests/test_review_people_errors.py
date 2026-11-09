@@ -296,7 +296,7 @@ def test_rename_reaches_partners_activities_meetings_and_intake_leaders(client, 
     result = client.post("/api/people/rename", json={"old": "김철수", "new": "김철순"})
     assert result.status_code == 200, result.text
     body = result.json()
-    assert body["counts"] == {"owners": 1, "partners": 1, "activities": 1, "meetings": 1, "intakes": 1}
+    assert body["counts"] == {"owners": 1, "partners": 1, "activities": 1, "meetings": 1, "experiences": 0, "intakes": 1}  # 경험(TODO 257)도 센다
     assert sorted(body["changed"]) == sorted([owned["id"], partnered["id"]]) and body["count"] == 2
 
     assert client.get(f"/api/projects/{owned['id']}").json()["owners"] == ["김철순"]

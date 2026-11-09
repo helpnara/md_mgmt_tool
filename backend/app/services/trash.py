@@ -37,6 +37,7 @@ KIND_LABELS = {
     "attachment": "첨부 파일",
     "activity": "역량 이력",
     "meeting": "면담 기록",
+    "experience": "경험",  # TODO 257
     "intake": "접수",
     "intake_log": "접수 검토 기록",
 }
@@ -158,6 +159,18 @@ def trashed_projects() -> dict[str, str]:
         for item in _read_manifest()
         if item.get("kind") == "project" and item.get("project_id")
     }
+
+
+def used_experience_ids() -> set[str]:
+    """보관함에 간 경험의 번호(TODO 257) — 다음 번호를 셀 때 지운 번호도 쓴 번호로 친다(접수 · 과제와 같은 규칙)."""
+    found: set[str] = set()
+    for item in _read_manifest():
+        if item.get("kind") != "experience":
+            continue
+        stem = str(item.get("origin") or "").rsplit("/", 1)[-1].removesuffix(".md")
+        if stem:
+            found.add(stem)
+    return found
 
 
 def used_folder_names(root: str) -> set[str]:

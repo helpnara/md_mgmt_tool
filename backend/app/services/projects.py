@@ -736,6 +736,10 @@ def rewrite_project_refs(conn: sqlite3.Connection, mapping: dict[str, str]) -> i
         doc.meta.update(updates)
         md.save(path, doc)
         changed += 1
+    # 경험이 적어 둔 과제 번호 (TODO 257 · 2단계.md ⑧)
+    from . import experiences as experiences_service
+
+    changed += experiences_service.rewrite_project_refs(mapping)
     return changed
 
 

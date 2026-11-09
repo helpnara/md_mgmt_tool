@@ -13,7 +13,7 @@ import anyio
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (activities, attachments, dashboard, drafts, edits, entries, errors, export, folders, home, intakes,
+from .api import (activities, attachments, dashboard, drafts, edits, entries, errors, experiences, export, folders, home, intakes,
                   linkfix, meetings, meta, people, person_history, projects, reports, restore, roadmap, search,
                   settings, trash, versions)
 from . import mimefix, permissions, readcache, share, who
@@ -455,6 +455,7 @@ app.include_router(meetings.router)
 app.include_router(edits.router)
 app.include_router(person_history.router)  # 사람별 이력 (TODO 238)
 app.include_router(restore.router)  # 전체 백업에서 되살리기 (TODO 246)
+app.include_router(experiences.router)  # 팀원별 경험 (TODO 257)
 
 if FRONTEND_DIST.exists():
     @app.get("/assets/{name}")

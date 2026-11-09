@@ -243,6 +243,10 @@ def rename_owner(conn: sqlite3.Connection, old: str, new: str) -> dict[str, Any]
     changes = _rename_in_projects(conn, _projects_naming(conn, old), old, new)
     activities = _rename_person_records(conn, "activity", old, new)
     meetings = _rename_person_records(conn, "meeting", old, new)
+    # 경험(TODO 257) — 파일 이름(번호)은 그대로, 사람 폴더만 옮긴다
+    from . import experiences as experiences_service
+
+    experiences = experiences_service.move_person(conn, old, new)
     if activities:
         index_activities(conn)
     if meetings:
@@ -264,4 +268,4 @@ def rename_owner(conn: sqlite3.Connection, old: str, new: str) -> dict[str, Any]
     changed = [project_id for project_id, _, _ in changes]
     return {"changed": changed, "count": len(changed), "old": old, "new": new,
             "counts": {"owners": sum(1 for _, o, _ in changes if o), "partners": sum(1 for _, _, p in changes if p),
-                       "activities": activities, "meetings": meetings, "intakes": intakes}}
+                       "activities": activities, "meetings": meetings, "experiences": experiences, "intakes": intakes}}

@@ -269,3 +269,50 @@ CREATE INDEX IF NOT EXISTS idx_activity_date ON activity(date DESC);
 CREATE INDEX IF NOT EXISTS idx_entry_project_date ON entry(project_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_report_project_date ON report(project_id, report_date DESC);
 CREATE INDEX IF NOT EXISTS idx_attachment_entry ON attachment(entry_id);
+
+-- 팀원별 경험 (TODO 257 · 253 의 2단계) — 원본은 people/<이름>/experiences/E-nnn.md, 이 표는 파생.
+-- 면담처럼 통합 검색(FTS)에는 넣지 않는다. 사람별 이력 · 경험 화면에서만 보인다.
+CREATE TABLE IF NOT EXISTS experience (
+  id             TEXT PRIMARY KEY,          -- E-nnn — 바뀌지 않는다
+  person         TEXT NOT NULL,
+  rel_path       TEXT NOT NULL UNIQUE,
+  title          TEXT NOT NULL,
+  project_id     TEXT,                      -- 과제 번호로만 잇는다(과제를 지워도 경험은 남는다)
+  project_text   TEXT,
+  start          TEXT,
+  end            TEXT,
+  role           TEXT,
+  kind           TEXT,
+  status         TEXT NOT NULL,
+  situation      TEXT,
+  goal           TEXT,
+  actions        TEXT,                      -- JSON 글 목록
+  result_qual    TEXT,
+  impact         TEXT,
+  lesson         TEXT,
+  lesson_source  TEXT,
+  open_questions TEXT,                      -- JSON 글 목록
+  open_count     INTEGER NOT NULL DEFAULT 0,
+  source         TEXT,
+  created_at     TEXT,
+  updated_at     TEXT,
+  created_by     TEXT,
+  file_mtime     REAL
+);
+CREATE INDEX IF NOT EXISTS idx_experience_person ON experience(person);
+CREATE INDEX IF NOT EXISTS idx_experience_project ON experience(project_id);
+CREATE TABLE IF NOT EXISTS experience_quant (
+  experience_id TEXT NOT NULL REFERENCES experience(id) ON DELETE CASCADE,
+  position      INTEGER NOT NULL,
+  metric        TEXT,
+  value         TEXT,
+  baseline      TEXT,
+  baseline_kind TEXT,
+  at_when       TEXT,
+  PRIMARY KEY(experience_id, position)
+);
+CREATE TABLE IF NOT EXISTS experience_skill (
+  experience_id TEXT NOT NULL REFERENCES experience(id) ON DELETE CASCADE,
+  axis          TEXT,
+  name          TEXT NOT NULL
+);

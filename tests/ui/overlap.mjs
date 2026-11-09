@@ -45,6 +45,8 @@ for (let i = 0; i < 5; i++) await call("POST", "/api/intakes", { title: i === 0 
 const intakes = await call("GET", "/api/intakes");
 for (let i = 0; i < 4; i++) await call("POST", "/api/activities", { person: names[(i + 2) % 8], kind: "education", title: `다가오는 교육 ${i} — 품질 데이터 분석 실무`, date: `2026-11-${String(20 + i).padStart(2, "0")}` });
 for (let i = 0; i < 16; i++) await call("POST", "/api/activities", { person: names[i % 8], kind: i % 3 ? "education" : "seminar", title: i % 4 ? `교육 ${i}` : "스마트 팩토리 데이터 분석 실무 과정 (심화 · 3일)", date: i < 3 ? `2026-11-${String(15 + i).padStart(2, "0")}` : `2026-${String(1 + (i % 10)).padStart(2, "0")}-1${i % 9}`, hours: i % 2 ? 8 : null, host: "한국생산성본부" });
+await call("PUT", `/api/projects/${ids[0]}/contributions/${encodeURIComponent(names[0])}`, { role: "주관", part: "판정 기준 정리 — 고온 고압 설비의 장시간 운전 조건 비교", did: "- 불량 유형 재분류\n- 두 단계 판정 설계", result: "재검 월 30건 → 12건", skills: ["이미지 판정", "Python"] });
+await call("POST", "/api/experiences/draft", { person: names[0], projects: [ids[0]] });
 await call("POST", "/api/meetings", { person: names[1], date: "2026-10-20", title: "3분기 목표 점검", followups: ["교육 신청서 내기", "멘토 정하기"] });
 const intakeId = Array.isArray(intakes) ? intakes[0]?.id : (intakes.items?.[0]?.id);
 const routes = [
@@ -52,7 +54,7 @@ const routes = [
   ["projects", "#/projects"], ["board", "#/projects?view=board"], ["detail", `#/projects/${ids[0]}`], ["detail-long", `#/projects/${ids[5]}`],
   ["report-editor", `#/projects/${ids[0]}?report=${draft2?.id}`], ["roadmap", "#/roadmap"], ["reports", "#/reports"], ["history", "#/history"],
   ["skills", "#/skills"], ["skills-records", `#/skills?tab=records&person=${encodeURIComponent(names[1])}`], ["skills-meetings", `#/skills?tab=meetings&person=${encodeURIComponent(names[1])}`],
-  ["person", `#/person/${encodeURIComponent(names[0])}`], ["search", `#/search?q=${encodeURIComponent("과제")}`], ["help", "#/help"],
+  ["person", `#/person/${encodeURIComponent(names[0])}`], ["experience", "#/experience/E-001"], ["search", `#/search?q=${encodeURIComponent("과제")}`], ["help", "#/help"],
   ...["", "class", "report", "forms", "backup", "check"].map((t) => [`settings-${t || "basic"}`, `#/settings${t ? `?tab=${t}` : ""}`]),
 ];
 const AUDIT = () => {

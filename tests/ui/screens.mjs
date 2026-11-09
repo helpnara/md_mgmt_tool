@@ -6581,6 +6581,52 @@ async function main() {
     });
   }
 
+  console.log("\n[65] 팀원별 경험 — 사람별 이력의 [경험] 카드 · 초안 · 상세 (TODO 257)");
+
+  await check("맡은 과제 줄의 [경험 초안] → 상세로 가고, 담당과 역할 · 효과 금액이 들어와 있다 (257)", async () => {
+    await api.put(`/api/projects/${seeded.projectA}/contributions/${encodeURIComponent("권경락")}`,
+      { role: "주관", part: "시제품 설계", did: "- 소재 조성 설계\n- 시제품 제작", result: "인장강도 15% 향상" });
+    await go(`#/person/${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(900);
+    const card = page.locator("[data-testid=experience-card]");
+    equal(await card.count(), 1, "경험 카드");
+    expect((await card.innerText()).includes("경험 0건"), "처음엔 0건");
+    const row = page.locator(`li[data-project="${seeded.projectA}"]`);
+    await row.getByRole("button", { name: "경험 초안" }).click();
+    await page.waitForTimeout(1200);
+    expect(/#\/experience\/E-\d{3}/.test(page.url()), `상세로: ${page.url()}`);
+    const detail = page.locator(".experience-detail");
+    expect((await detail.locator(".experience-head").innerText()).includes("초안"), "초안 딱지");
+    equal(await detail.locator('input[aria-label="지표"]').first().inputValue(), "과제 기대효과", "효과 금액이 정량으로");
+    const questions = await detail.locator('textarea[aria-label="확인 필요"]').inputValue();
+    expect(questions.includes("인장강도 15% 향상") && questions.includes("본인이 기여한 몫"), `숫자 · 금액은 질문으로: ${questions}`);
+    expect((await detail.locator(".exp-fields").innerText()).length > 0, "본문");
+  });
+
+  await check("경험 상세에서 고쳐 저장하면 목록에 바뀐 제목, 지우면 보관함으로 (257)", async () => {
+    const detail = page.locator(".experience-detail");
+    const save = detail.getByRole("button", { name: "저장", exact: true });
+    expect(await save.isDisabled(), "고친 것이 없으면 [저장] 꺼짐");
+    await detail.locator(".exp-fields label", { hasText: "제목" }).locator("input").fill("시제품 설계와 조성 최적화");
+    await save.click();
+    await page.waitForTimeout(900);
+    expect((await detail.innerText()).includes("저장했습니다"), "저장 알림");
+    await detail.locator("a.back").click();
+    await page.waitForTimeout(900);
+    const table = page.locator(".experience-table");
+    expect((await table.innerText()).includes("시제품 설계와 조성 최적화"), "목록에 바뀐 제목");
+    equal(await page.locator(`li[data-project="${seeded.projectA}"]`).getByRole("button", { name: "경험 초안" }).count(), 0, "경험이 있는 과제에는 [경험 초안] 이 없다");
+    await table.locator("a").first().click();
+    await page.waitForTimeout(800);
+    nextDialog((d) => d.accept());
+    await page.locator(".experience-detail").getByRole("button", { name: "지우기" }).click();
+    await page.waitForTimeout(1000);
+    expect(page.url().includes("#/person/"), `이력으로 돌아온다: ${page.url()}`);
+    expect((await page.locator("[data-testid=experience-card]").innerText()).includes("경험 0건"), "지운 뒤 0건");
+    const trash = await api.get("/api/trash");
+    expect(trash.some((item) => item.kind === "experience"), "보관함에");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

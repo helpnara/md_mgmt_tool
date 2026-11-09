@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { copyText, COPY_FAILED } from "../clipboard";
-import { getMe, isManager } from "../me";
+import { getMe, isManager, isMember } from "../me";
 import { backTarget, projectLink, setPageTitle } from "../nav";
 import { notifyError } from "../notify";
 import { toTsv } from "../tsv";
@@ -13,6 +13,7 @@ import { ContributionForm } from "./ContributionsCard";
 import YearCard from "./YearCard";
 import type { Project } from "../types";
 import StatusBadge from "./StatusBadge";
+import ExperienceCard, { experienceLink } from "./ExperienceCard";
 
 /**
  * 사람별 이력 (TODO 238 ①) — 한 사람이 맡은(지금 · 예전) 과제를 **맡기 시작한 해**별로, 역할 · 담당 기간 · 회고 · 그 밖의 성과와 교육 · 행사 이력.
@@ -158,6 +159,22 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
   const [showPrompt, setShowPrompt] = useState(false);
   // 이력 화면에서 바로 고치기 (TODO 243 B4) — 과제를 받아 와 같은 양식을 그 자리에 연다
   const [editing, setEditing] = useState<{ id: string; project: Project } | null>(null);
+  // 경험 (TODO 257) — 경험이 이미 있는 과제(그 과제 줄에는 [경험 초안] 을 세우지 않는다)
+  const [expProjects, setExpProjects] = useState<Set<string> | null>(null);
+  const [expReload, setExpReload] = useState(0);
+  const [drafting, setDrafting] = useState<string | null>(null);
+  async function draftOne(projectId: string) {
+    setDrafting(projectId);
+    try {
+      const result = await api.draftExperiences(name, [projectId]);
+      if (result.made.length) window.location.hash = experienceLink(result.made[0]);
+      else setExpReload((n) => n + 1);
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setDrafting(null);
+    }
+  }
   const [opening, setOpening] = useState<string | null>(null);
 
   async function openEdit(id: string) {
@@ -389,6 +406,12 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                           );
                         })()}
                         <span className="contrib-period">{period(item)}{item.derived && <span className="muted"> · 시작일부터</span>}</span>
+                        {isManager(me) && expProjects !== null && !expProjects.has(item.id) && (
+                          <button className="ghost small" disabled={drafting === item.id} onClick={() => void draftOne(item.id)}
+                            title="이 과제의 담당과 역할 · 회고 · 개요 · 효과 금액으로 경험 초안을 만듭니다 (TODO 257)">
+                            {drafting === item.id ? "만드는 중…" : "경험 초안"}
+                          </button>
+                        )}
                         {canEditRow(item.id) && editing?.id !== item.id && (
                           <button data-write className="ghost small" disabled={opening === item.id} onClick={() => void openEdit(item.id)}>
                             {opening === item.id ? "여는 중…" : item.role || item.part || hasRetro(item) ? "고치기" : "적기"}
@@ -466,6 +489,16 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
           ))
         )}
       </div>
+
+      {/* 팀원별 경험 (TODO 257) — 관리자 · 팀장, 그리고 팀원 PC 의 자기 이력에서만. 읽기 전용 공유 바깥에는 없다(면담과 같은 결) */}
+      {(isManager(me) || (isMember() && me.name === name)) && (
+        <ExperienceCard
+          name={name}
+          retroProjects={data.projects.filter((item) => hasRetro(item)).map((item) => item.id)}
+          reloadKey={expReload}
+          onChanged={(listing) => setExpProjects(new Set(listing.items.map((item) => item.project).filter(Boolean)))}
+        />
+      )}
 
       <div className="card person-activities">
         <h2>교육 · 행사 {data.activities.length}건</h2>

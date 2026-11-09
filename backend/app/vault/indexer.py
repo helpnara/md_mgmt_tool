@@ -972,6 +972,10 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
     index_activities(conn, problems)
     # 팀원 면담 (TODO 182)
     index_meetings(conn, problems)
+    # 팀원별 경험 (TODO 257) — 면담과 같은 사람 폴더
+    from ..services.experiences import reindex as reindex_experiences
+
+    reindex_experiences(conn, problems)
     # 접수 풀도 따로 훑는다 (TODO 136)
     from ..services.intakes import reindex_intakes
 

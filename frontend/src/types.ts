@@ -1394,3 +1394,83 @@ export interface RestoreResult {
   safety_backup: string | null;
   backup_dir_missing: string | null;
 }
+
+// ── 팀원별 경험 (TODO 257 · 253 의 2단계) ─────────────────────────────────────
+export interface ExperienceQuant {
+  metric: string;
+  value: string;
+  baseline: string;
+  baseline_kind: "비교" | "집계" | "조건" | "미확인";
+  when: string;
+}
+export interface ExperienceSkill {
+  axis: "기술" | "업무" | "리더십" | "문제해결";
+  name: string;
+}
+export interface ExperienceEvidence {
+  type: string;
+  text: string;
+  year?: string;
+  file?: string;
+}
+export interface ExperienceProblem {
+  code: string;
+  field: string;
+  message: string;
+  level: "오류" | "경고";
+}
+export interface ExperienceSummary {
+  id: string;
+  person: string;
+  title: string;
+  project: string;
+  project_title: string;
+  project_gone: boolean;
+  start: string;
+  end: string;
+  status: "초안" | "구조화" | "확정";
+  open_count: number;
+  warn_count: number;
+  source: string;
+  updated_at: string;
+}
+export interface ExperienceListing {
+  person: string;
+  items: ExperienceSummary[];
+  counts: Record<string, number>;
+  total: number;
+}
+export interface Experience {
+  id: string;
+  person: string;
+  title: string;
+  project: string;
+  project_title: string;
+  project_gone: boolean;
+  project_text: string;
+  affiliation: string;
+  start: string;
+  end: string;
+  role: string;
+  kind: string;
+  status: "초안" | "구조화" | "확정";
+  situation: string;
+  goal: string;
+  actions: string[];
+  result_qual: string;
+  impact: string;
+  lesson: string;
+  lesson_source: string;
+  open_questions: string[];
+  skills: ExperienceSkill[];
+  quants: ExperienceQuant[];
+  evidences: ExperienceEvidence[];
+  related: string[];
+  materials: string[];
+  source: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  problems: ExperienceProblem[];
+  confirm_missing: string[];
+}

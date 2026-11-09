@@ -83,6 +83,7 @@ BLOCKED_PREFIXES = (
     "/api/folders", "/api/backup", "/api/settings", "/api/errors", "/api/trash",
     "/api/versions", "/api/drafts", "/api/maintenance", "/api/health", "/api/people",  # maintenance = 링크 점검 (TODO 220)
     "/api/edits",  # 누가 무엇을 고쳤나 — 팀장의 홈 (TODO 233)
+    "/api/experiences",  # 팀원별 경험 (TODO 257) — 면담과 같은 결. 팀원 PC 는 자기 것만(MEMBER_OPEN_PREFIXES)
     # API 문서 — 끝점 전체 · 스키마 필드명이 보인다 (TODO 206 ㉘)
     "/openapi.json", "/docs", "/redoc",
 )
@@ -107,7 +108,7 @@ def is_remote(request: Request) -> bool:
 
 
 # 팀원(등록한 IP, TODO 233)에게는 열리는 것 — 자기 쓰다 만 글(사람마다 따로 둔다)
-MEMBER_OPEN_PREFIXES = ("/api/drafts",)
+MEMBER_OPEN_PREFIXES = ("/api/drafts", "/api/experiences")
 
 
 def blocked_path(path: str, member: bool = False) -> bool:

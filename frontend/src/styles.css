@@ -2718,3 +2718,33 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .card > :is(h2, .icon-title, .card-head, .card-title-row) + :is(p.hint, .card-intro, p.explain) { margin-top: var(--title-desc-gap); }
 /* 팀원역량 [기록] 의 면담 한 줄(248) — 설명이 아니라 상자라, 거르기 줄 밑에 붙지 않게 12px */
 .card-head + .skills-meeting-line { margin-top: 12px; }
+
+/* ── 팀원별 경험 (TODO 257 · 253 의 2단계) ─────────────────────────────────── */
+.exp-status { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; margin-left: 8px; border-radius: var(--radius-pill);
+  font-size: var(--fs-xs); font-weight: 500; vertical-align: middle; border: 1px solid currentColor; }
+.exp-초안 { color: var(--neutral-700); background: var(--neutral-100); }
+.exp-구조화 { color: var(--primary-600); background: var(--primary-50); }
+.exp-확정 { color: var(--success-600); background: var(--success-100); }
+.experience-counts { margin: 0 0 8px; font-size: var(--fs-xs); }
+.experience-table td:nth-child(2) { min-width: 220px; }
+.experience-head h1 { font-size: var(--fs-xl); margin: 0; }
+.experience-head .project-id { font-size: var(--fs-sm); }
+.experience-stage { margin-top: 8px; }
+.experience-questions.has { border-color: var(--warning-300); background: var(--warning-50); }
+.exp-warn-list { margin: 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--warning-700); }
+.experience-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 1100px) {
+  .experience-columns { grid-template-columns: minmax(0, 13fr) minmax(0, 7fr); }
+}
+.experience-columns > .card { margin: 0; }
+.exp-fields { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.exp-fields textarea, .exp-lines { min-height: 0; font-family: inherit; font-size: var(--fs-sm); }
+.exp-label { display: block; font-size: var(--fs-xs); color: var(--muted); margin-bottom: 4px; }
+.exp-quant-table input, .exp-quant-table select { min-width: 72px; }
+.exp-quant-table td { padding: 6px 8px; }
+.exp-skill-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.exp-skill-list li { display: flex; gap: 6px; align-items: center; }
+.exp-skill-list select { width: 104px; flex: none; }
+.experience-side h3 { font-size: var(--fs-sm); margin: 16px 0 6px; }
+.exp-materials { margin: 0; padding-left: 18px; font-size: var(--fs-sm); }
+.exp-stamps { margin-top: 16px; font-size: var(--fs-xs); }
