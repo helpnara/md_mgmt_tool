@@ -4503,7 +4503,7 @@ async function main() {
     equal(await bgOf(promote), "rgb(111, 67, 30)", "[착수 · 과제로 승격] 은 갈색");
     await readable(promote, "[착수 · 과제로 승격]");
     const del = page.locator("button.ghost.danger").first();
-    equal(await del.evaluate((el) => getComputedStyle(el).borderTopColor), "rgb(251, 196, 197)", "삭제 단추에 빨간 테두리");
+    equal(await del.evaluate((el) => getComputedStyle(el).borderTopColor), "rgb(200, 0, 3)", "삭제 단추에 빨간 테두리 (251 — Nimbus danger)");
     await readable(del, "[삭제]");
     await go("#/projects");
     const active = page.locator(".view-switch button.active").first();
