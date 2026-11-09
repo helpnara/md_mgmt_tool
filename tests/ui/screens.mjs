@@ -288,6 +288,15 @@ async function main() {
 
   const seeded = await seed();
 
+  /** 홈 [할 일] 의 다가오는 팀원 일정을 모두 편다 — 3줄 + "나머지 n건 ▾" (249 ④) */
+  const openUpcoming = async () => {
+    const more = page.locator(".home-upcoming + .home-more");
+    if ((await more.count()) && (await more.getAttribute("aria-expanded")) !== "true") {
+      await more.click();
+      await page.waitForTimeout(200);
+    }
+  };
+
   /**
    * 화면을 옮긴다. **사람이 링크를 누르는 것과 같은 방식**으로.
    *
@@ -5518,6 +5527,7 @@ async function main() {
         made.push(...(created.ids ?? [created.id]));
         await go("#/");
         const card = page.locator(".home-week");
+        await openUpcoming(); // 3줄을 넘으면 "나머지 n건 ▾" 안에 있다 (249 ④)
         const row = card.locator(".home-upcoming li", { hasText: soonTitle });
         equal(await row.count(), 1, "다가오는 팀원 일정의 줄");
         expect((await row.locator(".left-chip").innerText()).trim() === "D-5", `남은 날 띠지: ${await row.locator(".left-chip").innerText()}`);
@@ -5694,6 +5704,7 @@ async function main() {
           made.push(...(created.ids ?? [created.id]));
         }
         await go("#/");
+        await openUpcoming(); // 앞선 시험이 넣은 예정과 합쳐 3줄을 넘는다 (249 ④)
         const chip = async (title) => (await page.locator(".home-upcoming li", { hasText: title }).locator(".left-chip").innerText()).trim();
         equal(await chip(`오늘 교육 ${stamp}`), "오늘", "오늘 띠지");
         equal(await chip(`진행 중 교육 ${stamp}`), "진행 중", "진행 중 띠지");
