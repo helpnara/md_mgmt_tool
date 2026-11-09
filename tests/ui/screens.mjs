@@ -6066,7 +6066,7 @@ async function main() {
     });
     await check("[글로 복사] · [표로 복사] — 고른 과제만, 금액은 넣지 않는다 (238 ②)", async () => {
       await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
-      await page.getByRole("button", { name: "글로 복사" }).click();
+      await page.getByRole("button", { name: "글로 복사", exact: true }).click();
       const text = await page.evaluate(() => navigator.clipboard.readText());
       expect(text.includes("■ 회고 시험 과제") && text.includes("결과: 주 4시간 → 30분") && text.includes("그 밖의 성과: 작업 시간 40% 단축"), `글: ${text}`);
       expect(!text.includes("억"), "금액이 없다");
@@ -6075,7 +6075,7 @@ async function main() {
       expect(table.startsWith("과제 번호\t과제명\t기간\t역할") && table.includes("회고 시험 과제"), `표: ${table.slice(0, 120)}`);
       // 아무것도 고르지 않으면 단추가 잠긴다
       for (const box of await page.locator('.person-project input[type="checkbox"]:checked').all()) await box.uncheck();
-      equal(await page.getByRole("button", { name: "글로 복사" }).isDisabled(), true, "고른 것이 없으면 잠김");
+      equal(await page.getByRole("button", { name: "글로 복사", exact: true }).isDisabled(), true, "고른 것이 없으면 잠김");
     });
     await check("과제 [담당과 역할]의 이름 → 그 사람 이력 · [← 과제]로 돌아온다 (238 ①)", async () => {
       const made = (await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제");
