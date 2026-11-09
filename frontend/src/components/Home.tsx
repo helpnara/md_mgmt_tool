@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
+import { ChartColumn, Compass, FolderTree, Layers, ListChecks, Tags, TrendingUp, Users } from "lucide-react";
+import IconTitle from "./IconTitle";
 import { api } from "../api";
 import { attempt } from "../notify";
 import type { ActivityBrief, BackupStatus, EditItem, Home as HomeData, RetroDue, HomeSlice, Meta, StatusInfo } from "../types";
@@ -122,10 +125,10 @@ function HiddenColumns({ names }: { names: string[] }) {
 }
 
 /** 제목과 [표 복사] — 단추를 제목 **밖**에 둔다(화면 낭독기가 제목을 "속성별 표 복사" 로 읽었다, TODO 232 H) */
-function CardTitle({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
+function CardTitle({ children, actions, icon }: { children: ReactNode; actions?: ReactNode; icon?: LucideIcon }) {
   return (
     <div className="card-title-row">
-      <h2>{children}</h2>
+      {icon ? <IconTitle icon={icon}>{children}</IconTitle> : <h2>{children}</h2>}
       {actions}
     </div>
   );
@@ -143,6 +146,9 @@ function MoreLines({ rest, open, onToggle, unit = "건" }: { rest: number; open:
     </button>
   );
 }
+
+/** 카드 제목의 아이콘 (TODO 252) — 속성 = 딱지들 · 그룹 = 겹 · 성격 = 나침반 · 분류 = 폴더 나무 */
+const SLICE_ICONS = { type: Tags, group: Layers, nature: Compass, category: FolderTree } as const;
 
 /** 1년을 넘긴 경과일은 "D+1368" 보다 "3년 넘음" 이 읽힌다 (TODO 232 H). 정확한 날수는 마우스를 올리면 */
 function sinceText(days: number | null): string {
@@ -203,6 +209,7 @@ function SliceTable({
     // 어느 표를 보고 있는지 모른 채 통과할 수 있다.
     <div className={`card home-types home-slice-${param}`}>
       <CardTitle
+        icon={SLICE_ICONS[param]}
         actions={
         <CopyTableButton
           headers={[column, "과제", ...meta.statuses.map((status) => status.label), "기대효과(억원/년)", "실증효과(억원/년)"]}
@@ -477,10 +484,10 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const reportSide = retroDue.length > 0 || drafts.length > 0 || week.drafts > 0 || week.stale.length > 0 || week.owner_gaps_total > 0 || week.plans.length > 0;
   const todo = (
     <div className="card home-week">
-      <h2>
+      <IconTitle icon={ListChecks}>
         이번 주 할 일
         <span className="hint"> · 보고 예정일 {week.report_date}</span>
-      </h2>
+      </IconTitle>
       <div className="home-week-row">
         {/* 접수 풀 (TODO 136) — 과제 수와 섞지 않고 따로 선다. 풀이 비어 있으면 세우지 않는다. */}
         {data.intakes.pool > 0 && (
@@ -795,7 +802,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       {/* 팀 현황 · 연도별 추이를 나란히 (TODO 123) — 좁은 화면에서는 한 줄씩 선다 */}
       <div className="home-top home-status-top">
         <div className="card home-team">
-          <h2>{year === ALL_YEARS ? "전체" : `${year}년`} 팀 현황</h2>
+          <IconTitle icon={ChartColumn}>{year === ALL_YEARS ? "전체" : `${year}년`} 팀 현황</IconTitle>
           <div className="home-stats">
             {/* 과제 = 그 해에 수행한 과제(수행기간이 그 해와 겹침) — 다년도 과제는 해마다 하나씩 (TODO 181) */}
             <a
@@ -919,6 +926,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         {data.compare.length > 1 && (
           <div className="card home-compare">
             <CardTitle
+              icon={TrendingUp}
               actions={
                 <CopyTableButton
                   headers={["연도", "과제", "완료", "보고 횟수", "기대효과(억원/년)", "실증효과(억원/년)"]}
@@ -976,6 +984,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       {/* ── 팀원별 성과 (ROADMAP R1 의 실체) ───────────────────────── */}
       <div className="card home-members wide">
         <CardTitle
+          icon={Users}
           actions={
             data.members.length > 0 && (
               <CopyTableButton

@@ -7,6 +7,8 @@ import { useEditedUnsaved } from "../util";
 import { numberProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
+import { CalendarClock } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /** 서버와 같은 범위 (TODO 214 F12 · F14) — 일 · 주기는 1~999, 주 · 월은 0~999(0 = 그 층은 안 씀) */
 const RANGES = {
@@ -104,7 +106,7 @@ export default function BackupCard() {
 
   return (
     <div className="card wide backup-card" onKeyDown={enterToSave(() => void save(), !busy && !hasProblem)}>
-      <h2>자동 백업</h2>
+      <IconTitle icon={CalendarClock}>자동 백업</IconTitle>
       <CardIntro id="backup">
         정한 폴더로 <b>전체 자료를 zip 한 벌</b>씩 내보냅니다. 폴더를 <b>네트워크 드라이브나
         외장 디스크</b>로 잡으면 PC가 고장 나도 자료가 남습니다.

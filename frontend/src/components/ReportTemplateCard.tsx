@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useEditedUnsaved } from "../util";
 import CardIntro from "./CardIntro";
+import { FileText } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /**
  * 보고 초안 서식.
@@ -51,7 +53,7 @@ export default function ReportTemplateCard() {
 
   return (
     <div className="card wide">
-      <h2>보고 초안 서식</h2>
+      <IconTitle icon={FileText}>보고 초안 서식</IconTitle>
       <CardIntro id="report-template">
         [보고 초안 만들기]로 만드는 문서의 뼈대입니다. <code>{"{summary}"}</code> 자리에{" "}
         <b>마지막 보고 이후의 진행일지</b>가 들어갑니다. 비워 두면 기본 서식을 씁니다.

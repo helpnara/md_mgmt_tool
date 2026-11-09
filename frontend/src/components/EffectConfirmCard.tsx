@@ -5,6 +5,8 @@ import { EFFECT_CONFIRM_DEFAULT, numberProblem } from "../inputRules";
 import { useEditedUnsaved } from "../util";
 import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
+import { Calculator } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /** 서버가 받는 상한 — 효과 금액 상한(100만 억원/년)과 같다 */
 const LIMIT_MAX = 1_000_000;
@@ -63,7 +65,7 @@ export default function EffectConfirmCard({ meta, onSaved }: { meta: Meta; onSav
   const number = Number(value);
   return (
     <div className="card effect-confirm-card" onKeyDown={enterToSave(() => void save(), canSave)}>
-      <h2>효과 금액 확인</h2>
+      <IconTitle icon={Calculator}>효과 금액 확인</IconTitle>
       <CardIntro id="effect-confirm">
         효과 금액은 <b>억원/년</b> 입니다. 한 과제에 이 금액을 넘게 적으면 저장하기 전에 <b>&ldquo;단위를 확인하세요&rdquo;</b> 하고 묻습니다 —
         원 · 백만원 단위로 잘못 적은 숫자가 팀 합계를 덮지 않게.

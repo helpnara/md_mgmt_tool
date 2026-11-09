@@ -27,6 +27,8 @@ import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
 import ViewTabs from "./ViewTabs";
 import { LIMITS, hasControlChars, lengthState } from "../inputRules";
+import { Download, FolderOpen, Gauge, Server, UserPen } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /** 설정 묶음 (TODO 249 ⑤) — "" = 기본. title 은 탭 아래 한 줄 설명이기도 하다 */
 type SettingsTab = "" | "class" | "report" | "forms" | "backup" | "check";
@@ -160,7 +162,7 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
       {tab === "" && (
         <div className="settings-grid">
           <div className="card author-card settings-wide" onKeyDown={enterToSave(() => void save(), canSaveAuthor)}>
-            <h2>작성자</h2>
+            <IconTitle icon={UserPen}>작성자</IconTitle>
             <CardIntro id="author">
               진행일지와 보고 문서에 <strong>누가 작성했는지</strong>를 함께 남깁니다. 이 PC(서버 PC)에서 쓴 기록에 붙는 이름입니다.
               팀원 PC 에서 쓴 기록에는 그 팀원의 이름이 붙습니다.
@@ -236,7 +238,7 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
         <div className="settings-grid">
           <ReportDayCard onSaved={onSaved} />
           <div className="card">
-            <h2>보고 기준</h2>
+            <IconTitle icon={Gauge}>보고 기준</IconTitle>
             <p className="hint">
               보고 대상 후보의 점수를 계산할 때 쓰는 기준 주기는 <strong>{meta.report_cycle_days}일</strong>입니다.
             </p>
@@ -257,7 +259,7 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
           {!isAdmin() && (
             // 팀장 PC (TODO 247) — 서버 운영 칸은 서버 PC 에만 선다
             <div className="card admin-only-note" data-admin-note>
-              <h2>서버 운영은 서버 PC 에서</h2>
+              <IconTitle icon={Server}>서버 운영은 서버 PC 에서</IconTitle>
               <p className="hint">
                 지금은 <b>팀장 PC</b> 로 열었습니다. <b>데이터 위치 · 자동 백업 폴더 · 백업에서 되살리기 · 팀장 지정과 팀장 PC 주소</b>는
                 서버를 맡은 쪽(서버 PC 에서 연 화면 — 관리자)이 합니다. 전체 백업 내려받기 · 이전 버전 · 삭제 보관함은 여기서도 됩니다.
@@ -266,7 +268,7 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
           )}
           {isAdmin() && (
           <div className="card">
-            <h2>데이터 위치</h2>
+            <IconTitle icon={FolderOpen}>데이터 위치</IconTitle>
             <CardIntro id="vault">
               모든 내용은 아래 폴더에 마크다운 파일과 첨부 파일로 저장됩니다. 폴더째 복사하면 그대로 백업입니다.
             </CardIntro>
@@ -275,7 +277,7 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
           )}
 
           <div className="card">
-            <h2>전체 백업</h2>
+            <IconTitle icon={Download}>전체 백업</IconTitle>
             <CardIntro id="full-backup">
               모든 과제의 문서와 첨부를 zip 하나로 내려받습니다. 검색 색인처럼 다시 만들 수 있는 것은 빼고
               원본만 담습니다.

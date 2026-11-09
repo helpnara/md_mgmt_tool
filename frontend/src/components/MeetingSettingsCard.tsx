@@ -5,6 +5,8 @@ import { useEditedUnsaved } from "../util";
 import { listProblem, numberProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
+import { MessagesSquare } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /** 팀원 면담의 구분 목록 · 면담 주기 (TODO 182). 목록은 한 줄에 하나, 비우면 기본 목록. */
 export default function MeetingSettingsCard({ meta, onSaved }: { meta: Meta; onSaved: () => void }) {
@@ -47,7 +49,7 @@ export default function MeetingSettingsCard({ meta, onSaved }: { meta: Meta; onS
 
   return (
     <div className="card meeting-settings" onKeyDown={enterToSave(() => void save(), canSave)}>
-      <h2>팀원 면담</h2>
+      <IconTitle icon={MessagesSquare}>팀원 면담</IconTitle>
       <CardIntro id="meeting">
         팀원역량 화면의 <b>면담 기록</b>에서 고르는 구분과, 면담할 때가 지났다고 볼 날수입니다. 구분은 <b>한 줄에 하나</b> —
         30자 20개까지, 비우면 기본 목록(정기 · 목표 설정 · 중간 점검 · 수시 · 고충)으로 돌아갑니다.

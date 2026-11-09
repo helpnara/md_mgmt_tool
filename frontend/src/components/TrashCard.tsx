@@ -3,6 +3,8 @@ import { api } from "../api";
 import type { TrashItem } from "../types";
 import { formatDateTime } from "../util";
 import CardIntro from "./CardIntro";
+import { Trash2 } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /**
  * 삭제 보관함.
@@ -48,7 +50,7 @@ export default function TrashCard() {
   return (
     <div className="card">
       <div className="card-head">
-        <h2>삭제 보관함 {items.length}건</h2>
+        <IconTitle icon={Trash2}>삭제 보관함 {items.length}건</IconTitle>
         {items.length > 0 && (
           <button className="ghost" onClick={() => setOpen((value) => !value)}>
             {open ? "접기" : "펼치기"}

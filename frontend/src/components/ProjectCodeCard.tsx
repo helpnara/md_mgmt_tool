@@ -4,6 +4,8 @@ import type { RenumberPlan } from "../types";
 import { PROJECT_CODE_RULE, projectCodeProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
+import { Hash } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /**
  * 과제 번호의 팀·부문 코드.
@@ -94,7 +96,7 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="card project-code-card" onKeyDown={enterToSave(() => void save(), canSave)}>
-      <h2>과제 번호 체계</h2>
+      <IconTitle icon={Hash}>과제 번호 체계</IconTitle>
       <CardIntro id="project-code">
         비워 두면 지금처럼 <code>{year}-001</code> 입니다. 팀·부문 코드를 넣으면{" "}
         <code>{year}-소재-001</code> 처럼 붙습니다. 여러 팀장이 함께 쓰게 될 때 번호가 겹치지 않게

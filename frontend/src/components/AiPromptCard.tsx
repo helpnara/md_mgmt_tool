@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useEditedUnsaved } from "../util";
 import CardIntro from "./CardIntro";
+import { Sparkles } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /**
  * AI 요약 프롬프트의 앞뒤에 붙일 글 (TODO 71).
@@ -52,7 +54,7 @@ export default function AiPromptCard() {
 
   return (
     <div className="card wide ai-prompt-card">
-      <h2>AI 요약 프롬프트</h2>
+      <IconTitle icon={Sparkles}>AI 요약 프롬프트</IconTitle>
       <CardIntro id="ai-prompt">
         보고 편집 화면의 <b>[AI 요약 프롬프트]</b>가 만들어 주는 글의 <b>맨 앞과 맨 뒤</b>에 붙습니다.
         쓰시던 프롬프트를 그대로 넣으면 됩니다. 위를 비우면 기본 지시문을 씁니다.

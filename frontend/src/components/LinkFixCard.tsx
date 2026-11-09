@@ -3,6 +3,8 @@ import { api } from "../api";
 import { projectLink } from "../nav";
 import type { LinkFixReport } from "../types";
 import CardIntro from "./CardIntro";
+import { Link2 } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 const KIND_LABEL = { overview: "개요", entry: "진행일지", report: "보고" } as const;
 
@@ -51,7 +53,7 @@ export default function LinkFixCard() {
   return (
     <div className="card link-fix" data-testid="link-fix">
       <div className="card-head">
-        <h2>첨부 링크 정리</h2>
+        <IconTitle icon={Link2}>첨부 링크 정리</IconTitle>
         <div className="form-actions" style={{ margin: 0 }}>
           <button className="ghost small" disabled={busy} onClick={() => void scan()}>
             {report ? "다시 세기" : "점검하기"}

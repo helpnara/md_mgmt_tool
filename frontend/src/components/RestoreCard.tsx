@@ -3,6 +3,8 @@ import { api } from "../api";
 import type { RestoreReport, RestoreResult } from "../types";
 import { formatBytes, uploadAttachment } from "../upload";
 import CardIntro from "./CardIntro";
+import { ArchiveRestore } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /**
  * 전체 백업에서 되살리기 (TODO 246) — 새 서버로 옮길 때.
@@ -68,7 +70,7 @@ export default function RestoreCard() {
 
   return (
     <div className="card restore-card" data-restore-card>
-      <h2>백업에서 되살리기</h2>
+      <IconTitle icon={ArchiveRestore}>백업에서 되살리기</IconTitle>
       <CardIntro id="restore">
         [전체 백업 내려받기]로 받은 zip 을 골라 데이터를 되살립니다 — 새 서버로 옮길 때. 지금 데이터와 <b>합치지 않고 바꾸며</b>,
         바꾸기 전에 지금 데이터를 먼저 통째로 백업해 둡니다.

@@ -5,6 +5,8 @@ import { useEditedUnsaved } from "../util";
 import { listProblem, numberProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
+import { Inbox } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /** 서버와 같은 상한 (TODO 214 U6) — 분류 30자 20개 · 사전점검 80자 30개 */
 const CLASS_MAX_ITEMS = 20;
@@ -147,7 +149,7 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
 
   return (
     <div className="card wide intake-settings" onKeyDown={enterToSave(() => void save(), canSave)}>
-      <h2>과제 분류 · 접수</h2>
+      <IconTitle icon={Inbox}>과제 분류 · 접수</IconTitle>
       <CardIntro id="intake">
         스마트과제의 <b>성격 · 분류 · 수행 방식 · 비용구분</b> 목록입니다. <b>한 줄에 하나</b>씩, 목록마다{" "}
         <b>

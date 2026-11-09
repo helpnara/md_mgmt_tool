@@ -6,6 +6,8 @@ import { COPY_FAILED } from "../clipboard";
 import type { ErrorEntry, ErrorListing, InputRejection } from "../types";
 import { formatDateTime } from "../util";
 import CardIntro from "./CardIntro";
+import { TriangleAlert } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /**
  * 최근 오류.
@@ -68,7 +70,7 @@ export default function ErrorLogCard() {
   return (
     <div className="card wide">
       <div className="card-head">
-        <h2>최근 오류 ({items.length})</h2>
+        <IconTitle icon={TriangleAlert}>최근 오류 ({items.length})</IconTitle>
         <div className="form-actions" style={{ margin: 0 }}>
           <button data-write className="ghost small" onClick={load}>
             다시 읽기

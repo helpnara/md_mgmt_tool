@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { formatBytes } from "../upload";
 import CardIntro from "./CardIntro";
+import { History } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /**
  * 이전 버전 보관 현황.
@@ -24,7 +26,7 @@ export default function VersionsCard() {
 
   return (
     <div className="card">
-      <h2>이전 버전 보관</h2>
+      <IconTitle icon={History}>이전 버전 보관</IconTitle>
       <CardIntro id="versions">
         문서를 <b>고쳐 저장할 때마다 직전 내용</b>을 한 벌 남깁니다. 잘못 고쳤을 때
         진행일지·개요·보고 화면의 <b>[이전 버전]</b>에서 되돌릴 수 있습니다.

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import CardIntro from "./CardIntro";
+import { CalendarDays } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /** 0=월 … 6=일. 파이썬 `date.weekday()` 와 같은 순서로 맞춘다. */
 const DAYS = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
@@ -60,7 +62,7 @@ export default function ReportDayCard({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="card">
-      <h2>주간 보고 요일</h2>
+      <IconTitle icon={CalendarDays}>주간 보고 요일</IconTitle>
       <CardIntro id="report-day">
         팀에서 <b>주간업무를 보고하는 요일</b>입니다. 보고 예정일, 보고 초안의 기본 날짜,
         그리고 알림이 모두 이 요일을 따라갑니다.

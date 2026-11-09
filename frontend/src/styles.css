@@ -2689,3 +2689,16 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .view-tab { margin-bottom: -2px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; transition: background-color 0.15s ease; }
 .view-tab:hover { background: var(--primary-50); }
 .view-tab:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ── 카드 제목의 아이콘 칸 (TODO 252) — 연파랑 둥근 사각 36 + 파란 선 아이콘 20, 제목 왼쪽 ───────────── */
+.icon-title { display: flex; align-items: center; gap: 12px; }
+.icon-title-text { min-width: 0; }
+.icon-tile {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: var(--radius); background: var(--primary-50); color: var(--primary-500);
+}
+.card > .icon-title:first-child, .card-head > .icon-title, .card-title-row > .icon-title { margin: 0 0 12px; }
+.card-head > .icon-title, .card-title-row > .icon-title { margin-bottom: 0; }
+.card-title-row:has(> .icon-title) { margin-bottom: 12px; }
+/* 홈 카드 머리 줄 높이(249 ③) — 아이콘 칸이 있으면 36 */
+.home .card > .icon-title:first-child { min-height: 36px; column-gap: 12px; }

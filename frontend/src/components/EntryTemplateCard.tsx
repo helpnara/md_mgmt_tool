@@ -3,6 +3,8 @@ import { api } from "../api";
 import type { Meta } from "../types";
 import { useEditedUnsaved } from "../util";
 import CardIntro from "./CardIntro";
+import { NotebookPen } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /** 빈 서식은 "정한 적 없음" 과 같다 — [이 서식 비우기] 만으로 고친 것이 되지 않게 */
 function filled(templates: Record<string, string>): Record<string, string> {
@@ -60,7 +62,7 @@ export default function EntryTemplateCard({ meta }: { meta: Meta }) {
   return (
     <div className="card wide">
       <div className="card-head">
-        <h2>진행일지 서식</h2>
+        <IconTitle icon={NotebookPen}>진행일지 서식</IconTitle>
         <select value={target} onChange={(event) => setTarget(event.target.value)}>
           <option value="">공통</option>
           {meta.types.map((type) => (

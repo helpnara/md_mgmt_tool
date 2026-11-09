@@ -8,6 +8,8 @@ import NameDialog, { changeCounts } from "./NameDialog";
 import { enterToSave } from "./enterSave";
 import { isAdmin } from "../me";
 import CardIntro from "./CardIntro";
+import { Users } from "lucide-react";
+import IconTitle from "./IconTitle";
 
 /** IP 칸의 글 → 주소 목록 (TODO 233). 쉼표 · 띄어쓰기로 여럿 */
 function parseIps(text: string): string[] {
@@ -224,11 +226,11 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
   return (
     <div className="card people-card" onKeyDown={enterToSave(() => void save(), !busy && problemCount === 0)}>
       <div className="card-head">
-        <h2>
+        <IconTitle icon={Users}>
           담당자 명부 {people.length}명
           {leftCount > 0 && <span className="muted"> · 떠난 사람 {leftCount}명</span>}
           {leavingCount > 0 && <span className="muted"> · 떠날 예정 {leavingCount}명</span>}
-        </h2>
+        </IconTitle>
         <button
           className="ghost"
           onClick={() =>
