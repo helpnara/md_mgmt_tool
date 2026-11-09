@@ -19,6 +19,7 @@ import LinkFixCard from "./LinkFixCard";
 import PasteCheckCard from "./PasteCheckCard";
 import VersionsCard from "./VersionsCard";
 import BackupCard from "./BackupCard";
+import RestoreCard from "./RestoreCard";
 import LoadError from "./LoadError";
 import EffectConfirmCard from "./EffectConfirmCard";
 import { enterToSave } from "./enterSave";
@@ -271,6 +272,7 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
             </div>
           </div>
 
+          <RestoreCard />
           <BackupCard />
           <VersionsCard />
           <TrashCard />

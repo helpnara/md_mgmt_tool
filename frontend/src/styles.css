@@ -2393,3 +2393,13 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
 .done-card-head b { color: #2f6b3e; }
 .done-card-stats { margin-top: 2px; color: var(--muted-strong); }
 .done-card-outcome { margin-top: 4px; font-weight: 600; color: #2f6b3e; }
+
+/* 백업에서 되살리기 (TODO 246) */
+.restore-card label.button-like { cursor: pointer; }
+.restore-card label.button-like.disabled { opacity: 0.55; cursor: progress; }
+.restore-table { border-collapse: collapse; margin: 10px 0 6px; font-size: 14px; }
+.restore-table th { text-align: left; font-weight: 600; color: var(--muted-strong); padding: 3px 14px 3px 0; white-space: nowrap; vertical-align: top; }
+.restore-table td { padding: 3px 0; }
+.restore-problems { margin: 6px 0; padding-left: 18px; }
+.restore-done { margin-top: 10px; }
+.restore-done p { margin: 4px 0; }

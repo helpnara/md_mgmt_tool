@@ -14,8 +14,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
 from .api import (activities, attachments, dashboard, drafts, edits, entries, errors, export, folders, home, intakes,
-                  linkfix, meetings, meta, people, person_history, projects, reports, roadmap, search, settings,
-                  trash, versions)
+                  linkfix, meetings, meta, people, person_history, projects, reports, restore, roadmap, search,
+                  settings, trash, versions)
 from . import mimefix, permissions, readcache, share, who
 from .db import connect
 from .services import edits as edits_service
@@ -443,6 +443,7 @@ app.include_router(roadmap.router)
 app.include_router(meetings.router)
 app.include_router(edits.router)
 app.include_router(person_history.router)  # 사람별 이력 (TODO 238)
+app.include_router(restore.router)  # 전체 백업에서 되살리기 (TODO 246)
 
 if FRONTEND_DIST.exists():
     @app.get("/assets/{name}")

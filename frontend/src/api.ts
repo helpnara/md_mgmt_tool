@@ -1,6 +1,6 @@
 import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner } from "./types";
 import type { Attachment } from "./upload";
-import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RetroDue, Visitor, YearReview } from "./types";
+import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
 
 /**
@@ -75,6 +75,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   meta: () => request<Meta>("/api/meta"),
+  // 전체 백업에서 되살리기 (TODO 246) — 살펴보기는 파일 올리기라 RestoreCard 가 uploadAttachment 로 부른다
+  restoreBackup: (token: string) =>
+    request<RestoreResult>("/api/backup/restore", { method: "POST", body: JSON.stringify({ token }) }),
   // ── 과제 접수 풀 (TODO 136) ─────────────────────────
   intakes: (params: Record<string, string>) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v));

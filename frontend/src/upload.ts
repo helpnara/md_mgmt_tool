@@ -16,8 +16,8 @@ export interface Attachment {
   deduplicated: boolean;
 }
 
-export interface UploadHandle {
-  promise: Promise<Attachment>;
+export interface UploadHandle<T = Attachment> {
+  promise: Promise<T>;
   abort: () => void;
 }
 
@@ -25,13 +25,13 @@ export interface UploadHandle {
  * 용량 제한이 없으므로 진행률을 반드시 보여준다.
  * fetch는 업로드 진행률을 주지 않아 XHR을 쓴다.
  */
-export function uploadAttachment(
+export function uploadAttachment<T = Attachment>(
   endpoint: string,
   file: File,
   onProgress: (loaded: number, total: number) => void,
-): UploadHandle {
+): UploadHandle<T> {
   const xhr = new XMLHttpRequest();
-  const promise = new Promise<Attachment>((resolve, reject) => {
+  const promise = new Promise<T>((resolve, reject) => {
     const form = new FormData();
     form.append("file", file, file.name);
 
@@ -40,7 +40,7 @@ export function uploadAttachment(
     });
     xhr.addEventListener("load", () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText) as Attachment);
+        resolve(JSON.parse(xhr.responseText) as T);
       } else {
         // 다른 요청과 같은 말로 (TODO 165) — 사유가 목록(422)이어도, 글이 아닌 500 이어도
         let body: unknown = null;

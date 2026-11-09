@@ -357,7 +357,7 @@ def _vault_files(vault: Path, assets: bool) -> list[tuple[Path, str]]:
         rel_root = here.relative_to(vault)
         if rel_root == Path("."):
             # 색인(.index)과 휴지통(.trash)은 다시 만들 수 있거나 버린 것이라 뺀다.
-            dirnames[:] = [name for name in dirnames if name not in {".index", ".trash"}]
+            dirnames[:] = [name for name in dirnames if name not in {".index", ".trash", ".restoring"}]  # .restoring = 되살리기 작업 자리 (TODO 246)
         if not assets:
             dirnames[:] = [name for name in dirnames if name != ASSETS_DIR]
         dirnames.sort()

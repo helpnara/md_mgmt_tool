@@ -6355,6 +6355,39 @@ async function main() {
     });
   }
 
+  console.log("\n[64] 전체 백업에서 되살리기 (TODO 246)");
+  {
+    await check("엉뚱한 zip 을 고르면 이유를 말하고 [되살리기] 단추가 없다", async () => {
+      await go("#/settings");
+      await page.waitForSelector("[data-restore-card]", { timeout: 8000 });
+      // 머리글 · 내용이 아무렇게나인 zip — 이 도구의 백업이 아니다
+      const fake = Buffer.from("504b0506000000000000000000000000000000000000", "hex");
+      await page.locator('[data-restore-card] input[type="file"]').setInputFiles({ name: "다른것.zip", mimeType: "application/zip", buffer: fake });
+      await page.waitForSelector("[data-restore-report], [data-restore-card] .error", { timeout: 8000 });
+      const text = await page.locator("[data-restore-card]").innerText();
+      expect(text.includes("이 도구의 백업이 아닙니다"), `거절 이유: ${text}`);
+      equal(await page.locator("[data-restore-card]").getByRole("button", { name: "되살리기", exact: true }).count(), 0, "되살리기 단추 없음");
+      await page.locator("[data-restore-card]").getByRole("button", { name: "취소" }).click();
+    });
+    await check("[전체 백업]으로 받은 zip → 살펴보기(날짜 · 과제 건수 · 지금 데이터) → [되살리기] → 지금 데이터는 먼저 백업 · 과제 수 그대로", async () => {
+      const before = (await api.get("/api/projects")).length;
+      const backup = await page.request.get(`${BASE}/api/backup`);
+      const name = (backup.headers()["content-disposition"].match(/filename\*=UTF-8''([^;]+)/) || [])[1];
+      await page.locator('[data-restore-card] input[type="file"]').setInputFiles({
+        name: decodeURIComponent(name || "과제이력-전체백업.zip"), mimeType: "application/zip", buffer: await backup.body(),
+      });
+      await page.waitForSelector("[data-restore-report]", { timeout: 20000 });
+      const report = await page.locator("[data-restore-report]").innerText();
+      expect(report.includes(`과제 ${before}건`) && report.includes("바뀝니다"), `살펴보기: ${report}`);
+      // 확인 창은 위의 page.on("dialog") 가 받아 준다
+      await page.locator("[data-restore-card]").getByRole("button", { name: "되살리기", exact: true }).click();
+      await page.waitForSelector("[data-restore-done]", { timeout: 30000 });
+      const done = await page.locator("[data-restore-done]").innerText();
+      expect(done.includes(`과제 ${before}건`) && done.includes("과제이력-되살리기전-"), `되살린 뒤: ${done}`);
+      equal((await api.get("/api/projects")).length, before, "과제 수 그대로");
+    });
+  }
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

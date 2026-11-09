@@ -1358,3 +1358,34 @@ export interface PersonProject {
 export interface MyWork {
   recent_done?: { id: string; title: string; completed_at: string }[];
 }
+
+/** 전체 백업 ZIP 살펴보기 (TODO 246) */
+export interface RestoreCounts {
+  projects: number;
+  people: number;
+  intakes: number;
+  assets: number;
+}
+export interface RestoreReport extends RestoreCounts {
+  token: string | null;
+  filename: string;
+  date: string | null;
+  files: number;
+  bytes: number;
+  zip_bytes: number;
+  settings: boolean;
+  with_assets: boolean;
+  wrapped: string | null;
+  ok: boolean;
+  problems: string[];
+  current: RestoreCounts & { has_data: boolean };
+}
+export interface RestoreResult {
+  projects: number;
+  people: number;
+  intakes: number;
+  files: number;
+  problems: { path: string; reason: string }[];
+  safety_backup: string | null;
+  backup_dir_missing: string | null;
+}
