@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useEditedUnsaved } from "../util";
+import CardIntro from "./CardIntro";
 
 /**
  * AI 요약 프롬프트의 앞뒤에 붙일 글 (TODO 71).
@@ -50,15 +51,15 @@ export default function AiPromptCard() {
   }
 
   return (
-    <div className="card wide">
+    <div className="card wide ai-prompt-card">
       <h2>AI 요약 프롬프트</h2>
-      <p className="hint">
+      <CardIntro id="ai-prompt">
         보고 편집 화면의 <b>[AI 요약 프롬프트]</b>가 만들어 주는 글의 <b>맨 앞과 맨 뒤</b>에 붙습니다.
         쓰시던 프롬프트를 그대로 넣으면 됩니다. 위를 비우면 기본 지시문을 씁니다.
         <br />
         <b>이 도구는 AI 를 부르지 않습니다.</b> 붙여넣기 좋은 글을 만들어 줄 뿐이고, 어디에 넣을지는
         직접 정하십니다. 밖으로 나가는 것은 없습니다.
-      </p>
+      </CardIntro>
 
       <label className="stack-label">
         앞에 붙일 글 — 지시문

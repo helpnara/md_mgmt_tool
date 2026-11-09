@@ -4,6 +4,7 @@ import type { ClassificationKey, Meta, PrecheckItemDef } from "../types";
 import { useEditedUnsaved } from "../util";
 import { listProblem, numberProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
+import CardIntro from "./CardIntro";
 
 /** 서버와 같은 상한 (TODO 214 U6) — 분류 30자 20개 · 사전점검 80자 30개 */
 const CLASS_MAX_ITEMS = 20;
@@ -147,13 +148,16 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
   return (
     <div className="card wide intake-settings" onKeyDown={enterToSave(() => void save(), canSave)}>
       <h2>과제 분류 · 접수</h2>
-      <p className="hint">
+      <CardIntro id="intake">
         스마트과제의 <b>성격 · 분류 · 수행 방식 · 비용구분</b> 목록입니다. <b>한 줄에 하나</b>씩, 목록마다{" "}
         <b>
           {CLASS_MAX_LEN}자 {CLASS_MAX_ITEMS}개까지
         </b>{" "}
         적습니다. 목록에서 뺀 값도 이미 적힌 과제에서는 지워지지 않습니다.
-      </p>
+      </CardIntro>
+      {/* 넓은 화면에서는 두 단 (TODO 249 ①) — 왼쪽 분류 목록 · 묵힘, 오른쪽 접수 서식 · 사전점검. 한 단으로 1,500px 이었다 */}
+      <div className="intake-cols">
+      <div className="intake-col">
       <div className="class-lists">
         {meta.classifications.map((info) => (
           <label key={info.key}>
@@ -185,6 +189,8 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
           <span className="hint">접수 후 이 날수가 지나도 판정이 없으면 홈과 접수 풀에 표시합니다 (보류는 제외) · 1~999일</span>
         </label>
       </div>
+      </div>
+      <div className="intake-col">
       <label>
         접수 본문 서식
         <textarea
@@ -248,6 +254,8 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
         <button className="ghost" onClick={() => setPrecheckText(precheckDefault)} disabled={!precheckDefault}>
           체크리스트 기본 목록으로
         </button>
+      </div>
+      </div>
       </div>
       {notice && <p className="hint notice">{notice}</p>}
       {error && <p className="form-error">{error}</p>}

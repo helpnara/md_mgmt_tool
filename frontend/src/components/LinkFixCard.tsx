@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { projectLink } from "../nav";
 import type { LinkFixReport } from "../types";
+import CardIntro from "./CardIntro";
 
 const KIND_LABEL = { overview: "개요", entry: "진행일지", report: "보고" } as const;
 
@@ -63,12 +64,12 @@ export default function LinkFixCard() {
         </div>
       </div>
 
-      <p className="hint">
+      <CardIntro id="link-fix">
         이름에 <b>공백이나 괄호</b>가 있는 첨부는 예전에 넣은 링크가 그 자리에서 끊겨 그림이
         안 뜹니다. 지금은 넣을 때 <code>&lt;…&gt;</code> 로 감싸므로 새 문서는 괜찮고, 이미 쌓인
         문서만 여기서 한 번에 고칩니다. 고치는 것은 <b>이 과제의 실제 첨부를 가리키는 링크뿐</b>이고,
         본문의 다른 글은 건드리지 않습니다.
-      </p>
+      </CardIntro>
 
       <label className="check-label">
         <input

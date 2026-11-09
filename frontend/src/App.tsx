@@ -36,7 +36,7 @@ type Route =
   | { name: "skills"; query: string }
   // 사람별 이력 (TODO 238)
   | { name: "person"; person: string; back: string | null }
-  | { name: "settings"; back: string | null }
+  | { name: "settings"; back: string | null; query: string }
   | { name: "help" }
   // 과제 접수 풀 (TODO 136)
   | { name: "intakes"; query: string }
@@ -81,7 +81,7 @@ function readRoute(): Route {
   if (path.startsWith("skills")) return { name: "skills", query: queryString ?? "" };
   if (path.startsWith("person/"))
     return { name: "person", person: safeDecode(path.slice("person/".length)), back: params.get(BACK_PARAM) };
-  if (path.startsWith("settings")) return { name: "settings", back: params.get(BACK_PARAM) };
+  if (path.startsWith("settings")) return { name: "settings", back: params.get(BACK_PARAM), query: queryString ?? "" };
   if (path.startsWith("help")) return { name: "help" };
   if (path.startsWith("intakes/"))
     return {
@@ -389,7 +389,7 @@ export default function App() {
         {route.name === "reports" && <ReportCandidates meta={meta} query={route.query} />}
         {route.name === "history" && <ReportHistory meta={meta} query={route.query} />}
         {route.name === "roadmap" && <Roadmap meta={meta} query={route.query} />}
-        {route.name === "settings" && !meta.readonly && <Settings meta={meta} onSaved={loadMeta} back={route.back} />}
+        {route.name === "settings" && !meta.readonly && <Settings meta={meta} onSaved={loadMeta} back={route.back} query={route.query} />}
         {route.name === "settings" && meta.readonly && (
           // 읽기 전용 공유 (191) — 주소로 들어와도 설정은 열리지 않는다. 설정 화면은 묻는 것마다 403 이라 아예 세우지 않는다.
           <p className="hint readonly-note">설정은 서버 PC 에서만 엽니다. <a href="#/">홈으로</a></p>

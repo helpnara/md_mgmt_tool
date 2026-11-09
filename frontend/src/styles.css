@@ -389,27 +389,34 @@ button { white-space: nowrap; }
 .report-meta { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .report-meta label { max-width: 260px; }
 .report-meta .hint { padding-bottom: 6px; }
-/* 설정 카드는 글 읽는 폭(720px)을 넘지 않아야 읽기 좋다. 다만 본문은 1180~1720px 를
-   쓰므로 카드 하나만 세우면 오른쪽이 통째로 빈다. 넓은 화면에서는 두 칸으로 흘린다 —
-   카드가 아홉 개라 세로가 매우 길고, 두 칸이면 훑는 거리가 절반이 된다. */
-.settings .card { max-width: 720px; }
-@media (min-width: 1180px) {
-  /* 두 칸으로 흘린다 — **격자가 아니라 단(column)** 이다 (TODO 120).
-     격자로 두면 칸마다 카드 높이가 달라 짧은 카드 아래에 구멍이 생긴다. 높이를 억지로
-     맞추면 그 안이 빌 뿐이므로, 카드를 위로 붙여 흘려 구멍 자체를 없앤다. */
-  .settings-grid {
-    columns: 2;
-    column-gap: 16px;
-  }
-  .settings-grid > .card {
-    max-width: none;
-    width: 100%;
-    margin: 0 0 16px;
-    /* 카드가 두 단에 걸쳐 잘리지 않게 */
-    break-inside: avoid;
-    -webkit-column-break-inside: avoid;
-  }
+/* 설정 (TODO 249) — 묶음 탭 · 두 크기의 카드.
+   예전(120)에는 카드를 두 단으로 위에서 흘렸는데, 묶음마다 두 단의 바닥이 제각각이고 카드 하나뿐인 묶음은 반쪽이 비었다.
+   이제는 **격자**다 — 짧은 카드는 두 칸에 짝지어 **한 줄의 높이를 맞추고**, 넓은 카드는 가로 전체(.settings-wide).
+   [저장] 같은 카드 끝 단추는 카드 바닥에 붙어 나란한 두 카드에서 같은 선에 선다. */
+.settings-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: stretch; }
+@media (min-width: 1100px) {
+  .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.settings-grid > .card { margin: 0; min-width: 0; display: flex; flex-direction: column; }
+.settings-grid > .settings-wide,
+.settings-grid > .people-card,
+.settings-grid > .intake-settings,
+.settings-grid > .ai-prompt-card,
+.settings-grid > .paste-check { grid-column: 1 / -1; }
+.settings-grid > .card > .form-actions:last-child { margin-top: auto; padding-top: 10px; }
+.settings-tabs { margin-top: 8px; }
+.settings-group-desc { margin: 10px 0 14px; }
+/* 카드 머리의 설명 — 두 줄까지, 넘치면 [설명 ▾] (CardIntro) */
+.card-intro { margin: 0 0 8px; }
+.card-intro .card-intro-text { margin: 0; }
+.card-intro .card-intro-text.clamped { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-intro .explain-toggle { margin-top: 2px; }
+/* 분류 · 접수 — 카드 하나를 안에서 두 단으로 */
+.intake-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 24px; align-items: start; }
+@media (min-width: 1100px) {
+  .intake-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.intake-col { min-width: 0; }
 .settings h2 { margin-bottom: 6px; }
 .vault-box { display: block; margin-top: 6px; padding: 8px 10px; background: #f1f3f5; border-radius: 6px; font-size: 13px; word-break: break-all; }
 .warn-text { color: var(--warn); }
@@ -2438,3 +2445,23 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
 .role-chip.role-leader { background: #e8f0fb; color: #1d4f91; border: 1px solid #c4d7f2; }
 .role-chip.role-admin { background: #f1ede6; color: #5b4a33; border: 1px solid #ddd2c0; }
 .admin-only-note h2 { font-size: 15px; }
+
+/* ── 홈 정돈 (TODO 249) — 카드마다 높이가 달라 산만했다 ───────────────────── */
+/* ① 짝 지은 두 칸은 높이를 맞춘다 — 팀 현황 · 연도별 추이 / 속성별 · 그룹별 / 성격별 · 분류별.
+      설명 줄은 카드 바닥에 붙여 두 카드의 표 아래가 같은 선에서 끝나게 */
+.home-top, .home-slices { align-items: stretch; }
+.home-top > .card, .home-slices > .card { display: flex; flex-direction: column; margin-bottom: 0; }
+.home-slices > .card > .table-scroll + *,
+.home-top > .card > .explain:last-child { margin-top: auto; padding-top: 8px; }
+.home-top, .home-slices { margin-bottom: 16px; }
+/* ② 짝이 없으면 가로 전체 — 연도별 추이가 없는 해의 팀 현황, 표가 하나뿐인 줄 */
+.home-top > :only-child, .home-slices > :only-child { grid-column: 1 / -1; }
+/* ③ 카드 머리 줄 높이를 하나로 — [표 복사] 가 있든 없든 표가 같은 선에서 시작한다 */
+.home .card > h2:first-child, .home .card-title-row { min-height: 30px; display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; margin: 2px 0 10px; }
+.home .card-title-row h2 { min-height: 0; margin: 0; }
+/* ④ [할 일] 목록의 "나머지 n건 ▾" */
+.home-more { display: inline-block; margin: 6px 0 2px; font-size: 12px; color: var(--accent-strong); }
+/* 가로 전체가 된 작성자 카드 — 이름 칸까지 늘이지 않는다 (TODO 249) */
+.author-card .form-row { max-width: 480px; }
+/* 팀원별 표와 아래 속성별 · 그룹별 사이 (TODO 249) */
+.home-members + .home-slices { margin-top: 16px; }

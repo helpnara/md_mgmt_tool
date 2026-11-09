@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import { backTarget } from "../nav";
+import { backTarget, useAddressBar } from "../nav";
 import type { Health, Meta } from "../types";
 import { formatBytes } from "../upload";
 import { isAdmin } from "../me";
@@ -24,14 +24,37 @@ import RestoreCard from "./RestoreCard";
 import LoadError from "./LoadError";
 import EffectConfirmCard from "./EffectConfirmCard";
 import { enterToSave } from "./enterSave";
+import CardIntro from "./CardIntro";
+import ViewTabs from "./ViewTabs";
 import { LIMITS, hasControlChars, lengthState } from "../inputRules";
+
+/** 설정 묶음 (TODO 249 ⑤) — "" = 기본. title 은 탭 아래 한 줄 설명이기도 하다 */
+type SettingsTab = "" | "class" | "report" | "forms" | "backup" | "check";
+const SETTINGS_TABS: { key: SettingsTab; label: string; title: string }[] = [
+  { key: "", label: "기본", title: "누가 쓰는가 · 과제를 무엇으로 가르는가 — 작성자 · 담당자 명부 · 면담 · 과제 속성 · 번호 체계 · 효과 금액" },
+  { key: "class", label: "분류 · 접수", title: "스마트과제의 성격 · 분류 · 수행 방식 · 비용구분 목록 · 접수 서식 · 묵힘 기준 · 사전점검" },
+  { key: "report", label: "보고", title: "언제 보고하는가 · 무엇을 후보로 올리는가" },
+  { key: "forms", label: "서식", title: "새 문서를 무엇으로 시작하는가 — 진행일지 · 보고 초안 · AI 프롬프트" },
+  { key: "backup", label: "보관과 백업", title: "어디에 쌓이는가 · 잘못됐을 때 어디서 되찾는가" },
+  { key: "check", label: "점검", title: "뭔가 안 됐을 때 볼 자리 — 실행 중인 배포본 · 최근 오류 · 첨부 링크 · 붙여넣기" },
+];
+function tabFrom(params: URLSearchParams): SettingsTab {
+  const value = params.get("tab") ?? "";
+  return SETTINGS_TABS.some((item) => item.key === value) ? (value as SettingsTab) : "";
+}
 
 /**
  * 도구 설정.
  * 지금은 팀장 한 명이 쓰므로 작성자를 여기서 한 번 정해 두고 쓴다.
  * 나중에 로그인이 생기면 이 값 대신 로그인한 사용자가 작성자가 된다.
  */
-export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved: () => void; back?: string | null }) {
+export default function Settings({ meta, onSaved, back, query = "" }: { meta: Meta; onSaved: () => void; back?: string | null; query?: string }) {
+  const [tab, setTab] = useState<SettingsTab>(() => tabFrom(new URLSearchParams(query)));
+  useAddressBar(
+    "settings",
+    Object.fromEntries(Object.entries({ tab, back: back ?? "" }).filter(([, value]) => value)) as Record<string, string>,
+    (params) => setTab(tabFrom(params)),
+  );
   const [author, setAuthor] = useState("");
   // null = 아직 못 불러옴 — 그동안은 "고쳤다" 로 보지 않는다 (TODO 211 ②)
   const [savedAuthor, setSavedAuthor] = useState<string | null>(null);
@@ -124,23 +147,24 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
       )}
 
       {/*
-        설정은 기능이 늘 때마다 카드가 하나씩 붙어 열넷이 되었고, 한 칸에 죽 늘어놓으니
-        무엇이 어디 있는지 눈으로 찾아야 했다. **하는 일이 같은 것끼리 묶는다** —
-        백업은 백업끼리, 서식은 서식끼리. 묶음 안에서는 지금처럼 넓은 화면이면 두 칸으로
-        흐른다 (styles.css .settings-grid).
+        설정은 기능이 늘 때마다 카드가 하나씩 붙어 스물이 넘었다. **하는 일이 같은 것끼리 묶고(97), 한 번에 한 묶음만** 보인다
+        (TODO 249 ⑤ — 한 화면에 5,800px 를 늘어놓아 카드 높이가 제각각인 것이 그대로 보였다). 주소에 묶음이 남아
+        도움말 · 홈의 안내가 그 묶음으로 바로 간다.
+        묶음 안에서는 **두 크기** — 짧은 카드는 두 칸 격자에 짝지어 높이를 맞추고, 넓은 카드(명부 · 분류·접수 · 프롬프트 ·
+        붙여넣기 점검)는 가로 전체 (styles.css .settings-grid · .settings-wide).
       */}
-      <div className="settings-group">
-        <h2 className="settings-group-title">
-          기본
-          <span className="hint">누가 쓰는가 · 과제를 무엇으로 가르는가</span>
-        </h2>
+      <ViewTabs label="설정 묶음" className="settings-tabs" value={tab} onChange={(key) => setTab(key as SettingsTab)} tabs={SETTINGS_TABS} />
+      <div className="settings-group" role="tabpanel">
+        <p className="hint settings-group-desc">{SETTINGS_TABS.find((item) => item.key === tab)?.title}</p>
+
+      {tab === "" && (
         <div className="settings-grid">
-          <div className="card author-card" onKeyDown={enterToSave(() => void save(), canSaveAuthor)}>
+          <div className="card author-card settings-wide" onKeyDown={enterToSave(() => void save(), canSaveAuthor)}>
             <h2>작성자</h2>
-            <p className="hint">
+            <CardIntro id="author">
               진행일지와 보고 문서에 <strong>누가 작성했는지</strong>를 함께 남깁니다. 이 PC(서버 PC)에서 쓴 기록에 붙는 이름입니다.
               팀원 PC 에서 쓴 기록에는 그 팀원의 이름이 붙습니다.
-            </p>
+            </CardIntro>
             {leader ? (
               // 명부에서 팀장을 골랐다 (TODO 235) — 이름이 한 곳에만 있게 칸을 세우지 않는다
               <p className="leader-author">
@@ -192,31 +216,23 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           </div>
 
           <PeopleCard onChanged={() => { onSaved(); load(); }} />
-          {/* 팀원 면담의 구분 · 주기 (TODO 182) — 명부 곁에 */}
+          {/* 팀원 면담의 구분 · 주기 (TODO 182) · 과제 속성 — 키가 비슷한 둘을 한 줄에 */}
           <MeetingSettingsCard meta={meta} onSaved={onSaved} />
           <ProjectTypeCard onSaved={onSaved} />
           <ProjectCodeCard onSaved={onSaved} />
           {/* 효과 금액 단위 확인 기준 (TODO 214 D4) — 과제 번호 곁에 */}
           <EffectConfirmCard meta={meta} onSaved={onSaved} />
         </div>
-      </div>
+      )}
 
-      {/* 과제 분류 넷 · 접수 (TODO 136). 목록은 한 번 정하면 한동안 안 고치므로 접어 둔다. */}
-      <details className="settings-group settings-fold">
-        <summary className="settings-group-title">
-          과제 분류 · 접수
-          <span className="hint">스마트과제의 성격·분류·수행 방식·비용구분 목록 · 접수 서식 · 묵힘 기준</span>
-        </summary>
+      {/* 과제 분류 넷 · 접수 (TODO 136) — 카드 하나, 안에서 두 단 */}
+      {tab === "class" && (
         <div className="settings-grid">
           <IntakeSettingsCard meta={meta} onSaved={onSaved} />
         </div>
-      </details>
+      )}
 
-      <div className="settings-group">
-        <h2 className="settings-group-title">
-          보고
-          <span className="hint">언제 보고하는가 · 무엇을 후보로 올리는가</span>
-        </h2>
+      {tab === "report" && (
         <div className="settings-grid">
           <ReportDayCard onSaved={onSaved} />
           <div className="card">
@@ -226,27 +242,17 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
             </p>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* 서식 셋은 키가 크고 **매일 여는 칸이 아니다.** 접어 두면 설정 화면의 세로가
-          세 카드분 짧아진다 (TODO 120). 한 번 정하면 한동안 안 고치는 값들이다. */}
-      <details className="settings-group settings-fold">
-        <summary className="settings-group-title">
-          서식
-          <span className="hint">새 문서를 무엇으로 시작하는가 — 진행일지 · 보고 초안 · AI 프롬프트</span>
-        </summary>
+      {tab === "forms" && (
         <div className="settings-grid">
           <EntryTemplateCard meta={meta} />
           <ReportTemplateCard />
           <AiPromptCard />
         </div>
-      </details>
+      )}
 
-      <div className="settings-group">
-        <h2 className="settings-group-title">
-          보관과 백업
-          <span className="hint">어디에 쌓이는가 · 잘못됐을 때 어디서 되찾는가</span>
-        </h2>
+      {tab === "backup" && (
         <div className="settings-grid">
           {!isAdmin() && (
             // 팀장 PC (TODO 247) — 서버 운영 칸은 서버 PC 에만 선다
@@ -261,19 +267,19 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           {isAdmin() && (
           <div className="card">
             <h2>데이터 위치</h2>
-            <p className="hint">
+            <CardIntro id="vault">
               모든 내용은 아래 폴더에 마크다운 파일과 첨부 파일로 저장됩니다. 폴더째 복사하면 그대로 백업입니다.
-            </p>
+            </CardIntro>
             <code className="vault-box">{meta.vault}</code>
           </div>
           )}
 
           <div className="card">
             <h2>전체 백업</h2>
-            <p className="hint">
+            <CardIntro id="full-backup">
               모든 과제의 문서와 첨부를 zip 하나로 내려받습니다. 검색 색인처럼 다시 만들 수 있는 것은 빼고
               원본만 담습니다.
-            </p>
+            </CardIntro>
             <div className="form-actions">
               <a className="button-like" href="/api/backup">
                 전체 백업 내려받기
@@ -285,18 +291,16 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
             </div>
           </div>
 
-          {isAdmin() && <RestoreCard />}
+          {/* 키가 비슷한 것끼리 한 줄 — 자동 백업 · 이전 버전 / 되살리기 · 삭제 보관함 */}
           {isAdmin() && <BackupCard />}
           <VersionsCard />
+          {isAdmin() && <RestoreCard />}
           <TrashCard />
         </div>
-      </div>
+      )}
 
-      <div className="settings-group">
-        <h2 className="settings-group-title">
-          점검
-          <span className="hint">뭔가 안 됐을 때 볼 자리</span>
-        </h2>
+      {tab === "check" && (
+        <>
         {/* 지금 무엇이 돌고 있는가 (TODO 117). "덮어썼는데 새 기능이 없다" 를 여기서 가른다. */}
         <p className="hint build-line" data-testid="build-line">
           {meta.build ? (
@@ -351,6 +355,8 @@ export default function Settings({ meta, onSaved, back }: { meta: Meta; onSaved:
           <LinkFixCard />
           <PasteCheckCard />
         </div>
+        </>
+      )}
       </div>
     </section>
   );

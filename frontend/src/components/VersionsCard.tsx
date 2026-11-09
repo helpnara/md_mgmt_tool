@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { formatBytes } from "../upload";
+import CardIntro from "./CardIntro";
 
 /**
  * 이전 버전 보관 현황.
@@ -24,12 +25,12 @@ export default function VersionsCard() {
   return (
     <div className="card">
       <h2>이전 버전 보관</h2>
-      <p className="hint">
+      <CardIntro id="versions">
         문서를 <b>고쳐 저장할 때마다 직전 내용</b>을 한 벌 남깁니다. 잘못 고쳤을 때
         진행일지·개요·보고 화면의 <b>[이전 버전]</b>에서 되돌릴 수 있습니다.
         <br />
         삭제 보관함이 <i>지웠을 때</i>를 막아 준다면, 이쪽은 <i>잘못 고쳤을 때</i>를 막습니다.
-      </p>
+      </CardIntro>
       {data === null ? (
         <p className="hint">불러오는 중…</p>
       ) : data.versions === 0 ? (

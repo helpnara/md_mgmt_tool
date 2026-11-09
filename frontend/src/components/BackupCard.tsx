@@ -6,6 +6,7 @@ import FolderPicker from "./FolderPicker";
 import { useEditedUnsaved } from "../util";
 import { numberProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
+import CardIntro from "./CardIntro";
 
 /** 서버와 같은 범위 (TODO 214 F12 · F14) — 일 · 주기는 1~999, 주 · 월은 0~999(0 = 그 층은 안 씀) */
 const RANGES = {
@@ -104,13 +105,13 @@ export default function BackupCard() {
   return (
     <div className="card wide backup-card" onKeyDown={enterToSave(() => void save(), !busy && !hasProblem)}>
       <h2>자동 백업</h2>
-      <p className="hint">
+      <CardIntro id="backup">
         정한 폴더로 <b>전체 자료를 zip 한 벌</b>씩 내보냅니다. 폴더를 <b>네트워크 드라이브나
         외장 디스크</b>로 잡으면 PC가 고장 나도 자료가 남습니다.
         <br />
         프로그램이 <b>켜져 있는 동안</b> 주기마다 확인해서, 때가 되면 저절로 한 벌 남깁니다.
         폴더를 비우면 자동 백업이 꺼집니다.
-      </p>
+      </CardIntro>
 
       <div className="form-row">
         <label className="grow">

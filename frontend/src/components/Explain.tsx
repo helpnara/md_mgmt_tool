@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 const PREFIX = "explain-open:";
 
-function remembered(id: string): boolean {
+export function remembered(id: string): boolean {
   try {
     return window.localStorage.getItem(PREFIX + id) === "1";
   } catch {
@@ -11,7 +11,7 @@ function remembered(id: string): boolean {
   }
 }
 
-function remember(id: string, open: boolean): void {
+export function remember(id: string, open: boolean): void {
   try {
     if (open) window.localStorage.setItem(PREFIX + id, "1");
     else window.localStorage.removeItem(PREFIX + id);

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { copyText } from "../clipboard";
 import { describeClipboard } from "../htmlPaste";
+import CardIntro from "./CardIntro";
 
 /**
  * 붙여넣기 점검 (TODO 225) — 이 칸에 붙여 넣으면 클립보드에 **무엇이 어떤 모양으로** 왔는지만 보여 준다.
@@ -12,10 +13,10 @@ export default function PasteCheckCard() {
   return (
     <div className="card paste-check">
       <h2>붙여넣기 점검</h2>
-      <p className="hint">
+      <CardIntro id="paste-check">
         AI 답 · 문서를 붙였는데 그림이나 표가 빠질 때 — 같은 것을 아래 칸에 붙여 넣으면 <b>무엇이 어떤 모양으로 왔는지</b>만 셉니다.
         내용은 보이지도 저장되지도 않습니다.
-      </p>
+      </CardIntro>
       <textarea
         className="paste-check-area"
         rows={2}

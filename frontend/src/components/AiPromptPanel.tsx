@@ -55,7 +55,7 @@ export default function AiPromptPanel({ reportId }: { reportId: number }) {
       )}
       <p className="hint">
         {/* 읽기 전용 공유에서 설정 주소는 막다른 안내 페이지다 — 글자로만 (TODO 208) */}
-        앞뒤에 붙는 글은 {isReadonly() ? <b>설정 → AI 요약 프롬프트</b> : <a href="#/settings">설정 → AI 요약 프롬프트</a>}에서
+        앞뒤에 붙는 글은 {isReadonly() ? <b>설정 → AI 요약 프롬프트</b> : <a href="#/settings?tab=forms">설정 → 서식 → AI 요약 프롬프트</a>}에서
         바꿉니다{isReadonly() && " (서버 PC 에서)"}.
       </p>
     </div>

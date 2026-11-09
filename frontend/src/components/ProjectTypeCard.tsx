@@ -4,6 +4,7 @@ import type { ProjectTypeRow } from "../types";
 import { typeClass } from "./StatusBadge";
 import { useEditedUnsaved } from "../util";
 import { enterToSave } from "./enterSave";
+import CardIntro from "./CardIntro";
 
 /**
  * 과제 속성 더하고 빼고 고치기 (TODO 100).
@@ -78,14 +79,14 @@ export default function ProjectTypeCard({ onSaved }: { onSaved: () => void }) {
 
   return (
     // 이름 칸에서 Enter = [저장] (TODO 214 U9)
-    <div className="card" onKeyDown={enterToSave(() => void save(), !busy && changed)}>
+    <div className="card project-type-card" onKeyDown={enterToSave(() => void save(), !busy && changed)}>
       <h2>과제 속성</h2>
-      <p className="hint">
+      <CardIntro id="project-type">
         과제를 만들 때 고르는 <b>성격</b>입니다. 팀에서 쓰는 말로 더하고 빼고 고칠 수 있습니다.
         <br />
         <b>이름을 고쳐도 이미 만든 과제는 속성을 잃지 않습니다</b> — 과제 파일에 남는 것은
         이름이 아니라 속성 자체이기 때문입니다. <b>쓰고 있는 속성은 뺄 수 없습니다.</b>
-      </p>
+      </CardIntro>
 
       <ul className="type-rows">
         {rows.map((row, index) => (

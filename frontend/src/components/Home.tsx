@@ -131,6 +131,19 @@ function CardTitle({ children, actions }: { children: ReactNode; actions?: React
   );
 }
 
+/** [할 일] 목록마다 처음에 세우는 줄 수 (TODO 249 ④) — 묶음마다 8 · 5 · 3 · 모두로 달라 두 단의 바닥이 들쭉날쭉했다 */
+const TODO_LINES = 3;
+
+/** "나머지 n건 ▾" — 그 자리에서 펼친다. 다른 화면에 전체가 있으면 그 링크는 따로 둔다 */
+function MoreLines({ rest, open, onToggle, unit = "건" }: { rest: number; open: boolean; onToggle: () => void; unit?: string }) {
+  if (rest <= 0) return null;
+  return (
+    <button type="button" className="linkish home-more" aria-expanded={open} onClick={onToggle}>
+      {open ? "접기 ▴" : `나머지 ${rest}${unit} ▾`}
+    </button>
+  );
+}
+
 /** 1년을 넘긴 경과일은 "D+1368" 보다 "3년 넘음" 이 읽힌다 (TODO 232 H). 정확한 날수는 마우스를 올리면 */
 function sinceText(days: number | null): string {
   if (days === null) return "D+?";
@@ -333,6 +346,12 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const [teamEdits, setTeamEdits] = useState<EditItem[]>([]);
   // 회고를 적을 과제 — 내 것, 끝난 지 1년 안 (TODO 237 A3). 팀원 PC 에서도 본다(그 사람 것)
   const [retroDue, setRetroDue] = useState<RetroDue["items"]>([]);
+  // [할 일] 목록 펼침 (TODO 249 ④) — 목록마다 따로
+  const [openLists, setOpenLists] = useState<Record<string, boolean>>({});
+  const lines = <T,>(key: string, items: T[]) => (openLists[key] ? items : items.slice(0, TODO_LINES));
+  const more = (key: string, total: number, unit?: string) => (
+    <MoreLines rest={total - TODO_LINES} open={Boolean(openLists[key])} unit={unit} onToggle={() => setOpenLists((now) => ({ ...now, [key]: !now[key] }))} />
+  );
   useEffect(() => {
     api.retroDue().then((data) => setRetroDue(data.items)).catch(() => setRetroDue([]));
   }, []);
@@ -507,7 +526,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             <b>다가오는 팀원 일정</b> — 앞으로 {week.team_upcoming!.days}일 안에 예정한 교육 · 행사, 그리고 지금 진행 중인 것입니다.
           </p>
           <ul className="home-stale home-upcoming">
-            {week.team_upcoming!.items.map((item) => (
+            {lines("upcoming", week.team_upcoming!.items).map((item) => (
               <li key={item.id}>
                 {/* 남은 날 띠지 (TODO 226) — 오늘이면 "오늘", 진행 중이면 "진행 중", 아니면 D-N. 일주일 안은 진하게 */}
                 <span className={leftChipClass(item)}>{leftChipText(item)}</span>
@@ -523,6 +542,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
+          {more("upcoming", week.team_upcoming!.items.length)}
           {week.team_upcoming!.later > 0 && (
             <p className="hint">
               <a href={screenLink("skills", { tab: "records", when: "planned", year: "all" })}>
@@ -541,7 +561,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             안 갔으면 <b>[안 감 — 지우기]</b>(삭제 보관함으로). 얻은 것 · 시간은 팀원역량에서 채웁니다. (누르지 않아도 2주가 지나면 내려갑니다)
           </Explain>
           <ul className="home-stale home-missed">
-            {week.team_missed!.map((item) => (
+            {lines("missed", week.team_missed!).map((item) => (
               <li key={item.id}>
                 <span className="due">{briefPeriod(item)}</span>
                 <a href={screenLink("skills", { tab: "records", person: item.person, year: item.date.slice(0, 4) })}>{item.title}</a>
@@ -562,6 +582,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
+          {more("missed", week.team_missed!.length)}
         </>
       )}
 
@@ -572,7 +593,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             <b>팀원이 고친 것</b> — 최근 7일, 명부에 IP 를 적은 PC 에서 담당 과제의 진행일지 · 첨부 · 개요를 고친 기록입니다.
           </p>
           <ul className="home-stale home-edits">
-            {teamEdits.slice(0, 8).map((item, index) => (
+            {lines("edits", teamEdits).map((item, index) => (
               <li key={`${item.at}-${index}`}>
                 <span className="due">{item.at.slice(5, 16).replace("T", " ")}</span>
                 <b>{item.name}</b>
@@ -589,7 +610,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
-          {teamEdits.length > 8 && <p className="hint">그 앞 {teamEdits.length - 8}줄은 접어 두었습니다.</p>}
+          {more("edits", teamEdits.length, "줄")}
         </>
       )}
       </div>}
@@ -601,7 +622,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             <b>회고를 적을 과제 {retroDue.length}건</b> — 내가 담당한 끝난 과제(1년 안)에서 회고(내가 한 일 · 결과)가 비어 있습니다. 누르면 그 과제의 양식이 열립니다.
           </p>
           <ul className="home-stale home-retro">
-            {retroDue.slice(0, 5).map((item) => (
+            {lines("retro", retroDue).map((item) => (
               <li key={item.id}>
                 <span className="due">완료 {item.completed_at}</span>
                 <a href={projectLink(item.id, { retro: "me" })}>{item.title}</a>
@@ -609,7 +630,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
-          {retroDue.length > 5 && <p className="hint">그 밖에 {retroDue.length - 5}건 — 과제 상세의 [담당과 역할]에서 적습니다.</p>}
+          {more("retro", retroDue.length)}
         </>
       )}
       {/* 쓰다 만 글 (TODO 170) — 어느 과제에서 쓰다 말았는지 기억하지 않아도 되게, 누르면 그 편집기로 */}
@@ -619,7 +640,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             <b>작성 중이던 글 {drafts.length}건</b> — 저장하지 않고 남은 글입니다. 누르면 그 편집기가 열리고 글이 되살아납니다.
           </p>
           <ul className="home-drafts home-unsaved">
-            {drafts.map((item) => (
+            {lines("unsaved", drafts).map((item) => (
               <li key={item.key}>
                 {item.link && !item.missing ? (
                   <a href={item.link}>{item.where || item.label}</a>
@@ -641,6 +662,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
+          {more("unsaved", drafts.length)}
         </>
       )}
 
@@ -657,7 +679,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             )}
           </p>
           <ul className="home-drafts">
-            {week.draft_items.map((item) => (
+            {lines("drafts", week.draft_items).map((item) => (
               <li key={item.id}>
                 {/* 이름을 적어 놓고 목록으로 보내면 그 한 건을 다시 찾아야 한다 (TODO 91) */}
                 <a href={projectLink(item.project_id, { report: item.id })}>
@@ -671,6 +693,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
+          {more("drafts", week.draft_items.length)}
           {week.drafts > week.draft_items.length && (
             <p className="hint">
               <a href={screenLink("reports")}>
@@ -686,7 +709,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             <b>오래 보고되지 않은 과제</b> — 이번 주에 할 일이라기보다, 이미 새어 나간 것입니다.
           </p>
           <ul className="home-stale">
-            {week.stale.map((item) => (
+            {lines("stale", week.stale).map((item) => (
               <li key={item.id}>
                 <a href={projectLink(item.id)}>{item.title}</a>
                 <span className="due due-danger" title={`D+${item.days_since_report}`}>
@@ -698,6 +721,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
+          {more("stale", week.stale.length)}
           {/* 세 건만 세우고 잘렸다고 말하지 않으면 세 건만 있는 줄 안다 (TODO 103-B) */}
           {week.stale_total > week.stale.length && (
             <p className="hint">
@@ -719,7 +743,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             </a>
           </p>
           <ul className="home-owner-gaps" data-testid="owner-gaps">
-            {week.owner_gaps.map((item) => (
+            {lines("gaps", week.owner_gaps).map((item) => (
               <li key={`${item.id}-${item.owner}`}>
                 <a href={projectLink(item.id)}>{item.title}</a>
                 <span className="tag left-tag">
@@ -729,6 +753,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
+          {more("gaps", week.owner_gaps.length)}
           {week.owner_gaps_total > week.owner_gaps.length && (
             <p className="hint">
               <a href={listLink({ owner_left: "1" })}>
@@ -745,7 +770,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
             <b>다음 할 일</b> — 진행일지의 <code>## 계획</code>에 적어 둔 것입니다.
           </p>
           <ul className="home-plans" data-testid="home-plans">
-            {week.plans.map((item) => (
+            {lines("plans", week.plans).map((item) => (
               <li key={item.entry_id}>
                 <a href={projectLink(item.project_id, { entry: item.entry_id })}>{item.project_title}</a>
                 <span className="plan-text">{item.text}</span>
@@ -753,6 +778,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </li>
             ))}
           </ul>
+          {more("plans", week.plans.length)}
           {week.plans_total > week.plans.length && (
             <p className="hint">나머지 {week.plans_total - week.plans.length}건은 각 과제 위쪽에 있습니다.</p>
           )}
@@ -1164,7 +1190,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       {backupWarning(backup) && (
         <div className="home-backup-warn">
           <b>자동 백업</b> {backupWarning(backup)}
-          <a href={screenLink("settings")}>설정에서 보기 →</a>
+          <a href={screenLink("settings", { tab: "backup" })}>설정에서 보기 →</a>
         </div>
       )}
       <div className="home-head">

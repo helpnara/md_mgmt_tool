@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { TrashItem } from "../types";
 import { formatDateTime } from "../util";
+import CardIntro from "./CardIntro";
 
 /**
  * 삭제 보관함.
@@ -54,9 +55,9 @@ export default function TrashCard() {
           </button>
         )}
       </div>
-      <p className="hint">
+      <CardIntro id="trash">
         지운 과제·진행일지·보고·첨부는 삭제되지 않고 여기에 남습니다. 되돌리면 원래 자리로 돌아갑니다.
-      </p>
+      </CardIntro>
       {notice && <p className="hint notice">{notice}</p>}
       {error && <p className="form-error">{error}</p>}
       {items.length === 0 && <p className="hint">보관함이 비어 있습니다.</p>}

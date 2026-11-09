@@ -5,6 +5,7 @@ import { copyAsPlainText } from "../plaintext";
 import { COPY_FAILED } from "../clipboard";
 import type { ErrorEntry, ErrorListing, InputRejection } from "../types";
 import { formatDateTime } from "../util";
+import CardIntro from "./CardIntro";
 
 /**
  * 최근 오류.
@@ -92,11 +93,11 @@ export default function ErrorLogCard() {
         </div>
       </div>
 
-      <p className="hint">
+      <CardIntro id="error-log">
         저장·삭제 같은 동작이 실패하면 여기에 남습니다. 남는 것은 <b>동작과 오류 종류뿐</b>이고
         과제 내용은 담기지 않으므로, [복사]해서 그대로 전달하셔도 됩니다. {keepMonths}개월이
         지난 기록은 자동으로 지워집니다.
-      </p>
+      </CardIntro>
 
       {error && <p className="form-error">{error}</p>}
       {notice && <p className="hint notice">{notice}</p>}

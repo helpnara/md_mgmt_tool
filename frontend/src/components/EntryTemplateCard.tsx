@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta } from "../types";
 import { useEditedUnsaved } from "../util";
+import CardIntro from "./CardIntro";
 
 /** 빈 서식은 "정한 적 없음" 과 같다 — [이 서식 비우기] 만으로 고친 것이 되지 않게 */
 function filled(templates: Record<string, string>): Record<string, string> {
@@ -70,14 +71,14 @@ export default function EntryTemplateCard({ meta }: { meta: Meta }) {
           ))}
         </select>
       </div>
-      <p className="hint">
+      <CardIntro id="entry-template">
         [기록 추가]를 누르면 이 내용으로 시작합니다.
         {target === "" ? (
           <> 비워 두면 아래 기본 서식을 씁니다.</>
         ) : (
           <> <b>{label}</b> 과제에만 쓰입니다. 비워 두면 공통 서식을 씁니다.</>
         )}
-      </p>
+      </CardIntro>
       <textarea
         className="template-box"
         value={value}

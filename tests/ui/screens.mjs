@@ -604,7 +604,7 @@ async function main() {
       takeaway: "소입 조건 설계 기준을 정리해 옴",
     });
     await go("#/skills");
-    const text = await page.locator(".skills .card").first().innerText();
+    const text = await page.locator(".skills-top .card").first().innerText();
     // 앞서 넣은 세 건은 시간·비용이 비어 있다. 그것이 0 으로 굳으면 합계가 흔들린다.
     expect(text.includes("16h"), `교육 시간 합계가 16h 가 아닙니다: ${text}`);
     expect(text.includes("350,000원"), `비용 합계가 안 맞습니다: ${text}`);
@@ -729,7 +729,7 @@ async function main() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_code: "12" }), // 숫자만 → 거절
     });
-    await go("#/settings");
+    await go("#/settings?tab=check");
     // 입력 규칙이 돌려보낸 400 은 고장이 아니라 "입력 확인" 한 줄로 센다 (TODO 216) — 둘 중 한 자리에는 서야 한다
     const rows = await page.locator(".error-list li").count();
     const errorText = rows > 0 ? await page.locator(".error-list li").first().innerText() : "";
@@ -844,7 +844,7 @@ async function main() {
   console.log("\n[2-3] 이번에 넣은 것 (TODO 50·51·54·55)");
 
   await check("주간 보고 요일을 바꾸면 보고 예정일이 따라온다", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=report");
     const card = page.locator(".card").filter({ hasText: "주간 보고 요일" });
     expect(await card.count() > 0, "요일 설정 칸이 없습니다");
     await card.locator("select").selectOption("4"); // 금요일
@@ -858,7 +858,7 @@ async function main() {
     const day = new Date(candidates.default_report_date + "T00:00:00").getDay();
     equal(day, 5, `보고 예정일의 요일 (${candidates.default_report_date})`);
 
-    await go("#/settings");
+    await go("#/settings?tab=report");
     await page.locator(".card").filter({ hasText: "주간 보고 요일" }).locator("select").selectOption("1");
     await page.locator(".card").filter({ hasText: "주간 보고 요일" }).getByRole("button", { name: /저장/ }).click();
     await page.waitForTimeout(700);
@@ -1151,7 +1151,7 @@ async function main() {
 
   await check("없는 폴더를 백업 위치로 적으면 그렇다고 말해 준다", async () => {
     // 오타로 엉뚱한 곳에 폴더가 생기는 것보다, 먼저 만들라고 하는 편이 안전하다.
-    await go("#/settings");
+    await go("#/settings?tab=backup");
     const card = page.locator(".card").filter({ hasText: "자동 백업" });
     // 일부러 거절당하는 값을 넣는다 — 400 은 예상한 실패다.
     await expectingFailures(["/api/settings"], async () => {
@@ -1165,7 +1165,7 @@ async function main() {
   await check("백업 폴더를 정하면 실제로 파일이 생긴다", async () => {
     const folder = `${vault}-backup`;
     await mkdir(folder, { recursive: true });
-    await go("#/settings");
+    await go("#/settings?tab=backup");
     const card = page.locator(".card").filter({ hasText: "자동 백업" });
     expect(await card.count() > 0, "자동 백업 칸이 없습니다");
 
@@ -1184,7 +1184,7 @@ async function main() {
   });
 
   await check("데이터 폴더 안을 백업 폴더로 잡으면 막는다", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=backup");
     const card = page.locator(".card").filter({ hasText: "자동 백업" });
     await expectingFailures(["/api/settings"], async () => {
       await card.locator('input[placeholder^="예: D:"]').fill(`${vault}/백업`);
@@ -1197,7 +1197,7 @@ async function main() {
   });
 
   await check("설정에 보관 현황이 보인다", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=backup");
     const card = page.locator(".card").filter({ hasText: "이전 버전 보관" });
     expect(await card.count() > 0, "보관 현황 칸이 없습니다");
     const text = await card.innerText();
@@ -1397,7 +1397,7 @@ async function main() {
       const value = await contrastOf(selector);
       expect(value >= AA, `보고 이력 ${label} ${value} < ${AA}`);
     }
-    await go("#/settings");
+    await go("#/settings?tab=check");
     for (const [label, selector] of [
       ["상태 표식", ".error-status"],
       ["동작", ".error-action"],
@@ -2049,18 +2049,19 @@ async function main() {
 
   console.log("\n[12] 설정 화면 — 묶음과 폴더 고르기 (TODO 97 · 98)");
 
-  await check("설정이 기능별로 묶여 있다", async () => {
+  await check("설정이 기능별로 묶여 있다 — 묶음 탭, 한 번에 한 묶음 (97 → 249 ⑤)", async () => {
     await go("#/settings");
-    const titles = await page.locator(".settings-group-title").allInnerTexts();
-    const names = titles.map((text) => text.split("\n")[0].trim());
-    equal(names.join("|"), "기본|과제 분류 · 접수|보고|서식|보관과 백업|점검", "묶음 이름");
-    // 묶음마다 카드가 하나 이상 들어 있어야 한다 — 빈 묶음은 어수선함만 늘린다.
-    for (const group of await page.locator(".settings-group").all()) {
-      expect(await group.locator(".card").count() > 0, "카드가 없는 묶음이 있습니다");
+    const names = (await page.locator(".settings-tabs .view-tab").allInnerTexts()).map((text) => text.trim());
+    equal(names.join("|"), "기본|분류 · 접수|보고|서식|보관과 백업|점검", "묶음 탭 이름");
+    // 묶음마다 카드가 하나 이상 — 빈 묶음은 어수선함만 늘린다
+    for (const name of names) {
+      await page.locator(".settings-tabs .view-tab", { hasText: name }).click();
+      await page.waitForTimeout(300);
+      expect(await page.locator(".settings-grid > .card").count() > 0, `카드가 없는 묶음: ${name}`);
     }
-    // 백업 관련은 한 묶음에 모여 있다.
-    const backup = page.locator(".settings-group").filter({ hasText: "보관과 백업" });
-    const cards = (await backup.locator(".card > h2").allInnerTexts()).map((t) => t.trim());
+    // 백업 관련은 한 묶음에 모여 있다
+    await go("#/settings?tab=backup");
+    const cards = (await page.locator(".settings-grid > .card > h2").allInnerTexts()).map((t) => t.trim());
     for (const name of ["데이터 위치", "전체 백업", "자동 백업"]) {
       expect(cards.includes(name), `"${name}" 이 보관과 백업 묶음에 없습니다: ${cards.join(", ")}`);
     }
@@ -2086,7 +2087,7 @@ async function main() {
   }
 
   await check("백업 폴더를 눌러서 고른다", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=backup");
     const { card, up } = await openPicker();
     // 처음 자리에서는 위로 갈 곳이 없다.
     expect(await up.isDisabled(), "처음 자리인데 [위로]가 켜져 있습니다");
@@ -2107,7 +2108,7 @@ async function main() {
   });
 
   await check("폴더 고르기에서 새 폴더를 만든다", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=backup");
     await openPicker();
     await page.locator(".folder-picker .folder-row").first().click();
     await page.waitForTimeout(700);
@@ -2555,7 +2556,7 @@ async function main() {
     const broken = saved.markdown.replace("](<", "](").replace(">)", ")");
     await api.patch(`/api/entries/${entry.id}`, { body: `## 내용\n\n사진\n\n${broken}\n` });
     try {
-      await go("#/settings");
+      await go("#/settings?tab=check");
       const card = page.locator('[data-testid="link-fix"]');
       await card.getByRole("button", { name: "점검하기" }).click();
       await page.waitForTimeout(600);
@@ -2574,7 +2575,7 @@ async function main() {
   });
 
   await check("설정 → 점검이 지금 무엇이 돌고 있는지 말한다 (TODO 117)", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=check");
     const line = await page.locator('[data-testid="build-line"]').innerText();
     // 시험은 저장소에서 돌므로 "배포본 아님". 배포본에서는 배포본-정보.txt 의 이름이 선다.
     expect(line.includes("저장소에서 바로 실행") || line.includes("지금 실행 중인 배포본"), `줄: ${line}`);
@@ -2675,7 +2676,7 @@ async function main() {
 
   console.log("\n[19] 백업 층 보관 · 화면 배치 (TODO 119 · 120 · 123)");
   await check("백업 카드가 일·주·월 칸과 덮는 범위를 보여 준다", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=backup");
     const card = page.locator(".card", { hasText: "자동 백업" }).first();
     const labels = await card.locator("label").allInnerTexts();
     for (const want of ["일", "주", "월"]) {
@@ -2685,16 +2686,48 @@ async function main() {
     expect((await card.innerText()).includes("네트워크 드라이브"), "안내 문구");
   });
 
-  await check("설정의 서식 묶음은 접혀 있고 눌러서 편다 (TODO 120)", async () => {
+  await check("설정은 한 번에 한 묶음, 주소에 남고 — 짝지은 카드는 높이 · [저장] 선이 같고, 넓은 카드는 가로 전체 (249 ① ② ⑤)", async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await go("#/settings");
-    const fold = page.locator("details.settings-fold").first();
-    equal(await fold.count(), 1, "접히는 묶음");
-    equal(await fold.evaluate((el) => el.open), false, "기본은 접힘");
-    // 접혀 있으면 안의 카드는 보이지 않는다 — 그만큼 세로가 짧아진다.
-    equal(await fold.locator(".card").first().isVisible(), false, "접힌 동안 카드");
-    await fold.locator("summary").click();
-    await page.waitForTimeout(300);
-    equal(await fold.locator(".card").first().isVisible(), true, "펼친 뒤 카드");
+    equal(await page.locator(".settings-tabs .view-tab.on").innerText(), "기본", "기본 묶음이 먼저");
+    equal(await page.locator(".card", { hasText: "자동 백업" }).count(), 0, "다른 묶음의 카드는 없다");
+    await page.locator(".settings-tabs .view-tab", { hasText: "서식" }).click();
+    await page.waitForTimeout(400);
+    expect(page.url().includes("tab=forms"), `주소에 묶음: ${page.url()}`);
+    // 같은 줄의 두 카드 — 높이가 같다
+    const boxes = await page.locator(".settings-grid > .card").evaluateAll((els) => els.map((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: Math.round(r.top), height: Math.round(r.height), width: Math.round(r.width), name: el.querySelector("h2")?.textContent?.trim() };
+    }));
+    const pair = boxes.filter((b) => b.top === boxes[0].top);
+    equal(pair.length, 2, `서식 첫 줄은 두 카드: ${JSON.stringify(boxes)}`);
+    expect(Math.abs(pair[0].height - pair[1].height) <= 1, `짝지은 두 카드의 높이: ${JSON.stringify(pair)}`);
+    // AI 프롬프트는 넓은 카드 — 가로 전체
+    const wide = boxes.find((b) => (b.name || "").startsWith("AI 요약"));
+    expect(wide && wide.width > pair[0].width * 1.8, `넓은 카드는 가로 전체: ${JSON.stringify(wide)}`);
+    // 기본 묶음 — 짝지은 줄의 [저장] 은 같은 선
+    await go("#/settings");
+    const saves = await page.locator(".settings-grid > .card").evaluateAll((els) => els.map((el) => {
+      const r = el.getBoundingClientRect();
+      const actions = [...el.children].filter((c) => c.classList.contains("form-actions")).pop();
+      return { top: Math.round(r.top), bottom: actions ? Math.round(actions.getBoundingClientRect().bottom) : null, name: el.querySelector("h2")?.textContent?.trim() };
+    }));
+    const rows = new Map();
+    for (const b of saves) rows.set(b.top, [...(rows.get(b.top) ?? []), b]);
+    for (const [, row] of rows) {
+      if (row.length !== 2 || row.some((b) => b.bottom === null)) continue;
+      expect(Math.abs(row[0].bottom - row[1].bottom) <= 2, `[저장] 선이 다르다: ${JSON.stringify(row)}`);
+    }
+    // 설명 — 두 줄 넘으면 접히고 [설명 ▾] 로 편다
+    const intro = page.locator(".people-card .card-intro");
+    if (await intro.locator(".explain-toggle").count()) {
+      const closed = await intro.locator(".card-intro-text").evaluate((el) => el.clientHeight);
+      await intro.locator(".explain-toggle").click();
+      await page.waitForTimeout(200);
+      const opened = await intro.locator(".card-intro-text").evaluate((el) => el.clientHeight);
+      expect(opened > closed, `펼치면 길어진다: ${closed} → ${opened}`);
+      await intro.locator(".explain-toggle").click();
+    }
   });
 
   await check("홈 [팀 현황] 의 팀 현황 · 연도별 추이가 같은 줄에서 시작한다 (TODO 123 · 232)", async () => {
@@ -2714,6 +2747,34 @@ async function main() {
     // 속성별·그룹별은 나란히
     const slices = page.locator(".home-slices:has(.home-slice-type)");
     equal(await slices.count(), 1, "속성별·그룹별 묶음");
+    // 짝 지은 두 칸은 높이가 같고, 표는 같은 선에서 시작한다 (249 ① ③)
+    const same = async (a, b, label) => {
+      const [x, y] = [await page.locator(a).boundingBox(), await page.locator(b).boundingBox()];
+      expect(Math.abs(x.height - y.height) <= 1, `${label} 높이: ${x.height} vs ${y.height}`);
+    };
+    await same(".home-team", ".home-compare", "팀 현황 · 연도별 추이");
+    if (await page.locator(".home-slice-group").count()) {
+      await same(".home-slice-type", ".home-slice-group", "속성별 · 그룹별");
+      const t1 = await page.locator(".home-slice-type table").boundingBox();
+      const t2 = await page.locator(".home-slice-group table").boundingBox();
+      expect(Math.abs(t1.y - t2.y) <= 1, `표 시작선: ${t1.y} vs ${t2.y}`);
+    }
+  });
+
+  await check("홈 [할 일] 의 목록은 3줄까지, '나머지 n건 ▾' 로 그 자리에서 편다 (249 ④)", async () => {
+    await go("#/");
+    for (const list of await page.locator(".home-week ul").all()) {
+      expect((await list.locator("> li").count()) <= 3, `3줄을 넘는 목록: ${await list.getAttribute("class")}`);
+    }
+    const more = page.locator(".home-week .home-more").first();
+    if (await more.count()) {
+      const list = more.locator("xpath=preceding-sibling::ul[1]");
+      await more.click();
+      await page.waitForTimeout(200);
+      expect((await list.locator("> li").count()) > 3, "펼치면 3줄보다 많다");
+      equal((await more.innerText()).trim(), "접기 ▴", "펼친 뒤 단추");
+      await more.click();
+    }
   });
 
   console.log("\n[20] 효과 금액 분모 · 효과성 비대상 · 계정 칸 (TODO 124 · 125 · 126)");
@@ -3119,7 +3180,7 @@ async function main() {
   });
 
   await check("설정에 분류 목록 · 접수 서식 칸이 있고 도움말에 접수 흐름이 있다", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=class");
     const card = page.locator(".intake-settings");
     await page.locator("summary", { hasText: "과제 분류" }).first().click().catch(() => undefined);
     equal(await card.count(), 1, "설정 카드");
@@ -3575,7 +3636,7 @@ async function main() {
   });
 
   await check("설정에 사전점검 항목 · 기준 칸이 있다", async () => {
-    await go("#/settings");
+    await go("#/settings?tab=class");
     await page.locator("summary", { hasText: "과제 분류" }).first().click().catch(() => undefined);
     const box = page.locator(".intake-settings .precheck-lines");
     equal(await box.count(), 1, "항목 칸");
@@ -3870,7 +3931,7 @@ async function main() {
     const logged = (await api.get("/api/errors")).items;
     expect(logged.some((item) => item.action.startsWith("화면") && item.error === "render"), `기록: ${JSON.stringify(logged.slice(0, 2))}`);
     // 화면 오류는 목록에서 "화면" 으로 보인다
-    await go("#/settings");
+    await go("#/settings?tab=check");
     await page.locator("summary", { hasText: "점검" }).first().click().catch(() => undefined);
     // 이 시험이 남긴 기록은 지운다 — 뒤의 "화면 오류가 없었다" 는 페이지 오류를 보므로 영향이 없다
     await api.delete("/api/errors");
@@ -4578,7 +4639,7 @@ async function main() {
       await page.locator(".report-editor").getByRole("button", { name: "AI 요약 프롬프트", exact: true }).click();
       await page.waitForTimeout(1000);
       equal(await page.locator(".ai-prompt").count(), 1, "AI 프롬프트 판");
-      equal(await page.locator('.ai-prompt a[href="#/settings"]').count(), 0, "AI 프롬프트의 설정 링크");
+      equal(await page.locator('.ai-prompt a[href^="#/settings"]').count(), 0, "AI 프롬프트의 설정 링크");
       // [내용 보기] — GET 미리보기라 열린다
       await page.locator(".report-editor .attachments").getByRole("button", { name: "내용 보기", exact: true }).click();
       await page.waitForTimeout(1000);
@@ -5020,7 +5081,7 @@ async function main() {
       body: JSON.stringify({ person: "권경락", date: "2026-09-10", summary: "거꾸로 잡은 다음 면담", next_date: "2026-09-01" }),
     });
     expect([400, 422].includes(response.status), `서버가 거절해야 한다: ${response.status}`);
-    await go("#/settings");
+    await go("#/settings?tab=check");
     const card = page.locator(".card", { hasText: "최근 오류" }).first();
     const errorText = (await card.locator(".error-list").count()) > 0 ? await card.locator(".error-list").innerText() : "";
     expect(!errorText.includes("/api/meetings"), `최근 오류에 입력 거절이 섰다: ${errorText}`);
@@ -5424,7 +5485,7 @@ async function main() {
         equal((await filesOf()).includes(fileName), false, "첨부가 과제에 남았다");
       });
       await check("보관함에 기록 한 줄 · '첨부 1개 함께' — [되돌리기] 하면 첨부도 돌아온다", async () => {
-        await go("#/settings");
+        await go("#/settings?tab=backup");
         const card = page.locator(".card", { has: page.getByRole("heading", { name: /삭제 보관함/ }) });
         const toggle = card.getByRole("button", { name: "펼치기" });
         if (await toggle.count()) await toggle.click();
@@ -5602,7 +5663,7 @@ async function main() {
         await page.waitForTimeout(600);
       });
       await check("설정 → 점검의 붙여넣기 점검 — 무엇이 어떤 모양으로 왔는지만 센다", async () => {
-        await go("#/settings");
+        await go("#/settings?tab=check");
         const card = page.locator(".paste-check");
         equal(await card.count(), 1, "붙여넣기 점검 카드");
         await pasteInto(".paste-check textarea", { html, text: "글자만" });
@@ -6020,10 +6081,11 @@ async function main() {
         equal(await member.getByRole("button", { name: "과제 정보 수정" }).filter({ visible: true }).count(), 1, "[과제 정보 수정]");
       });
       await check("팀장 PC 의 설정 — 명부 · 면담 설정은 있고, 데이터 위치 · 자동 백업 · 되살리기 대신 '서버 PC 에서' 안내 · 팀장 줄 잠김 (247)", async () => {
-        await member.goto(`${outside}/#/settings`); await member.reload(); await member.waitForTimeout(1500);
+        await member.goto(`${outside}/#/settings?tab=backup`); await member.reload(); await member.waitForTimeout(1500);
         expect((await member.locator("[data-admin-note]").innerText()).includes("서버 PC"), "서버 운영 안내");
         equal(await member.locator("[data-restore-card]").count(), 0, "되살리기 없음");
         equal(await member.locator(".vault-box").count(), 0, "데이터 위치 없음");
+        await member.goto(`${outside}/#/settings`); await member.waitForTimeout(1200); // 명부는 [기본] 묶음 (249)
         const leaderRow = member.locator('tr[data-name="가팀원"]');
         equal(await leaderRow.locator(".leader-pick").isDisabled(), true, "팀장 동그라미 잠김");
         equal(await leaderRow.getByLabel("PC 주소").isDisabled(), true, "팀장 PC 주소 잠김");
@@ -6444,7 +6506,7 @@ async function main() {
   console.log("\n[64] 전체 백업에서 되살리기 (TODO 246)");
   {
     await check("엉뚱한 zip 을 고르면 이유를 말하고 [되살리기] 단추가 없다", async () => {
-      await go("#/settings");
+      await go("#/settings?tab=backup");
       await page.waitForSelector("[data-restore-card]", { timeout: 8000 });
       // 머리글 · 내용이 아무렇게나인 zip — 이 도구의 백업이 아니다
       const fake = Buffer.from("504b0506000000000000000000000000000000000000", "hex");

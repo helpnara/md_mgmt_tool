@@ -7,6 +7,7 @@ import { DATE_MAX, DATE_MIN, LEFT_REASONS, dateProblem, isDeparted, isFuture, pe
 import NameDialog, { changeCounts } from "./NameDialog";
 import { enterToSave } from "./enterSave";
 import { isAdmin } from "../me";
+import CardIntro from "./CardIntro";
 
 /** IP 칸의 글 → 주소 목록 (TODO 233). 쉼표 · 띄어쓰기로 여럿 */
 function parseIps(text: string): string[] {
@@ -240,7 +241,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
           + 사람 추가
         </button>
       </div>
-      <p className="hint">
+      <CardIntro id="people">
         과제의 담당자 자동완성이 이 목록을 씁니다. 명부에 없는 이름도 <b>쓸 수는 있고</b>,
         아래 <b>명부에 없는 이름</b>에 모여 보입니다.
         <br />
@@ -262,7 +263,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         <b>PC 주소</b> — 팀원 <b>개인 PC 의 IP</b> 를 적으면, 그 PC 에서 공유 주소로 연 화면은 그 사람으로 보고{" "}
         <b>담당 과제의 진행일지 · 첨부 · 개요</b>를 고칠 수 있습니다. 본인 면담은 보기만 됩니다. 가상 PC · 공용 PC 는 적지 마세요 —
         적지 않은 PC 는 지금처럼 보기만 됩니다. IP 가 바뀌면 여기서 고치면 됩니다.
-      </p>
+      </CardIntro>
 
       {people.length > 8 && (
         <label className="people-find">

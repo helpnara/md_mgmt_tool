@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { RenumberPlan } from "../types";
 import { PROJECT_CODE_RULE, projectCodeProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
+import CardIntro from "./CardIntro";
 
 /**
  * 과제 번호의 팀·부문 코드.
@@ -94,7 +95,7 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
   return (
     <div className="card project-code-card" onKeyDown={enterToSave(() => void save(), canSave)}>
       <h2>과제 번호 체계</h2>
-      <p className="hint">
+      <CardIntro id="project-code">
         비워 두면 지금처럼 <code>{year}-001</code> 입니다. 팀·부문 코드를 넣으면{" "}
         <code>{year}-소재-001</code> 처럼 붙습니다. 여러 팀장이 함께 쓰게 될 때 번호가 겹치지 않게
         하는 자리입니다.
@@ -102,7 +103,7 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
         저장은 <b>다음에 만드는 과제부터</b> 적용됩니다. 이미 만든 과제까지 같은 형태로 맞추려면
         아래 <b>[기존 과제 번호도 맞추기]</b> 를 쓰세요 — 연도와 일련번호는 그대로 두고 가운데
         코드만 바꿉니다 (<code>2026-001</code> → <code>{year}-소재-001</code>).
-      </p>
+      </CardIntro>
       <div className="form-row">
         <label>
           팀·부문 코드
