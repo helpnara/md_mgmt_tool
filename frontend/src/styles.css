@@ -1048,13 +1048,42 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 700; }
 }
 .skills-quiet-chip:hover { border-color: var(--warn); }
 .skills-quiet-chip.on { border-color: var(--warn); background: #fdf3e1; box-shadow: inset 0 0 0 1px var(--warn); }
-/* 지금 보는 사람 (TODO 183 · 185) — 좁혀지는 두 칸(면담 · 역량 기록) 바로 위의 띠 */
-.skills-person-bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px;
-  background: var(--accent-soft); border-color: #c7d7fb; font-size: 14px;
+/* 사람 줄 (TODO 248 ①) — 세 탭 공통. 183 · 185 의 "보는 중" 띠와 기록 탭의 [사람] 상자를 합쳤다 */
+.skills-people-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 14px; }
+.people-pill {
+  display: inline-flex; align-items: center; gap: 4px; width: auto; padding: 4px 12px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+  color: #374151; font-size: 13px; font-weight: 500; cursor: pointer;
 }
-.skills-person-bar button { margin-left: auto; white-space: nowrap; }
-.skills-person-name { color: var(--accent-strong); }
+.people-pill:hover { border-color: #9db8f2; color: var(--accent-strong); }
+.people-pill.on { border-color: var(--accent-strong); background: var(--accent-soft); color: var(--accent-strong); font-weight: 700; box-shadow: inset 0 0 0 1px var(--accent-strong); }
+.people-pill.left { color: var(--muted); border-style: dashed; }
+.people-pill.left.on { color: var(--accent-strong); }
+.people-pill-more { color: var(--muted); }
+.pill-tag { font-size: 10px; font-weight: 600; color: var(--muted); }
+.pill-mark { font-size: 10px; line-height: 1; }
+.pill-due { color: var(--warn); }
+.pill-empty { color: var(--muted); }
+.people-pill-legend { margin-left: auto; font-size: 12px; white-space: nowrap; }
+/* 기록 탭 — 고른 사람의 면담 한 줄 (TODO 248 ③) */
+.skills-meeting-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 0 0 12px; padding: 8px 12px;
+  border-radius: 8px; background: #fffdf8; border: 1px solid #ecdcc0; font-size: 13px;
+}
+.skills-meeting-line-label { font-weight: 700; color: var(--warn); margin-right: 4px; }
+.skills-meeting-line button { margin-left: auto; }
+/* 면담 탭 — 고른 사람의 면담 옆에 그 사람의 역량 기록 (TODO 248 ②). 좁으면 위아래 */
+.skills-meet-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+.skills-meet-split > .card { margin-top: 0; }
+@media (max-width: 1000px) {
+  .skills-meet-split { grid-template-columns: minmax(0, 1fr); }
+}
+.skills-meet-side h3 { font-size: 13px; margin: 12px 0 6px; color: #374151; }
+.side-activity-list { list-style: none; margin: 0; padding: 0; }
+.side-activity-list li { padding: 6px 0; border-top: 1px solid var(--border); }
+.side-activity-list li:first-child { border-top: 0; }
+.side-activity-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; }
+.side-activity-takeaway { margin: 3px 0 0; font-size: 12px; color: #4b5563; }
 .skills-table tr.picked-row td { background: var(--accent-soft); }
 .skills-quiet-chip .muted { font-weight: 400; font-size: 11px; color: var(--muted); }
 

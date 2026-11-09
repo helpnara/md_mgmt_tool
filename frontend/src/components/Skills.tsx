@@ -37,6 +37,8 @@ function won(value: number): string {
 const EVENT_PAGE = 20;
 /** 예정 묶음에 처음 세우는 행사 수 (TODO 232 ⑥) — 가까운 것부터 */
 const PLANNED_PAGE = 10;
+/** 면담 탭 옆 칸에 세우는 지난 기록 수 (TODO 248 ②) — 모두는 기록 탭에서 */
+const SIDE_PAST = 5;
 
 /** 화면 안 탭 (TODO 232 ②) — "" = 사람별 · records = 기록 · meetings = 면담(팀장 PC 만) */
 type SkillsTab = "" | "records" | "meetings";
@@ -87,6 +89,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const [plannedAll, setPlannedAll] = useState(false);
   // 기록 목록은 처음에 최근 행사 몇 건만 (TODO 227) — 행사가 쌓이자 화면이 한없이 길어졌다. 조건을 바꾸면 다시 처음부터
   const [shown, setShown] = useState(EVENT_PAGE);
+  // 사람 줄의 떠난 사람 묶음 (TODO 248 ①) — 처음엔 접어 둔다
+  const [leftOpen, setLeftOpen] = useState(false);
 
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [rows, setRows] = useState<Activity[]>([]);
@@ -128,6 +132,22 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   }, [yearParam, person, kind, findQuery, when, latest]);
 
   useEffect(load, [load]);
+
+  // 면담 탭에서 고른 사람의 역량 기록 (TODO 248 ②) — 기록 탭의 조건(연도 · 구분 · 찾기)과 따로, 그 사람 것 모두.
+  // 면담은 지난해 · 올해를 함께 놓고 이야기하므로 연도를 가리지 않는다
+  const [sideRows, setSideRows] = useState<Activity[] | null>(null);
+  const sideLatest = useLatest();
+  const sidePerson = tab === "meetings" ? (readonly ? getMe().name : person) : "";
+  useEffect(() => {
+    if (!sidePerson) {
+      setSideRows(null);
+      return;
+    }
+    const mine = sideLatest();
+    api.activities({ person: sidePerson })
+      .then((next) => mine() && setSideRows(next))
+      .catch(() => mine() && setSideRows([]));
+  }, [sidePerson, rows, sideLatest]);
   useEffect(() => setShown(EVENT_PAGE), [yearParam, person, kind, findQuery, when]);
 
   useAddressBar(
@@ -311,6 +331,73 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
     );
   };
 
+  // ── 사람 줄 (TODO 248 ①) ──
+  // 한 칸에 여러 이름이 붙은 것은 사람이 아니므로 줄에 세우지 않는다(사람별 표에는 남는다, 74).
+  // 주소로 들어온 이름이 줄에 없으면 그 이름도 세운다 — 무엇을 보는지 늘 보이게
+  const strip = peopleRows.filter((item) => splitPeople(item.name).length === 1);
+  if (person && !strip.some((item) => item.name === person)) {
+    strip.push({ name: person } as (typeof strip)[number]);
+  }
+  const picked = summary.people.find((item) => item.name === person) ?? null;
+  const showDue = (item: (typeof strip)[number]) => !readonly && Boolean(item.meeting_due) && !item.left && !item.leader;
+  const showEmpty = (item: (typeof strip)[number]) => item.count === 0 && !item.left;
+  const markDue = strip.some(showDue);
+  const markEmpty = strip.some(showEmpty);
+  /** 사람 줄에서 고른다 — 탭은 그대로. 사람별 탭이면 표 · 먼저 볼 사람 칩처럼 그 사람의 기록(면담할 때가 지났으면 면담)으로 */
+  const choose = (name: string) => {
+    if (!name || person === name) {
+      setPerson(ALL);
+      return;
+    }
+    if (tab === "") {
+      const item = summary.people.find((row) => row.name === name);
+      pick(name, item?.meeting_due && !readonly ? "meetings" : "records");
+      return;
+    }
+    setPerson(name);
+  };
+  const pill = (item: (typeof strip)[number]) => {
+    const on = person === item.name;
+    const due = showDue(item);
+    const empty = showEmpty(item);
+    const why = [due ? "면담할 때가 지났습니다" : "", empty ? "기록이 없습니다" : "", item.left ? leftLabel(meta, item.name) || "떠난 사람" : ""].filter(Boolean).join(" · ");
+    return (
+      <button
+        key={item.name}
+        type="button"
+        className={["people-pill", on ? "on" : "", item.left ? "left" : ""].filter(Boolean).join(" ")}
+        aria-pressed={on}
+        onClick={() => choose(item.name)}
+        title={on ? "다시 누르면 팀 전체로 돌아갑니다" : why || undefined}
+      >
+        {item.name}
+        {item.leader && <span className="pill-tag">팀장</span>}
+        {due && <span className="pill-mark pill-due" aria-label="면담할 때 지남">●</span>}
+        {empty && <span className="pill-mark pill-empty" aria-label="기록 없음">○</span>}
+      </button>
+    );
+  };
+
+  // ── 면담 탭 옆 칸의 그 사람 기록 (TODO 248 ②) — 예정은 가까운 것부터 모두, 지난 것은 최근 것부터 몇 건 ──
+  const sidePlanned = (sideRows ?? []).filter((row) => row.planned).sort((a, b) => a.date.localeCompare(b.date));
+  const sidePast = (sideRows ?? []).filter((row) => !row.planned).sort((a, b) => b.date.localeCompare(a.date));
+  const sideRow = (item: Activity, planned: boolean) => {
+    const left = planned ? daysFromToday(item.date) : null;
+    return (
+      <li key={item.id}>
+        <div className="side-activity-head">
+          {left !== null && (
+            <span className={`left-chip ${left <= 0 ? "left-now" : left <= 7 ? "left-soon" : "left-later"}`}>{left <= 0 ? "오늘" : `D-${left}`}</span>
+          )}
+          <span className="activity-date">{period(item)}</span>
+          <span className="tag">{kindLabel(item.kind)}</span>
+          <strong>{item.title}</strong>
+        </div>
+        {item.takeaway && <p className="side-activity-takeaway">{item.takeaway}</p>}
+      </li>
+    );
+  };
+
   const tabs = [
     { key: "", label: "사람별", title: "합계 · 면담에서 먼저 볼 사람 · 사람별 표" },
     { key: "records", label: "기록", title: "교육 · 행사 기록 — 예정과 지난 기록" },
@@ -369,15 +456,38 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       {/* 화면 안 탭 (TODO 232 ②) — 사람별(통계) · 기록(입력 · 관리) · 면담(팀장 것). 팀원 PC 에는 면담 탭이 없다 (191) */}
       <ViewTabs label="팀원역량 보기" className="skills-tabs" value={tab} onChange={(key) => setTab(key as SkillsTab)} tabs={tabs} />
 
-      {/* ── 지금 보는 사람 (TODO 183 · 185) — 기록 · 면담 탭에서. 어디서 골랐든 푸는 자리는 여기 하나다 ── */}
-      {person && tab !== "" && (
-        <div className="card wide skills-person-bar" role="status">
-          <span>
-            {tab === "meetings" ? "면담 기록" : "역량 기록"}은 <b className="skills-person-name">{person}</b> 님만 보는 중
-          </span>
-          <button type="button" className="ghost small" onClick={() => setPerson(ALL)} title="면담 기록 · 역량 기록을 팀 전체로">
-            팀 전체로 ×
+      {/* ── 사람 줄 (TODO 248 ①) — 세 탭 공통, 사람을 고르고 바꾸고 푸는 자리는 여기 하나다(183 · 185 의 띠 · 기록 탭의 [사람] 상자를 합쳤다).
+            팀원 PC 의 면담은 본인 것뿐이라 그 탭에서는 세우지 않는다 (233) ── */}
+      {!(tab === "meetings" && readonly) && strip.length > 0 && (
+        <div className="card wide skills-people-strip" role="group" aria-label="사람 고르기">
+          <button
+            type="button"
+            className={person ? "people-pill" : "people-pill on"}
+            aria-pressed={!person}
+            onClick={() => choose(ALL)}
+            title="팀 전체 — 사람 고르기를 풉니다"
+          >
+            팀 전체
           </button>
+          {strip.filter((item) => !item.left).map(pill)}
+          {strip.some((item) => item.left) && (
+            <button
+              type="button"
+              className={leftOpen ? "people-pill people-pill-more on" : "people-pill people-pill-more"}
+              aria-expanded={leftOpen}
+              onClick={() => setLeftOpen((on) => !on)}
+              title="명부에서 떠난 사람 — 지난 기록 · 면담을 볼 때"
+            >
+              떠난 사람 {strip.filter((item) => item.left).length} {leftOpen ? "▴" : "▾"}
+            </button>
+          )}
+          {strip.filter((item) => item.left && (leftOpen || item.name === person)).map(pill)}
+          {(markDue || markEmpty) && (
+            <span className="people-pill-legend muted">
+              {markDue && <><span className="pill-mark pill-due">●</span> 면담할 때 지남 </>}
+              {markEmpty && <><span className="pill-mark pill-empty">○</span> {year === ALL_YEARS ? "" : `${year}년 `}기록 없음</>}
+            </span>
+          )}
         </div>
       )}
 
@@ -643,7 +753,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       {tab === "meetings" && readonly && (
         <p className="hint member-meetings-note">{getMe().name} 님의 면담 기록입니다 — 보기만 됩니다. 고칠 것이 있으면 팀장에게 말해 주세요.</p>
       )}
-      {tab === "meetings" && meetingsOpen && <MeetingPanel
+      {tab === "meetings" && meetingsOpen && (
+      <div className={sidePerson ? "skills-meet-split" : undefined}>
+      <MeetingPanel
         meta={meta}
         person={readonly ? getMe().name : person}
         // 떠난 날이 오늘 이후면 아직 있는 사람이다 — 전배 예정자와도 면담한다 (TODO 214 D8)
@@ -655,7 +767,42 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           .filter((name) => splitPeople(name).length === 1)}
         onChanged={load}
         onPickPerson={setPerson}
-      />}
+      />
+      {/* 그 사람의 역량 기록 — 보기만 (TODO 248 ②). 면담을 적으면서 [기록] 탭으로 오가지 않는다. 고치기는 [기록] 탭에서 */}
+      {sidePerson && (
+        <div className="card skills-meet-side">
+          <div className="card-head">
+            <h2>
+              역량 기록 <span className="hint">· {sidePerson} · 보기만</span>
+            </h2>
+            <button type="button" className="ghost small" onClick={() => setTab("records")}>기록 탭에서 모두 ▸</button>
+          </div>
+          {sideRows === null ? (
+            <p className="hint">불러오는 중…</p>
+          ) : sideRows.length === 0 ? (
+            <p className="empty">역량 기록이 없습니다 — 그것도 이야깃거리입니다.</p>
+          ) : (
+            <>
+              {sidePlanned.length > 0 && (
+                <>
+                  <h3>예정 {sidePlanned.length}건</h3>
+                  <ul className="side-activity-list">{sidePlanned.map((item) => sideRow(item, true))}</ul>
+                </>
+              )}
+              <h3>
+                지난 기록 {sidePast.length}건{sidePast.length > SIDE_PAST && <span className="hint"> · 최근 {SIDE_PAST}건</span>}
+              </h3>
+              {sidePast.length === 0 ? (
+                <p className="empty">지난 기록이 없습니다.</p>
+              ) : (
+                <ul className="side-activity-list">{sidePast.slice(0, SIDE_PAST).map((item) => sideRow(item, false))}</ul>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      </div>
+      )}
 
       {/* ── 기록 목록 ──────────────────────────────────────────────── */}
       {tab === "records" && (
@@ -667,14 +814,6 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             {person && <span className="hint"> · {person}</span>}
           </h2>
           <div className="filters">
-            <select value={person} onChange={(event) => setPerson(event.target.value)} aria-label="사람">
-              <option value={ALL}>사람 전체</option>
-              {peopleRows.map((item) => (
-                <option key={item.name} value={item.name}>
-                  {item.name}{item.left ? ` · ${leftLabel(meta, item.name) || "떠남"}` : ""}
-                </option>
-              ))}
-            </select>
             <select value={when} onChange={(event) => setWhen(event.target.value)} aria-label="예정 · 지난 것">
               <option value="">예정 · 지난 것 모두</option>
               <option value="planned">예정만</option>
@@ -697,6 +836,17 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             />
           </div>
         </div>
+
+        {/* 고른 사람의 면담 한 줄 (TODO 248 ③) — 면담 내용은 넣지 않고, 언제 했고 무엇이 열려 있는지만 */}
+        {picked && meetingsOpen && !readonly && !picked.leader && (
+          <p className="skills-meeting-line">
+            <span className="skills-meeting-line-label">면담</span>
+            {picked.last_meeting ? <>마지막 {picked.last_meeting}{picked.meeting_days_since !== null && <span className={picked.meeting_due ? "due due-warn" : "muted"}> D+{picked.meeting_days_since}</span>}</> : <span className="muted">아직 없음</span>}
+            {picked.next_meeting && <span className="muted"> · 다음 {picked.next_meeting}</span>}
+            {picked.open_followups > 0 && <> · 하기로 한 것 <b>{picked.open_followups}건</b></>}
+            <button type="button" className="ghost small" onClick={() => setTab("meetings")}>면담 보기 ▸</button>
+          </p>
+        )}
 
         {rows.length === 0 ? (
           <p className="empty">조건에 맞는 기록이 없습니다.</p>

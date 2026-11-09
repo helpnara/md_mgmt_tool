@@ -1466,6 +1466,9 @@ async function main() {
       ["탭", ".view-tab", AA, "#/skills"],
       ["설명 펼치기", ".explain-toggle", AA, "#/skills"],
       ["한 줄 기록의 주관", ".activity-meta-inline", AA, "#/skills?tab=records"],
+      // 사람 줄 (TODO 248) — 보통 · 고른 알약
+      ["사람 줄", ".people-pill:not(.on)", AA, "#/skills"],
+      ["고른 사람", ".people-pill.on", AA, `#/skills?tab=records&person=${encodeURIComponent("권경락")}`],
     ]) {
       await go(hash);
       if (!(await page.locator(selector).count())) continue;
@@ -4276,37 +4279,54 @@ async function main() {
     await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
   });
 
-  await check("고른 사람은 탭 위의 띠 [팀 전체로 ×] · 다시 누르기로 푼다 (183 · 185 · 232)", async () => {
+  await check("사람은 탭 위의 사람 줄 하나에서 고르고 · 바꾸고 · 푼다, 탭은 그대로 (183 · 185 · 232 → 248 ①)", async () => {
     await go(`#/skills?tab=meetings&person=${encodeURIComponent("권경락")}`);
     await page.waitForTimeout(800);
-    const bar = page.locator(".skills-person-bar");
-    expect((await bar.innerText()).includes("권경락"), "띠에 보는 사람");
+    const strip = page.locator(".skills-people-strip");
+    equal(await strip.count(), 1, "사람 줄");
+    equal((await strip.locator(".people-pill.on").innerText()).trim().startsWith("권경락"), true, "고른 사람이 켜져 있다");
+    // 예전의 "보는 중" 띠 · 기록 탭의 [사람] 상자는 없다 — 고르는 자리는 하나
+    equal(await page.locator(".skills-person-bar").count(), 0, "옛 띠가 없다");
     // 기준 연도 옆(화면 머리)에는 없다 — 화면 전체가 바뀐 것처럼 읽혔다 (185)
-    equal(await page.locator(".home-head .skills-person-bar, .home-head .skills-person-chip").count(), 0, "머리에는 없다");
-    // 띠는 탭 바로 아래, 면담 칸 위 (232 — 사람별 표는 [사람별] 탭에 있다)
+    equal(await page.locator(".home-head .skills-people-strip").count(), 0, "머리에는 없다");
+    // 사람 줄은 탭 바로 아래, 면담 칸 위
     const order = await page.evaluate(() => {
       const at = (selector) => document.querySelector(selector)?.getBoundingClientRect().top ?? -1;
-      return { tabs: at(".skills-tabs"), bar: at(".skills-person-bar"), meeting: at(".meeting-panel") };
+      return { tabs: at(".skills-tabs"), strip: at(".skills-people-strip"), meeting: at(".meeting-panel") };
     });
-    expect(order.tabs >= 0 && order.tabs < order.bar && order.bar < order.meeting, `칸 순서: ${JSON.stringify(order)}`);
-    // [사람별] 탭으로 가도 고른 사람은 남는다 — 표에서 고른 줄
+    expect(order.tabs >= 0 && order.tabs < order.strip && order.strip < order.meeting, `칸 순서: ${JSON.stringify(order)}`);
+    // [사람별] 탭으로 가도 고른 사람은 남는다 — 표에서 고른 줄, 사람 줄도 그대로
     await page.locator(".skills-tabs .view-tab", { hasText: "사람별" }).click();
     await page.waitForTimeout(600);
     equal(await page.locator(".skills-table tr.picked-row", { hasText: "권경락" }).count(), 1, "표에서 고른 줄");
+    equal(await strip.locator(".people-pill.on", { hasText: "권경락" }).count(), 1, "사람별 탭에도 사람 줄");
     await page.locator(".skills-tabs .view-tab", { hasText: "면담" }).click();
     await page.waitForTimeout(600);
-    // 띠의 [팀 전체로 ×]
-    await bar.getByRole("button", { name: /팀 전체로/ }).click();
+    // 면담 탭에서 다른 사람으로 — 탭은 면담 그대로 (248 ① — 예전엔 사람별 탭으로 돌아가야 했다)
+    const other = strip.locator(".people-pill:not(.on):not(.people-pill-more)").filter({ hasNotText: "팀 전체" }).first();
+    if ((await other.count()) > 0) {
+      const name = (await other.innerText()).replace(/[●○]|팀장/g, "").trim();
+      await other.click();
+      await page.waitForTimeout(700);
+      expect(page.url().includes("tab=meetings"), `면담 탭 그대로: ${page.url()}`);
+      expect(page.url().includes(`person=${encodeURIComponent(name)}`), `다른 사람으로: ${page.url()} (${name})`);
+      await strip.locator(".people-pill", { hasText: "권경락" }).click();
+      await page.waitForTimeout(700);
+    }
+    // [팀 전체] 로 푼다
+    await strip.getByRole("button", { name: "팀 전체" }).click();
     await page.waitForTimeout(700);
-    equal(await bar.count(), 0, "띠가 사라진다");
+    equal(await strip.locator(".people-pill.on").innerText(), "팀 전체", "[팀 전체] 가 켜진다");
     expect(!page.url().includes("person="), `주소에서도 빠진다: ${page.url()}`);
     expect((await page.locator(".meeting-panel h2").innerText()).includes("팀 전체"), "면담 칸이 팀 전체로");
-    // 표에서 고르면 [기록] 탭으로 가고 띠가 선다. [사람별] 로 돌아와 이름을 한 번 더 누르면 풀린다
+    equal(await page.locator(".skills-meet-side").count(), 0, "옆 칸의 기록도 접힌다");
+    // 표에서 고르면 [기록] 탭으로 가고 사람 줄에 켜진다. [사람별] 로 돌아와 이름을 한 번 더 누르면 풀린다
     await go("#/skills");
     await page.locator(".skills-table button", { hasText: "권경락" }).click();
     await page.waitForTimeout(700);
     expect(page.url().includes("tab=records"), `기록 탭으로: ${page.url()}`);
-    equal(await bar.count(), 1, "표에서 고르면 띠가 선다");
+    equal(await strip.locator(".people-pill.on", { hasText: "권경락" }).count(), 1, "표에서 고르면 사람 줄에 켜진다");
+    equal(await page.locator('.skills-records select[aria-label="사람"]').count(), 0, "기록 탭의 [사람] 상자는 없다");
     await page.locator(".skills-tabs .view-tab", { hasText: "사람별" }).click();
     await page.waitForTimeout(600);
     await page.locator(".skills-table button", { hasText: "권경락" }).click();
@@ -4325,6 +4345,41 @@ async function main() {
       await page.waitForTimeout(700);
       expect(!page.url().includes("person="), `칩을 다시 누르면 풀린다: ${page.url()}`);
     }
+  });
+
+  await check("면담 탭 옆에 그 사람의 역량 기록(보기만), 기록 탭 위에 면담 한 줄 — 탭을 오가지 않는다 (248 ② ③)", async () => {
+    const mine = (await api.get(`/api/activities?person=${encodeURIComponent("권경락")}`));
+    const past = mine.filter((row) => !row.planned).sort((a, b) => b.date.localeCompare(a.date));
+    await go(`#/skills?tab=meetings&person=${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(900);
+    const side = page.locator(".skills-meet-side");
+    equal(await side.count(), 1, "옆 칸");
+    expect((await side.locator("h2").innerText()).includes("권경락"), "그 사람의 기록");
+    equal(await side.getByRole("button", { name: /수정|삭제/ }).count(), 0, "보기만 — 고치는 단추 없음");
+    if (past.length > 0) {
+      expect((await side.innerText()).includes(past[0].title), `가장 최근 기록 "${past[0].title}" 이 옆 칸에`);
+      equal(await side.locator(".side-activity-list li").count() <= 5 + mine.filter((row) => row.planned).length, true, "지난 것은 최근 5건까지");
+    }
+    // 넓은 화면에서는 면담과 나란히
+    const box = await page.evaluate(() => {
+      const a = document.querySelector(".meeting-panel")?.getBoundingClientRect();
+      const b = document.querySelector(".skills-meet-side")?.getBoundingClientRect();
+      return a && b ? { aTop: a.top, bTop: b.top, aRight: a.right, bLeft: b.left } : null;
+    });
+    expect(box && Math.abs(box.aTop - box.bTop) < 4 && box.aRight <= box.bLeft, `나란히: ${JSON.stringify(box)}`);
+    // [기록 탭에서 모두 ▸] → 같은 사람의 기록 탭, 위에 면담 한 줄
+    await side.getByRole("button", { name: /기록 탭에서 모두/ }).click();
+    await page.waitForTimeout(800);
+    expect(page.url().includes("tab=records") && page.url().includes("person="), `같은 사람의 기록 탭: ${page.url()}`);
+    const line = page.locator(".skills-meeting-line");
+    equal(await line.count(), 1, "면담 한 줄");
+    await line.getByRole("button", { name: /면담 보기/ }).click();
+    await page.waitForTimeout(700);
+    expect(page.url().includes("tab=meetings") && page.url().includes("person="), `같은 사람의 면담: ${page.url()}`);
+    // 사람을 풀면 면담 한 줄도 없다
+    await go("#/skills?tab=records");
+    await page.waitForTimeout(600);
+    equal(await page.locator(".skills-meeting-line").count(), 0, "팀 전체면 면담 한 줄 없음");
   });
 
   console.log("\n[37] 단추 색은 목적별로 — 파랑 만들기 · 보라 보고 · 갈색 확정 · 빨강 삭제 · 연한 선택 (TODO 189)");
