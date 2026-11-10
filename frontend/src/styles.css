@@ -2787,6 +2787,39 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-fields dt { color: var(--muted); }
 .import-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .import-empty, .import-done { margin: 8px 0; }
+/* 4단계 — 확정 · 정합성 · 확인 필요 [반영] · 역량 사전 (TODO 260) */
+.exp-head-actions { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+.exp-confirm-bar { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; position: relative; }
+.exp-missing { flex-basis: 100%; margin: 4px 0 0; padding: 8px 12px 8px 28px; border: 1px solid var(--warning-300); border-radius: var(--radius);
+  background: var(--warning-50); font-size: var(--fs-xs); color: var(--warning-700); }
+.experience-consistency.has { border-color: var(--warning-300); }
+.exp-consistency-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sm); }
+.exp-consistency-list li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.exp-consistency-list li.done { opacity: 0.65; }
+.exp-consistency-text { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.exp-code { flex: none; font-size: var(--fs-xs); font-weight: 600; color: var(--warning-700); }
+.exp-answers { margin: 0 0 8px; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-sm); }
+.exp-question { display: block; overflow-wrap: anywhere; }
+.exp-answer-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.exp-answer-row input { flex: 1 1 200px; min-width: 0; width: auto; }
+.exp-answer-row select { flex: 0 1 200px; min-width: 0; width: auto; }
+.exp-unknown { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; flex-basis: 100%; font-size: var(--fs-xs); }
+.exp-unknown-tag { color: var(--warning-700); border: 1px dashed var(--warning-300); border-radius: var(--radius-pill); padding: 0 6px; }
+.exp-unknown select { width: auto; min-width: 0; padding: 2px 6px; font-size: var(--fs-xs); }
+.exp-skill-list li { flex-wrap: wrap; }
+.experience-skills { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+.exp-skill-axis { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.exp-skill-axis .exp-label { margin: 0; width: 56px; flex: none; }
+.exp-chip { display: inline-flex; gap: 4px; align-items: center; padding: 0 8px; min-height: 22px; border: 1px solid var(--border); border-radius: var(--radius-pill);
+  font-size: var(--fs-xs); background: var(--surface); }
+.exp-chip.unknown { border-style: dashed; color: var(--muted); }
+.exp-chip b { color: var(--accent); font-weight: 600; }
+.experience-skills .link-button { align-self: flex-start; font-size: var(--fs-xs); }
+.skill-table-wrap { max-height: 420px; overflow: auto; }
+.skill-table { width: 100%; }
+.skill-table td:nth-child(2) { min-width: 180px; }
+.skill-table td:nth-child(3) { min-width: 260px; width: 100%; }
+.skill-table select { width: auto; }
 .import-draft-first { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 0 0 8px;
   padding: 6px 10px; border: 1px solid var(--warning-300); border-radius: var(--radius); background: var(--warning-50); }
 .import-draft-first .hint { margin: 0; flex: 1 1 240px; min-width: 0; }

@@ -72,7 +72,7 @@ def test_prompt_has_rules_format_records_and_leaves_out_names_and_money(team):  
                   f"## 과제 1. 함께 하는 과제 ({pid})", "- 배경: 출하 검사를 육안으로 해서 편차가 컸다.", "- 목표: 재검을 줄인다.",
                   "- 역할: 주관", "- 맡은 부분: 판정 기준 정리", "- 기술 · 도구: 이미지 판정, Python",
                   "  - 2026-06-30 시범 라인 적용", "- 내가 한 일:", "  - 불량 유형 재분류", "- 결과: 재검 월 30건 → 12건",
-                  "[역량 목록]", "(아직 없음)", "[기존 경험 목록]"):
+                  "[역량 목록]", "- 기술: 비전 AI 객체탐지", "- 문제해결: 문제 재정의", "[기존 경험 목록]"):
         assert piece in text, piece
     # 넣지 않는 것 — 팀원 이름 · 다른 사람 이름 · 효과 금액(3단계.md ⑤)
     assert "가팀원" not in text and "나팀원" not in text
@@ -89,7 +89,6 @@ def test_prompt_lists_existing_experiences_and_skills_and_takes_any_number_of_pr
     assert data["projects"] == [pid, *extra]                           # ⑧ 과제 수를 막지 않는다(사용자 2026-11-10)
     assert "## 과제 8. 과제 6" in data["text"]
     assert f"- E-001 | 함께 하는 과제 | 2026-03 ~ ? | {pid}" in data["text"] and data["existing"] == 1
-    assert "- 기술: Python, 이미지 판정" in data["text"]
     assert owner.get("/api/experiences/prompt", params={"person": "가팀원", "projects": "2099-999"}).status_code == 400
     empty = owner.get("/api/experiences/prompt", params={"person": "가팀원", "projects": ""}).json()
     assert empty["projects"] == [] and empty["text"] == ""

@@ -6770,6 +6770,76 @@ async function main() {
     await page.waitForTimeout(1200);
   });
 
+  console.log("\n[68] 역량 사전 · 정합성 · 확정 (TODO 260)");
+
+  await check("[확정하기 (조건 n개 남음)] → 남은 조건, [반영] · [확인함] 뒤 확정 → 되돌림 (260)", async () => {
+    const made = await api.post("/api/experiences", {
+      person: "권경락", title: "확정 시험용 고유 경험", kind: "업무", start: "2026-02", end: "2026-05", role: "주관",
+      situation: "조건이 흩어져 있었다", actions: ["조건 정리"], open_questions: ["본인이 기여한 몫은?"],
+      skills: [{ axis: "문제해결", name: "PoC" }, { axis: "기술", name: "사내 점검 도구" }],
+    });
+    seeded.confirmExp = made.id;
+    await go(`#/experience/${made.id}`);
+    await page.waitForTimeout(900);
+    const detail = page.locator(".experience-detail");
+    const button = detail.getByRole("button", { name: /확정하기 \(조건 2개 남음\)/ });
+    equal(await button.count(), 1, "남은 조건 수가 붙은 단추");
+    await button.click();
+    const missing = await page.locator("[data-testid=confirm-missing]").innerText();
+    expect(missing.includes("3.") && missing.includes("5."), `남은 조건: ${missing}`);
+    // 확인 필요 [반영] — 답을 결과(정성)에 덧붙이고 질문을 지운다
+    const row = detail.locator(".exp-answers li").first();
+    equal(await row.locator('select[aria-label="반영할 곳"]').inputValue(), "result_qual", "몫 질문 → 결과(정성)");
+    await row.locator('input[aria-label="답"]').fill("판정 기준 정리 전부");
+    await row.getByRole("button", { name: "반영" }).click();
+    equal(await detail.locator(".exp-answers li").count(), 0, "질문이 지워졌다");
+    await detail.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForTimeout(900);
+    const saved = await api.get(`/api/experiences/${made.id}`);
+    expect(saved.result_qual.includes("판정 기준 정리 전부") && saved.open_questions.length === 0, "답이 결과에 남았다");
+    // 정합성 R-07 — [확인함]
+    const consistency = page.locator("[data-testid=consistency]");
+    expect((await consistency.innerText()).includes("R-07"), "역할 주체 경고");
+    await consistency.locator('li[data-code="R-07"]').getByRole("button", { name: "확인함" }).click();
+    await page.waitForTimeout(900);
+    expect((await consistency.innerText()).includes("확인함 2026"), "확인함 표시");
+    await detail.getByRole("button", { name: "확정하기", exact: true }).click();
+    await page.waitForTimeout(900);
+    expect((await detail.locator(".experience-head").innerText()).includes("확정"), "확정 딱지");
+    await detail.getByRole("button", { name: "구조화로 되돌림" }).click();
+    await page.waitForTimeout(900);
+    equal((await api.get(`/api/experiences/${made.id}`)).status, "구조화", "되돌림");
+  });
+
+  await check("역량 태그 — 동의어는 대표 이름으로, 사전에 없음 → [사전에 추가] (260)", async () => {
+    const detail = page.locator(".experience-detail");
+    const tags = await detail.locator('input[aria-label="역량 태그"]').evaluateAll((els) => els.map((el) => el.value));
+    expect(tags.includes("가설 검증·파일럿"), `동의어 PoC → 대표 이름: ${tags}`);
+    const unknown = detail.locator('[data-unknown="사내 점검 도구"]');
+    equal(await unknown.count(), 1, "사전에 없음 표시");
+    await unknown.getByRole("button", { name: "사전에 추가" }).click();
+    await page.waitForTimeout(900);
+    equal(await detail.locator('[data-unknown="사내 점검 도구"]').count(), 0, "더한 뒤 표시가 사라진다");
+    await go(`#/person/${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(900);
+    expect((await page.locator("[data-testid=experience-skills]").innerText()).includes("가설 검증·파일럿"), "사람별 역량 칩");
+  });
+
+  await check("설정 → 분류 · 접수의 역량 사전 — 더한 것이 보이고 [기본으로] 되돌린다 (260)", async () => {
+    await go("#/settings?tab=class");
+    await page.waitForTimeout(900);
+    const card = page.locator("[data-testid=skill-dictionary]");
+    expect((await card.locator(".icon-title, h2").first().innerText()).includes("역량 사전 47개"), "46 + 더한 하나");
+    equal(await card.locator('tr[data-skill="사내 점검 도구"]').count(), 1, "더한 역량");
+    await card.locator('select[aria-label="축으로 거르기"]').selectOption("리더십");
+    equal(await card.locator("tbody tr").count(), 10, "리더십 10개");
+    nextDialog((d) => d.accept());
+    await card.getByRole("button", { name: "기본으로" }).click();
+    await page.waitForTimeout(1000);
+    await card.locator('select[aria-label="축으로 거르기"]').selectOption("");
+    expect((await card.innerText()).includes("역량 사전 46개 (기본)"), "기본으로 돌아왔다");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

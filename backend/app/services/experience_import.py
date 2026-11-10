@@ -181,11 +181,10 @@ def build_prompt(conn: sqlite3.Connection, person: str, project_ids: list[str] |
     recent = conn.execute(
         "SELECT id, title, start, end, project_id FROM experience WHERE person = ? ORDER BY updated_at DESC, id DESC LIMIT ?",
         (person, RECENT_MAX)).fetchall()
+    # [역량 목록] = 역량 사전(4단계 — TODO 260). 3단계에서는 이 사람이 쓴 태그였다
     skills: dict[str, list[str]] = {}
-    for row in conn.execute(
-            "SELECT DISTINCT s.axis, s.name FROM experience_skill s JOIN experience e ON e.id = s.experience_id"
-            " WHERE e.person = ? ORDER BY s.axis, s.name", (person,)):
-        skills.setdefault(row["axis"] or "기술", []).append(row["name"])
+    for entry in settings_service.skill_dictionary():
+        skills.setdefault(entry["axis"], []).append(entry["name"])
     parts = [PROMPT_HEAD, "[역량 목록]"]
     parts += [f"- {axis}: {', '.join(skills[axis])}" for axis in exp.AXES if skills.get(axis)] or ["(아직 없음)"]
     parts += ["", f"[기존 경험 목록] (최근 {RECENT_MAX}건: 번호 | 제목 | 기간 | 과제)"]

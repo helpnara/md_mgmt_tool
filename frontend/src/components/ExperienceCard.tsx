@@ -7,6 +7,8 @@ import type { ExperienceListing } from "../types";
 import IconTitle from "./IconTitle";
 import CardIntro from "./CardIntro";
 
+const AXES = ["기술", "업무", "리더십", "문제해결"] as const;
+
 /** 경험 상세 주소 (TODO 257 · 2단계.md ①) — 사람별 이력에서 왔으면 돌아갈 곳을 함께 */
 export function experienceLink(id: string): string {
   return `#/experience/${encodeURIComponent(id)}`;
@@ -72,6 +74,16 @@ export default function ExperienceCard({
     }
   }
 
+  async function rematch() {
+    try {
+      const result = await api.rematchSkills(name);
+      setNotice(result.changed.length ? `경험 ${result.changed.length}건의 태그를 사전에 맞췄습니다.` : "바뀐 태그가 없습니다 — 사전에 없는 이름은 그대로입니다.");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   async function addBlank() {
     try {
       const made = await api.createExperience({ person: name, title: "새 경험", kind: "업무" });
@@ -109,6 +121,29 @@ export default function ExperienceCard({
         <p className="muted experience-counts">
           확정 {data.counts["확정"] ?? 0} · 구조화 {data.counts["구조화"] ?? 0} · 초안 {data.counts["초안"] ?? 0}
         </p>
+      )}
+      {/* 역량 칩 (TODO 260 · 4단계.md ⑩) — 축별 · 경험 수. 사전에 없는 태그는 점선 */}
+      {data && (data.skills?.length ?? 0) > 0 && (
+        <div className="experience-skills" data-testid="experience-skills">
+          {AXES.map((axis) => {
+            const chips = data.skills.filter((skill) => skill.axis === axis);
+            return chips.length === 0 ? null : (
+              <div key={axis} className="exp-skill-axis">
+                <span className="exp-label">{axis}</span>
+                {chips.map((skill) => (
+                  <span key={skill.name} className={skill.known ? "exp-chip" : "exp-chip unknown"} title={skill.known ? "" : "역량 사전에 없음"}>
+                    {skill.name} <b>{skill.count}</b>
+                  </span>
+                ))}
+              </div>
+            );
+          })}
+          {manager && data.skills.some((skill) => !skill.known) && (
+            <button className="link-button" onClick={() => void rematch()} title="역량 사전을 고친 뒤 — 이 사람 경험의 태그를 지금 사전으로 다시 맞춥니다">
+              사전에 다시 맞추기
+            </button>
+          )}
+        </div>
       )}
       {!data ? (
         <p className="muted">불러오는 중…</p>

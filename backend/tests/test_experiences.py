@@ -117,7 +117,8 @@ def test_listing_counts_order_and_problems(team):  # noqa: F811
     assert first["project_title"] == "함께 하는 과제" and first["open_count"] >= 2
     detail = owner.get("/api/experiences/E-001").json()
     assert any(p["code"] == "baseline_ask" for p in detail["problems"])     # 집계 기준 — 규칙 12 질문
-    assert detail["confirm_missing"] and detail["confirm_missing"][-1].startswith("3.")   # 확인 필요가 남았다
+    assert any(m.startswith("3.") for m in detail["confirm_missing"])        # 확인 필요가 남았다
+    assert detail["confirm_missing"][-1].startswith("5.")                   # 정합성 경고(R-07 — "주관 · …") — 4단계
     assert owner.get("/api/experiences", params={"person": "나팀원"}).json()["total"] == 0
 
 

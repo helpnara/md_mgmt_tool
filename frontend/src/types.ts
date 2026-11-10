@@ -417,6 +417,8 @@ export interface AppSettings {
   /** 팀원 면담 구분 — null 이면 기본 목록. 저장할 때는 한 줄에 하나인 글로도 (TODO 182) */
   meeting_kinds: string[] | string | null;
   meeting_cycle_days: number;
+  /** 역량 사전 (TODO 260) — null 이면 기본(46개). 빈 목록을 보내면 기본으로 */
+  skill_dictionary?: SkillEntry[] | null;
   /** 자동 백업에서 첨부를 빼고 문서만 (TODO 202 · 197 ③) — 서버가 아직 모르면 없다 */
   backup_skip_assets?: boolean;
   /** 이전 버전을 남기지 못한 문서 (TODO 206 ㉕) — 읽을 때만 온다 */
@@ -1439,6 +1441,28 @@ export interface ExperienceListing {
   items: ExperienceSummary[];
   counts: Record<string, number>;
   total: number;
+  /** 사람별 역량 칩 (TODO 260) */
+  skills: { axis: ExperienceSkill["axis"]; name: string; count: number; known: boolean }[];
+}
+/** 정합성 경고 (TODO 260 · 4단계.md 3절) */
+export interface ConsistencyWarning {
+  code: string;
+  key: string;
+  label: string;
+  message: string;
+  acknowledged: boolean;
+  ack_at: string;
+  ack_by: string;
+}
+export interface SkillEntry {
+  axis: ExperienceSkill["axis"];
+  name: string;
+  aliases: string[];
+}
+export interface SkillDictionary {
+  dictionary: SkillEntry[];
+  usage: Record<string, number>;
+  custom: boolean;
 }
 export interface Experience {
   id: string;
@@ -1473,6 +1497,12 @@ export interface Experience {
   created_by: string;
   problems: ExperienceProblem[];
   confirm_missing: string[];
+  // 4단계 (TODO 260)
+  consistency: ConsistencyWarning[];
+  skills_unknown: string[];
+  acknowledged: { code: string; key: string; at: string; by: string }[];
+  confirmed_at: string;
+  confirmed_by: string;
 }
 
 // ── 응답 되받기 (TODO 258 · 253 의 3단계) ───────────────────

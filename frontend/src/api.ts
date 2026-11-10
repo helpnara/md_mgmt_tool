@@ -1,4 +1,4 @@
-import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview } from "./types";
+import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -232,6 +232,16 @@ export const api = {
     request<{ made: string[]; skipped: { project: string; reason: string }[] }>("/api/experiences/draft", {
       method: "POST", body: JSON.stringify({ person, projects }),
     }),
+  // ── 역량 사전 · 정합성 · 확정 (TODO 260) ─────────────
+  experienceSkills: () => request<SkillDictionary>("/api/experiences/skills"),
+  mergeSkill: (source: { axis: string; name: string }, target: { axis: string; name: string }) =>
+    request<{ changed: string[] }>("/api/experiences/skills/merge", { method: "POST", body: JSON.stringify({ source, target }) }),
+  rematchSkills: (person: string) =>
+    request<{ changed: string[] }>("/api/experiences/skills/rematch", { method: "POST", body: JSON.stringify({ person }) }),
+  confirmExperience: (id: string) => request<Experience>(`/api/experiences/${encodeURIComponent(id)}/confirm`, { method: "POST" }),
+  unconfirmExperience: (id: string) => request<Experience>(`/api/experiences/${encodeURIComponent(id)}/unconfirm`, { method: "POST" }),
+  acknowledgeWarning: (id: string, code: string, key: string) =>
+    request<Experience>(`/api/experiences/${encodeURIComponent(id)}/acknowledge`, { method: "POST", body: JSON.stringify({ code, key }) }),
   // ── 응답 되받기 (TODO 258) ──────────────────────────
   experiencePrompt: (person: string, projects?: string[]) =>
     request<ExperiencePrompt>(

@@ -9,6 +9,7 @@ import AiPromptCard from "./AiPromptCard";
 import ReportTemplateCard from "./ReportTemplateCard";
 import IntakeSettingsCard from "./IntakeSettingsCard";
 import MeetingSettingsCard from "./MeetingSettingsCard";
+import SkillDictionaryCard from "./SkillDictionaryCard";
 import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
 import PeopleCard from "./PeopleCard";
@@ -34,7 +35,7 @@ import IconTitle from "./IconTitle";
 type SettingsTab = "" | "class" | "report" | "forms" | "backup" | "check";
 const SETTINGS_TABS: { key: SettingsTab; label: string; title: string }[] = [
   { key: "", label: "기본", title: "누가 쓰는가 · 과제를 무엇으로 가르는가 — 작성자 · 담당자 명부 · 면담 · 과제 속성 · 번호 체계 · 효과 금액" },
-  { key: "class", label: "분류 · 접수", title: "스마트과제의 성격 · 분류 · 수행 방식 · 비용구분 목록 · 접수 서식 · 묵힘 기준 · 사전점검" },
+  { key: "class", label: "분류 · 접수", title: "스마트과제의 성격 · 분류 · 수행 방식 · 비용구분 목록 · 접수 서식 · 묵힘 기준 · 사전점검 · 역량 사전" },
   { key: "report", label: "보고", title: "언제 보고하는가 · 무엇을 후보로 올리는가" },
   { key: "forms", label: "서식", title: "새 문서를 무엇으로 시작하는가 — 진행일지 · 보고 초안 · AI 프롬프트" },
   { key: "backup", label: "보관과 백업", title: "어디에 쌓이는가 · 잘못됐을 때 어디서 되찾는가" },
@@ -231,6 +232,8 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
       {tab === "class" && (
         <div className="settings-grid">
           <IntakeSettingsCard meta={meta} onSaved={onSaved} />
+          {/* 역량 사전 (TODO 260) — 경험의 역량 태그를 맞추는 표 */}
+          <SkillDictionaryCard />
         </div>
       )}
 

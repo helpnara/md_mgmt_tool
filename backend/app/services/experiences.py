@@ -19,6 +19,8 @@ from typing import Any
 
 from .. import clock
 from ..config import get_settings
+from ..experience import consistency as consistency_rules
+from ..experience import skills as skill_rules
 from ..experience.check import check as check_block
 from ..experience.check import confirm_ready
 from ..experience.parse import ParsedBlock, Quant
@@ -43,6 +45,7 @@ SOURCES = ("담당", "응답", "직접", "분해")
 SECTIONS = ("상황", "목표", "행동", "결과", "교훈", "확인 필요")
 META_ORDER = ["id", "person", "title", "project", "project_text", "affiliation", "start", "end", "role", "kind", "status",
               "impact", "lesson_source", "skills", "quants", "evidences", "related", "materials", "source",
+              "acknowledged", "confirmed_at", "confirmed_by",
               "created_at", "updated_at", "created_by", "schema"]
 TITLE_MAX = 120
 TEXT_MAX = 4000
@@ -199,11 +202,25 @@ def clean(data: dict[str, Any], stored: dict[str, Any] | None = None, opened: tu
         "impact": _text(merged.get("impact"), "영향", 500), "lesson": _text(merged.get("lesson"), "교훈"),
         "lesson_source": _text(merged.get("lesson_source"), "교훈 출처", 100),
         "open_questions": _lines(merged.get("open_questions"), "확인 필요"),
-        "skills": _skills(merged.get("skills")), "quants": _quants(merged.get("quants")),
+        # 역량 사전에 맞춘다(4단계.md 2절) — 동의어는 대표 이름 · 사전의 축으로, 못 맞추면 그대로
+        "skills": skill_rules.match(_skills(merged.get("skills")), settings_service.skill_dictionary()),
+        "quants": _quants(merged.get("quants")),
         "evidences": _evidences(merged.get("evidences")),
         "related": [item for item in _lines(merged.get("related"), "관련 경험") if ID_PATTERN.match(item)],
         "materials": _lines(merged.get("materials"), "재료"), "source": source,
+        # 4단계(TODO 260) — 끝점(확정 · 확인함)만 바꾼다. 고치기(PATCH)로는 들어오지 않는다
+        "acknowledged": _acks(merged.get("acknowledged")),
+        "confirmed_at": _text(merged.get("confirmed_at"), "확정한 때", 40) if status == "확정" else "",
+        "confirmed_by": _text(merged.get("confirmed_by"), "확정한 사람", 40) if status == "확정" else "",
     }
+
+
+def _acks(value: object) -> list[dict[str, str]]:
+    out = []
+    for item in value if isinstance(value, list) else []:
+        if isinstance(item, dict) and item.get("code"):
+            out.append({k: str(item.get(k) or "") for k in ("code", "key", "at", "by")})
+    return out[:200]
 
 
 # ── 1단계 검사로 잇기 ─────────────────────────────────────────────────────────
@@ -285,6 +302,8 @@ def read_file(path: Path) -> dict[str, Any]:
         "lesson_source": str(meta.get("lesson_source") or ""), "open_questions": as_list(sec.get("확인 필요")),
         "skills": meta.get("skills") or [], "quants": meta.get("quants") or [], "evidences": meta.get("evidences") or [],
         "related": meta.get("related") or [], "materials": meta.get("materials") or [], "source": str(meta.get("source") or ""),
+        "acknowledged": meta.get("acknowledged") or [], "confirmed_at": str(meta.get("confirmed_at") or ""),
+        "confirmed_by": str(meta.get("confirmed_by") or ""),
         "created_at": str(meta.get("created_at") or ""), "updated_at": str(meta.get("updated_at") or ""),
         "created_by": str(meta.get("created_by") or ""),
     }
@@ -316,7 +335,8 @@ def update(conn: sqlite3.Connection, experience_id: str, updates: dict[str, Any]
     base = updates.pop("base_updated_at", None)
     if base and base != stored["updated_at"]:
         raise ConflictError("그사이 다른 곳에서 이 경험을 고쳤습니다 — 새로 불러온 뒤 다시 고쳐 주세요.")
-    fields = clean({k: v for k, v in updates.items() if k not in ("id", "person", "source", "created_at", "created_by")}, stored)
+    fields = clean({k: v for k, v in updates.items()
+                    if k not in ("id", "person", "source", "created_at", "created_by", "acknowledged", "confirmed_at", "confirmed_by")}, stored)
     _write(path, experience_id, fields,
            {"created_at": stored["created_at"], "updated_at": now_iso(), "created_by": stored["created_by"]})
     reindex(conn)
@@ -483,13 +503,153 @@ def _summary_row(row: sqlite3.Row, project_titles: dict[str, str]) -> dict[str, 
 def listing(conn: sqlite3.Connection, person: str) -> dict[str, Any]:
     titles = {r["id"]: r["title"] for r in conn.execute("SELECT id, title FROM project")}
     rows = conn.execute("SELECT * FROM experience WHERE person = ? ORDER BY COALESCE(start, '') DESC, id DESC", (person,)).fetchall()
+    full = {row["id"]: get_row(conn, row) for row in rows}
+    found = consistency(conn, person, list(full.values()))
     items = []
     for row in rows:
         summary = _summary_row(row, titles)
-        summary["warn_count"] = sum(1 for p in problems_of(get_row(conn, row)) if p["level"] == "경고")
+        open_warnings = [w for w in found.get(row["id"], []) if not w["acknowledged"]]
+        summary["warn_count"] = sum(1 for p in problems_of(full[row["id"]]) if p["level"] == "경고") + len(open_warnings)
         items.append(summary)
     counts = {status: sum(1 for item in items if item["status"] == status) for status in STATUSES}
-    return {"items": items, "counts": counts, "total": len(items)}
+    # 사람별 역량 칩(4단계.md ⑩) — 축 · 이름 · 경험 수 · 사전에 있나
+    known = {(d["axis"], d["name"]) for d in settings_service.skill_dictionary()}
+    tally: dict[tuple[str, str], int] = {}
+    for item in full.values():
+        for skill in item["skills"] if isinstance(item["skills"], list) else []:
+            if isinstance(skill, dict) and skill.get("name"):
+                mark = (skill.get("axis") or "기술", skill["name"])
+                tally[mark] = tally.get(mark, 0) + 1
+    skills = [{"axis": axis, "name": name, "count": count, "known": (axis, name) in known}
+              for (axis, name), count in sorted(tally.items(), key=lambda pair: (AXES.index(pair[0][0]) if pair[0][0] in AXES else 9, -pair[1], pair[0][1]))]
+    return {"items": items, "counts": counts, "total": len(items), "skills": skills}
+
+
+# ── 정합성 · 확정 (4단계.md 3 · 4절) ─────────────────────────────────────────────
+
+def _spans(conn: sqlite3.Connection, person: str) -> dict[str, tuple[str, str]]:
+    from .person_history import history
+
+    return {p["id"]: ((p["from"] or "")[:7], (p["to"] or "")[:7]) for p in history(conn, person)["projects"]}
+
+
+def consistency(conn: sqlite3.Connection, person: str, items: list[dict[str, Any]] | None = None) -> dict[str, list[dict[str, Any]]]:
+    """그 사람의 경험끼리 정합성 경고 — 경험 번호 → [{code, key, message, label, acknowledged, ack_at, ack_by}]."""
+    if items is None:
+        items = [get_row(conn, row) for row in conn.execute("SELECT * FROM experience WHERE person = ?", (person,))]
+    found = consistency_rules.check_person(items, _spans(conn, person))
+    out: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        acks = {(a.get("code"), a.get("key")): a for a in item.get("acknowledged") or [] if isinstance(a, dict)}
+        rows = []
+        for warning in found.get(item["id"], []):
+            ack = acks.get((warning.code, warning.key))
+            rows.append({**warning.as_dict(), "acknowledged": bool(ack), "ack_at": (ack or {}).get("at", ""), "ack_by": (ack or {}).get("by", "")})
+        out[item["id"]] = rows
+    return out
+
+
+def confirm_missing(item: dict[str, Any], warnings: list[dict[str, Any]]) -> list[str]:
+    """확정 조건 다섯(원본 4절 · FR-E6) 중 못 맞춘 것 — 1 ~ 4 는 1단계 `confirm_ready`, 5 = 정합성 경고를 모두 [확인함]."""
+    missing = confirm_ready(as_block(item), item["person"])
+    left = [w for w in warnings if not w["acknowledged"]]
+    if left:
+        missing.append(f"5. 정합성 경고 {len(left)}건 — 고치거나 [확인함]으로 넘깁니다")
+    return missing
+
+
+def _set_status(conn: sqlite3.Connection, experience_id: str, status: str, extra: dict[str, Any]) -> dict[str, Any]:
+    path = file_path(conn, experience_id)
+    stored = read_file(path)
+    fields = clean({**stored, **extra, "status": status}, stored, opened=(status,))
+    _write(path, experience_id, fields, {"created_at": stored["created_at"], "updated_at": now_iso(), "created_by": stored["created_by"]})
+    reindex(conn)
+    conn.commit()
+    return get(conn, experience_id)
+
+
+def confirm(conn: sqlite3.Connection, experience_id: str, by: str = "") -> dict[str, Any]:
+    """[확정하기] — 조건 다섯을 서버가 다시 본다(화면을 믿지 않는다). 초안에서도 조건만 맞으면 된다(4단계.md ⑥)."""
+    item = get(conn, experience_id)
+    if item["status"] == "확정":
+        raise ExperienceError("이미 확정한 경험입니다.")
+    if item["confirm_missing"]:
+        raise ExperienceError("확정하려면 아래가 남았습니다: " + " / ".join(item["confirm_missing"]))
+    who = by or settings_service.current_author(None) or ""
+    return _set_status(conn, experience_id, "확정", {"confirmed_at": now_iso(), "confirmed_by": who})
+
+
+def unconfirm(conn: sqlite3.Connection, experience_id: str) -> dict[str, Any]:
+    """[구조화로 되돌림] — 확정한 때 · 사람은 지운다(이전 버전에 남는다)."""
+    if get(conn, experience_id)["status"] != "확정":
+        raise ExperienceError("확정한 경험만 되돌립니다.")
+    return _set_status(conn, experience_id, "구조화", {"confirmed_at": "", "confirmed_by": ""})
+
+
+def acknowledge(conn: sqlite3.Connection, experience_id: str, code: str, key: str, by: str = "") -> dict[str, Any]:
+    """정합성 경고 하나를 [확인함] — 지금 있는 경고에만(누가 · 언제를 남긴다, 원본 FR-F2)."""
+    item = get(conn, experience_id)
+    if not any(w["code"] == code and w["key"] == key for w in item["consistency"]):
+        raise ExperienceError("그 경고는 지금 없습니다 — 새로 불러온 뒤 다시 하세요.")
+    acks = [a for a in item["acknowledged"] if not (a.get("code") == code and a.get("key") == key)]
+    acks.append({"code": code, "key": key, "at": now_iso(), "by": by or settings_service.current_author(None) or ""})
+    return _set_status(conn, experience_id, item["status"], {"acknowledged": acks})
+
+
+# ── 역량 사전 — 합치기 · 다시 맞추기 (4단계.md 2절) ────────────────────────────
+
+def skill_usage(conn: sqlite3.Connection) -> dict[str, int]:
+    return {f"{r['axis']}|{r['name']}": r["n"] for r in conn.execute(
+        "SELECT axis, name, COUNT(DISTINCT experience_id) AS n FROM experience_skill GROUP BY axis, name")}
+
+
+def _rewrite_skills(conn: sqlite3.Connection, paths_: list[Path], change) -> list[str]:
+    changed = []
+    for path in paths_:
+        stored = read_file(path)
+        skills = change(list(stored["skills"]))
+        if skills == stored["skills"]:
+            continue
+        fields = clean({**stored, "skills": skills}, stored, opened=(stored["status"],))
+        if fields["skills"] == stored["skills"]:
+            continue
+        _write(path, stored["id"], fields, {"created_at": stored["created_at"], "updated_at": now_iso(), "created_by": stored["created_by"]})
+        changed.append(stored["id"])
+    return changed
+
+
+def merge_skill(conn: sqlite3.Connection, source: dict[str, str], target: dict[str, str]) -> dict[str, Any]:
+    """사전의 한 역량을 다른 역량으로 합친다 — 경험의 태그를 바꾸고, 옛 이름은 대상의 동의어로 남긴다."""
+    src = (str(source.get("axis") or ""), " ".join(str(source.get("name") or "").split()))
+    dst = (str(target.get("axis") or ""), " ".join(str(target.get("name") or "").split()))
+    if not src[1] or not dst[1] or src == dst or dst[0] not in AXES:
+        raise ExperienceError("합칠 역량 둘을 골라 주세요.")
+    dictionary = settings_service.skill_dictionary()
+    if not any((d["axis"], d["name"]) == dst for d in dictionary):
+        raise ExperienceError(f"사전에 없는 역량으로는 합치지 않습니다: {dst[1]}")
+    out = []
+    for entry in dictionary:
+        if (entry["axis"], entry["name"]) == src:
+            continue
+        if (entry["axis"], entry["name"]) == dst:
+            entry = {**entry, "aliases": list(dict.fromkeys([*entry.get("aliases", []), src[1]]))}
+        out.append(entry)
+    settings_service.save({"skill_dictionary": out})
+    changed = _rewrite_skills(conn, sorted(get_settings().people_dir.glob("*/experiences/E-*.md")),
+                              lambda skills: [{"axis": dst[0], "name": dst[1]} if (s.get("axis"), s.get("name")) == src else s for s in skills])
+    reindex(conn)
+    conn.commit()
+    return {"changed": changed}
+
+
+def rematch_person(conn: sqlite3.Connection, person: str) -> dict[str, Any]:
+    """[사전에 다시 맞추기] — 그 사람의 경험 태그를 지금 사전으로 다시 맞춘다(사전을 고친 뒤)."""
+    paths_ = [paths.safe_join(get_settings().vault_dir, r["rel_path"]) for r in conn.execute(
+        "SELECT rel_path FROM experience WHERE person = ?", (person,))]
+    changed = _rewrite_skills(conn, paths_, lambda skills: skill_rules.match(skills, settings_service.skill_dictionary()))
+    reindex(conn)
+    conn.commit()
+    return {"changed": changed}
 
 
 def get_row(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
@@ -499,10 +659,12 @@ def get_row(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
 def get(conn: sqlite3.Connection, experience_id: str) -> dict[str, Any]:
     item = read_file(file_path(conn, experience_id))
     project = conn.execute("SELECT title FROM project WHERE id = ?", (item["project"],)).fetchone() if item["project"] else None
+    warnings = consistency(conn, item["person"]).get(item["id"], [])
     return {**item, "project_title": project["title"] if project else "", "project_gone": bool(item["project"]) and not project,
             "problems": problems_of(item),
-            # 4단계에서 [확정하기] 가 쓴다 — 지금은 보여 주기만(조건 5 정합성은 4단계)
-            "confirm_missing": confirm_ready(as_block(item), item["person"])}
+            "consistency": warnings,
+            "skills_unknown": skill_rules.unknown(item["skills"], settings_service.skill_dictionary()),
+            "confirm_missing": confirm_missing(item, warnings)}
 
 
 def reindex(conn: sqlite3.Connection, problems: list | None = None) -> int:

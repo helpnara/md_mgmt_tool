@@ -43,6 +43,8 @@ class SettingsUpdate(BaseModel):
     # 팀원 면담 (TODO 182) — 구분(한 줄에 하나 또는 목록, 비우면 기본) · 주기(일)
     meeting_kinds: list[str] | str | None = None
     meeting_cycle_days: int | None = None
+    # 역량 사전 (TODO 260) — [{axis, name, aliases}] · null 이면 기본
+    skill_dictionary: list[dict] | None = None
     # 백업에 첨부를 넣지 않는다 (TODO 202) — 참/거짓만
     backup_skip_assets: StrictBool | None = None
     # 효과 금액 단위 확인 기준선 (TODO 214 D4) — 억원/년, 0 이면 묻지 않음

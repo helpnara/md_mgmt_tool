@@ -4,7 +4,8 @@ import { api } from "../api";
 import { isManager } from "../me";
 import { notifyError } from "../notify";
 import { personLink, projectLink, setPageTitle } from "../nav";
-import type { Experience, ExperienceQuant, ExperienceResponseFile, ExperienceSkill } from "../types";
+import type { ConsistencyWarning, Experience, ExperienceQuant, ExperienceResponseFile, ExperienceSkill, SkillDictionary } from "../types";
+import { ConfirmBar, ConsistencyCard, QuestionAnswers, guessKind, type AnswerTarget } from "./ExperienceConfirm";
 import IconTitle from "./IconTitle";
 import { useEditedUnsaved } from "../util";
 
@@ -40,7 +41,14 @@ export default function ExperienceDetail({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [raw, setRaw] = useState<ExperienceResponseFile | null>(null);
+  const [dictionary, setDictionary] = useState<SkillDictionary | null>(null);
   const editable = isManager();
+
+  // 역량 사전 (TODO 260) — "사전에 없음" 의 [기존 역량으로 ▾] 가 쓴다
+  useEffect(() => {
+    if (!editable) return;
+    api.experienceSkills().then(setDictionary).catch(() => setDictionary(null));
+  }, [editable]);
 
   useEffect(() => {
     api
@@ -93,6 +101,69 @@ export default function ExperienceDetail({ id }: { id: string }) {
     }
   }
 
+  /** 서버가 돌려준 경험으로 바꾼다 — 고치던 칸이 없을 때만 부른다 */
+  function adopt(next: Experience, message: string) {
+    setItem(next);
+    setForm(toForm(next));
+    setNotice(message);
+    window.setTimeout(() => setNotice(""), 3000);
+  }
+
+  async function act(run: () => Promise<Experience>, message: string) {
+    setBusy(true);
+    try {
+      adopt(await run(), message);
+    } catch (err) {
+      notifyError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function ack(warning: ConsistencyWarning) {
+    if (dirty) {
+      notifyError("고친 것을 먼저 저장하세요 — [확인함]은 저장한 내용에 붙습니다.");
+      return;
+    }
+    void act(() => api.acknowledgeWarning(item!.id, warning.code, warning.key), `${warning.code} 을(를) 확인함으로 넘겼습니다.`);
+  }
+
+  /** 확인 필요 [반영] — 답을 고른 칸 끝에 덧붙이고 질문을 지운다(저장은 [저장]으로) */
+  function applyAnswer(question: string, answer: string, target: AnswerTarget) {
+    if (!form) return;
+    const rest = lines(form.open_questions).filter((q) => q !== question).join("\n");
+    const next: Form = { ...form, open_questions: rest };
+    if (target.startsWith("quant:")) {
+      const index = Number(target.slice(6));
+      next.quants = form.quants.map((q, i) => (i === index ? { ...q, baseline: answer, baseline_kind: q.baseline_kind === "미확인" ? guessKind(answer) : q.baseline_kind } : q));
+    } else if (target === "actions") {
+      next.actions = [form.actions.trim(), answer].filter(Boolean).join("\n");
+    } else {
+      const key = target as "role" | "situation" | "goal" | "result_qual" | "impact" | "lesson";
+      const old = String(form[key] ?? "").trim();
+      next[key] = old ? (key === "role" || key === "impact" ? `${old} / ${answer}` : `${old}\n${answer}`) : answer;
+    }
+    setForm(next);
+    setNotice("반영했습니다 — [저장]을 눌러야 남습니다.");
+  }
+
+  function dropQuestion(question: string) {
+    if (!form) return;
+    set("open_questions", lines(form.open_questions).filter((q) => q !== question).join("\n"));
+  }
+
+  async function addToDictionary(skill: ExperienceSkill) {
+    if (!dictionary) return;
+    try {
+      await api.saveSettings({ skill_dictionary: [...dictionary.dictionary, { axis: skill.axis, name: skill.name, aliases: [] }] });
+      setDictionary(await api.experienceSkills());
+      setItem({ ...item!, skills_unknown: item!.skills_unknown.filter((name) => name !== skill.name) });
+      setNotice(`역량 사전에 ‘${skill.name}’ 을(를) 더했습니다.`);
+    } catch (err) {
+      notifyError((err as Error).message);
+    }
+  }
+
   async function remove() {
     if (!item || !window.confirm(`${item.id} ${item.title} — 삭제 보관함으로 옮길까요? 번호는 다시 쓰지 않습니다.`)) return;
     try {
@@ -114,7 +185,14 @@ export default function ExperienceDetail({ id }: { id: string }) {
             <span className="project-id">{item.id}</span> {item.title}
             <span className={`exp-status exp-${item.status}`}>{item.status}</span>
           </h1>
-          {editable && <button className="ghost danger" onClick={() => void remove()}>지우기</button>}
+          {editable && (
+            <span className="exp-head-actions">
+              <ConfirmBar item={item} dirty={dirty} busy={busy}
+                onConfirm={() => void act(() => api.confirmExperience(item.id), "확정했습니다.")}
+                onUnconfirm={() => void act(() => api.unconfirmExperience(item.id), "구조화로 되돌렸습니다.")} />
+              <button className="ghost danger" onClick={() => void remove()}>지우기</button>
+            </span>
+          )}
         </div>
         <p className="muted">
           {item.person}
@@ -124,20 +202,24 @@ export default function ExperienceDetail({ id }: { id: string }) {
           {" "}· 만든 때 {item.created_at.slice(0, 10)}{item.created_by ? ` (${item.created_by})` : ""} · 출처 {item.source}
         </p>
         <p className="hint experience-stage">
-          {item.status === "초안"
-            ? <>지금은 <b>초안</b>입니다 — 사람별 이력의 [경험] 카드에서 <b>[AI 로 정리]</b>로 다듬어 붙이면 <b>구조화</b>가 됩니다.</>
-            : <>AI 응답을 읽어 채운 <b>{item.status}</b> 경험입니다 — 고쳐도 상태는 그대로이고, [확정하기]는 다음 단계에서 붙습니다.</>}
-          {item.confirm_missing.length > 0 && <> 확정하려면: {item.confirm_missing.join(" / ")}</>}
+          {item.status === "확정"
+            ? <>팀장이 검토해 사실로 인정한 <b>확정</b> 경험입니다 — 고쳐도 상태는 그대로, 업무 이력 파일(다음 단계)에 들어갑니다.</>
+            : item.status === "초안"
+              ? <>지금은 <b>초안</b>입니다 — [AI 로 정리]로 다듬거나 손으로 채운 뒤, 조건 다섯이 맞으면 확정합니다.</>
+              : <>AI 응답을 읽어 채운 <b>구조화</b> 경험입니다 — 검토하고 조건 다섯이 맞으면 확정합니다.</>}
         </p>
       </div>
 
       {/* 확인 필요 — 본문 위(원본 S-05) */}
       <div className={questions.length ? "card experience-questions has" : "card experience-questions"}>
         <IconTitle icon={CircleHelp}>확인 필요 {questions.length}건</IconTitle>
-        <p className="hint">답한 질문은 지웁니다 — 남아 있으면 확정할 수 없습니다. 한 줄에 하나.</p>
+        <p className="hint">답을 적고 <b>[반영]</b>하면 고른 칸에 들어가고 질문이 지워집니다. [해당 없음]은 질문만 지웁니다. 남아 있으면 확정할 수 없습니다.</p>
+        <QuestionAnswers questions={questions} quants={form.quants} editable={editable} onApply={applyAnswer} onDrop={dropQuestion} />
         <textarea className="exp-lines" value={form.open_questions} readOnly={!editable} rows={Math.max(3, questions.length + 1)}
           onChange={(event) => set("open_questions", event.target.value)} aria-label="확인 필요" />
       </div>
+
+      <ConsistencyCard warnings={item.consistency} editable={editable} busy={busy} onAck={ack} />
 
       {warnings.length > 0 && (
         <div className="card experience-warnings">
@@ -214,7 +296,7 @@ export default function ExperienceDetail({ id }: { id: string }) {
 
         <div className="card experience-side">
           <IconTitle icon={Tags}>역량 태그 · 재료</IconTitle>
-          <p className="hint">역량 사전에 맞추기는 다음 단계 — 지금은 적힌 그대로입니다.</p>
+          <p className="hint">저장하면 역량 사전의 이름 · 축으로 맞춥니다. 사전에 없는 태그는 그대로 두고 표시만 합니다(확정은 막지 않음).</p>
           <ul className="exp-skill-list">
             {form.skills.map((skill, index) => (
               <li key={index}>
@@ -223,6 +305,23 @@ export default function ExperienceDetail({ id }: { id: string }) {
                 </select>
                 <input aria-label="역량 태그" disabled={!editable} value={skill.name} onChange={(event) => setSkill(index, { name: event.target.value })} />
                 {editable && <button type="button" className="ghost small danger" onClick={() => set("skills", form.skills.filter((_, i) => i !== index))}>빼기</button>}
+                {item.skills_unknown.includes(skill.name) && item.skills.some((s) => s.name === skill.name && s.axis === skill.axis) && (
+                  <span className="exp-unknown" data-unknown={skill.name}>
+                    <span className="exp-unknown-tag">사전에 없음</span>
+                    {editable && dictionary && (
+                      <>
+                        <button type="button" className="link-button" onClick={() => void addToDictionary(skill)}>사전에 추가</button>
+                        <select aria-label="기존 역량으로" value="" onChange={(event) => {
+                          const [axis, name] = event.target.value.split("|");
+                          if (name) setSkill(index, { axis: axis as ExperienceSkill["axis"], name });
+                        }}>
+                          <option value="">기존 역량으로 ▾</option>
+                          {dictionary.dictionary.filter((d) => d.axis === skill.axis).map((d) => <option key={d.name} value={`${d.axis}|${d.name}`}>{d.name}</option>)}
+                        </select>
+                      </>
+                    )}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
