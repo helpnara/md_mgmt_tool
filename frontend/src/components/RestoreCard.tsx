@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { api } from "../api";
 import type { RestoreReport, RestoreResult } from "../types";
-import { formatBytes, uploadAttachment } from "../upload";
+import { formatBytes, uploadRaw } from "../upload";
 import CardIntro from "./CardIntro";
 import { ArchiveRestore } from "lucide-react";
 import IconTitle from "./IconTitle";
@@ -33,7 +33,7 @@ export default function RestoreCard() {
     setBusy(true);
     setProgress("올리는 중…");
     try {
-      const handle = uploadAttachment<RestoreReport>("/api/backup/restore/inspect", file, (loaded, total) =>
+      const handle = uploadRaw<RestoreReport>("/api/backup/restore/inspect", file, (loaded, total) =>
         setProgress(loaded < total ? `올리는 중… ${formatBytes(loaded)} / ${formatBytes(total)}` : "살펴보는 중…"),
       );
       setReport(await handle.promise);

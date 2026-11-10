@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from .. import share
@@ -40,12 +41,25 @@ def backup_everything(
     zip 을 **임시 파일에 흘려 쓴 뒤** 그 파일을 내려보내고, 다 보내면 지운다 (TODO 202 ⑬) — 첨부가 GB 여도
     메모리에 통째로 올리지 않는다. `assets=none` 이면 첨부(`assets/`)를 뺀 문서만 (TODO 197 ③).
     """
+    from ..services import backup_jobs, workspace
+
     with_assets = assets != "none"
-    fd, tmp_name = tempfile.mkstemp(prefix="과제이력-백업-", suffix=".zip.part")
+    # 작업 파일은 데이터 폴더 드라이브의 `.work/` 에(TODO 267 — %TEMP% 는 C: 라 모자랐다) · 쓰기 전에 남은 자리를 본다
+    folder = workspace.work_dir("backup")
+    try:
+        workspace.ensure_space(folder, backup_jobs.estimate(with_assets)["bytes"], "전체 백업 만들기")
+    except workspace.SpaceError as exc:
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+    fd, tmp_name = tempfile.mkstemp(dir=str(folder), prefix="과제이력-백업-", suffix=".zip.part")
     tmp_path = Path(tmp_name)
     try:
         with os.fdopen(fd, "wb") as handle:
             svc.write_backup_all(handle, assets=with_assets)
+    except OSError as exc:
+        tmp_path.unlink(missing_ok=True)
+        if exc.errno == 28:
+            raise HTTPException(status_code=507, detail=str(workspace.space_error_from(exc, folder, "전체 백업"))) from exc
+        raise
     except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise
@@ -56,6 +70,72 @@ def backup_everything(
         headers={"Content-Disposition": _disposition(filename)},
         background=BackgroundTask(tmp_path.unlink, missing_ok=True),
     )
+
+
+# ── 전체 백업 — 뒤에서 만들고 진행을 보인다 (TODO 266) ──────────────────────
+
+class BackupJobIn(BaseModel):
+    assets: bool = True
+
+
+@router.get("/backup/estimate")
+def backup_estimate(assets: str = Query("all", pattern="^(all|none)$")) -> dict:
+    """담을 파일 수 · 크기(문서 · 첨부) · 작업 자리의 남은 자리 — 시작 전에 보인다."""
+    from ..services import backup_jobs
+
+    return backup_jobs.estimate(assets != "none")
+
+
+@router.post("/backup/jobs", status_code=201)
+def backup_job_start(payload: BackupJobIn) -> dict:
+    from ..services import backup_jobs, workspace
+
+    try:
+        return backup_jobs.start(payload.assets).as_dict()
+    except workspace.SpaceError as exc:
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+
+
+@router.get("/backup/jobs/current")
+def backup_job_current() -> dict:
+    """지금 작업(없으면 null) — 다른 화면에 갔다 와도 이어 보이게."""
+    from ..services import backup_jobs
+
+    job = backup_jobs.current()
+    return {"job": job.as_dict() if job else None}
+
+
+@router.get("/backup/jobs/{job_id}")
+def backup_job_status(job_id: str) -> dict:
+    from ..services import backup_jobs
+
+    try:
+        return backup_jobs.get(job_id).as_dict()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="그 백업 작업이 없습니다(프로그램을 다시 켰거나 이미 받았습니다).") from exc
+
+
+@router.post("/backup/jobs/{job_id}/cancel")
+def backup_job_cancel(job_id: str) -> dict:
+    from ..services import backup_jobs
+
+    try:
+        return backup_jobs.cancel(job_id).as_dict()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="그 백업 작업이 없습니다.") from exc
+
+
+@router.get("/backup/jobs/{job_id}/file")
+def backup_job_file(job_id: str) -> Response:
+    """다 만든 zip 을 내려보내고, 다 보내면 지운다."""
+    from ..services import backup_jobs
+
+    try:
+        job = backup_jobs.take(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="아직 다 만들지 않았거나 이미 받은 백업입니다.") from exc
+    return FileResponse(job.path, media_type="application/zip", headers={"Content-Disposition": _disposition(job.filename)},
+                        background=BackgroundTask(backup_jobs.release, job_id))
 
 
 @router.get("/projects/{project_id}/export")

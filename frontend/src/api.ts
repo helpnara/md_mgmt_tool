@@ -1,4 +1,4 @@
-import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates } from "./types";
+import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -515,6 +515,12 @@ export const api = {
     ),
   /** 점검 (TODO 204 · 206) — 첨부 전체 용량 · 이전 버전 보관 실패. 새 칸은 서버가 아직 안 줄 수도 있다 */
   health: () => request<Health>("/api/health"),
+  // 전체 백업 진행 표시 (TODO 266)
+  backupEstimate: (assets: boolean) => request<BackupEstimate>(`/api/backup/estimate?assets=${assets ? "all" : "none"}`),
+  startBackupJob: (assets: boolean) => request<BackupJob>("/api/backup/jobs", { method: "POST", body: JSON.stringify({ assets }) }),
+  currentBackupJob: () => request<{ job: BackupJob | null }>("/api/backup/jobs/current"),
+  backupJob: (id: string) => request<BackupJob>(`/api/backup/jobs/${id}`),
+  cancelBackupJob: (id: string) => request<BackupJob>(`/api/backup/jobs/${id}/cancel`, { method: "POST" }),
 };
 
 // ── TODO 214 D11 — 같은 이름 과제를 저장 **전에** 묻는다 ─────────────────────────────

@@ -62,6 +62,39 @@ export function uploadAttachment<T = Attachment>(
   return { promise, abort: () => xhr.abort() };
 }
 
+/**
+ * 파일을 **본문 그대로** 올린다(TODO 267) — 서버가 받는 대로 데이터 폴더 드라이브에 바로 쓴다(웹 틀의 임시 파일 · 복사를 거치지 않음).
+ * 되살리기의 큰 zip 에 쓴다. 파일 이름은 `X-Filename` 머리에.
+ */
+export function uploadRaw<T>(endpoint: string, file: File, onProgress: (loaded: number, total: number) => void): UploadHandle<T> {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise<T>((resolve, reject) => {
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress(event.loaded, event.total);
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText) as T);
+      } else {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(xhr.responseText);
+        } catch {
+          /* 응답이 JSON이 아니면 상태 번호로 말한다 */
+        }
+        reject(new Error(errorText(xhr.status, body)));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error(OFFLINE_MESSAGE)));
+    xhr.addEventListener("abort", () => reject(new Error("업로드를 취소했습니다.")));
+    xhr.open("POST", endpoint);
+    xhr.setRequestHeader("Content-Type", file.type || "application/zip");
+    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+    xhr.send(file);
+  });
+  return { promise, abort: () => xhr.abort() };
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];

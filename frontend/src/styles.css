@@ -2787,6 +2787,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-fields dt { color: var(--muted); }
 .import-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .import-empty, .import-done { margin: 8px 0; }
+.backup-progress { margin: 8px 0; }
+.backup-bar { height: 10px; border-radius: var(--radius-pill); background: var(--neutral-100); overflow: hidden; border: 1px solid var(--border); }
+.backup-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.4s ease; }
+.backup-progress .muted { margin: 6px 0 0; font-size: var(--fs-xs); }
+.backup-estimate { margin: 0 0 8px; }
 /* 265 — 체크박스가 든 스크롤 목록은 안쪽 여백을 둔다. 상자 끝에 붙으면 체크했을 때 채움 · 포커스 테두리의 끝이 깎여 보였다 */
 .import-projects, .export-pick { padding: 3px 4px; }
 /* 검색 고도화 1차 (TODO 254) — 종류 칩 · 정렬 · 읽은 조건 */

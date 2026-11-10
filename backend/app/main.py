@@ -37,6 +37,10 @@ THREAD_POOL_SIZE = 64
 async def lifespan(app: FastAPI):
     settings = get_settings()
     settings.ensure_dirs()
+    # 지난 실행이 남긴 큰 작업 파일(백업 zip · 올린 되살리기 zip — TODO 267)을 치운다
+    from .services import workspace
+
+    workspace.clean_stale(everything=True)
     # 지난 실행의 동작 꼬리가 이번 실행의 오류에 붙으면 맥락이 아니라 잡음이다.
     errorlog.clear_trail()
     for ext, before, after in MIME_FIXED:

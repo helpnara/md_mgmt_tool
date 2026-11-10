@@ -31,9 +31,9 @@ from ..config import get_settings
 
 WORK_DIR = ".restoring"
 # 데이터 폴더 안에서 되살리기가 건드리지 않는 것 — 열려 있는 색인과 작업 자리
-KEEP_IN_PLACE = {".index", WORK_DIR}
+KEEP_IN_PLACE = {".index", WORK_DIR, ".work"}   # .work = 큰 작업 파일 자리(TODO 267) — 올린 zip 이 여기 있다
 # ZIP 에 있어도 펴지 않는 것 — 다시 만들 수 있거나 버린 것
-SKIP_TOP = {".index", ".trash", WORK_DIR}
+SKIP_TOP = {".index", ".trash", WORK_DIR, ".work"}
 # 이 도구의 데이터 폴더라고 볼 수 있는 맨 윗단 이름 — 하나도 없으면 엉뚱한 ZIP 이다
 KNOWN_TOP = {"projects", "people", "intakes", "settings.json"}
 SAFETY_PREFIX = "과제이력-되살리기전-"
@@ -48,23 +48,61 @@ class RestoreError(Exception):
 # ── 올린 파일 ─────────────────────────────────────────────
 
 def _upload_dir() -> Path:
-    path = Path(tempfile.gettempdir()) / UPLOAD_DIR_NAME
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    """올린 ZIP 의 자리 — 데이터 폴더와 같은 드라이브의 `.work/restore-upload/`(TODO 267).
+    예전에는 서버 PC 의 `%TEMP%`(보통 C:)라, 데이터를 네트워크 드라이브에 두면 C: 가 모자라 "No space left on device" 가 났다."""
+    from . import workspace
+
+    return workspace.work_dir("restore-upload")
 
 
-def save_upload(source: BinaryIO) -> str:
-    """올린 ZIP 을 임시 폴더에 흘려 쓰고 표(token)를 돌려준다. 하루 지난 것 · 앞서 올린 것은 치운다(한 번에 하나)."""
+def _fresh_target(size_hint: int = 0) -> tuple[str, Path]:
+    from . import workspace
+
     folder = _upload_dir()
-    for stale in folder.glob("*.zip"):
+    for stale in folder.glob("*.zip*"):
         try:
             stale.unlink()
         except OSError:
             pass
+    if size_hint:
+        workspace.ensure_space(folder, size_hint, "올린 백업 받기")
     token = uuid.uuid4().hex
-    target = folder / f"{token}.zip"
-    with target.open("wb") as handle:
-        shutil.copyfileobj(source, handle, length=1024 * 1024)
+    return token, folder / f"{token}.zip"
+
+
+def save_upload(source: BinaryIO, size_hint: int = 0) -> str:
+    """올린 ZIP 을 작업 자리에 흘려 쓰고 표(token)를 돌려준다. 앞서 올린 것은 치운다(한 번에 하나)."""
+    from . import workspace
+
+    token, target = _fresh_target(size_hint)
+    try:
+        with target.open("wb") as handle:
+            shutil.copyfileobj(source, handle, length=1024 * 1024)
+    except OSError as exc:
+        target.unlink(missing_ok=True)
+        if exc.errno == 28:
+            raise workspace.space_error_from(exc, target.parent, "올린 백업") from exc
+        raise
+    return token
+
+
+async def save_upload_stream(chunks, size_hint: int = 0) -> str:
+    """요청 본문을 **받는 대로 바로** 작업 자리에 쓴다(TODO 267) — 웹 틀의 임시 파일(%TEMP%)을 거치지 않아 복사가 한 번 준다."""
+    from . import workspace
+
+    token, target = _fresh_target(size_hint)
+    try:
+        with target.open("wb") as handle:
+            async for chunk in chunks:
+                handle.write(chunk)
+    except OSError as exc:
+        target.unlink(missing_ok=True)
+        if exc.errno == 28:
+            raise workspace.space_error_from(exc, target.parent, "올린 백업") from exc
+        raise
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
     return token
 
 
@@ -206,9 +244,17 @@ def _safety_backup() -> str | None:
     candidates += [vault.parent, Path(tempfile.gettempdir())]
     name = f"{SAFETY_PREFIX}{datetime.now():%Y%m%d-%H%M%S}.zip"
     last_error: Exception | None = None
+    from . import backup_jobs, workspace
+
+    needed = backup_jobs.estimate(True)["bytes"]
     for folder in candidates:
         target = folder / name
         part = target.with_name(target.name + ".part")
+        # 자리가 모자란 곳은 건너뛴다(TODO 267) — 쓰다가 모자라 실패하기 전에
+        free = workspace.free_bytes(folder)
+        if free is not None and free < needed + workspace.MARGIN:
+            last_error = OSError(28, f"{folder} 의 남은 자리 {workspace.human(free)} < 필요 {workspace.human(needed)}")
+            continue
         try:
             write_backup_all(part, assets=True)
             part.replace(target)
@@ -285,6 +331,16 @@ def apply(conn: sqlite3.Connection, token: str) -> dict[str, Any]:
         new, old = work / "new", work / "old"
         new.mkdir(parents=True)
         old.mkdir(parents=True)
+        # 풀 자리 — 데이터 폴더 드라이브에 풀린 크기만큼(TODO 267)
+        from . import workspace
+
+        with zipfile.ZipFile(path) as archive:
+            unpacked = sum(info.file_size for info in archive.infolist())
+        try:
+            workspace.ensure_space(vault, unpacked, "백업 풀기")
+        except workspace.SpaceError as exc:
+            shutil.rmtree(work, ignore_errors=True)
+            raise RestoreError(str(exc)) from exc
         try:
             _extract(path, new)
         except (OSError, zipfile.BadZipFile) as exc:

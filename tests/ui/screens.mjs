@@ -6988,6 +6988,25 @@ async function main() {
     }
   });
 
+  console.log("\n[72] 전체 백업 진행 표시 · 작업 파일 자리 (TODO 266 · 267)");
+
+  await check("전체 백업 — 예상 크기, 누르면 진행 표시 뒤 저절로 내려받기, 점검에 작업 자리 (266 · 267)", async () => {
+    await go("#/settings?tab=backup");
+    await page.waitForTimeout(1200);
+    const card = page.locator("[data-testid=backup-download]");
+    equal(await card.count(), 1, "전체 백업 카드");
+    expect((await card.locator(".backup-estimate").innerText()).includes("예상 크기"), "예상 크기");
+    const download = page.waitForEvent("download", { timeout: 30000 });
+    await card.getByRole("button", { name: "첨부 빼고 내려받기" }).click();
+    const got = await download;
+    expect(got.suggestedFilename().endsWith(".zip"), `받은 파일: ${got.suggestedFilename()}`);
+    await page.waitForTimeout(500);
+    expect((await card.innerText()).includes("다 만들었습니다"), "다 만든 뒤 알림");
+    await go("#/settings?tab=check");
+    await page.waitForTimeout(1200);
+    expect((await page.locator("[data-testid=health-workspace]").innerText()).includes(".work"), "점검에 작업 파일 자리");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

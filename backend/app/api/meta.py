@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api", tags=["meta"])
 @router.get("/health")
 def health(conn: sqlite3.Connection = Depends(get_db)) -> dict:
     from ..services import attachments as attachments_service
+    from ..services import workspace
     from ..vault import versions
 
     settings = get_settings()
@@ -37,6 +38,8 @@ def health(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         # 전체 첨부 용량 · 개수 (TODO 204 · 197 ③) — 과제 첨부 + 접수 첨부. 설정 → 점검에 한 줄.
         "attachments_total_bytes": total_bytes,
         "attachments_count": count,
+        # 큰 작업 파일(백업 · 되살리기) 자리와 그 드라이브의 남은 자리 (TODO 267)
+        "workspace": workspace.status(),
     }
 
 

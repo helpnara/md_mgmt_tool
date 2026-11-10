@@ -11,6 +11,7 @@ import IntakeSettingsCard from "./IntakeSettingsCard";
 import MeetingSettingsCard from "./MeetingSettingsCard";
 import SkillDictionaryCard from "./SkillDictionaryCard";
 import SkillCleanupCard from "./SkillCleanupCard";
+import BackupDownloadCard from "./BackupDownloadCard";
 import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
 import PeopleCard from "./PeopleCard";
@@ -29,7 +30,7 @@ import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
 import ViewTabs from "./ViewTabs";
 import { LIMITS, hasControlChars, lengthState } from "../inputRules";
-import { Download, FolderOpen, Gauge, Server, UserPen } from "lucide-react";
+import { FolderOpen, Gauge, Server, UserPen } from "lucide-react";
 import IconTitle from "./IconTitle";
 
 /** 설정 묶음 (TODO 249 ⑤) — "" = 기본. title 은 탭 아래 한 줄 설명이기도 하다 */
@@ -282,22 +283,8 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
           </div>
           )}
 
-          <div className="card">
-            <IconTitle icon={Download}>전체 백업</IconTitle>
-            <CardIntro id="full-backup">
-              모든 과제의 문서와 첨부를 zip 하나로 내려받습니다. 검색 색인처럼 다시 만들 수 있는 것은 빼고
-              원본만 담습니다.
-            </CardIntro>
-            <div className="form-actions">
-              <a className="button-like" href="/api/backup">
-                전체 백업 내려받기
-              </a>
-              {/* 첨부가 GB 단위면 문서만 먼저 받아 둔다 (TODO 202 · 197 ③) */}
-              <a className="button-like ghost" href="/api/backup?assets=none" title="진행일지 · 보고 · 개요 같은 문서만 — 첨부 파일은 빠집니다">
-                첨부 빼고 내려받기
-              </a>
-            </div>
-          </div>
+          {/* 전체 백업 — 만들기 진행 · 받기 (TODO 266). 첨부가 GB 단위면 문서만 먼저(202 · 197 ③) */}
+          <BackupDownloadCard />
 
           {/* 키가 비슷한 것끼리 한 줄 — 자동 백업 · 이전 버전 / 되살리기 · 삭제 보관함 */}
           {isAdmin() && <BackupCard />}
@@ -342,6 +329,14 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
             첨부 전체 <b>{formatBytes(health.attachments_total_bytes)}</b>
             {typeof health.attachments_count === "number" && <> · {health.attachments_count.toLocaleString("ko-KR")}개</>}
             {" "}— 데이터 폴더의 첨부를 모두 더한 크기입니다. 백업 zip 이 커지면 [첨부 빼고 내려받기] 나 자동 백업의 "첨부 빼기" 를 쓰세요.
+          </p>
+        )}
+        {/* 큰 작업 파일 자리 (TODO 267) — 데이터 폴더 드라이브. 백업 · 되살리기가 여기 쓴다 */}
+        {health?.workspace && (
+          <p className="hint health-line" data-testid="health-workspace">
+            작업 파일 자리 <code>{health.workspace.work_dir}</code>
+            {health.workspace.free_bytes !== null && <> · 남은 자리 <b>{formatBytes(health.workspace.free_bytes)}</b></>}
+            {" "}— 백업 zip 을 만들고 되살리기 zip 을 받는 곳입니다(데이터 폴더와 같은 드라이브).
           </p>
         )}
         {keepFailures.length > 0 && (

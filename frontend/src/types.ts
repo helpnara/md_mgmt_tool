@@ -448,6 +448,32 @@ export interface Health {
   attachments_total_bytes?: number;
   attachments_count?: number;
   version_keep_failures?: VersionKeepFailure[];
+  /** 큰 작업 파일(백업 · 되살리기) 자리 · 그 드라이브의 남은 자리 (TODO 267) */
+  workspace?: { work_dir: string; free_bytes: number | null };
+}
+
+/** 전체 백업 작업 (TODO 266) */
+export interface BackupJob {
+  id: string;
+  assets: boolean;
+  state: "running" | "done" | "error" | "cancelled";
+  files_done: number;
+  files_total: number;
+  bytes_done: number;
+  bytes_total: number;
+  elapsed: number;
+  eta: number | null;
+  error: string;
+  filename: string;
+  size: number;
+}
+export interface BackupEstimate {
+  files: number;
+  bytes: number;
+  docs_bytes: number;
+  assets_bytes: number;
+  free_bytes: number | null;
+  work_dir: string;
 }
 
 export interface TrashItem {

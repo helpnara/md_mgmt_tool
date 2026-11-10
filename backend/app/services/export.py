@@ -357,7 +357,7 @@ def _vault_files(vault: Path, assets: bool) -> list[tuple[Path, str]]:
         rel_root = here.relative_to(vault)
         if rel_root == Path("."):
             # 색인(.index)과 휴지통(.trash)은 다시 만들 수 있거나 버린 것이라 뺀다.
-            dirnames[:] = [name for name in dirnames if name not in {".index", ".trash", ".restoring"}]  # .restoring = 되살리기 작업 자리 (TODO 246)
+            dirnames[:] = [name for name in dirnames if name not in {".index", ".trash", ".restoring", ".work"}]  # .restoring = 되살리기 작업 자리 (TODO 246) · .work = 큰 작업 파일 (267)
         if not assets:
             dirnames[:] = [name for name in dirnames if name != ASSETS_DIR]
         dirnames.sort()
@@ -368,24 +368,44 @@ def _vault_files(vault: Path, assets: bool) -> list[tuple[Path, str]]:
     return found
 
 
-def write_backup_all(destination: Path | BinaryIO, assets: bool = True) -> int:
+class BackupCancelled(Exception):
+    """진행 표시의 [그만두기] (TODO 266)."""
+
+
+def write_backup_all(destination: Path | BinaryIO, assets: bool = True, progress=None) -> int:
     """vault 전체 zip 을 **디스크로 흘려 쓴다** (TODO 202 ⑬) — 메모리에 통째로 올리지 않는다.
 
     첨부가 GB 면 예전 방식(BytesIO)은 MemoryError 로 자동 백업이 한 번도 성공하지 못했다.
     `destination` 은 임시 경로(`.part`)여야 한다 — 다 쓴 뒤 이름을 바꾸는 것은 부르는 쪽 몫이다.
     담은 파일 수를 돌려준다.
+
+    `progress(files_done, files_total, bytes_done, bytes_total)` — 파일마다 부른다(TODO 266 진행 표시). False 를 돌려주면 멈춘다.
     """
+    import os
+
     from ..config import get_settings
 
     vault = get_settings().vault_dir
+    files = _vault_files(vault, assets)
+    sizes = []
+    for path, _name in files:
+        try:
+            sizes.append(os.path.getsize(path))
+        except OSError:
+            sizes.append(0)
+    total = sum(sizes)
+    done = 0
     count = 0
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path, name in _vault_files(vault, assets):
+        for index, ((path, name), size) in enumerate(zip(files, sizes), start=1):
             try:
                 archive.write(path, name)
             except FileNotFoundError:
                 continue  # 훑은 뒤 사라진 파일 (저장 도중의 이름 바꾸기 등) — 건너뛴다 (TODO 202 ㉜)
             count += 1
+            done += size
+            if progress is not None and progress(index, len(files), done, total) is False:
+                raise BackupCancelled()
     return count
 
 
