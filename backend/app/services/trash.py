@@ -49,7 +49,7 @@ def _manifest_path() -> Path:
 
 # ── 번호 장부 (TODO 264) ───────────────────────────────────────────────────────
 # 지운 번호를 다시 쓰지 않는 규칙(146 · 257)은 보관함 기록을 보고 셌다. 그런데 **보관함은 백업에 들어가지 않고**
-# (export._vault_files — 버린 것이라), [보관함 비우기]로도 사라진다. 그러면 백업에서 되살린 뒤 · 비운 뒤에
+# (export._vault_files — 버린 것이라), 디스크를 비우려고 `.trash` 폴더를 손으로 지워도 사라진다(도구에 [비우기]는 없다). 그러면 백업에서 되살린 뒤 · 지운 뒤에
 # 지운 번호가 새 과제 · 접수 · 경험에 다시 나간다. 그래서 쓴 번호를 vault 의 `.numbers/used.jsonl` 에도 적는다 —
 # 이 폴더는 백업에 들어간다. 지울 때 한 줄씩 덧붙이고, 읽을 때 보관함 기록에만 있는 줄을 옮겨 적는다(이 기능 전에 지운 것).
 LEDGER_DIR = ".numbers"
@@ -131,7 +131,7 @@ def record(
         with _lock:
             with _manifest_path().open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-            # 번호 장부에도(TODO 264) — 백업에서 되살리거나 보관함을 비워도 지운 번호가 남게
+            # 번호 장부에도(TODO 264) — 백업에서 되살리거나 `.trash` 를 손으로 지워도 지운 번호가 남게
             _ledger_add([{"at": entry["at"], "kind": kind, "origin": entry["origin"]}])
     except (OSError, ValueError):
         # 기록에 실패했다고 사용자의 삭제 동작을 되돌릴 이유는 없다.
