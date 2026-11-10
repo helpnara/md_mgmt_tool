@@ -220,8 +220,14 @@ export interface Entry {
 
 export interface SearchResults {
   /** 갈래마다 상한이 있어 잘렸는지 — 화면이 "N건" 대신 "N건 이상"이라고 말하는 근거 */
-  truncated: { projects: boolean; entries: boolean; reports: boolean; attachments: boolean; intakes?: boolean };
+  truncated: { projects?: boolean; entries?: boolean; reports?: boolean; attachments?: boolean; intakes?: boolean; contributions?: boolean; activities?: boolean };
   query: string;
+  /** 읽은 질의 (TODO 254) — 낱말 · 빼기 · 칸 · 종류 */
+  parsed?: { words: string[]; excludes: string[]; fields: Record<string, string[]>; kinds: string[] };
+  /** 담당과 역할 · 회고 (TODO 254) */
+  contributions?: { project_id: string; project_title: string; name: string; role: string; snippet: string }[];
+  /** 팀원역량 기록 — 교육 · 행사 (TODO 254) */
+  activities?: { id: number; person: string; date: string; kind: string; title: string; host: string; snippet: string }[];
   projects: {
     id: string;
     title: string;

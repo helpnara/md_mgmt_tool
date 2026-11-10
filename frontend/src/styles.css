@@ -2787,6 +2787,16 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-fields dt { color: var(--muted); }
 .import-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .import-empty, .import-done { margin: 8px 0; }
+/* 검색 고도화 1차 (TODO 254) — 종류 칩 · 정렬 · 읽은 조건 */
+.search-tools { display: flex; gap: 8px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 4px 0 8px; }
+.search-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.search-chip { padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface);
+  color: var(--muted-strong); font-size: var(--fs-xs); font-weight: 600; cursor: pointer; }
+.search-chip:hover { border-color: var(--accent); color: var(--accent-strong); }
+.search-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
+.search-sort { flex-direction: row; align-items: center; gap: 6px; }
+.search-sort select { width: auto; }
+.search-conditions { margin: 0 0 8px; font-size: var(--fs-xs); }
 /* 5단계 — 업무 이력 파일 · 태그 정리함 · 도구 칸 (TODO 262) */
 .export-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (min-width: 1093px) {
@@ -2835,6 +2845,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .exp-unknown-tag { color: var(--warning-700); border: 1px dashed var(--warning-300); border-radius: var(--radius-pill); padding: 0 6px; }
 .exp-unknown select { width: auto; min-width: 0; padding: 2px 6px; font-size: var(--fs-xs); }
 .exp-skill-list li { flex-wrap: wrap; }
+/* 263 — 축 · 태그명 · [빼기]를 한 줄에(태그명이 남는 폭). "사전에 없음" 은 그 아래 둘째 줄(.exp-unknown 의 flex-basis 100%) */
+.exp-skill-list li > select { width: 96px; flex: none; }
+.exp-skill-list li > input { flex: 1 1 0; min-width: 0; width: auto; }
+.exp-skill-list li > button { flex: none; }
 .experience-skills { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
 .exp-skill-axis { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
 .exp-skill-axis .exp-label { margin: 0; width: 56px; flex: none; }

@@ -189,6 +189,7 @@ def test_search_does_not_claim_truncation_when_everything_fits(client):
     assert found["truncated"] == {
         "projects": False, "entries": False, "reports": False, "attachments": False,
         "intakes": False,  # 접수도 찾는다 (TODO 144)
+        "contributions": False, "activities": False,  # 담당과 역할 · 팀원역량 (TODO 254)
     }
 
 

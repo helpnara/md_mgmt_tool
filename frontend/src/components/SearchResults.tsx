@@ -7,25 +7,29 @@ import StatusBadge from "./StatusBadge";
 import StageBand from "./StageBand";
 import LoadError from "./LoadError";
 
-/** 검색어와 일치하는 부분을 강조한다. */
-function Highlight({ text, query }: { text: string; query: string }) {
-  if (!query) return <>{text}</>;
-  const parts: (string | JSX.Element)[] = [];
-  const lowerText = text.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-  let cursor = 0;
-  for (let found = lowerText.indexOf(lowerQuery); found >= 0; found = lowerText.indexOf(lowerQuery, cursor)) {
-    parts.push(text.slice(cursor, found));
-    parts.push(<mark key={found}>{text.slice(found, found + query.length)}</mark>);
-    cursor = found + query.length;
-  }
-  parts.push(text.slice(cursor));
-  return <>{parts}</>;
+/** 검색어와 일치하는 부분을 강조한다 — 낱말이 여럿이면 모두(TODO 254). */
+function Highlight({ text, query }: { text: string; query: string | string[] }) {
+  const words = (Array.isArray(query) ? query : [query]).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (words.length === 0 || !text) return <>{text}</>;
+  const escape = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(${words.map(escape).join("|")})`, "gi");
+  return <>{text.split(pattern).map((part, index) => (index % 2 === 1 ? <mark key={index}>{part}</mark> : part))}</>;
 }
+
+/** 결과 갈래 — 칩의 이름과 순서(TODO 254 C) */
+const GROUPS: { key: string; label: string }[] = [
+  { key: "projects", label: "과제" }, { key: "intakes", label: "접수" }, { key: "entries", label: "진행일지" },
+  { key: "reports", label: "보고" }, { key: "attachments", label: "첨부" }, { key: "contributions", label: "담당과 역할" },
+  { key: "activities", label: "팀원역량" },
+];
+const FIELD_LABELS: Record<string, string> = { owner: "담당", tag: "태그", status: "상태", year: "연도" };
 
 export default function SearchResults({ query, meta, back }: { query: string; meta: Meta; back?: string | null }) {
   const [results, setResults] = useState<Results | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 정렬 · 종류 칩 (TODO 254 C) — 과제는 관련도 순이 기본
+  const [sort, setSort] = useState<"relevance" | "recent">("relevance");
+  const [only, setOnly] = useState<string>("");
 
   // 새 검색어마다 지난 오류를 비운다 — 한 번 실패하면 다음 검색어도 같은 오류가 남아 있었다 (TODO 209 ③).
   // 검색어를 빨리 바꾸면 앞 검색이 늦게 와 덮을 수 있다 — 지금 검색어의 것만 받는다(alive)
@@ -35,13 +39,13 @@ export default function SearchResults({ query, meta, back }: { query: string; me
     setResults(null);
     setError(null);
     api
-      .search(query)
+      .search(query, sort)
       .then((next) => alive && setResults(next))
       .catch((err: Error) => alive && setError(err.message));
     return () => {
       alive = false;
     };
-  }, [query, attempt]);
+  }, [query, attempt, sort]);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
   if (error)
@@ -56,6 +60,20 @@ export default function SearchResults({ query, meta, back }: { query: string; me
   if (!results) return <div className="app-loading">검색 중…</div>;
 
   const cut = Object.values(results.truncated ?? {}).some(Boolean);
+  const words = results.parsed?.words ?? [query];
+  const counts: Record<string, number> = Object.fromEntries(
+    GROUPS.map((g) => [g.key, ((results as unknown as Record<string, unknown[] | undefined>)[g.key] ?? []).length]),
+  );
+  const show = (key: string) => (!only || only === key) && counts[key] > 0;
+  const parsed = results.parsed;
+  const conditions = parsed
+    ? [
+        ...(parsed.words.length > 1 ? [`낱말 ${parsed.words.length}개 모두`] : []),
+        ...parsed.excludes.map((w) => `-${w}`),
+        ...Object.entries(parsed.fields).flatMap(([key, values]) => values.map((v) => `${FIELD_LABELS[key] ?? key}:${v}`)),
+        ...parsed.kinds.map((k) => `종류:${GROUPS.find((g) => g.key === k)?.label ?? k}`),
+      ]
+    : [];
 
   return (
     <section className="search-results">
@@ -77,9 +95,34 @@ export default function SearchResults({ query, meta, back }: { query: string; me
         </p>
       )}
 
-      {results.total === 0 && <p className="empty card">일치하는 내용이 없습니다.</p>}
+      {/* 종류 칩 · 정렬 · 읽은 조건 (TODO 254) */}
+      <div className="search-tools" data-testid="search-tools">
+        <span className="search-chips" role="group" aria-label="종류로 거르기">
+          <button className={only ? "search-chip" : "search-chip on"} onClick={() => setOnly("")}>전체 {results.total}</button>
+          {GROUPS.filter((g) => counts[g.key] > 0).map((g) => (
+            <button key={g.key} className={only === g.key ? "search-chip on" : "search-chip"} data-kind={g.key} onClick={() => setOnly(only === g.key ? "" : g.key)}>
+              {g.label} {counts[g.key]}{(results.truncated as Record<string, boolean | undefined>)?.[g.key] ? "+" : ""}
+            </button>
+          ))}
+        </span>
+        <label className="search-sort">과제 정렬
+          <select aria-label="과제 정렬" value={sort} onChange={(event) => setSort(event.target.value as "relevance" | "recent")}>
+            <option value="relevance">관련도 순</option>
+            <option value="recent">최근 순</option>
+          </select>
+        </label>
+      </div>
+      {conditions.length > 0 && <p className="muted search-conditions">조건: {conditions.join(" · ")}</p>}
 
-      {results.projects.length > 0 && (
+      {results.total === 0 && (
+        <div className="empty card">
+          <p>일치하는 내용이 없습니다.</p>
+          <p className="hint">찾는 법 — 낱말을 띄어 쓰면 <b>모두 들어간 것</b> · <code>"한 구절"</code> · <code>-뺄말</code> ·
+            <code> 담당:이름</code> · <code>태그:품질</code> · <code>상태:진행중</code> · <code>연도:2026</code> · <code>종류:일지</code>(과제 · 일지 · 보고 · 첨부 · 접수 · 역할 · 역량)</p>
+        </div>
+      )}
+
+      {show("projects") && (
         <div className="card">
           <h2>과제 {results.projects.length}건{results.truncated?.projects && " 이상"}</h2>
           <ul className="result-list">
@@ -88,13 +131,13 @@ export default function SearchResults({ query, meta, back }: { query: string; me
                 <a href={projectLink(project.id)}>
                   <span className="project-id">{project.id}</span>
                   <strong>
-                    <Highlight text={project.title} query={query} />
+                    <Highlight text={project.title} query={words} />
                   </strong>
                   <StageBand stage={project.stage} />
                   <StatusBadge status={project.status} meta={meta} />
                 </a>
                 <p className="snippet">
-                  <Highlight text={project.snippet} query={query} />
+                  <Highlight text={project.snippet} query={words} />
                 </p>
               </li>
             ))}
@@ -102,7 +145,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
         </div>
       )}
 
-      {(results.intakes ?? []).length > 0 && (
+      {show("intakes") && (
         <div className="card">
           <h2>접수 {(results.intakes ?? []).length}건{results.truncated?.intakes && " 이상"}</h2>
           <ul className="result-list">
@@ -115,13 +158,13 @@ export default function SearchResults({ query, meta, back }: { query: string; me
                     {intake.leader && ` ${intake.leader}`}
                   </span>
                   <strong>
-                    <Highlight text={intake.title} query={query} />
+                    <Highlight text={intake.title} query={words} />
                   </strong>
                   <span className={`intake-status intake-${intake.status}`}>{intake.status_label}</span>
                   {intake.project_id && <span className="muted"> → {intake.project_id}</span>}
                 </a>
                 <p className="snippet">
-                  <Highlight text={intake.snippet} query={query} />
+                  <Highlight text={intake.snippet} query={words} />
                 </p>
               </li>
             ))}
@@ -129,7 +172,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
         </div>
       )}
 
-      {results.entries.length > 0 && (
+      {show("entries") && (
         <div className="card">
           <h2>진행일지 {results.entries.length}건{results.truncated?.entries && " 이상"}</h2>
           <ul className="result-list">
@@ -140,11 +183,11 @@ export default function SearchResults({ query, meta, back }: { query: string; me
                     {entry.date} · {entry.project_title}
                   </span>
                   <strong>
-                    <Highlight text={entry.title} query={query} />
+                    <Highlight text={entry.title} query={words} />
                   </strong>
                 </a>
                 <p className="snippet">
-                  <Highlight text={entry.snippet} query={query} />
+                  <Highlight text={entry.snippet} query={words} />
                 </p>
               </li>
             ))}
@@ -152,7 +195,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
         </div>
       )}
 
-      {results.reports.length > 0 && (
+      {show("reports") && (
         <div className="card">
           <h2>보고 {results.reports.length}건{results.truncated?.reports && " 이상"}</h2>
           <ul className="result-list">
@@ -165,11 +208,11 @@ export default function SearchResults({ query, meta, back }: { query: string; me
                     {!report.frozen && <span className="draft-tag"> 작성 중</span>}
                   </span>
                   <strong>
-                    <Highlight text={report.audience || report.title || "보고"} query={query} />
+                    <Highlight text={report.audience || report.title || "보고"} query={words} />
                   </strong>
                 </a>
                 <p className="snippet">
-                  <Highlight text={report.snippet} query={query} />
+                  <Highlight text={report.snippet} query={words} />
                 </p>
               </li>
             ))}
@@ -177,7 +220,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
         </div>
       )}
 
-      {results.attachments.length > 0 && (
+      {show("attachments") && (
         <div className="card">
           <h2>첨부 파일 {results.attachments.length}건{results.truncated?.attachments && " 이상"}</h2>
           <ul className="result-list">
@@ -186,10 +229,44 @@ export default function SearchResults({ query, meta, back }: { query: string; me
                 <a href={projectLink(attachment.project_id)}>
                   <span className="project-id">{attachment.project_title}</span>
                   <strong>
-                    <Highlight text={attachment.orig_name} query={query} />
+                    <Highlight text={attachment.orig_name} query={words} />
                   </strong>
                   <span className="muted">{formatBytes(attachment.size_bytes)}</span>
                 </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {show("contributions") && (
+        <div className="card" data-testid="search-contributions">
+          <h2>담당과 역할 {counts.contributions}건{results.truncated?.contributions && " 이상"}</h2>
+          <ul className="result-list">
+            {(results.contributions ?? []).map((item) => (
+              <li key={`${item.project_id}|${item.name}`}>
+                <a href={projectLink(item.project_id)}>
+                  <span className="project-id">{item.project_id} · {item.project_title}</span>
+                  <strong><Highlight text={item.name} query={words} /></strong>
+                  {item.role && <span className="muted"> {item.role}</span>}
+                </a>
+                <p className="snippet"><Highlight text={item.snippet} query={words} /></p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {show("activities") && (
+        <div className="card" data-testid="search-activities">
+          <h2>팀원역량 {counts.activities}건{results.truncated?.activities && " 이상"}</h2>
+          <ul className="result-list">
+            {(results.activities ?? []).map((item) => (
+              <li key={item.id}>
+                <a href={screenLink(`skills?tab=records&person=${encodeURIComponent(item.person)}`)}>
+                  <span className="project-id">{item.date} · {item.person}{item.host ? ` · ${item.host}` : ""}</span>
+                  <strong><Highlight text={item.title} query={words} /></strong>
+                </a>
+                {item.snippet && <p className="snippet"><Highlight text={item.snippet} query={words} /></p>}
               </li>
             ))}
           </ul>

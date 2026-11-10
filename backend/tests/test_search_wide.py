@@ -93,7 +93,8 @@ def test_renaming_an_owner_updates_the_index(client):
     assert len(find(client, "권 경락")["projects"]) == 1
 
     client.post("/api/people/rename", json={"old": "권 경락", "new": "권경락"})
-    assert find(client, "권 경락")["projects"] == []
+    # 254 — 띄어 쓰면 낱말 둘(모두 들어간 것)이라 새 이름에도 걸린다. 옛 이름 그대로는 "따옴표" 구절로 본다
+    assert find(client, '"권 경락"')["projects"] == []
     assert len(find(client, "권경락")["projects"]) == 1
 
 

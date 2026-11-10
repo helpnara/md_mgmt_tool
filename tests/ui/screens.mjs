@@ -6904,6 +6904,48 @@ async function main() {
     expect(after.tools.includes("Matlab") && !after.skills.some((sk) => sk.name === "알고리즘 개발"), `도구로 · 빼기: ${JSON.stringify(after.skills)}`);
   });
 
+  console.log("\n[70] 검색 고도화 1차 · 상세의 태그 한 줄 (TODO 254 · 263)");
+
+  await check("검색 — 종류 칩으로 거르기 · 칸 지정 · 담당과 역할 · 팀원역량 · / 단축키 (254)", async () => {
+    await api.put(`/api/projects/${seeded.projectA}/contributions/${encodeURIComponent("권경락")}`, { did: "- 검색시험용 고유 작업" });
+    await go(`#/search?q=${encodeURIComponent("검색시험용")}`);
+    await page.waitForTimeout(900);
+    const tools = page.locator("[data-testid=search-tools]");
+    expect((await tools.innerText()).includes("담당과 역할 1"), "종류 칩에 담당과 역할");
+    equal(await page.locator("[data-testid=search-contributions] li").count(), 1, "담당과 역할 결과");
+    await go(`#/search?q=${encodeURIComponent("시제품 종류:과제")}`);
+    await page.waitForTimeout(900);
+    expect((await page.locator(".search-conditions").innerText()).includes("종류:과제"), "읽은 조건");
+    equal(await page.locator("[data-testid=search-tools] .search-chip").count(), 2, "전체 + 과제 칩만");
+    await go(`#/search?q=${encodeURIComponent("시제품")}`);
+    await page.waitForTimeout(900);
+    const chips = page.locator("[data-testid=search-tools] .search-chip");
+    if ((await chips.count()) > 2) {
+      await chips.nth(1).click();
+      await page.waitForTimeout(200);
+      equal(await page.locator(".search-results > .card h2").count(), 1, "칩을 누르면 그 갈래만");
+    }
+    await page.locator("body").click({ position: { x: 5, y: 300 } });
+    await page.keyboard.press("/");
+    expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-label") === "검색"), "/ 로 검색 칸");
+  });
+
+  await check("경험 상세의 역량 태그 — 축 · 태그명 · [빼기] 가 한 줄 (263)", async () => {
+    await api.patch(`/api/experiences/${seeded.exportExp}`, { skills: [{ axis: "기술", name: "데이터 파이프라인" }, { axis: "업무", name: "아주 긴 사전에 없는 역량 태그 이름" }] });
+    for (const width of [1440, 1100, 900]) {
+      await page.setViewportSize({ width, height: 900 });
+      await go(`#/experience/${seeded.exportExp}`);
+      await page.waitForTimeout(900);
+      const rows = page.locator(".exp-skill-list li");
+      for (let i = 0; i < await rows.count(); i++) {
+        const tops = await rows.nth(i).evaluate((li) => [...li.children].filter((c) => !c.classList.contains("exp-unknown"))
+          .map((c) => Math.round(c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2)));
+        expect(Math.max(...tops) - Math.min(...tops) <= 4, `${width}px ${i}번째 줄이 한 줄이 아니다: ${tops}`);
+      }
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

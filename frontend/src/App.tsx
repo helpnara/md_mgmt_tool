@@ -122,6 +122,21 @@ export default function App() {
   const [author, setAuthor] = useState<string | null>(null);
   const [authorNoticeClosed, setAuthorNoticeClosed] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
+  // 검색 단축키 `/` (TODO 254 D) — 글 칸에서 친 / 는 그대로 둔다
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = Boolean(target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable));
+      if (event.key === "/" && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // 상단 헤더는 화면이 좁아지면 두세 줄로 접혀 67px에서 183px까지 자란다.
   // 편집기로 화면을 옮길 때(util.ts) 제목이 헤더에 가리지 않도록 실제 높이를 CSS에 알려 준다.
@@ -326,8 +341,9 @@ export default function App() {
             type="search"
             value={term}
             onChange={(event) => setTerm(event.target.value)}
-            placeholder="과제·진행일지·보고·첨부·담당자·유관부서 검색"
+            placeholder="검색 ( / ) — 낱말 여럿 · 담당:이름 · 태그: · 상태: · 연도:"
             aria-label="검색"
+            ref={searchRef}
           />
           <button type="submit" className="ghost">
             검색
