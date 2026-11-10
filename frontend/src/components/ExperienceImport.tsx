@@ -22,6 +22,12 @@ const NO_BLOCK = "형식 블록이 없습니다. 프롬프트를 처음부터 �
 
 type Decisions = Record<number, ImportDecision>;
 
+/** 기본값의 근거 — 백엔드 `PROJECT_REASONS` · `ACTION_REASONS` 와 같은 말 (TODO 259) */
+const PROJECT_REASON: Record<string, string> = { continues: "AI 의 이어짐으로", single: "고른 과제가 하나라", title: "제목이 과제명과 닮아" };
+const ACTION_REASON: Record<string, string> = {
+  continues: "AI 의 이어짐으로", draft: "이 과제의 담당 초안으로", shared: "같은 경험을 앞 블록이 가리켜 새 경험으로",
+};
+
 function blockValue(block: ImportBlock, field: string): string {
   const f = block.fields;
   if (field === "period") return f.start || f.end ? `${f.start} ~ ${f.end}` : "";
@@ -52,6 +58,8 @@ export default function ExperienceImport({ name }: { name: string }) {
   const [open, setOpen] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ made: string[]; merged: string[]; dropped: number } | null>(null);
+  const [reload, setReload] = useState(0);
+  const [drafted, setDrafted] = useState("");
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const manager = isManager();
 
@@ -69,7 +77,7 @@ export default function ExperienceImport({ name }: { name: string }) {
       .catch((error: Error) => { if (!stale) notifyError(error.message); });
     return () => { stale = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, picked?.join(",")]);
+  }, [name, picked?.join(","), reload]);
 
   const pending = Boolean(preview && !done && preview.blocks.length > 0);
   useEditedUnsaved(`experience-import:${name}`, paste.trim() || pending ? "1" : "0", "0", busy);
@@ -149,6 +157,23 @@ export default function ExperienceImport({ name }: { name: string }) {
     }
   }
 
+  /** 259 — 고른 과제 중 경험이 없는 과제의 초안을 먼저 만든다(비교 · 효과 금액 · ★성과 일지가 남게) */
+  async function makeDrafts(ids: string[]) {
+    setBusy(true);
+    try {
+      const result = await api.draftExperiences(name, ids);
+      setDrafted(
+        `초안 ${result.made.length}건을 만들었습니다(${result.made.join(" · ")}).` +
+          (preview && !done ? " 이미 읽은 응답의 기본값은 [읽기]를 다시 해야 바뀝니다." : ""),
+      );
+      setReload((value) => value + 1);
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function copySummary() {
     if (!preview) return;
     try {
@@ -164,6 +189,11 @@ export default function ExperienceImport({ name }: { name: string }) {
     }
   }
 
+  const missing = (prompt?.choices ?? []).filter((c) => (picked ?? []).includes(c.id) && !c.has_experience).map((c) => c.id);
+  // 같은 경험에 이어서 저장할 블록 수 — 둘 이상이면 나눈 경험이 하나로 합쳐진다(259)
+  const sharedCount: Record<string, number> = {};
+  for (const d of Object.values(decisions)) if (d.action === "이어서" && d.target) sharedCount[d.target] = (sharedCount[d.target] ?? 0) + 1;
+  const sharedTargets = Object.entries(sharedCount).filter(([, n]) => n > 1);
   const keep = preview ? preview.blocks.filter((block) => decisions[block.index]?.action !== "버림").length : 0;
   const targets = preview?.targets ?? [];
   return (
@@ -181,10 +211,19 @@ export default function ExperienceImport({ name }: { name: string }) {
                 <label key={choice.id} className={choice.retro ? "" : "muted"}>
                   <input type="checkbox" checked={(picked ?? []).includes(choice.id)} onChange={() => toggle(choice.id)} />
                   <span className="project-id">{choice.id}</span> {choice.title}
-                  <span className="muted"> · {choice.period}{choice.retro ? "" : " · 회고 없음"}{choice.structured ? " · 구조화 있음" : ""}</span>
+                  <span className="muted"> · {choice.period}{choice.retro ? "" : " · 회고 없음"}{choice.structured ? " · 구조화 있음" : choice.has_experience ? " · 초안 있음" : " · 초안 없음"}</span>
                 </label>
               ))}
             </div>
+            {missing.length > 0 && (
+              <div className="import-draft-first" data-testid="draft-first">
+                <p className="hint">
+                  초안이 없는 과제 <b>{missing.length}개</b> — 초안을 먼저 만들면 AI 값과 <b>비교해서 고를 수</b> 있고, 효과 금액 · ★성과 일지가 함께 남습니다.
+                </p>
+                <button className="ghost small" disabled={busy} onClick={() => void makeDrafts(missing)}>초안 만들기</button>
+              </div>
+            )}
+            {drafted && <p className="hint notice">{drafted}</p>}
             <textarea className="refine-text import-prompt" readOnly value={prompt?.text ?? ""} aria-label="경험 정리 프롬프트"
               placeholder="과제를 고르면 프롬프트가 여기에 나옵니다." />
             <p className="hint import-note">ⓘ {PROMPT_NOTE}</p>
@@ -225,6 +264,11 @@ export default function ExperienceImport({ name }: { name: string }) {
                   {copied === "summary" ? "복사됨 ✓" : "실험 요약 복사"}
                 </button>
               </div>
+              {!done && sharedTargets.length > 0 && (
+                <p className="form-warn import-shared" data-testid="shared-warning">
+                  ⚠ 같은 경험에 이어서 저장할 블록이 있습니다({sharedTargets.map(([id, n]) => `${id} 에 ${n}블록`).join(" · ")}) — 나눈 경험이면 하나를 새 경험으로 고르세요.
+                </p>
+              )}
               {preview.blocks.length === 0 && (
                 <div className="import-empty">
                   <p className="error">{NO_BLOCK}</p>
@@ -263,6 +307,15 @@ export default function ExperienceImport({ name }: { name: string }) {
                         )}
                         {block.bad_lines.length > 0 && (
                           <ul className="exp-warn-list">{block.bad_lines.map((b) => <li key={b.line}>{b.line}번 줄 — {b.reason}: {b.text}</li>)}</ul>
+                        )}
+                        {(block.project_reason || block.action_reason) && (
+                          <p className="muted import-reason">
+                            기본값 —{block.project && block.project_reason ? ` 과제는 ${PROJECT_REASON[block.project_reason]}` : " 과제는 못 잡음"}
+                            {block.action_reason ? ` · 저장은 ${ACTION_REASON[block.action_reason]}` : ""}
+                          </p>
+                        )}
+                        {d.action === "이어서" && d.target && (sharedCount[d.target] ?? 0) > 1 && (
+                          <p className="form-warn">⚠ 다른 블록도 {d.target} 에 이어 붙입니다 — 한 경험으로 합쳐집니다.</p>
                         )}
                         <div className="import-block-controls">
                           <label>

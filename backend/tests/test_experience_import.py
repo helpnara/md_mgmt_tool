@@ -352,3 +352,44 @@ def test_search_does_not_find_responses(team):  # noqa: F811
     assert owner.post("/api/reindex").status_code == 200
     assert owner.get("/api/search", params={"q": "검색되지않는응답원문"}).json()["total"] == 0
     assert owner.get("/api/experiences", params={"person": "가팀원"}).json()["total"] == 0   # 원문은 경험이 아니다
+
+
+# ── 259 — 같은 경험 기본값 · 요약의 과제 추정 · 저장 방법 · 초안 없는 과제 ────────
+def test_two_blocks_pointing_same_draft_default_first_merge_rest_new(team):  # noqa: F811
+    owner, pid = team["owner"], team["shared"]
+    _prepare(owner, pid)
+    owner.post("/api/experiences/draft", json={"person": "가팀원", "projects": [pid]})
+    # 실험 2차(Teams Copilot) — 한 과제를 둘로 나누며 둘 다 그 초안을 가리켰다
+    data = _read(owner, _block(cont="E-001") + _block(title="판정 결과 주간 공유", cont="E-001"), projects=[pid]).json()
+    first, second = data["blocks"]
+    assert (first["action"], first["target"], first["action_reason"]) == ("이어서", "E-001", "continues")
+    assert (second["action"], second["target"], second["action_reason"], second["project"]) == ("새로", "", "shared", pid)
+    assert first["project_reason"] == "continues"
+
+
+def test_summary_has_project_guess_and_action_without_values(team):  # noqa: F811
+    owner, pid = team["owner"], team["shared"]
+    _prepare(owner, pid)
+    owner.post("/api/experiences/draft", json={"person": "가팀원", "projects": [pid]})
+    other = owner.post("/api/projects", json={"title": "다른 과제", "owners": ["가팀원"], "status": "in_progress",
+                                              "start_date": "2026-01-01"}).json()["id"]
+    text = (_block(cont="E-001") + _block(title="판정 결과 주간 공유", cont="E-001")
+            + _block(title="엉뚱한 제목", cont="E-099"))
+    data = _read(owner, text, projects=[pid, other]).json()
+    summary = owner.get(f"/api/experiences/responses/가팀원/{data['response']}/summary").json()["text"]
+    lines = [line for line in summary.splitlines() if line.startswith("- 블록")]
+    assert "이어짐 있음(아는 번호)" in lines[0] and "과제 잡힘(이어짐)" in lines[0] and "저장 이어서(이어짐)" in lines[0]
+    assert "저장 새로(같은 경험이 앞 블록에)" in lines[1]
+    assert "이어짐 있음(없는 번호)" in lines[2] and "과제 없음" in lines[2] and lines[2].endswith("저장 새로")
+    assert "같은 경험을 가리킨 블록 1개" in summary
+    assert "E-001" not in summary and pid not in summary                     # 번호 같은 값은 넣지 않는다
+
+
+def test_choices_mark_projects_without_experience(team):  # noqa: F811
+    owner, pid = team["owner"], team["shared"]
+    _prepare(owner, pid)
+    before = owner.get("/api/experiences/prompt", params={"person": "가팀원"}).json()
+    assert next(c for c in before["choices"] if c["id"] == pid)["has_experience"] is False
+    owner.post("/api/experiences/draft", json={"person": "가팀원", "projects": [pid]})
+    after = owner.get("/api/experiences/prompt", params={"person": "가팀원"}).json()
+    assert next(c for c in after["choices"] if c["id"] == pid)["has_experience"] is True

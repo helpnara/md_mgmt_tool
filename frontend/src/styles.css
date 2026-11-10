@@ -2787,6 +2787,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-fields dt { color: var(--muted); }
 .import-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .import-empty, .import-done { margin: 8px 0; }
+.import-draft-first { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 0 0 8px;
+  padding: 6px 10px; border: 1px solid var(--warning-300); border-radius: var(--radius); background: var(--warning-50); }
+.import-draft-first .hint { margin: 0; flex: 1 1 240px; min-width: 0; }
+.import-reason { margin: 0 0 4px; font-size: var(--fs-xs); }
+.import-shared { margin: 0 0 10px; }
 /* 체크 · 라디오는 글자 옆에 — 전역 label(세로) · input(width 100%)을 덮는다 */
 .import-projects label, .import-compare label, .import-actions label { flex-direction: row; min-width: 0; overflow-wrap: anywhere; font-size: inherit; color: inherit; }
 .import-compare label { display: flex; gap: 4px; align-items: flex-start; }

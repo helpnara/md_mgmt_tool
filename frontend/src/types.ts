@@ -1483,6 +1483,8 @@ export interface ExperiencePromptChoice {
   retro: boolean;
   structured: boolean;
   default: boolean;
+  /** 이 과제의 경험(초안 포함)이 있나 — 없으면 "초안 먼저" (TODO 259) */
+  has_experience: boolean;
 }
 
 export interface ExperiencePrompt {
@@ -1526,6 +1528,9 @@ export interface ImportBlock {
   project: string;
   action: ImportAction;
   target: string;
+  /** 기본값의 근거 (TODO 259) — continues · single · title · "" / continues · draft · shared · "" */
+  project_reason: string;
+  action_reason: string;
   counts: { open: number; quant: number; skill: number; action: number };
   warnings: { code: string; message: string }[];
   bad_lines: { line: number; text: string; reason: string }[];

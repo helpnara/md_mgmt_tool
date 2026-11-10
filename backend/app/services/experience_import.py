@@ -156,11 +156,15 @@ def choices(conn: sqlite3.Connection, person: str) -> list[dict[str, Any]]:
     from .person_history import history
 
     structured = _structured_projects(conn, person)
+    with_any = {r["project_id"] for r in conn.execute(
+        "SELECT DISTINCT project_id FROM experience WHERE person = ? AND project_id IS NOT NULL", (person,))}
     out = []
     for item in history(conn, person)["projects"]:
         retro = bool((item["did"] or "").strip() or (item["result"] or "").strip())
         out.append({"id": item["id"], "title": item["title"], "period": _period(item), "retro": retro,
-                    "structured": item["id"] in structured, "default": retro and item["id"] not in structured})
+                    "structured": item["id"] in structured, "default": retro and item["id"] not in structured,
+                    # 259 — 이 과제의 경험(초안 포함)이 없으면 화면이 "초안 먼저" 를 알린다
+                    "has_experience": item["id"] in with_any})
     return out
 
 
@@ -337,29 +341,61 @@ def _person_items(conn: sqlite3.Connection, person: str) -> dict[str, dict[str, 
         "SELECT * FROM experience WHERE person = ? ORDER BY id", (person,))}
 
 
-def _guess_project(fields: dict[str, Any], target: dict[str, Any] | None, projects: list[str], titles: dict[str, str]) -> str:
-    """정할 것 ② — 이어짐 경험의 과제 → 고른 과제가 하나면 그것 → 제목이 과제명과 닮은 것 → 빈칸."""
+# 추정 근거 — 미리보기 · [실험 요약] 이 같은 이름을 쓴다(259)
+PROJECT_REASONS = {"continues": "이어짐", "single": "고른 과제 하나", "title": "제목", "": "못 잡음"}
+ACTION_REASONS = {"continues": "이어짐", "draft": "담당 초안", "shared": "같은 경험이 앞 블록에", "": "기본"}
+
+
+def _guess_project(fields: dict[str, Any], target: dict[str, Any] | None, projects: list[str], titles: dict[str, str]) -> tuple[str, str]:
+    """정할 것 ② — (과제, 근거). 이어짐 경험의 과제 → 고른 과제가 하나면 그것 → 제목이 과제명과 닮은 것 → 빈칸."""
     if target and target.get("project"):
-        return target["project"]
+        return target["project"], "continues"
     if len(projects) == 1:
-        return projects[0]
+        return projects[0], "single"
     title = re.sub(r"\s+", "", fields["title"])
     for pid in projects:
         name = re.sub(r"\s+", "", titles.get(pid, ""))
         if name and (name in title or title in name):
-            return pid
-    return ""
+            return pid, "title"
+    return "", ""
 
 
-def _default_target(block: ParsedBlock, project: str, items: dict[str, dict[str, Any]]) -> tuple[str, str]:
-    """정할 것 ③ — (저장 방법, 대상). 확실한 이어짐 → 그 경험 / 같은 과제의 담당 초안 하나 → 그 초안 / 그 밖 새 경험."""
+def _default_target(block: ParsedBlock, project: str, items: dict[str, dict[str, Any]]) -> tuple[str, str, str]:
+    """정할 것 ③ — (저장 방법, 대상, 근거). 확실한 이어짐 → 그 경험 / 같은 과제의 담당 초안 하나 → 그 초안 / 그 밖 새 경험."""
     sure = block.continues if block.continues and not block.continues.endswith("?") else None
     if sure and sure in items and items[sure]["status"] != "확정":
-        return "이어서", sure
+        return "이어서", sure, "continues"
     drafts = [i for i in items.values() if i["project"] == project and i["source"] == "담당" and i["status"] == "초안"] if project else []
     if len(drafts) == 1:
-        return "이어서", drafts[0]["id"]
-    return "새로", ""
+        return "이어서", drafts[0]["id"], "draft"
+    return "새로", "", ""
+
+
+def plan(conn: sqlite3.Connection, person: str, result: ParseResult, projects: list[str]) -> list[dict[str, Any]]:
+    """블록마다 과제 · 저장 방법의 기본값과 근거. 미리보기와 [실험 요약] 이 같이 쓴다 — 둘이 어긋나지 않게.
+
+    259 — 한 응답에서 **같은 경험을 가리키는 블록이 둘 이상**이면 앞 블록만 "이어서", 나머지는 "새 경험"(과제는 같게).
+    실험 2차(Teams Copilot): 한 과제를 경험 둘로 나누면서 둘 다 그 과제의 초안을 가리켰다 — 그대로 두면 하나로 합쳐진다.
+    """
+    titles = {r["id"]: r["title"] for r in conn.execute("SELECT id, title FROM project")}
+    items = _person_items(conn, person)
+    taken: set[str] = set()
+    out = []
+    for block in result.blocks:
+        fields = block_fields(block)
+        suggested = (block.continues or "").rstrip("?")
+        project, project_reason = _guess_project(fields, items.get(suggested), projects, titles)
+        action, target, action_reason = _default_target(block, project, items)
+        if action == "이어서" and target in taken:
+            action, action_reason = "새로", "shared"
+            project = project or items[target]["project"]
+            target = ""
+        if target:
+            taken.add(target)
+        out.append({"block": block, "fields": fields, "suggested": suggested, "known": bool(suggested and suggested in items),
+                    "project": project, "project_reason": project_reason, "action": action, "target": target,
+                    "action_reason": action_reason})
+    return out
 
 
 def preview(conn: sqlite3.Connection, person: str, name: str, result: ParseResult, projects: list[str]) -> dict[str, Any]:
@@ -367,19 +403,18 @@ def preview(conn: sqlite3.Connection, person: str, name: str, result: ParseResul
     items = _person_items(conn, person)
     owned = [c["id"] for c in choices(conn, person)]
     blocks = []
-    for block in result.blocks:
-        fields = block_fields(block)
-        suggested = (block.continues or "").rstrip("?")
-        project = _guess_project(fields, items.get(suggested), projects, titles)
-        action, target = _default_target(block, project, items)
+    for row in plan(conn, person, result, projects):
+        block, fields = row["block"], row["fields"]
+        project, action, target = row["project"], row["action"], row["target"]
         warnings = [{"code": p.code, "message": p.message} for p in check_block(block, "구조화", person) if p.level != "정보"]
         role_note = role_warning(fields["role"])
         if role_note:
             warnings.append({"code": "role_subject", "message": role_note})
         blocks.append({
             "index": block.index, "first_line": block.first_line, "fields": fields,
-            "continues": block.continues or "", "continues_known": bool(suggested and suggested in items),
+            "continues": block.continues or "", "continues_known": row["known"],
             "project": project, "action": action, "target": target,
+            "project_reason": row["project_reason"], "action_reason": row["action_reason"],
             "counts": {"open": len(fields["open_questions"]), "quant": len(fields["quants"]), "skill": len(fields["skills"]),
                        "action": len(fields["actions"])},
             "warnings": warnings,
@@ -435,17 +470,32 @@ def summary(conn: sqlite3.Connection, person: str, name: str) -> dict[str, Any]:
              f" · 인용 표식 {result.stripped_markers} · 제어 문자 {result.stripped_controls} · 중복 후보 {len(result.duplicates)}"]
     if result.notice:
         lines.append(f"안내: {result.notice}")
-    for block in result.blocks:
+    rows = plan(conn, person, result, stored["projects"])
+    for row in rows:
+        block = row["block"]
         filled = sum(1 for value in block.fields.values() if value)
         problems = sorted({p.code for p in check_block(block, "구조화", person) if p.level != "정보"})
         role = role_warning(block.get("역할"))
         lines.append(
             f"- 블록 {block.index + 1}: 채운 칸 {filled} · 행동 {len(block.lists.get('행동') or [])}"
             f" · 정량 {len(block.quants)} · 확인 필요 {len(block.lists.get('확인_필요') or [])}"
-            f" · 이어짐 {'물음표' if (block.continues or '').endswith('?') else ('있음' if block.continues else '없음')}"
+            f" · 이어짐 {_continues_shape(block, row['known'])}"
             f" · 못 읽은 줄 {len(block.bad_lines)}{' (' + ', '.join(sorted({b.reason for b in block.bad_lines})) + ')' if block.bad_lines else ''}"
-            f" · 미분류 키 {', '.join(block.unknown) or '없음'} · 경고 {', '.join(problems + (['role_subject'] if role else [])) or '없음'}")
+            f" · 미분류 키 {', '.join(block.unknown) or '없음'} · 경고 {', '.join(problems + (['role_subject'] if role else [])) or '없음'}"
+            # 259 — 과제 추정 · 기본 저장 방법(근거만, 번호 같은 값은 넣지 않는다)
+            f" · 과제 {('잡힘(' + PROJECT_REASONS[row['project_reason']] + ')') if row['project'] else '없음'}"
+            f" · 저장 {row['action']}{'(' + ACTION_REASONS[row['action_reason']] + ')' if row['action_reason'] else ''}")
+    shared = sum(1 for row in rows if row["action_reason"] == "shared")
+    if shared:
+        lines.append(f"같은 경험을 가리킨 블록 {shared}개 — 앞 블록만 이어서, 나머지는 새 경험으로 미리 골랐다")
     return {"text": "\n".join(lines) + "\n"}
+
+
+def _continues_shape(block: ParsedBlock, known: bool) -> str:
+    if not block.continues:
+        return "없음"
+    kind = "물음표" if block.continues.endswith("?") else "있음"
+    return f"{kind}({'아는 번호' if known else '없는 번호'})"
 
 
 # ── 저장 (3단계.md 6절 ③) ─────────────────────────────────────────────────────

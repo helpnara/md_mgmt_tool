@@ -6729,6 +6729,47 @@ async function main() {
     expect(!summary.includes("비밀정리문장"), "응답 값은 담지 않는다");
   });
 
+  console.log("\n[67] AI 로 정리 — 초안 먼저 · 같은 경험 기본값 (TODO 259)");
+
+  await check("고른 과제에 초안이 없으면 안내 + [초안 만들기] → 안내가 사라진다 (259)", async () => {
+    const fresh = await api.post("/api/projects", { title: "초안 없는 과제", owners: ["권경락"], status: "in_progress", start_date: "2026-04-01" });
+    await api.put(`/api/projects/${fresh.id}/contributions/${encodeURIComponent("권경락")}`, { role: "주관", did: "- 조건 정리", result: "정리 완료" });
+    seeded.freshForImport = fresh.id;
+    await go(`#/experience-import/${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(1000);
+    const notice = page.locator("[data-testid=draft-first]");
+    equal(await notice.count(), 1, "초안 먼저 안내");
+    expect((await page.locator(".import-projects").innerText()).includes("초안 없음"), "과제 줄에 초안 없음");
+    await notice.getByRole("button", { name: "초안 만들기" }).click();
+    await page.waitForTimeout(1200);
+    equal(await page.locator("[data-testid=draft-first]").count(), 0, "만든 뒤 안내가 사라진다");
+    expect(/초안 \d+건을 만들었습니다/.test(await page.locator("[data-testid=experience-import]").innerText()), "만든 알림");
+    const list = await api.get(`/api/experiences?person=${encodeURIComponent("권경락")}`);
+    expect(list.items.some((item) => item.project === fresh.id && item.status === "초안"), "그 과제의 초안이 생겼다");
+  });
+
+  await check("같은 초안을 가리킨 두 블록 — 뒤 블록은 새 경험이 기본, 둘 다 이어서면 알림 (259)", async () => {
+    const list = await api.get(`/api/experiences?person=${encodeURIComponent("권경락")}`);
+    const draft = list.items.find((item) => item.project === seeded.freshForImport).id;
+    const block = (title) => ["```slow-way", "형식: slow-way-experience/0.1", `이어짐: ${draft}`, `제목: ${title}`, "기간: 2026-04 ~ 2026-09",
+      "역할: 조건 정리는 본인", "구분: 업무", "상황: 조건이 흩어져 있었다.", "행동:", "- 조건 정리", "확인_필요:", "-", "```", ""].join("\n");
+    const screen = page.locator("[data-testid=experience-import]");
+    await screen.locator('textarea[aria-label="AI 응답"]').fill(block("조건 정리 앞부분") + block("조건 정리 뒷부분"));
+    await screen.getByRole("button", { name: "읽기", exact: true }).click();
+    await page.waitForTimeout(1000);
+    const blocks = page.locator(".import-block");
+    expect(await blocks.nth(0).getByRole("radio", { name: "기존 경험에 이어서" }).isChecked(), "앞 블록은 이어서");
+    expect(await blocks.nth(1).getByRole("radio", { name: "새 경험" }).isChecked(), "뒤 블록은 새 경험");
+    expect((await blocks.nth(1).locator(".import-reason").innerText()).includes("같은 경험을 앞 블록이 가리켜"), "근거가 보인다");
+    equal(await page.locator("[data-testid=shared-warning]").count(), 0, "처음엔 알림 없음");
+    await blocks.nth(1).getByRole("radio", { name: "기존 경험에 이어서" }).check();
+    await blocks.nth(1).locator('select[aria-label="이어 붙일 경험"]').selectOption(draft);
+    await page.waitForTimeout(300);
+    equal(await page.locator("[data-testid=shared-warning]").count(), 1, "둘 다 이어서면 알림");
+    await page.locator("[data-testid=import-preview]").getByRole("button", { name: /저장 — 2건/ }).click();
+    await page.waitForTimeout(1200);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
