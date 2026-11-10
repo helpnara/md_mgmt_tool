@@ -1,4 +1,4 @@
-import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary } from "./types";
+import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -242,6 +242,27 @@ export const api = {
   unconfirmExperience: (id: string) => request<Experience>(`/api/experiences/${encodeURIComponent(id)}/unconfirm`, { method: "POST" }),
   acknowledgeWarning: (id: string, code: string, key: string) =>
     request<Experience>(`/api/experiences/${encodeURIComponent(id)}/acknowledge`, { method: "POST", body: JSON.stringify({ code, key }) }),
+  // ── 태그 정리함 · 업무 이력 파일 (TODO 262) ─────────
+  unknownTags: () => request<{ items: UnknownTag[] }>("/api/experiences/skills/unknown"),
+  cleanupTags: (actions: TagDecision[]) =>
+    request<{ changed: string[]; dictionary: number }>("/api/experiences/skills/cleanup", { method: "POST", body: JSON.stringify({ actions }) }),
+  tagPrompt: () => request<{ text: string; chars: number; tags: number }>("/api/experiences/skills/prompt"),
+  tagAnswer: (text: string) =>
+    request<{ items: TagProposal[] }>("/api/experiences/skills/answer", { method: "POST", body: JSON.stringify({ text }) }),
+  addSuggestedAliases: () => request<{ added: number }>("/api/experiences/skills/suggest", { method: "POST" }),
+  exportFile: (person: string, o: ExportOptions) => {
+    const q = new URLSearchParams({ person, scope: o.scope });
+    if (o.start) q.set("start", o.start);
+    if (o.end) q.set("end", o.end);
+    if (o.ids?.length) q.set("ids", o.ids.join(","));
+    for (const key of ["structured", "ids_in", "money", "anonymize"] as const) if (o[key] !== undefined) q.set(key, String(o[key]));
+    return request<ExportResult>(`/api/experiences/export?${q.toString()}`);
+  },
+  logExport: (person: string, o: ExportOptions, how: "저장" | "복사") =>
+    request<{ logged: boolean }>("/api/experiences/export/log", { method: "POST", body: JSON.stringify({ person, ...o, how }) }),
+  exportLog: (person: string) => request<{ items: ExportLogRow[] }>(`/api/experiences/export/log?person=${encodeURIComponent(person)}`),
+  anonymizeCandidates: (person: string) =>
+    request<AnonymizeCandidates>(`/api/experiences/anonymize/candidates?person=${encodeURIComponent(person)}`),
   // ── 응답 되받기 (TODO 258) ──────────────────────────
   experiencePrompt: (person: string, projects?: string[]) =>
     request<ExperiencePrompt>(

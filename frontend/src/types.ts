@@ -419,6 +419,8 @@ export interface AppSettings {
   meeting_cycle_days: number;
   /** 역량 사전 (TODO 260) — null 이면 기본(46개). 빈 목록을 보내면 기본으로 */
   skill_dictionary?: SkillEntry[] | null;
+  /** 업무 이력 파일 익명화 치환표 (TODO 262) */
+  anonymize_rules?: { rules: AnonymizeRule[]; patterns?: { kind: string; regex: string; to: string }[] } | null;
   /** 자동 백업에서 첨부를 빼고 문서만 (TODO 202 · 197 ③) — 서버가 아직 모르면 없다 */
   backup_skip_assets?: boolean;
   /** 이전 버전을 남기지 못한 문서 (TODO 206 ㉕) — 읽을 때만 온다 */
@@ -1503,6 +1505,65 @@ export interface Experience {
   acknowledged: { code: string; key: string; at: string; by: string }[];
   confirmed_at: string;
   confirmed_by: string;
+  // 5단계 (TODO 262)
+  tools: string[];
+  edited_by_member_at: string;
+}
+/** 사전에 없는 태그 — 태그 정리함 (TODO 262 · 역량태그입력.md) */
+export interface UnknownTag {
+  axis: ExperienceSkill["axis"];
+  name: string;
+  count: number;
+  experiences: string[];
+  people: string[];
+  suggest: { axis: ExperienceSkill["axis"]; name: string }[];
+  tool_like: boolean;
+}
+export type TagAction = "alias" | "new" | "tool" | "drop";
+export interface TagDecision {
+  axis: string;
+  name: string;
+  action: TagAction;
+  target_axis?: string;
+  target_name?: string;
+}
+export interface TagProposal extends Partial<TagDecision> {
+  axis: string;
+  name: string;
+  unsure: boolean;
+  raw: string;
+  problem: string;
+}
+export interface ExportOptions {
+  scope: "all" | "period" | "pick";
+  start?: string;
+  end?: string;
+  ids?: string[];
+  structured?: boolean;
+  ids_in?: boolean;
+  money?: boolean;
+  anonymize?: boolean;
+}
+export interface ExportResult {
+  text: string;
+  filename: string;
+  chars: number;
+  warnings: string[];
+  ids: string[];
+  summary: {
+    experiences: number; confirmed: number; structured: number; period: string; projects: number;
+    axes: Record<string, number>; top_skills: string[]; quants: number; quants_compared: number; replaced: Record<string, number>;
+  };
+}
+export interface AnonymizeRule { kind: string; from: string; to: string }
+export interface AnonymizeCandidates {
+  items: { kind: string; text: string; suggest: string; in_rules: boolean }[];
+  rules: AnonymizeRule[];
+  patterns: { kind: string; regex: string; to: string }[];
+}
+export interface ExportLogRow {
+  at: string; by: string; role: string; person: string; how: string; count: number; chars: number;
+  options: { scope: string; start: string; end: string; structured: boolean; ids_in: boolean; money: boolean; anonymize: boolean };
 }
 
 // ── 응답 되받기 (TODO 258 · 253 의 3단계) ───────────────────

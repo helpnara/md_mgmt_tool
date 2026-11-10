@@ -2787,6 +2787,34 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-fields dt { color: var(--muted); }
 .import-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .import-empty, .import-done { margin: 8px 0; }
+/* 5단계 — 업무 이력 파일 · 태그 정리함 · 도구 칸 (TODO 262) */
+.export-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 1093px) {
+  .export-columns { grid-template-columns: minmax(0, 37fr) minmax(0, 63fr); }
+}
+.export-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.export-left > .card, .export-columns > .card { margin: 0; }
+.export-right { min-width: 0; }
+.export-options { border: 0; padding: 0; margin: 0 0 8px; display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; }
+.export-options label, .export-flags label, .export-pick label { flex-direction: row; align-items: center; gap: 6px; font-size: var(--fs-sm); color: inherit; }
+.export-options input, .export-flags input, .export-pick input { width: auto; flex: none; margin: 0; padding: 0; }
+.export-flags { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.export-pick { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; margin: 4px 0 8px; }
+.export-pick label { overflow-wrap: anywhere; }
+.export-axes { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 0 0 8px; font-size: var(--fs-xs); }
+.export-warnings { margin: 0 0 8px; }
+.export-text { width: 100%; height: 420px; min-height: 0; font-size: var(--fs-xs); background: var(--neutral-0); }
+.export-log { margin-top: 12px; font-size: var(--fs-xs); }
+.export-log ul { margin: 6px 0 0; padding-left: 18px; }
+.export-rules { width: 100%; margin: 8px 0; font-size: var(--fs-xs); }
+.export-rules select { width: auto; }
+.export-candidates { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.export-candidates .exp-chip { cursor: pointer; }
+.cleanup-table { width: 100%; }
+.cleanup-choice { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cleanup-choice select { width: auto; min-width: 0; max-width: 260px; }
+.exp-member-edit { color: var(--warning-700); font-weight: 600; }
+.exp-tools { margin-top: 12px; }
 /* 4단계 — 확정 · 정합성 · 확인 필요 [반영] · 역량 사전 (TODO 260) */
 .exp-head-actions { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
 .exp-confirm-bar { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; position: relative; }

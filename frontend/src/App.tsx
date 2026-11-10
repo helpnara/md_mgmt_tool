@@ -19,6 +19,7 @@ import { BACK_PARAM, SCREEN_TITLES, listLink, personLink, setPageTitle } from ".
 import PersonHistory from "./components/PersonHistory";
 import ExperienceDetail from "./components/ExperienceDetail";
 import ExperienceImport from "./components/ExperienceImport";
+import ExperienceExport from "./components/ExperienceExport";
 import { confirmLeave, hasUnsaved, LEAVE_MESSAGE, migrateBrowserDrafts } from "./unsaved";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Toast from "./components/Toast";
@@ -41,6 +42,8 @@ type Route =
   | { name: "experience"; id: string }
   // AI 로 정리 — 응답 되받기 (TODO 258)
   | { name: "experienceImport"; person: string }
+  // 업무 이력 파일 (TODO 262)
+  | { name: "experienceExport"; person: string }
   | { name: "settings"; back: string | null; query: string }
   | { name: "help" }
   // 과제 접수 풀 (TODO 136)
@@ -84,6 +87,8 @@ function readRoute(): Route {
   if (path.startsWith("roadmap")) return { name: "roadmap", query: queryString ?? "" };
   if (path.startsWith("reports")) return { name: "reports", query: queryString ?? "" };
   if (path.startsWith("skills")) return { name: "skills", query: queryString ?? "" };
+  if (path.startsWith("experience-export/"))
+    return { name: "experienceExport", person: safeDecode(path.slice("experience-export/".length)) };
   if (path.startsWith("experience-import/"))
     return { name: "experienceImport", person: safeDecode(path.slice("experience-import/".length)) };
   if (path.startsWith("experience/")) return { name: "experience", id: safeDecode(path.slice("experience/".length)) };
@@ -409,6 +414,7 @@ export default function App() {
         {route.name === "person" && <PersonHistory key={route.person} meta={meta} name={route.person} back={route.back} />}
         {route.name === "experience" && <ExperienceDetail key={route.id} id={route.id} />}
         {route.name === "experienceImport" && <ExperienceImport key={route.person} name={route.person} />}
+        {route.name === "experienceExport" && <ExperienceExport key={route.person} name={route.person} />}
         {route.name === "help" && <Help />}
         {route.name === "intakes" && <IntakePool meta={meta} query={route.query} onMetaChange={loadMeta} />}
         {route.name === "intake" && (

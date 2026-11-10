@@ -24,6 +24,8 @@ DENIED = "담당 과제의 진행일지 · 첨부 · 개요 · 자기 역할과 
 NOT_YOURS = "남이 쓴 진행일지는 고치거나 지울 수 없습니다 — 쓴 사람이나 팀장에게 말해 주세요."
 NOT_OWNER = "담당 과제만 고칠 수 있습니다 — 이 과제의 담당자가 아닙니다."
 NOT_YOUR_ROW = "자기 줄만 고칠 수 있습니다 — 다른 사람의 역할 · 회고는 그 사람이나 팀장이 고칩니다."
+NOT_YOUR_EXPERIENCE = "자기 경험만 고칠 수 있습니다."
+CONFIRMED_LOCKED = "확정한 경험은 팀장만 고칩니다 — 고칠 곳이 있으면 팀장에게 [구조화로 되돌림]을 부탁하세요."
 PROJECT_FIELDS_DENIED = "팀원은 과제 개요 본문만 고칠 수 있습니다 — 상태 · 일정 · 효과 · 담당자 같은 칸은 팀장이 고칩니다."
 
 # 팀원이 PATCH /api/projects/{id} 로 보낼 수 있는 칸
@@ -40,6 +42,9 @@ _RULES: list[tuple[str, re.Pattern[str], str]] = [
     ("PATCH", re.compile(r"^/api/projects/(?P<project>[^/]+)$"), "개요 수정"),
     # 담당과 역할 · 회고 (TODO 237) — 자기 줄만(`person` 이 자기 이름)
     ("PUT", re.compile(r"^/api/projects/(?P<project>[^/]+)/contributions/(?P<person>[^/]+)$"), "역할 · 회고 수정"),
+    # 팀원 보완 (TODO 262 · 5단계.md ⑦) — 자기 경험, 초안 · 구조화만. 업무 이력 파일 내보내기 기록(자기 것은 끝점이 본다)
+    ("PATCH", re.compile(r"^/api/experiences/(?P<experience>E-\d{3,})$"), "경험 보완"),
+    ("POST", re.compile(r"^/api/experiences/export/log$"), "업무 이력 파일 내보내기"),
 ]
 # 쓰다 만 글 — 사람마다 따로 둔다(drafts 가 사람 폴더로 나눈다). 쓰기 기록에는 남기지 않는다
 _DRAFTS = re.compile(r"^/api/drafts(/[^/]+)?$")
@@ -97,6 +102,17 @@ def check(conn: sqlite3.Connection, user: User, method: str, path: str) -> Decis
             if (row["author"] or "") != user.name:
                 return Decision(False, NOT_YOURS)
             return Decision(True, action=action, project_id=row["project_id"], entry_id=entry_id)
+        if "experience" in groups:
+            row = conn.execute("SELECT person, status FROM experience WHERE id = ?", (groups["experience"],)).fetchone()
+            if row is None:
+                return Decision(True, action=action)            # 없으면 끝점이 404
+            if row["person"] != user.name:
+                return Decision(False, NOT_YOUR_EXPERIENCE)
+            if row["status"] == "확정":
+                return Decision(False, CONFIRMED_LOCKED)
+            return Decision(True, action=action)
+        if not groups:
+            return Decision(True, action=action, record=False)  # 끝점이 자기 것인지 본다
         if "attachment" in groups:
             row = conn.execute(
                 "SELECT a.project_id, a.entry_id, e.author FROM attachment a LEFT JOIN entry e ON e.id = a.entry_id WHERE a.id = ?",

@@ -36,7 +36,7 @@ def test_draft_from_contribution_maps_fields(team):  # noqa: F811
     assert item["situation"] == "출하 검사를 육안으로 해서 편차가 컸다." and item["goal"] == "재검을 줄인다."
     assert item["actions"] == ["불량 유형 재분류", "두 단계 판정 설계"]
     assert "재검 월 30건 → 12건" in item["result_qual"] and "2026-06-30 시범 라인 적용" in item["result_qual"]
-    assert {"axis": "기술", "name": "Python"} in item["skills"]
+    assert item["tools"] == ["이미지 판정", "Python"] and item["skills"] == []      # 261 — 기술 · 도구는 도구 칸
     # ⑤ 숫자는 정량으로 옮기지 않고 질문으로
     assert any("재검 월 30건" in q and "비교 기준" in q for q in item["open_questions"])
     assert not any("시범 라인 적용" in q for q in item["open_questions"])     # 날짜만 숫자인 줄은 묻지 않는다
@@ -180,7 +180,8 @@ def test_member_sees_only_own_and_cannot_write_viewer_blocked(team):  # noqa: F8
     assert member.get("/api/experiences/E-001").status_code == 200
     assert member.get("/api/experiences/E-002").status_code == 403
     assert member.post("/api/experiences", json={"person": "가팀원", "title": "x"}).status_code == 403
-    assert member.patch("/api/experiences/E-001", json={"title": "x"}).status_code == 403
+    assert member.patch("/api/experiences/E-002", json={"title": "x"}).status_code == 403    # 남의 것
+    # 자기 경험의 보완은 5단계(TODO 262)에서 열었다 — test_experience_export 가 본다
     assert member.post("/api/experiences/draft", json={"person": "가팀원"}).status_code == 403
     assert viewer.get("/api/experiences", params={"person": "가팀원"}).status_code == 403
     assert viewer.get("/api/experiences/E-001").status_code == 403

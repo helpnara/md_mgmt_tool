@@ -68,6 +68,8 @@ DEFAULTS: dict[str, Any] = {
     "meeting_cycle_days": 90,
     # 역량 사전 (TODO 260 · 253 의 4단계). **null 이면 기본**(설계 원본 9절의 46개) — [{"axis", "name", "aliases"}]
     "skill_dictionary": None,
+    # 업무 이력 파일의 익명화 치환표 (TODO 262). null 이면 비어 있음 — {"rules": [{kind, from, to}], "patterns": [{kind, regex, to}]}
+    "anonymize_rules": None,
     # 백업에 첨부(assets)를 넣지 않는다 (TODO 202 · 197) — 첨부가 GB 단위면 백업이 조용히 실패했다.
     # 끄면(False, 기본) 지금처럼 전부 넣는다. 백업 서비스가 읽는다.
     "backup_skip_assets": False,
@@ -88,7 +90,8 @@ def _path():
 # 값의 모양 (TODO 163). 손으로 고친 설정 파일의 값 하나가 모양이 다르면(`"backup_every_hours": "매일"`)
 # 그 값을 쓰는 곳이 모두 넘어졌다. 읽을 때 한 번 걸러 **그 값만** 기본값으로 둔다.
 _NULLABLE_SHAPES: dict[str, type] = {"project_types": list, "classifications": dict, "precheck_items": list,
-                                      "meeting_kinds": list, "skill_dictionary": list}
+                                      "meeting_kinds": list, "skill_dictionary": list,
+                                      "anonymize_rules": dict}
 _POSITIVE_KEYS = ("backup_keep", "backup_every_hours", "intake_stale_days", "meeting_cycle_days")
 _ZERO_OK_KEYS = ("backup_keep_weekly", "backup_keep_monthly")
 
@@ -206,6 +209,10 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             from ..experience import skills as skill_rules
 
             current[key] = skill_rules.validate(updates[key])
+        elif key == "anonymize_rules":
+            from . import experience_export
+
+            current[key] = experience_export.validate_rules(updates[key])
         elif key == "precheck_items":
             from . import precheck
 

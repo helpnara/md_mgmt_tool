@@ -10,6 +10,7 @@ import ReportTemplateCard from "./ReportTemplateCard";
 import IntakeSettingsCard from "./IntakeSettingsCard";
 import MeetingSettingsCard from "./MeetingSettingsCard";
 import SkillDictionaryCard from "./SkillDictionaryCard";
+import SkillCleanupCard from "./SkillCleanupCard";
 import EntryTemplateCard from "./EntryTemplateCard";
 import TrashCard from "./TrashCard";
 import PeopleCard from "./PeopleCard";
@@ -234,6 +235,8 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
           <IntakeSettingsCard meta={meta} onSaved={onSaved} />
           {/* 역량 사전 (TODO 260) — 경험의 역량 태그를 맞추는 표 */}
           <SkillDictionaryCard />
+          {/* 역량 태그 정리함 (TODO 262) — 사전에 없는 태그를 모아 한 번에 */}
+          <SkillCleanupCard />
         </div>
       )}
 

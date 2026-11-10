@@ -232,8 +232,8 @@ def test_merge_into_untouched_draft_takes_ai_values_and_keeps_money_and_question
     # 합치는 칸 — 초안의 효과 금액 정량 · "본인 몫" 질문이 남는다
     assert [q["metric"] for q in item["quants"]] == ["과제 기대효과", "재검 건수"]
     assert any("본인이 기여한 몫" in q for q in item["open_questions"]) and "재검 건수의 정확한 값은?" in item["open_questions"]
-    assert {"axis": "기술", "name": "이미지 판정"} in item["skills"]
-    assert item["skills"].count({"axis": "기술", "name": "Python"}) == 1
+    # 261 — AI 가 역량_기술에 적은 Python · 이미지 판정은 팀의 기술 · 도구라 도구 칸으로(한 번씩)
+    assert item["tools"] == ["이미지 판정", "Python"] and not any(s["name"] in ("Python", "이미지 판정") for s in item["skills"])
     assert f"response:{data['response']}" in item["materials"]
 
 

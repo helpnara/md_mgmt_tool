@@ -54,7 +54,7 @@ const routes = [
   ["projects", "#/projects"], ["board", "#/projects?view=board"], ["detail", `#/projects/${ids[0]}`], ["detail-long", `#/projects/${ids[5]}`],
   ["report-editor", `#/projects/${ids[0]}?report=${draft2?.id}`], ["roadmap", "#/roadmap"], ["reports", "#/reports"], ["history", "#/history"],
   ["skills", "#/skills"], ["skills-records", `#/skills?tab=records&person=${encodeURIComponent(names[1])}`], ["skills-meetings", `#/skills?tab=meetings&person=${encodeURIComponent(names[1])}`],
-  ["person", `#/person/${encodeURIComponent(names[0])}`], ["experience", "#/experience/E-001"], ["experience-import", `#/experience-import/${encodeURIComponent(names[0])}`], ["search", `#/search?q=${encodeURIComponent("과제")}`], ["help", "#/help"],
+  ["person", `#/person/${encodeURIComponent(names[0])}`], ["experience", "#/experience/E-001"], ["experience-import", `#/experience-import/${encodeURIComponent(names[0])}`], ["experience-export", `#/experience-export/${encodeURIComponent(names[0])}`], ["search", `#/search?q=${encodeURIComponent("과제")}`], ["help", "#/help"],
   ...["", "class", "report", "forms", "backup", "check"].map((t) => [`settings-${t || "basic"}`, `#/settings${t ? `?tab=${t}` : ""}`]),
 ];
 const AUDIT = () => {

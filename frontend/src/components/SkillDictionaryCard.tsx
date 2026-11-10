@@ -128,6 +128,19 @@ export default function SkillDictionaryCard() {
       {notice && <p className="hint notice">{notice}</p>}
       <div className="form-actions">
         <button type="button" className="ghost" onClick={() => setRows([...rows, { axis: axis || "기술", name: "", aliases: "", origin: "" }])}>+ 역량</button>
+        <button type="button" className="ghost" disabled={busy || dirty} title="실제 팀원 태그에서 본 다른 이름(운영 최적화 → 최적화·시뮬레이션 등)을 한 번에 더합니다(TODO 261)"
+          onClick={() => void (async () => {
+            setBusy(true);
+            try {
+              const { added } = await api.addSuggestedAliases();
+              await load();
+              setNotice(added ? `추천 동의어 ${added}개를 더했습니다.` : "더할 추천 동의어가 없습니다 — 이미 있습니다.");
+            } catch (error) {
+              notifyError((error as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          })()}>추천 동의어 더하기</button>
         <button type="button" className="ghost" disabled={busy || !data?.custom}
           onClick={() => window.confirm("역량 사전을 처음 46개로 되돌릴까요? 경험의 태그는 그대로입니다.") && void save(null, "기본 사전으로 되돌렸습니다.")}>
           기본으로

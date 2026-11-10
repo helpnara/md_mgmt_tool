@@ -6840,6 +6840,69 @@ async function main() {
     expect((await card.innerText()).includes("역량 사전 46개 (기본)"), "기본으로 돌아왔다");
   });
 
+  console.log("\n[69] 업무 이력 파일 · 익명화 · 태그 정리함 · 도구 칸 (TODO 262)");
+
+  await check("[업무 이력 파일] — 확정 경험이 미리보기에, 근거 ID 끄기, 복사 = 보인 글, 기록 (262)", async () => {
+    const made = await api.post("/api/experiences", {
+      person: "권경락", title: "내보내기 시험용 확정 경험", kind: "업무", start: "2025-04", end: "2025-10", role: "조건 정리는 본인",
+      situation: "흩어진 조건", actions: ["조건 정리"], tools: ["Python"], skills: [{ axis: "기술", name: "알고리즘 개발" }, { axis: "기술", name: "Matlab" }],
+    });
+    for (const w of made.consistency) await api.post(`/api/experiences/${made.id}/acknowledge`, { code: w.code, key: w.key });
+    await api.post(`/api/experiences/${made.id}/confirm`, {});
+    seeded.exportExp = made.id;
+    await go(`#/person/${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(900);
+    await page.locator("[data-testid=experience-card]").getByRole("link", { name: "업무 이력 파일" }).click();
+    await page.waitForTimeout(1500);
+    const area = page.locator('textarea[aria-label="업무 이력 파일 원문"]');
+    const text = await area.inputValue();
+    expect(text.startsWith("---\nformat: slow-way-career-context") && text.includes(`## [${made.id}] 내보내기 시험용 확정 경험`), "파일 머리 · 경험");
+    expect(text.includes("- 도구: Python") && text.includes("# 기술 · 도구"), "도구 칸 · 절");
+    await page.locator(".export-flags label", { hasText: "근거 ID 넣기" }).locator("input").uncheck();
+    await page.waitForTimeout(1200);
+    expect(!(await area.inputValue()).includes(`[${made.id}]`), "근거 ID 를 끄면 [E-nnn] 이 없다");
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
+    await page.locator("[data-testid=export-preview]").getByRole("button", { name: "파일 복사" }).click();
+    await page.waitForTimeout(800);
+    equal(await page.evaluate(() => navigator.clipboard.readText()), await area.inputValue(), "복사한 글 = 보인 글");
+    expect((await page.locator("[data-testid=export-log]").innerText()).includes("복사"), "내보내기 기록");
+  });
+
+  await check("익명화 — 후보를 눌러 치환표에 더하면 이름이 바뀐다 (262)", async () => {
+    await page.locator(".export-flags label", { hasText: "익명화" }).locator("input").check();
+    await page.waitForTimeout(1200);
+    const box = page.locator("[data-testid=anonymize]");
+    await box.getByRole("button", { name: "치환표 · 후보 보기" }).click();
+    await box.locator(".export-candidates button", { hasText: "권경락" }).first().click();
+    await box.getByRole("button", { name: "치환표 저장" }).click();
+    await page.waitForTimeout(1500);
+    const text = await page.locator('textarea[aria-label="업무 이력 파일 원문"]').inputValue();
+    expect(text.includes("owner: 익명") && !text.includes("권경락"), "이름이 남지 않는다");
+    expect(text.includes(seeded.exportExp), "근거 ID 는 그대로");
+    await api.put("/api/settings", { anonymize_rules: {} });
+  });
+
+  await check("역량 태그 정리함 — 사전에 없는 태그를 빼기 · 도구로, AI 로 맞추기 프롬프트 (262)", async () => {
+    await go("#/settings?tab=class");
+    await page.waitForTimeout(1200);
+    const card = page.locator("[data-testid=skill-cleanup]");
+    const row = card.locator('tr[data-tag="알고리즘 개발"]');
+    equal(await row.count(), 1, "사전에 없는 태그");
+    await card.getByRole("button", { name: "AI 로 맞추기" }).click();
+    await page.waitForTimeout(600);
+    expect((await card.locator('textarea[aria-label="태그 맞추기 프롬프트"]').inputValue()).includes("알고리즘 개발"), "프롬프트에 정리할 태그");
+    await card.locator('textarea[aria-label="AI 의 답"]').fill("- 알고리즘 개발 | 버림\n- Matlab | 도구");
+    await card.getByRole("button", { name: "답 읽기" }).click();
+    await page.waitForTimeout(800);
+    equal(await row.locator('select[aria-label="정리"]').inputValue(), "drop", "AI 의 답이 고르는 칸을 채웠다");
+    nextDialog((d) => d.accept());
+    await card.getByRole("button", { name: /적용 \(\d+\)/ }).click();
+    await page.waitForTimeout(1500);
+    equal(await card.locator('tr[data-tag="알고리즘 개발"]').count(), 0, "정리된 태그는 사라진다");
+    const after = await api.get(`/api/experiences/${seeded.exportExp}`);
+    expect(after.tools.includes("Matlab") && !after.skills.some((sk) => sk.name === "알고리즘 개발"), `도구로 · 빼기: ${JSON.stringify(after.skills)}`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

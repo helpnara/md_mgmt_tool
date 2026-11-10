@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Award } from "lucide-react";
 import { api } from "../api";
-import { isManager } from "../me";
+import { getMe, isManager, isMember } from "../me";
 import { notifyError } from "../notify";
 import type { ExperienceListing } from "../types";
 import IconTitle from "./IconTitle";
@@ -12,6 +12,11 @@ const AXES = ["기술", "업무", "리더십", "문제해결"] as const;
 /** 경험 상세 주소 (TODO 257 · 2단계.md ①) — 사람별 이력에서 왔으면 돌아갈 곳을 함께 */
 export function experienceLink(id: string): string {
   return `#/experience/${encodeURIComponent(id)}`;
+}
+
+/** 업무 이력 파일 주소 (TODO 262 · 5단계.md 5절) */
+export function experienceExportLink(name: string): string {
+  return `#/experience-export/${encodeURIComponent(name)}`;
 }
 
 /** AI 로 정리(응답 되받기) 주소 (TODO 258 · 3단계.md 6절) */
@@ -41,6 +46,8 @@ export default function ExperienceCard({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const manager = isManager();
+  // 업무 이력 파일 — 관리자 · 팀장은 누구 것이든, 팀원 PC 는 자기 것만(5단계.md ⑥)
+  const canExport = manager || (isMember() && getMe().name === name);
 
   const load = () =>
     api
@@ -98,8 +105,15 @@ export default function ExperienceCard({
     <div className="card person-experiences" data-testid="experience-card">
       <div className="card-head">
         <IconTitle icon={Award}>경험 {data?.total ?? 0}건</IconTitle>
+        {!manager && canExport && (
+          <div className="person-tools">
+            <a className="button-link" href={experienceExportLink(name)}>업무 이력 파일</a>
+          </div>
+        )}
         {manager && (
           <div className="person-tools">
+            <a className="button-link" href={experienceExportLink(name)}
+              title="확정한 경험을 .md 파일 하나로 — 팀원 본인에게 건네는 업무 이력">업무 이력 파일</a>
             <button onClick={() => { window.location.hash = experienceImportLink(name); }}
               title="고른 과제의 기록으로 경험 정리 프롬프트를 만들고, 사내 AI 의 응답을 붙여 넣어 경험으로 저장합니다">
               AI 로 정리

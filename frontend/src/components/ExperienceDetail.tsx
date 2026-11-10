@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CircleHelp, FileText, Tags, TriangleAlert } from "lucide-react";
 import { api } from "../api";
-import { isManager } from "../me";
+import { getMe, isManager, isMember } from "../me";
 import { notifyError } from "../notify";
 import { personLink, projectLink, setPageTitle } from "../nav";
 import type { ConsistencyWarning, Experience, ExperienceQuant, ExperienceResponseFile, ExperienceSkill, SkillDictionary } from "../types";
@@ -14,14 +14,14 @@ const KINDS: ExperienceQuant["baseline_kind"][] = ["비교", "집계", "조건",
 
 /** 고칠 수 있는 칸만 — 저장할 때 이것을 보낸다 */
 type Form = Pick<Experience, "title" | "start" | "end" | "role" | "kind" | "situation" | "goal" | "result_qual" | "impact" |
-  "lesson" | "lesson_source" | "skills" | "quants"> & { actions: string; open_questions: string };
+  "lesson" | "lesson_source" | "skills" | "quants"> & { actions: string; open_questions: string; tools: string };
 
 function toForm(item: Experience): Form {
   return {
     title: item.title, start: item.start, end: item.end, role: item.role, kind: item.kind, situation: item.situation,
     goal: item.goal, result_qual: item.result_qual, impact: item.impact, lesson: item.lesson, lesson_source: item.lesson_source,
     skills: item.skills.map((skill) => ({ ...skill })), quants: item.quants.map((quant) => ({ ...quant })),
-    actions: item.actions.join("\n"), open_questions: item.open_questions.join("\n"),
+    actions: item.actions.join("\n"), open_questions: item.open_questions.join("\n"), tools: (item.tools ?? []).join(", "),
   };
 }
 
@@ -42,9 +42,11 @@ export default function ExperienceDetail({ id }: { id: string }) {
   const [notice, setNotice] = useState("");
   const [raw, setRaw] = useState<ExperienceResponseFile | null>(null);
   const [dictionary, setDictionary] = useState<SkillDictionary | null>(null);
-  const editable = isManager();
+  const manager = isManager();
+  // 팀원 보완 (TODO 262 · 5단계.md ⑦) — 팀원 PC 는 자기 경험의 초안 · 구조화만 고친다(확정 · 확인함 · 지우기는 팀장)
+  const editable = manager || Boolean(item && isMember() && getMe().name === item.person && item.status !== "확정");
 
-  // 역량 사전 (TODO 260) — "사전에 없음" 의 [기존 역량으로 ▾] 가 쓴다
+  // 역량 사전 (TODO 260) — "사전에 없음" 의 [기존 역량으로 ▾] · 태그 입력 자동 완성이 쓴다
   useEffect(() => {
     if (!editable) return;
     api.experienceSkills().then(setDictionary).catch(() => setDictionary(null));
@@ -87,6 +89,7 @@ export default function ExperienceDetail({ id }: { id: string }) {
     try {
       const next = await api.updateExperience(item.id, {
         ...form, actions: lines(form.actions), open_questions: lines(form.open_questions),
+        tools: form.tools.split(",").map((tool) => tool.trim()).filter(Boolean),
         skills: form.skills.filter((skill) => skill.name.trim()), quants: form.quants.filter((quant) => quant.metric.trim()),
         base_updated_at: item.updated_at,
       } as Partial<Experience> & { base_updated_at: string });
@@ -185,7 +188,7 @@ export default function ExperienceDetail({ id }: { id: string }) {
             <span className="project-id">{item.id}</span> {item.title}
             <span className={`exp-status exp-${item.status}`}>{item.status}</span>
           </h1>
-          {editable && (
+          {manager && (
             <span className="exp-head-actions">
               <ConfirmBar item={item} dirty={dirty} busy={busy}
                 onConfirm={() => void act(() => api.confirmExperience(item.id), "확정했습니다.")}
@@ -198,6 +201,9 @@ export default function ExperienceDetail({ id }: { id: string }) {
           {item.person}
           {item.project && (
             <> · 과제 {item.project_gone ? <span>{item.project} (지운 과제)</span> : <a href={projectLink(item.project)}>{item.project} {item.project_title}</a>}</>
+          )}
+          {item.edited_by_member_at && (
+            <> · <span className="exp-member-edit" title="팀원이 자기 PC 에서 보완했습니다 — 확정하면 표시가 지워집니다">팀원이 고침 {item.edited_by_member_at.slice(5, 10)}</span></>
           )}
           {" "}· 만든 때 {item.created_at.slice(0, 10)}{item.created_by ? ` (${item.created_by})` : ""} · 출처 {item.source}
         </p>
@@ -219,7 +225,7 @@ export default function ExperienceDetail({ id }: { id: string }) {
           onChange={(event) => set("open_questions", event.target.value)} aria-label="확인 필요" />
       </div>
 
-      <ConsistencyCard warnings={item.consistency} editable={editable} busy={busy} onAck={ack} />
+      <ConsistencyCard warnings={item.consistency} editable={manager} busy={busy} onAck={ack} />
 
       {warnings.length > 0 && (
         <div className="card experience-warnings">
@@ -303,14 +309,19 @@ export default function ExperienceDetail({ id }: { id: string }) {
                 <select aria-label="축" disabled={!editable} value={skill.axis} onChange={(event) => setSkill(index, { axis: event.target.value as ExperienceSkill["axis"] })}>
                   {AXES.map((axis) => <option key={axis}>{axis}</option>)}
                 </select>
-                <input aria-label="역량 태그" disabled={!editable} value={skill.name} onChange={(event) => setSkill(index, { name: event.target.value })} />
+                <input aria-label="역량 태그" list="exp-skill-names" disabled={!editable} value={skill.name}
+                  onChange={(event) => {
+                    // 사전의 이름 · 다른 이름을 고르면 축도 사전의 것으로(역량태그입력.md — 입력할 때 맞추기)
+                    const hit = dictionary?.dictionary.find((d) => d.name === event.target.value || d.aliases.includes(event.target.value));
+                    setSkill(index, hit ? { name: hit.name, axis: hit.axis } : { name: event.target.value });
+                  }} />
                 {editable && <button type="button" className="ghost small danger" onClick={() => set("skills", form.skills.filter((_, i) => i !== index))}>빼기</button>}
                 {item.skills_unknown.includes(skill.name) && item.skills.some((s) => s.name === skill.name && s.axis === skill.axis) && (
                   <span className="exp-unknown" data-unknown={skill.name}>
                     <span className="exp-unknown-tag">사전에 없음</span>
                     {editable && dictionary && (
                       <>
-                        <button type="button" className="link-button" onClick={() => void addToDictionary(skill)}>사전에 추가</button>
+                        {manager && <button type="button" className="link-button" onClick={() => void addToDictionary(skill)}>사전에 추가</button>}
                         <select aria-label="기존 역량으로" value="" onChange={(event) => {
                           const [axis, name] = event.target.value.split("|");
                           if (name) setSkill(index, { axis: axis as ExperienceSkill["axis"], name });
@@ -326,6 +337,14 @@ export default function ExperienceDetail({ id }: { id: string }) {
             ))}
           </ul>
           {editable && <button type="button" className="ghost small" onClick={() => set("skills", [...form.skills, { axis: "기술", name: "" }])}>+ 역량 태그</button>}
+          {dictionary && (
+            <datalist id="exp-skill-names">
+              {dictionary.dictionary.flatMap((d) => [d.name, ...d.aliases]).map((name) => <option key={name} value={name} />)}
+            </datalist>
+          )}
+          <label className="exp-tools">도구 <span className="muted">— 프로그래밍 언어 · 소프트웨어 · 장비(쉼표로). 역량 태그와 따로 업무 이력 파일에 들어갑니다</span>
+            <input aria-label="도구" disabled={!editable} value={form.tools} placeholder="Python, SQL" onChange={(event) => set("tools", event.target.value)} />
+          </label>
           {item.materials.length > 0 && (
             <>
               <h3>재료 — ★성과 일지 · AI 응답 원문</h3>

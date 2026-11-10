@@ -59,6 +59,7 @@ PROMPT_HEAD = """[역할]
 8. "역할"에는 본인이 직접 한 일과 다른 주체(팀원, 외부 기업, AI 도구)가 한 일을 구분해 적습니다. 기록에 주체가 없으면 "확인_필요"에 "본인이 직접 수행했는지"를 적습니다.
 9. 과제 하나에서 경험이 여럿이면 블록도 여럿입니다. 블록 하나에 경험 하나.
 10. 사람 이름 · 부서명 · 라인 번호 · 사내 시스템명은 일반화합니다(예: "냉연 2라인" → "냉연 공정 라인"). 금액은 쓰지 않습니다.
+11. 역량은 [역량 목록]의 이름으로 씁니다. "개발 · 구축" 같은 넓은 말 대신 무엇을 잘했는지를 씁니다. 프로그래밍 언어 · 소프트웨어 이름(예: Python, SQL)은 역량에 쓰지 않습니다.
 
 [출력 형식]
 - 아래 모양의 블록만 출력합니다. 블록 밖에 설명을 쓰지 않습니다.
@@ -327,6 +328,7 @@ def merge(old: dict[str, Any], new: dict[str, Any], choose: dict[str, str] | Non
         out["lesson_source"] = new["lesson_source"]
     out["open_questions"] = _union(old.get("open_questions"), new.get("open_questions"))
     out["skills"] = _union(old.get("skills"), new.get("skills"), key=lambda s: (s.get("axis"), s.get("name")))
+    out["tools"] = _union(old.get("tools"), new.get("tools"))
     out["quants"] = _union(old.get("quants"), new.get("quants"), key=lambda q: (q.get("metric"), q.get("value")))
     out["evidences"] = _union(old.get("evidences"), new.get("evidences"), key=lambda e: (e.get("type"), e.get("text")))
     out["materials"] = _union(old.get("materials"), new.get("materials"))

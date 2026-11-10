@@ -13,7 +13,9 @@ from pydantic import BaseModel
 
 from .. import who
 from ..deps import get_db
+from ..services import experience_export as export_svc
 from ..services import experience_import as imp
+from ..services import skill_cleanup
 from ..services import experiences as svc
 
 router = APIRouter(prefix="/api/experiences", tags=["experiences"])
@@ -40,6 +42,7 @@ class ExperienceIn(BaseModel):
     lesson_source: str | None = None
     open_questions: list[str] | None = None
     skills: list[Any] | None = None
+    tools: list[str] | None = None
     quants: list[dict[str, Any]] | None = None
     evidences: list[dict[str, Any]] | None = None
     related: list[str] | None = None
@@ -87,6 +90,27 @@ class MergeIn(BaseModel):
 
 class RematchIn(BaseModel):
     person: str
+
+
+class ExportIn(BaseModel):
+    person: str
+    scope: str = "all"
+    start: str | None = None
+    end: str | None = None
+    ids: list[str] | None = None
+    structured: bool | None = None
+    ids_in: bool | None = None
+    money: bool | None = None
+    anonymize: bool | None = None
+    how: str = "저장"           # 저장 · 복사 — 기록용
+
+
+class CleanupIn(BaseModel):
+    actions: list[dict[str, Any]]
+
+
+class AnswerIn(BaseModel):
+    text: str
 
 
 class ImportIn(BaseModel):
@@ -204,6 +228,96 @@ def rematch(payload: RematchIn, request: Request, conn: sqlite3.Connection = Dep
     return svc.rematch_person(conn, _name(payload.person))
 
 
+# ── 역량 태그 정리함 (TODO 262 · 261 — 역량태그입력.md) ──────────────────────
+
+@router.get("/skills/unknown")
+def unknown_tags(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    _manager(request)
+    return {"items": skill_cleanup.unknown_tags(conn)}
+
+
+@router.post("/skills/cleanup")
+def cleanup_tags(payload: CleanupIn, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    _manager(request)
+    try:
+        return skill_cleanup.apply(conn, payload.actions)
+    except (svc.ExperienceError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/skills/prompt")
+def tag_prompt(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    _manager(request)
+    return skill_cleanup.tag_prompt(conn)
+
+
+@router.post("/skills/answer")
+def tag_answer(payload: AnswerIn, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """AI 의 `태그 | 맞출 곳` 답 → 제안(적용하지 않는다)."""
+    _manager(request)
+    return {"items": skill_cleanup.read_answer(conn, payload.text)}
+
+
+@router.post("/skills/suggest")
+def add_suggested(request: Request) -> dict:
+    _manager(request)
+    return skill_cleanup.add_suggested()
+
+
+# ── 업무 이력 파일 (TODO 262 · 5단계.md 3 ~ 5절) — 팀원 PC 는 자기 것만(⑥) ───────
+
+def _own(request: Request, person: str) -> str:
+    user = who.of(request)
+    name = _name(person)
+    if user.role == who.MEMBER and name != user.name:
+        raise HTTPException(status_code=403, detail="자기 업무 이력 파일만 내보낼 수 있습니다.")
+    return name
+
+
+@router.get("/export")
+def export_file(request: Request, person: str = Query(..., min_length=1, max_length=40), scope: str = "all",
+                start: str | None = None, end: str | None = None, ids: str | None = None,
+                structured: bool | None = None, ids_in: bool | None = None, money: bool | None = None,
+                anonymize: bool | None = None, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """업무 이력 파일 글 + 요약 · 경고. 만들기만 한다(저장 · 복사는 화면이 이 글 그대로)."""
+    name = _own(request, person)
+    try:
+        opt = export_svc.options({"scope": scope, "start": start, "end": end, "ids": (ids or "").split(",") if ids else [],
+                                  "structured": structured, "ids_in": ids_in, "money": money, "anonymize": anonymize})
+        return export_svc.render(conn, name, opt)
+    except svc.ExperienceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/export/log", status_code=201)
+def export_log(payload: ExportIn, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """저장 · 복사했을 때 한 줄 — 누가 · 언제 · 누구의 · 범위 · 옵션(내용 없음, 5단계.md ⑧)."""
+    name = _own(request, payload.person)
+    user = who.of(request)
+    try:
+        opt = export_svc.options(payload.model_dump())
+    except svc.ExperienceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result = export_svc.render(conn, name, opt)
+    from ..services import settings as settings_service
+
+    by = user.name or settings_service.current_author(None) or ""
+    export_svc.log(name, by, user.role, opt, len(result["ids"]), result["chars"], "복사" if payload.how == "복사" else "저장")
+    return {"logged": True}
+
+
+@router.get("/export/log")
+def export_log_rows(request: Request, person: str = Query(..., min_length=1, max_length=40)) -> dict:
+    return {"items": export_svc.log_rows(_own(request, person))}
+
+
+@router.get("/anonymize/candidates")
+def anonymize_candidates(request: Request, person: str = Query(..., min_length=1, max_length=40),
+                         conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    name = _own(request, person)
+    return {"items": export_svc.candidates(conn, name), **export_svc.anonymize_rules()}
+
+
 @router.get("/{experience_id}")
 def get_experience(experience_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     try:
@@ -244,9 +358,10 @@ def create_drafts(payload: DraftIn, conn: sqlite3.Connection = Depends(get_db)) 
 
 
 @router.patch("/{experience_id}")
-def update_experience(experience_id: str, payload: ExperienceIn, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def update_experience(experience_id: str, payload: ExperienceIn, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """고치기 — 팀원 PC 는 자기 경험의 초안 · 구조화만(미들웨어가 막고, 여기서는 상태를 빼고 "팀원이 고침" 을 남긴다)."""
     try:
-        return svc.update(conn, experience_id, payload.changes())
+        return svc.update(conn, experience_id, payload.changes(), member=who.of(request).role == who.MEMBER)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="그런 경험이 없습니다.") from exc
     except svc.ConflictError as exc:

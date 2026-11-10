@@ -19,7 +19,7 @@ DEFAULT_SKILLS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ('기술', '비전 AI 객체탐지', ('객체탐지', 'CNN', '머신비전', '비전 AI')),
     ('기술', '시계열 분석·이상탐지', ('시계열', '이상탐지', '센서 데이터 분석')),
     ('기술', '자연어 처리', ('NLP', '텍스트 분석')),
-    ('기술', '최적화·시뮬레이션', ('최적화', '시뮬레이터', '배합 최적화', '설비 운영 최적화')),
+    ('기술', '최적화·시뮬레이션', ('최적화', '시뮬레이터', '배합 최적화', '설비 운영 최적화', '운영 최적화', '생산계획 최적화')),
     ('기술', '예측 모델링', ('수요 예측', '재고 예측', '회귀')),
     ('기술', '데이터 파이프라인', ('ETL', '실시간 스트림', '데이터 수집')),
     ('기술', 'AI 인프라·플랫폼', ('GPU', 'HPC', 'MLOps', 'AI Lifecycle', '개발환경')),
@@ -35,7 +35,7 @@ DEFAULT_SKILLS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ('업무', '과제 포트폴리오 관리', ('포트폴리오 매니지먼트', '우선순위 선정')),
     ('업무', '교육 과정 설계', ('PBL', '러닝 패스', '커리큘럼')),
     ('업무', '프로세스 표준화', ('공통 프레임', '업무 표준')),
-    ('업무', '요구사항 관리', ('요구사항 정의', '현업 합의')),
+    ('업무', '요구사항 관리', ('요구사항 정의', '현업 합의', '현업 요구사항 분석', '사용자 요구사항 해결', '현업 VOC 분석')),
     ('업무', '제조 공정 이해', ('공정 지식', '도메인 이해')),
     ('업무', '품질 관리', ('품질 판정', '불량 관리')),
     ('업무', '그룹사·대외 협업', ('계열사 교류', '대외 발표', '산학 연계')),
@@ -58,11 +58,56 @@ DEFAULT_SKILLS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ('문제해결', '지표의 함정 발견', ('평가 오류 발견', '검증 설계')),
     ('문제해결', '병목 진단', ('병목 분석',)),
     ('문제해결', '실패 원인 분석', ('사후 분석', '교훈 도출')),
-    ('문제해결', '제약 우회', ('제약 극복', '대안 설계')),
+    ('문제해결', '제약 우회', ('제약 극복', '대안 설계', '현장 제약조건 반영')),
     ('문제해결', '우선순위 기준 수립', ('선별 기준', '판단 기준')),
     ('문제해결', '가설 검증·파일럿', ('선검증', 'PoC')),
-    ('문제해결', '도구 자체 구축', ('업무 도구 제작',)),
+    ('문제해결', '도구 자체 구축', ('업무 도구 제작', '업무 자동화')),
 )
+
+
+# TODO 261 — 실제 팀원의 태그에서 본 다른 이름(사용자 2026-11-10). 기본 사전에도 넣었고,
+# 이미 고친 사전에는 [추천 동의어 더하기]로 넣는다. 대표 이름이 사전에 없으면 건너뛴다.
+SUGGESTED_ALIASES: dict[str, tuple[str, ...]] = {
+    "최적화·시뮬레이션": ("운영 최적화", "생산계획 최적화"),
+    "요구사항 관리": ("현업 요구사항 분석", "사용자 요구사항 해결", "현업 VOC 분석"),
+    "제약 우회": ("현장 제약조건 반영",),
+    "도구 자체 구축": ("업무 자동화",),
+}
+
+
+def add_suggested(dictionary: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """[추천 동의어 더하기] — 고친 사전에 SUGGESTED_ALIASES 를 더한다. 이미 어느 항목이 쓰는 이름은 건너뛴다."""
+    taken = set(index(dictionary))
+    added = 0
+    out = []
+    for item in dictionary:
+        aliases = list(item.get("aliases") or [])
+        for alias in SUGGESTED_ALIASES.get(item["name"], ()):
+            if key(alias) not in taken and len(aliases) < ALIAS_MAX:
+                aliases.append(alias)
+                taken.add(key(alias))
+                added += 1
+        out.append({**item, "aliases": aliases})
+    return out, added
+
+
+def similar(name: str, dictionary: Iterable[dict[str, Any]], limit: int = 3) -> list[dict[str, str]]:
+    """사전에 없는 태그에 가까운 대표 역량 — 이름 · 동의어와 글자가 겹치는 정도(낱말이 같으면 더 높게)."""
+    import difflib
+
+    target = key(name)
+    words = {w for w in re.split(r"[\s·/,]+", name or "") if len(w) >= 2}
+    scored: list[tuple[float, str, str]] = []
+    for item in dictionary:
+        best = 0.0
+        for label in [item["name"], *(item.get("aliases") or [])]:
+            ratio = difflib.SequenceMatcher(None, target, key(label)).ratio()
+            shared = words & {w for w in re.split(r"[\s·/,]+", label) if len(w) >= 2}
+            best = max(best, ratio + 0.3 * len(shared))
+        if best >= 0.45:
+            scored.append((best, item["axis"], item["name"]))
+    scored.sort(key=lambda row: -row[0])
+    return [{"axis": axis, "name": name_} for _, axis, name_ in scored[:limit]]
 
 
 def default_dictionary() -> list[dict[str, Any]]:

@@ -44,8 +44,8 @@ EVIDENCE_TYPES = ("특허", "수상", "발표", "문서", "링크", "이미지")
 SOURCES = ("담당", "응답", "직접", "분해")
 SECTIONS = ("상황", "목표", "행동", "결과", "교훈", "확인 필요")
 META_ORDER = ["id", "person", "title", "project", "project_text", "affiliation", "start", "end", "role", "kind", "status",
-              "impact", "lesson_source", "skills", "quants", "evidences", "related", "materials", "source",
-              "acknowledged", "confirmed_at", "confirmed_by",
+              "impact", "lesson_source", "skills", "tools", "quants", "evidences", "related", "materials", "source",
+              "acknowledged", "confirmed_at", "confirmed_by", "edited_by_member_at",
               "created_at", "updated_at", "created_by", "schema"]
 TITLE_MAX = 120
 TEXT_MAX = 4000
@@ -202,8 +202,9 @@ def clean(data: dict[str, Any], stored: dict[str, Any] | None = None, opened: tu
         "impact": _text(merged.get("impact"), "영향", 500), "lesson": _text(merged.get("lesson"), "교훈"),
         "lesson_source": _text(merged.get("lesson_source"), "교훈 출처", 100),
         "open_questions": _lines(merged.get("open_questions"), "확인 필요"),
-        # 역량 사전에 맞춘다(4단계.md 2절) — 동의어는 대표 이름 · 사전의 축으로, 못 맞추면 그대로
-        "skills": skill_rules.match(_skills(merged.get("skills")), settings_service.skill_dictionary()),
+        # 역량 사전에 맞춘다(4단계.md 2절) — 동의어는 대표 이름 · 사전의 축으로, 못 맞추면 그대로.
+        # 261 — 팀의 기술 · 도구 목록에 있는 이름(Python · SQL …)은 역량이 아니라 도구 칸으로
+        **_skills_and_tools(merged),
         "quants": _quants(merged.get("quants")),
         "evidences": _evidences(merged.get("evidences")),
         "related": [item for item in _lines(merged.get("related"), "관련 경험") if ID_PATTERN.match(item)],
@@ -212,7 +213,39 @@ def clean(data: dict[str, Any], stored: dict[str, Any] | None = None, opened: tu
         "acknowledged": _acks(merged.get("acknowledged")),
         "confirmed_at": _text(merged.get("confirmed_at"), "확정한 때", 40) if status == "확정" else "",
         "confirmed_by": _text(merged.get("confirmed_by"), "확정한 사람", 40) if status == "확정" else "",
+        "edited_by_member_at": _text(merged.get("edited_by_member_at"), "팀원이 고친 때", 40),
     }
+
+
+def team_tools() -> set[str]:
+    """팀의 기술 · 도구 목록(모든 담당과 역할의 기술 · 도구, TODO 239) — 맞추기 열쇠로."""
+    from .. import db
+    from .. import schemas as rules
+
+    conn = db.connect()
+    try:
+        names = {name for row in conn.execute("SELECT skills FROM project_contribution WHERE skills IS NOT NULL AND skills != ''")
+                 for name in rules.split_list(row["skills"])}
+    finally:
+        conn.close()
+    return {skill_rules.key(name) for name in names if name}
+
+
+def _skills_and_tools(merged: dict[str, Any]) -> dict[str, Any]:
+    dictionary = settings_service.skill_dictionary()
+    known = skill_rules.index(dictionary)
+    tools = list(dict.fromkeys(_lines(merged.get("tools"), "도구")))
+    skills = []
+    team = None
+    for skill in skill_rules.match(_skills(merged.get("skills")), dictionary):
+        if skill_rules.key(skill["name"]) not in known:
+            team = team_tools() if team is None else team
+            if skill_rules.key(skill["name"]) in team:
+                if skill["name"] not in tools:
+                    tools.append(skill["name"])
+                continue
+        skills.append(skill)
+    return {"skills": skills, "tools": [_text(t, "도구", 60) for t in tools][:LIST_MAX]}
 
 
 def _acks(value: object) -> list[dict[str, str]]:
@@ -300,10 +333,11 @@ def read_file(path: Path) -> dict[str, Any]:
         "situation": sec.get("상황", ""), "goal": sec.get("목표", ""), "actions": as_list(sec.get("행동")),
         "result_qual": sec.get("결과", ""), "impact": str(meta.get("impact") or ""), "lesson": sec.get("교훈", ""),
         "lesson_source": str(meta.get("lesson_source") or ""), "open_questions": as_list(sec.get("확인 필요")),
-        "skills": meta.get("skills") or [], "quants": meta.get("quants") or [], "evidences": meta.get("evidences") or [],
+        "skills": meta.get("skills") or [], "tools": [str(t) for t in meta.get("tools") or []],
+        "quants": meta.get("quants") or [], "evidences": meta.get("evidences") or [],
         "related": meta.get("related") or [], "materials": meta.get("materials") or [], "source": str(meta.get("source") or ""),
         "acknowledged": meta.get("acknowledged") or [], "confirmed_at": str(meta.get("confirmed_at") or ""),
-        "confirmed_by": str(meta.get("confirmed_by") or ""),
+        "confirmed_by": str(meta.get("confirmed_by") or ""), "edited_by_member_at": str(meta.get("edited_by_member_at") or ""),
         "created_at": str(meta.get("created_at") or ""), "updated_at": str(meta.get("updated_at") or ""),
         "created_by": str(meta.get("created_by") or ""),
     }
@@ -329,14 +363,22 @@ def create(conn: sqlite3.Connection, data: dict[str, Any], status: str = "초안
     return experience_id
 
 
-def update(conn: sqlite3.Connection, experience_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+def update(conn: sqlite3.Connection, experience_id: str, updates: dict[str, Any], member: bool = False) -> dict[str, Any]:
+    """고치기. 팀원 보완(member — 5단계.md ⑦)은 상태를 바꾸지 못하고, 고친 때를 `edited_by_member_at` 에 남긴다."""
     path = file_path(conn, experience_id)
     stored = read_file(path)
+    if member:
+        if stored["status"] == "확정":
+            raise ExperienceError("확정한 경험은 팀장만 고칩니다.")
+        updates = {k: v for k, v in updates.items() if k != "status"}
     base = updates.pop("base_updated_at", None)
     if base and base != stored["updated_at"]:
         raise ConflictError("그사이 다른 곳에서 이 경험을 고쳤습니다 — 새로 불러온 뒤 다시 고쳐 주세요.")
     fields = clean({k: v for k, v in updates.items()
-                    if k not in ("id", "person", "source", "created_at", "created_by", "acknowledged", "confirmed_at", "confirmed_by")}, stored)
+                    if k not in ("id", "person", "source", "created_at", "created_by", "acknowledged", "confirmed_at", "confirmed_by",
+                                 "edited_by_member_at")}, stored)
+    if member:
+        fields["edited_by_member_at"] = now_iso()
     _write(path, experience_id, fields,
            {"created_at": stored["created_at"], "updated_at": now_iso(), "created_by": stored["created_by"]})
     reindex(conn)
@@ -465,7 +507,8 @@ def draft_fields(conn: sqlite3.Connection, person: str, project_id: str) -> dict
         "role": role, "kind": "업무", "situation": item["context"]["background"], "goal": item["context"]["goal"],
         "actions": [re.sub(r"^[-•·*]\s*", "", line).strip() for line in (item["did"] or "").splitlines() if line.strip()],
         "result_qual": "\n".join(results), "open_questions": questions, "quants": quants,
-        "skills": [{"axis": "기술", "name": name} for name in item["skills"]],
+        # 261 — 기술 · 도구는 역량 태그가 아니라 도구 칸으로
+        "tools": list(item["skills"]),
         "materials": [f"entry:{entry['id']} {entry['date']} {entry['title']}" for entry in item["star_entries"]],
         "source": "담당",
     }
@@ -576,7 +619,8 @@ def confirm(conn: sqlite3.Connection, experience_id: str, by: str = "") -> dict[
     if item["confirm_missing"]:
         raise ExperienceError("확정하려면 아래가 남았습니다: " + " / ".join(item["confirm_missing"]))
     who = by or settings_service.current_author(None) or ""
-    return _set_status(conn, experience_id, "확정", {"confirmed_at": now_iso(), "confirmed_by": who})
+    # 팀장이 확정하면 "팀원이 고침" 표시는 검토를 마친 것으로 지운다(이전 버전에 남음)
+    return _set_status(conn, experience_id, "확정", {"confirmed_at": now_iso(), "confirmed_by": who, "edited_by_member_at": ""})
 
 
 def unconfirm(conn: sqlite3.Connection, experience_id: str) -> dict[str, Any]:
@@ -608,10 +652,8 @@ def _rewrite_skills(conn: sqlite3.Connection, paths_: list[Path], change) -> lis
     for path in paths_:
         stored = read_file(path)
         skills = change(list(stored["skills"]))
-        if skills == stored["skills"]:
-            continue
         fields = clean({**stored, "skills": skills}, stored, opened=(stored["status"],))
-        if fields["skills"] == stored["skills"]:
+        if fields["skills"] == stored["skills"] and fields["tools"] == stored["tools"]:
             continue
         _write(path, stored["id"], fields, {"created_at": stored["created_at"], "updated_at": now_iso(), "created_by": stored["created_by"]})
         changed.append(stored["id"])
