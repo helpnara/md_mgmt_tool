@@ -6869,6 +6869,7 @@ async function main() {
   });
 
   await check("익명화 — 후보를 눌러 치환표에 더하면 이름이 바뀐다 (262)", async () => {
+    await page.locator(".export-flags label", { hasText: "근거 ID 넣기" }).locator("input").check();   // 앞 시험이 껐다
     await page.locator(".export-flags label", { hasText: "익명화" }).locator("input").check();
     await page.waitForTimeout(1200);
     const box = page.locator("[data-testid=anonymize]");
