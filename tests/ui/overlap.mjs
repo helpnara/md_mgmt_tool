@@ -105,6 +105,23 @@ const AUDIT = () => {
     if (!vis(el)) continue; const s = getComputedStyle(el);
     if (el.scrollWidth > el.clientWidth + 1 && s.textOverflow !== "ellipsis" && !/(auto|scroll)/.test(s.overflowX)) out.push({ kind: s.overflowX === "visible" ? "글자넘침" : "글자잘림", where: path(el), text: (el.innerText || "").trim().slice(0, 30), d: el.scrollWidth - el.clientWidth });
   }
+  // 체크박스 · 라디오가 잘리는 상자(overflow) 끝에 붙음 (TODO 265) — 체크하면 채움 · 포커스 테두리 끝이 깎여 보인다
+  for (const el of document.querySelectorAll('input[type="checkbox"], input[type="radio"]')) {
+    if (!vis(el)) continue;
+    const r = el.getBoundingClientRect();
+    for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) {
+      const st = getComputedStyle(e);
+      if (!/(auto|scroll|hidden|clip)/.test(st.overflowX + st.overflowY)) continue;
+      const c = e.getBoundingClientRect();
+      // 가로는 늘, 세로는 그 상자가 세로로 스크롤되지 않을 때만(스크롤로 가려진 줄은 잘림이 아니다)
+      const sides = [r.left - c.left - e.clientLeft, c.right - r.right];
+      if (e.scrollHeight <= e.clientHeight + 1) sides.push(r.top - c.top, c.bottom - r.bottom);
+      else if (r.bottom < c.top || r.top > c.bottom) break;
+      const gap = Math.min(...sides);
+      if (gap < 3) out.push({ kind: "체크박스잘림", where: path(el) + "  ⊂  " + path(e), text: (el.closest("label")?.innerText || el.getAttribute("aria-label") || "").trim().slice(0, 24), d: Math.round(gap * 10) / 10 });
+      break;
+    }
+  }
   // 카드 밖으로 나감
   for (const card of document.querySelectorAll("main .card")) {
     if (!vis(card)) continue; const cr = card.getBoundingClientRect();

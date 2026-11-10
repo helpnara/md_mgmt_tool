@@ -2787,6 +2787,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-fields dt { color: var(--muted); }
 .import-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .import-empty, .import-done { margin: 8px 0; }
+/* 265 — 체크박스가 든 스크롤 목록은 안쪽 여백을 둔다. 상자 끝에 붙으면 체크했을 때 채움 · 포커스 테두리의 끝이 깎여 보였다 */
+.import-projects, .export-pick { padding: 3px 4px; }
 /* 검색 고도화 1차 (TODO 254) — 종류 칩 · 정렬 · 읽은 조건 */
 .search-tools { display: flex; gap: 8px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 4px 0 8px; }
 .search-chips { display: flex; gap: 6px; flex-wrap: wrap; }
