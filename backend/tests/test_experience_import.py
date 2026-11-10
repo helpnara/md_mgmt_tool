@@ -392,3 +392,16 @@ def test_choices_mark_projects_without_experience(team):  # noqa: F811
     owner.post("/api/experiences/draft", json={"person": "가팀원", "projects": [pid]})
     after = owner.get("/api/experiences/prompt", params={"person": "가팀원"}).json()
     assert next(c for c in after["choices"] if c["id"] == pid)["has_experience"] is True
+
+
+def test_project_key_from_spec_v03(team):  # noqa: F811
+    """원본 스펙 v0.3 의 선택 키 `과제:` — 고른 과제 안이면 그 과제가 먼저, 미분류로 보지 않는다."""
+    owner, pid = team["owner"], team["shared"]
+    other = owner.post("/api/projects", json={"title": "다른 과제", "owners": ["가팀원"], "status": "in_progress",
+                                              "start_date": "2026-01-01"}).json()["id"]
+    text = _block(title="제목만으로는 모름").replace("제목: 제목만으로는 모름", f"과제: {other}\n제목: 제목만으로는 모름")
+    block = _read(owner, text, projects=[pid, other]).json()["blocks"][0]
+    assert (block["project"], block["project_reason"]) == (other, "key")
+    assert block["unknown"] == [] and not any("과제" in q for q in block["fields"]["open_questions"])
+    outside = _read(owner, text.replace(other, "2099-999"), projects=[pid, other]).json()["blocks"][0]
+    assert outside["project"] == "" and outside["project_reason"] == ""      # 고른 과제 밖의 번호는 믿지 않는다

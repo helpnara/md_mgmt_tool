@@ -23,7 +23,7 @@ const NO_BLOCK = "형식 블록이 없습니다. 프롬프트를 처음부터 �
 type Decisions = Record<number, ImportDecision>;
 
 /** 기본값의 근거 — 백엔드 `PROJECT_REASONS` · `ACTION_REASONS` 와 같은 말 (TODO 259) */
-const PROJECT_REASON: Record<string, string> = { continues: "AI 의 이어짐으로", single: "고른 과제가 하나라", title: "제목이 과제명과 닮아" };
+const PROJECT_REASON: Record<string, string> = { key: "블록의 과제 칸으로", continues: "AI 의 이어짐으로", single: "고른 과제가 하나라", title: "제목이 과제명과 닮아" };
 const ACTION_REASON: Record<string, string> = {
   continues: "AI 의 이어짐으로", draft: "이 과제의 담당 초안으로", shared: "같은 경험을 앞 블록이 가리켜 새 경험으로",
 };

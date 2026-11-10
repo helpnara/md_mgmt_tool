@@ -343,12 +343,16 @@ def _person_items(conn: sqlite3.Connection, person: str) -> dict[str, dict[str, 
 
 
 # 추정 근거 — 미리보기 · [실험 요약] 이 같은 이름을 쓴다(259)
-PROJECT_REASONS = {"continues": "이어짐", "single": "고른 과제 하나", "title": "제목", "": "못 잡음"}
+PROJECT_REASONS = {"key": "과제 칸", "continues": "이어짐", "single": "고른 과제 하나", "title": "제목", "": "못 잡음"}
 ACTION_REASONS = {"continues": "이어짐", "draft": "담당 초안", "shared": "같은 경험이 앞 블록에", "": "기본"}
 
 
-def _guess_project(fields: dict[str, Any], target: dict[str, Any] | None, projects: list[str], titles: dict[str, str]) -> tuple[str, str]:
-    """정할 것 ② — (과제, 근거). 이어짐 경험의 과제 → 고른 과제가 하나면 그것 → 제목이 과제명과 닮은 것 → 빈칸."""
+def _guess_project(fields: dict[str, Any], target: dict[str, Any] | None, projects: list[str], titles: dict[str, str],
+                   key: str = "") -> tuple[str, str]:
+    """정할 것 ② — (과제, 근거). 블록의 `과제:` 칸(원본 스펙 v0.3 선택 키, 고른 과제 안일 때) → 이어짐 경험의 과제 →
+    고른 과제가 하나면 그것 → 제목이 과제명과 닮은 것 → 빈칸."""
+    if key and key in projects:
+        return key, "key"
     if target and target.get("project"):
         return target["project"], "continues"
     if len(projects) == 1:
@@ -385,7 +389,7 @@ def plan(conn: sqlite3.Connection, person: str, result: ParseResult, projects: l
     for block in result.blocks:
         fields = block_fields(block)
         suggested = (block.continues or "").rstrip("?")
-        project, project_reason = _guess_project(fields, items.get(suggested), projects, titles)
+        project, project_reason = _guess_project(fields, items.get(suggested), projects, titles, block.get("과제").strip())
         action, target, action_reason = _default_target(block, project, items)
         if action == "이어서" and target in taken:
             action, action_reason = "새로", "shared"
