@@ -58,13 +58,16 @@ export default function ExperienceImport({ name }: { name: string }) {
   useEffect(() => setPageTitle(`${name} — AI 로 정리`), [name]);
   useEffect(() => {
     if (!manager) return;
+    let stale = false;   // 과제를 빨리 여러 번 바꾸면 늦게 온 옛 답이 새 글을 덮지 않게
     api
       .experiencePrompt(name, picked ?? undefined)
       .then((next) => {
+        if (stale) return;
         setPrompt(next);
         if (picked === null) setPicked(next.projects);
       })
-      .catch((error: Error) => notifyError(error.message));
+      .catch((error: Error) => { if (!stale) notifyError(error.message); });
+    return () => { stale = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, picked?.join(",")]);
 

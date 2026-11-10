@@ -6647,11 +6647,13 @@ async function main() {
     await screen.getByRole("button", { name: "전문 복사" }).click();
     await page.waitForTimeout(300);
     equal(await page.evaluate(() => navigator.clipboard.readText()), text, "복사한 글 = 보인 글");
-    await box.uncheck();
-    await page.waitForTimeout(600);
+    const boxes = screen.locator("input[type=checkbox]");
+    const was = [];
+    for (let i = 0; i < await boxes.count(); i++) was.push(await boxes.nth(i).isChecked());
+    for (let i = 0; i < was.length; i++) if (was[i]) { await boxes.nth(i).uncheck(); await page.waitForTimeout(400); }
+    await page.waitForTimeout(400);
     equal(await screen.locator('textarea[aria-label="경험 정리 프롬프트"]').inputValue(), "", "과제를 다 빼면 빈 글");
-    await box.check();
-    await page.waitForTimeout(600);
+    for (let i = 0; i < was.length; i++) if (was[i]) { await boxes.nth(i).check(); await page.waitForTimeout(400); }
   });
 
   await check("응답을 붙여 [읽기] → 블록 미리보기 → 저장하면 구조화, 상세에서 원문을 연다 (258)", async () => {
