@@ -47,6 +47,59 @@ def _manifest_path() -> Path:
     return get_settings().trash_dir / MANIFEST
 
 
+# ── 번호 장부 (TODO 264) ───────────────────────────────────────────────────────
+# 지운 번호를 다시 쓰지 않는 규칙(146 · 257)은 보관함 기록을 보고 셌다. 그런데 **보관함은 백업에 들어가지 않고**
+# (export._vault_files — 버린 것이라), [보관함 비우기]로도 사라진다. 그러면 백업에서 되살린 뒤 · 비운 뒤에
+# 지운 번호가 새 과제 · 접수 · 경험에 다시 나간다. 그래서 쓴 번호를 vault 의 `.numbers/used.jsonl` 에도 적는다 —
+# 이 폴더는 백업에 들어간다. 지울 때 한 줄씩 덧붙이고, 읽을 때 보관함 기록에만 있는 줄을 옮겨 적는다(이 기능 전에 지운 것).
+LEDGER_DIR = ".numbers"
+LEDGER = "used.jsonl"
+
+
+def _ledger_path() -> Path:
+    return get_settings().vault_dir / LEDGER_DIR / LEDGER
+
+
+def _ledger_add(rows: list[dict[str, str]]) -> None:
+    if not rows:
+        return
+    try:
+        path = _ledger_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError:
+        pass  # 장부를 못 적어도 지우기는 막지 않는다 — 보관함 기록이 아직 있다
+
+
+def _read_ledger() -> list[dict[str, str]]:
+    path = _ledger_path()
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict) and item.get("origin"):
+            rows.append(item)
+    return rows
+
+
+def used_origins() -> list[dict[str, str]]:
+    """쓴 번호의 자리(vault 상대 경로 · 종류) — 장부 + 보관함 기록. 보관함에만 있는 것은 장부에 옮겨 적는다."""
+    with _lock:
+        ledger = _read_ledger()
+        known = {row["origin"] for row in ledger}
+        missing = [{"at": str(item.get("at") or ""), "kind": str(item.get("kind") or ""), "origin": str(item["origin"])}
+                   for item in _read_manifest() if item.get("origin") and item["origin"] not in known]
+        unique = list({row["origin"]: row for row in missing}.values())
+        _ledger_add(unique)
+    return ledger + unique
+
+
 def record(
     kind: str,
     *,
@@ -78,6 +131,8 @@ def record(
         with _lock:
             with _manifest_path().open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            # 번호 장부에도(TODO 264) — 백업에서 되살리거나 보관함을 비워도 지운 번호가 남게
+            _ledger_add([{"at": entry["at"], "kind": kind, "origin": entry["origin"]}])
     except (OSError, ValueError):
         # 기록에 실패했다고 사용자의 삭제 동작을 되돌릴 이유는 없다.
         # 이 경우 아래 list_items() 가 '복구 정보 없음' 으로 보여 준다.
@@ -164,7 +219,7 @@ def trashed_projects() -> dict[str, str]:
 def used_experience_ids() -> set[str]:
     """보관함에 간 경험의 번호(TODO 257) — 다음 번호를 셀 때 지운 번호도 쓴 번호로 친다(접수 · 과제와 같은 규칙)."""
     found: set[str] = set()
-    for item in _read_manifest():
+    for item in used_origins():                # 장부 + 보관함(TODO 264)
         if item.get("kind") != "experience":
             continue
         stem = str(item.get("origin") or "").rsplit("/", 1)[-1].removesuffix(".md")
@@ -182,7 +237,7 @@ def used_folder_names(root: str) -> set[str]:
     어느 쪽이든 **쓰인 적 있는 번호**다.
     """
     names: set[str] = set()
-    for item in _read_manifest():
+    for item in used_origins():                # 장부 + 보관함(TODO 264)
         parts = str(item.get("origin") or "").split("/")
         if len(parts) >= 2 and parts[0] == root and parts[1]:
             names.add(parts[1])
