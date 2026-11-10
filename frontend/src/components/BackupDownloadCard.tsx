@@ -46,10 +46,12 @@ export default function BackupDownloadCard() {
   useEffect(() => {
     if (job?.state === "done" && fetched.current !== job.id) {
       fetched.current = job.id;
+      // 파일 이름은 서버의 Content-Disposition(UTF-8)을 따른다 — a.download 에 한글 이름을 주면 "download" 로 받는 브라우저가 있다
       const link = document.createElement("a");
       link.href = `/api/backup/jobs/${job.id}/file`;
-      link.download = job.filename;
+      document.body.appendChild(link);
       link.click();
+      link.remove();
       setMessage(`다 만들었습니다(${formatBytes(job.size)}) — 내려받기를 시작했습니다. 브라우저의 내려받기 표시에서 진행을 볼 수 있습니다.`);
     }
     if (job?.state === "cancelled") setMessage("그만두었습니다 — 만들던 파일은 지웠습니다.");

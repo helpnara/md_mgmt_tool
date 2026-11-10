@@ -6997,9 +6997,11 @@ async function main() {
     equal(await card.count(), 1, "전체 백업 카드");
     expect((await card.locator(".backup-estimate").innerText()).includes("예상 크기"), "예상 크기");
     const download = page.waitForEvent("download", { timeout: 30000 });
-    await card.getByRole("button", { name: "첨부 빼고 내려받기" }).click();
-    const got = await download;
-    expect(got.suggestedFilename().endsWith(".zip"), `받은 파일: ${got.suggestedFilename()}`);
+    const fileResponse = page.waitForResponse((r) => /\/api\/backup\/jobs\/[0-9a-f]+\/file$/.test(r.url()), { timeout: 30000 });
+    await card.getByRole("button", { name: /첨부 빼고 내려받기/ }).click();
+    await download;   // 헤드리스 브라우저는 이름을 "download" 로 적는다(예전 링크도 같다) — 이름은 서버 머리로 본다
+    const disposition = (await fileResponse).headers()["content-disposition"] || "";
+    expect(disposition.includes(".zip") && disposition.includes("UTF-8''"), `파일 이름 머리: ${disposition}`);
     await page.waitForTimeout(500);
     expect((await card.innerText()).includes("다 만들었습니다"), "다 만든 뒤 알림");
     await go("#/settings?tab=check");
