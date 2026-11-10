@@ -223,7 +223,7 @@ export interface SearchResults {
   truncated: { projects?: boolean; entries?: boolean; reports?: boolean; attachments?: boolean; intakes?: boolean; contributions?: boolean; activities?: boolean };
   query: string;
   /** 읽은 질의 (TODO 254) — 낱말 · 빼기 · 칸 · 종류 */
-  parsed?: { words: string[]; excludes: string[]; fields: Record<string, string[]>; kinds: string[] };
+  parsed?: { words: string[]; excludes: string[]; fields: Record<string, string[]>; kinds: string[]; synonyms?: Record<string, string[]> };
   /** 담당과 역할 · 회고 (TODO 254) */
   contributions?: { project_id: string; project_title: string; name: string; role: string; snippet: string }[];
   /** 팀원역량 기록 — 교육 · 행사 (TODO 254) */

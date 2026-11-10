@@ -6946,6 +6946,48 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
+  console.log("\n[71] 검색 2차 — 입력 중 미리보기 · 초성 · 띄어쓰기 무시 (TODO 254 2차)");
+
+  await check("머리줄 검색 칸 — 두 글자부터 미리보기, 누르면 그곳으로, Esc 로 접기 (254 2차)", async () => {
+    await go("#/projects");
+    await page.waitForTimeout(600);
+    const box = page.locator('input[aria-label="검색"]');
+    await box.click();
+    await box.fill("시제품");
+    await page.waitForTimeout(900);
+    const preview = page.locator("[data-testid=search-preview]");
+    equal(await preview.count(), 1, "미리보기가 펼쳐진다");
+    expect((await preview.locator(".search-preview-item").count()) >= 1, "결과 줄");
+    expect((await preview.locator(".search-preview-all").innerText()).includes("전체 결과 보기"), "전체 결과로");
+    await box.press("Escape");
+    equal(await preview.count(), 0, "Esc 로 접힌다");
+    await box.fill("시제품 ");
+    await page.waitForTimeout(900);
+    const first = page.locator("[data-testid=search-preview] .search-preview-item").first();
+    const href = await first.getAttribute("href");
+    await first.click();
+    await page.waitForTimeout(600);
+    expect(page.url().endsWith(href), `누르면 그곳으로: ${page.url()} / ${href}`);
+  });
+
+  await check("초성 · 띄어쓰기 무시로 찾는다 (254 2차)", async () => {
+    const title = (await api.get(`/api/projects/${seeded.projectA}`)).title;
+    const initials = title.replace(/\s+/g, "").slice(0, 3).split("").map((ch) => {
+      const code = ch.charCodeAt(0) - 0xac00;
+      return code >= 0 && code < 11172 ? "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"[Math.floor(code / 588)] : ch;
+    }).join("");
+    if (/^[ㄱ-ㅎ]{2,}$/.test(initials)) {
+      await go(`#/search?q=${encodeURIComponent(initials)}`);
+      await page.waitForTimeout(900);
+      expect((await page.locator(".search-results").innerText()).includes(title), `초성 ${initials} → ${title}`);
+    }
+    if (title.includes(" ")) {
+      await go(`#/search?q=${encodeURIComponent(title.replace(/\s+/g, ""))}`);
+      await page.waitForTimeout(900);
+      expect((await page.locator(".search-results").innerText()).includes(title), "붙여 써도 찾는다");
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

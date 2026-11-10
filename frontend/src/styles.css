@@ -2797,6 +2797,18 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .search-sort { flex-direction: row; align-items: center; gap: 6px; }
 .search-sort select { width: auto; }
 .search-conditions { margin: 0 0 8px; font-size: var(--fs-xs); }
+.search-box { position: relative; }
+.search-preview { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-3);
+  padding: 4px; max-height: 360px; overflow: auto; }
+.search-preview .muted { margin: 6px 8px; font-size: var(--fs-xs); }
+.search-preview-item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 0 6px; padding: 6px 8px; border-radius: var(--radius);
+  color: var(--text); text-decoration: none; font-size: var(--fs-sm); }
+.search-preview-item:hover, .search-preview-item:focus { background: var(--accent-soft); }
+.search-preview-kind { grid-row: span 2; align-self: center; font-size: var(--fs-xs); color: var(--accent-strong); font-weight: 600; }
+.search-preview-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-preview-sub { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-preview-all { padding: 6px 8px; border-top: 1px solid var(--border); margin-top: 2px; font-size: var(--fs-xs); color: var(--accent); text-decoration: none; }
 /* 5단계 — 업무 이력 파일 · 태그 정리함 · 도구 칸 (TODO 262) */
 .export-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (min-width: 1093px) {

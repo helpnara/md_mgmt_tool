@@ -134,6 +134,51 @@ def parse_query(text: str) -> dict:
     return {"words": words, "excludes": excludes, "fields": {k: v for k, v in fields.items() if k != "kind"}, "kinds": kinds}
 
 
+# ── 254 2차 — 띄어쓰기 무시 · 같은 말 · 초성 ────────────────────────────────────
+_CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+
+
+def chosung(text: str) -> str:
+    """한글 음절 → 첫소리(ㄱㅇㅅ), 그 밖의 글자는 그대로."""
+    out = []
+    for ch in text or "":
+        code = ord(ch) - 0xAC00
+        out.append(_CHO[code // 588] if 0 <= code < 11172 else ch)
+    return "".join(out)
+
+
+def is_chosung(word: str) -> bool:
+    return len(word) >= 2 and all("ㄱ" <= ch <= "ㅎ" for ch in word)
+
+
+def synonyms(word: str) -> list[str]:
+    """같은 말 — 역량 사전의 대표 이름 · 다른 이름이 낱말과 같으면 그 묶음 모두(TODO 254 2차). 낱말 그대로가 먼저."""
+    from ..experience import skills as skill_rules
+    from . import settings as settings_service
+
+    target = skill_rules.key(word)
+    if len(target) < 2:
+        return [word]
+    for entry in settings_service.skill_dictionary():
+        names = [entry["name"], *(entry.get("aliases") or [])]
+        if any(skill_rules.key(n) == target for n in names):
+            return list(dict.fromkeys([word, *names]))
+    return [word]
+
+
+def _flat(text: str) -> str:
+    return re.sub(r"\s+", "", (text or "").lower())
+
+
+def _hit(text: str, word: str) -> bool:
+    """한 낱말이 글에 있나 — 띄어쓰기를 무시하고(공정자동화 = 공정 자동화), 초성이면 첫소리로."""
+    if is_chosung(word):
+        return word in chosung(re.sub(r"\s+", "", text or ""))
+    low = (text or "").lower()
+    w = word.lower()
+    return w in low or (" " not in w and len(w) >= 2 and _flat(w) in _flat(low))
+
+
 def _status_codes(values: list[str]) -> set[str]:
     from ..config import STATUS_LABELS
 
@@ -141,11 +186,35 @@ def _status_codes(values: list[str]) -> set[str]:
     return {by_label.get(v, v) for v in values}
 
 
-def _matching(conn: sqlite3.Connection, kind: str, words: list[str], excludes: list[str]) -> list[str]:
-    """모든 낱말이 들어간 ref_id(첫 낱말의 순서) — 빼기 낱말이 든 것은 뺀다."""
+_SPACELESS = {
+    "project": "SELECT id AS ref_id, title, body FROM project",
+    "entry": "SELECT CAST(id AS TEXT) AS ref_id, title, body FROM entry",
+    "report": "SELECT CAST(id AS TEXT) AS ref_id, COALESCE(title, '') || ' ' || COALESCE(audience, '') AS title, body FROM report",
+}
+
+
+def _word_refs(conn: sqlite3.Connection, word: str, kind: str) -> list[str]:
+    """한 낱말의 ref_id — 지금 길(FTS · LIKE) + 띄어쓰기 무시 · 초성(TODO 254 2차). 같은 말은 부르는 쪽이 묶는다."""
+    if is_chosung(word):
+        return [r["ref_id"] for r in conn.execute(_SPACELESS[kind]) if _hit(r["title"] or "", word)]
+    refs, _ = _refs_for(conn, word, kind, BIG)
+    if " " not in word and len(word) >= 2:
+        seen = set(refs)
+        flat = _flat(word)
+        refs = refs + [r["ref_id"] for r in conn.execute(_SPACELESS[kind])
+                       if r["ref_id"] not in seen and flat in _flat((r["title"] or "") + " " + (r["body"] or ""))]
+    return refs
+
+
+def _matching(conn: sqlite3.Connection, kind: str, words: list[str], excludes: list[str],
+              groups: dict[str, list[str]] | None = None) -> list[str]:
+    """모든 낱말이 들어간 ref_id(첫 낱말의 순서) — 낱말마다 같은 말 중 하나면 된다. 빼기 낱말이 든 것은 뺀다."""
+    groups = groups or {}
     found: list[str] | None = None
     for word in words:
-        refs, _ = _refs_for(conn, word, kind, BIG)
+        refs: list[str] = []
+        for alt in groups.get(word, [word]):
+            refs += [r for r in _word_refs(conn, alt, kind) if r not in refs]
         keep = set(refs)
         found = refs if found is None else [r for r in found if r in keep]
     for word in excludes:
@@ -183,16 +252,17 @@ def _project_ok(fact: dict | None, fields: dict[str, list[str]], year: str | Non
     return True
 
 
-def _score(fact: dict, words: list[str]) -> int:
-    """관련도 — 낱말마다 제목 3 · 담당 · 태그 2 · 본문 1."""
+def _score(fact: dict, words: list[str], groups: dict[str, list[str]] | None = None) -> int:
+    """관련도 — 낱말마다 제목 3 · 담당 · 태그 2 · 본문 1(같은 말 중 하나라도)."""
+    groups = groups or {}
     score = 0
     for word in words:
-        w = word.lower()
-        if w in fact["title"].lower():
+        alts = groups.get(word, [word])
+        if any(_hit(fact["title"], w) for w in alts):
             score += 3
-        if any(w in x.lower() for x in fact["owners"] + fact["tags"]):
+        if any(_hit(x, w) for x in fact["owners"] + fact["tags"] for w in alts):
             score += 2
-        if w in fact["body"].lower():
+        if any(_hit(fact["body"], w) for w in alts):
             score += 1
     return score
 
@@ -213,6 +283,10 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None, sort:
         return empty
     wanted = set(parsed["kinds"] or GROUPS)
     first = words[0] if words else ""
+    # 같은 말(역량 사전) — 낱말마다 묶음. 화면의 "조건:" 줄 · 강조에 쓰라고 돌려준다
+    groups = {w: synonyms(w) for w in words if not is_chosung(w)}
+    parsed = {**parsed, "synonyms": {w: alts[1:] for w, alts in groups.items() if len(alts) > 1}}
+    empty = {**empty, "parsed": parsed}
     caps = {kind: (limit or KIND_LIMITS[kind]) for kind in KIND_LIMITS}
     facts = _project_facts(conn)
     truncated: dict[str, bool] = {}
@@ -220,14 +294,18 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None, sort:
     projects = []
     if "projects" in wanted:
         if words:
-            ids = _matching(conn, "project", words, excludes)
+            ids = _matching(conn, "project", words, excludes, groups)
+            # 초성은 담당 이름으로도(ㄱㅁㅈ → 김민준)
+            for word in (w for w in words if is_chosung(w)):
+                more = [pid for pid, f in facts.items() if any(_hit(o, word) for o in f["owners"]) and pid not in ids]
+                ids = (ids + more) if len(words) == 1 else ids
         else:
             drop = {r for w in excludes for r in _refs_for(conn, w, "project", BIG)[0]}
             ids = [pid for pid in facts if pid not in drop]
         ids = [pid for pid in ids if _project_ok(facts.get(pid), fields)]
         ids.sort(key=lambda pid: facts[pid]["updated_at"], reverse=True)
         if sort != "recent" and words:
-            ids.sort(key=lambda pid: -_score(facts[pid], words))   # 같은 점수 안에서는 최근 순이 남는다(안정 정렬)
+            ids.sort(key=lambda pid: -_score(facts[pid], words, groups))   # 같은 점수 안에서는 최근 순이 남는다(안정 정렬)
         truncated["projects"] = len(ids) > caps["project"]
         ids = ids[: caps["project"]]
         stages = stage_map(conn) if ids else {}  # 과제명 뒤 단계 띠 (TODO 175)
@@ -243,7 +321,7 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None, sort:
     # 진행일지 · 보고 — 낱말이 있을 때만(칸만으로 찾으면 너무 많다)
     entries = []
     if "entries" in wanted and words:
-        refs = _matching(conn, "entry", words, excludes)
+        refs = _matching(conn, "entry", words, excludes, groups)
         rows = []
         if refs:
             marks = ",".join("?" * len(refs))
@@ -260,7 +338,7 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None, sort:
     # 보고 문서. "그 회의체에 뭘 보고했더라" 를 상단 검색 하나로 답한다 (TODO 53).
     reports = []
     if "reports" in wanted and words:
-        refs = _matching(conn, "report", words, excludes)
+        refs = _matching(conn, "report", words, excludes, groups)
         rows = []
         if refs:
             marks = ",".join("?" * len(refs))
@@ -278,29 +356,28 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None, sort:
     attachments = []
     if "attachments" in wanted and words:
         cap = limit or ATTACHMENT_LIMIT
-        clause = " AND ".join(["a.orig_name LIKE ?"] * len(words) + ["a.orig_name NOT LIKE ?"] * len(excludes))
         rows = conn.execute(
-            f"SELECT a.id, a.project_id, a.orig_name, a.rel_path, a.size_bytes, p.title AS project_title FROM attachment a"
-            f" JOIN project p ON p.id = a.project_id WHERE {clause} ORDER BY a.rel_path",
-            [f"%{w}%" for w in words] + [f"%{w}%" for w in excludes]).fetchall()
-        rows = [r for r in rows if _project_ok(facts.get(r["project_id"]), fields)]
+            "SELECT a.id, a.project_id, a.orig_name, a.rel_path, a.size_bytes, p.title AS project_title FROM attachment a"
+            " JOIN project p ON p.id = a.project_id ORDER BY a.rel_path").fetchall()
+        rows = [r for r in rows if _all_words(r["orig_name"] or "", words, excludes, groups)
+                and _project_ok(facts.get(r["project_id"]), fields)]
         truncated["attachments"] = len(rows) > cap
         attachments = [{"id": r["id"], "project_id": r["project_id"], "project_title": r["project_title"],
                         "orig_name": r["orig_name"], "rel_path": r["rel_path"], "size_bytes": r["size_bytes"]} for r in rows[:cap]]
 
     intakes: list[dict] = []
     if "intakes" in wanted and words:
-        intakes, truncated["intakes"] = _intakes(conn, words, excludes, fields, limit or INTAKE_LIMIT)
+        intakes, truncated["intakes"] = _intakes(conn, words, excludes, fields, limit or INTAKE_LIMIT, groups)
 
     # 담당과 역할 · 회고 (254 A) — 역할 · 맡은 부분 · 내가 한 일 · 결과 · 기술 · 도구
     contributions: list[dict] = []
     if "contributions" in wanted and (words or fields.get("owner")):
-        contributions, truncated["contributions"] = _contributions(conn, words, excludes, fields, facts, limit or CONTRIBUTION_LIMIT)
+        contributions, truncated["contributions"] = _contributions(conn, words, excludes, fields, facts, limit or CONTRIBUTION_LIMIT, groups)
 
     # 팀원역량 기록 — 교육 · 행사 (254 A)
     activities: list[dict] = []
     if "activities" in wanted and (words or fields.get("owner")):
-        activities, truncated["activities"] = _activities(conn, words, excludes, fields, limit or ACTIVITY_LIMIT)
+        activities, truncated["activities"] = _activities(conn, words, excludes, fields, limit or ACTIVITY_LIMIT, groups)
 
     total = len(projects) + len(entries) + len(reports) + len(attachments) + len(intakes) + len(contributions) + len(activities)
     return {**empty, "projects": projects, "entries": entries, "reports": reports, "attachments": attachments,
@@ -309,12 +386,15 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None, sort:
             "truncated": {k: bool(v) for k, v in truncated.items()}}
 
 
-def _all_words(text: str, words: list[str], excludes: list[str]) -> bool:
+def _all_words(text: str, words: list[str], excludes: list[str], groups: dict[str, list[str]] | None = None) -> bool:
+    groups = groups or {}
     low = text.lower()
-    return all(w.lower() in low for w in words) and not any(w.lower() in low for w in excludes)
+    return (all(any(_hit(text, alt) for alt in groups.get(w, [w])) for w in words)
+            and not any(w.lower() in low for w in excludes))
 
 
-def _intakes(conn: sqlite3.Connection, words: list[str], excludes: list[str], fields: dict, cap: int) -> tuple[list[dict], bool]:
+def _intakes(conn: sqlite3.Connection, words: list[str], excludes: list[str], fields: dict, cap: int,
+             groups: dict[str, list[str]] | None = None) -> tuple[list[dict], bool]:
     """접수 건 — 번호·제목·요청 본문·과제리더·소속·태그를 훑는다 (TODO 144). 낱말이 모두 들어간 것(254).
 
     반년 뒤 "그 요청 어떻게 됐더라" 를 찾는 길이다. 반려·이관된 것도 찾아져야 한다 —
@@ -327,7 +407,7 @@ def _intakes(conn: sqlite3.Connection, words: list[str], excludes: list[str], fi
             "SELECT id, title, status, leader, leader_team, received_on, project_id, merged_into, body, tags"
             " FROM intake ORDER BY received_on DESC, id DESC"):
         text = " ".join(str(row[k] or "") for k in ("id", "title", "body", "leader", "leader_team", "tags"))
-        if not _all_words(text, words, excludes):
+        if not _all_words(text, words, excludes, groups):
             continue
         if any(v not in (row["leader"] or "") for v in fields.get("owner", [])):
             continue
@@ -342,13 +422,13 @@ def _intakes(conn: sqlite3.Connection, words: list[str], excludes: list[str], fi
     return out[:cap], len(out) > cap
 
 
-def _contributions(conn, words, excludes, fields, facts, cap) -> tuple[list[dict], bool]:
+def _contributions(conn, words, excludes, fields, facts, cap, groups=None) -> tuple[list[dict], bool]:
     out = []
     for row in conn.execute(
             "SELECT c.project_id, c.name, c.role, c.part, c.did, c.result, c.skills, p.title AS project_title"
             " FROM project_contribution c JOIN project p ON p.id = c.project_id ORDER BY c.project_id DESC, c.name"):
         text = " ".join(str(row[k] or "") for k in ("name", "role", "part", "did", "result", "skills"))
-        if not _all_words(text, words, excludes):
+        if not _all_words(text, words, excludes, groups):
             continue
         if any(v not in (row["name"] or "") for v in fields.get("owner", [])):
             continue
@@ -360,11 +440,11 @@ def _contributions(conn, words, excludes, fields, facts, cap) -> tuple[list[dict
     return out[:cap], len(out) > cap
 
 
-def _activities(conn, words, excludes, fields, cap) -> tuple[list[dict], bool]:
+def _activities(conn, words, excludes, fields, cap, groups=None) -> tuple[list[dict], bool]:
     out = []
     for row in conn.execute("SELECT id, person, date, kind, title, host, takeaway FROM activity ORDER BY date DESC, id DESC"):
         text = " ".join(str(row[k] or "") for k in ("person", "title", "host", "takeaway"))
-        if not _all_words(text, words, excludes):
+        if not _all_words(text, words, excludes, groups):
             continue
         if any(v not in (row["person"] or "") for v in fields.get("owner", [])):
             continue

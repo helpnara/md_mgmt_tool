@@ -472,8 +472,8 @@ export const api = {
     request<SpreadsheetPreview>(`/api/attachments/${attachmentId}/preview`),
   /** 첨부가 알려 준 미리보기 주소로 — 과제 첨부와 접수 첨부가 주소만 다르다 (TODO 138) */
   spreadsheetPreviewAt: (url: string) => request<SpreadsheetPreview>(url),
-  search: (query: string, sort: "relevance" | "recent" = "relevance") =>
-    request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}${sort === "recent" ? "&sort=recent" : ""}`),
+  search: (query: string, sort: "relevance" | "recent" = "relevance", limit?: number) =>
+    request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}${sort === "recent" ? "&sort=recent" : ""}${limit ? `&limit=${limit}` : ""}`),
   /** 이 문서의 이전 버전 (TODO 37-1). path 는 vault 기준 상대경로. */
   versions: (path: string) =>
     request<{ path: string; items: DocumentVersion[] }>(

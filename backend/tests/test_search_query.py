@@ -72,3 +72,38 @@ def test_contributions_and_activities_are_found(client):
     act = _find(client, "관리도")["activities"]
     assert act and act[0]["person"] == "이서연" and act[0]["title"] == "품질 데이터 분석 과정"
     assert _find(client, "관리도 종류:과제")["activities"] == []
+
+
+# ── 2차 — 띄어쓰기 무시 · 같은 말 · 초성 · 미리보기 (254 2차) ──────────────────
+def test_spaces_ignored_both_ways(client):
+    a = client.post("/api/projects", json={"title": "공정 자동화 시범", "body": "## 배경\n\n설비 데이터 수집\n"}).json()["id"]
+    b = client.post("/api/projects", json={"title": "품질자동화 검토"}).json()["id"]
+    assert [p["id"] for p in _find(client, "공정자동화")["projects"]] == [a]                # 붙여 써도
+    assert [p["id"] for p in _find(client, "품질 자동화")["projects"]] == [b]                # 띄어 써도(낱말 둘)
+    assert [p["id"] for p in _find(client, "데이터수집")["projects"]] == [a]                 # 본문도
+
+
+def test_synonyms_from_skill_dictionary(client):
+    client.post("/api/projects", json={"title": "요구사항 관리 체계 정비"})
+    found = _find(client, "VOC")
+    assert found["projects"] == []                                                           # VOC 는 사전에 없다
+    client.put("/api/settings", json={"skill_dictionary": [{"axis": "업무", "name": "요구사항 관리", "aliases": ["VOC 분석", "VOC"]}]})
+    found = _find(client, "VOC")
+    assert [p["title"] for p in found["projects"]] == ["요구사항 관리 체계 정비"]
+    assert found["parsed"]["synonyms"] == {"VOC": ["요구사항 관리", "VOC 분석"]}
+
+
+def test_chosung_finds_titles_and_owner_names(client):
+    client.put("/api/people", json={"people": [{"name": "김민준"}]})
+    a = client.post("/api/projects", json={"title": "출하 검사 자동 판정"}).json()["id"]
+    b = client.post("/api/projects", json={"title": "설비 점검", "owners": ["김민준"]}).json()["id"]
+    assert [p["id"] for p in _find(client, "ㅊㅎㄱㅅ")["projects"]] == [a]
+    assert [p["id"] for p in _find(client, "ㄱㅁㅈ")["projects"]] == [b]
+
+
+def test_preview_limit(client):
+    for n in range(6):
+        client.post("/api/projects", json={"title": f"미리보기 과제 {n}"})
+    found = client.get("/api/search", params={"q": "미리보기", "limit": 3}).json()
+    assert len(found["projects"]) == 3 and found["truncated"]["projects"] is True
+    assert client.get("/api/search", params={"q": "x", "limit": 0}).status_code == 422

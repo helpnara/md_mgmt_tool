@@ -60,7 +60,8 @@ export default function SearchResults({ query, meta, back }: { query: string; me
   if (!results) return <div className="app-loading">검색 중…</div>;
 
   const cut = Object.values(results.truncated ?? {}).some(Boolean);
-  const words = results.parsed?.words ?? [query];
+  // 강조 — 낱말과 같은 말(역량 사전, 254 2차)까지
+  const words = [...(results.parsed?.words ?? [query]), ...Object.values(results.parsed?.synonyms ?? {}).flat()];
   const counts: Record<string, number> = Object.fromEntries(
     GROUPS.map((g) => [g.key, ((results as unknown as Record<string, unknown[] | undefined>)[g.key] ?? []).length]),
   );
@@ -72,6 +73,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
         ...parsed.excludes.map((w) => `-${w}`),
         ...Object.entries(parsed.fields).flatMap(([key, values]) => values.map((v) => `${FIELD_LABELS[key] ?? key}:${v}`)),
         ...parsed.kinds.map((k) => `종류:${GROUPS.find((g) => g.key === k)?.label ?? k}`),
+        ...Object.entries(parsed.synonyms ?? {}).map(([w, alts]) => `${w} = ${alts.join(" · ")}`),
       ]
     : [];
 

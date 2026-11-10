@@ -20,6 +20,7 @@ import PersonHistory from "./components/PersonHistory";
 import ExperienceDetail from "./components/ExperienceDetail";
 import ExperienceImport from "./components/ExperienceImport";
 import ExperienceExport from "./components/ExperienceExport";
+import SearchPreview from "./components/SearchPreview";
 import { confirmLeave, hasUnsaved, LEAVE_MESSAGE, migrateBrowserDrafts } from "./unsaved";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Toast from "./components/Toast";
@@ -124,6 +125,8 @@ export default function App() {
   const headerRef = useRef<HTMLElement>(null);
   // 검색 단축키 `/` (TODO 254 D) — 글 칸에서 친 / 는 그대로 둔다
   const searchRef = useRef<HTMLInputElement>(null);
+  // 입력 중 미리보기 (254 2차) — 칸에 있을 때만 펼친다
+  const [previewOpen, setPreviewOpen] = useState(false);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -332,6 +335,7 @@ export default function App() {
           className="search-box"
           onSubmit={(event) => {
             event.preventDefault();
+            setPreviewOpen(false);
             const query = term.trim();
             // 검색어를 비우고 누르면 검색을 그만두는 것이므로 과제 목록으로 돌려보낸다.
             window.location.hash = query ? `#/search?q=${encodeURIComponent(query)}` : "#/projects";
@@ -340,11 +344,15 @@ export default function App() {
           <input
             type="search"
             value={term}
-            onChange={(event) => setTerm(event.target.value)}
+            onChange={(event) => { setTerm(event.target.value); setPreviewOpen(true); }}
+            onFocus={() => setPreviewOpen(true)}
+            onBlur={() => setPreviewOpen(false)}
+            onKeyDown={(event) => { if (event.key === "Escape") setPreviewOpen(false); }}
             placeholder="검색 ( / ) — 낱말 여럿 · 담당:이름 · 태그: · 상태: · 연도:"
             aria-label="검색"
             ref={searchRef}
           />
+          <SearchPreview term={term} active={previewOpen && route.name !== "search"} onClose={() => setPreviewOpen(false)} />
           <button type="submit" className="ghost">
             검색
           </button>
