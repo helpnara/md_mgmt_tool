@@ -6658,6 +6658,13 @@ async function main() {
 
   await check("응답을 붙여 [읽기] → 블록 미리보기 → 저장하면 구조화, 상세에서 원문을 연다 (258)", async () => {
     const screen = page.locator("[data-testid=experience-import]");
+    // 과제 A 만 남긴다 — 고른 과제가 하나면 그 과제로 추정(3단계.md ②)
+    const labels = screen.locator(".import-projects label");
+    for (let i = 0; i < await labels.count(); i++) {
+      const box = labels.nth(i).locator("input");
+      const mine = (await labels.nth(i).innerText()).includes(seeded.projectA);
+      if ((await box.isChecked()) !== mine) { await box.setChecked(mine); await page.waitForTimeout(400); }
+    }
     await screen.locator('textarea[aria-label="AI 응답"]').fill(await readFile(join(FIX, "fenced.md"), "utf8"));
     await screen.getByRole("button", { name: "읽기", exact: true }).click();
     await page.waitForTimeout(1000);
