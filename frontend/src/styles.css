@@ -2787,4 +2787,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-fields dt { color: var(--muted); }
 .import-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .import-empty, .import-done { margin: 8px 0; }
+/* 체크 · 라디오는 글자 옆에 — 전역 label(세로) · input(width 100%)을 덮는다 */
+.import-projects label, .import-compare label, .import-actions label { flex-direction: row; min-width: 0; overflow-wrap: anywhere; font-size: inherit; color: inherit; }
+.import-compare label { display: flex; gap: 4px; align-items: flex-start; }
+.import-projects input, .import-compare input, .import-actions input { width: auto; flex: none; margin: 0; padding: 0; }
+.import-block-controls label { flex-direction: row; align-items: center; gap: 6px; font-size: inherit; color: inherit; }
+.import-block-controls select, .import-actions select { width: auto; }
 .import-done a { margin-right: 4px; }
