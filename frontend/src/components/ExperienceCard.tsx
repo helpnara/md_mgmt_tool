@@ -12,11 +12,16 @@ export function experienceLink(id: string): string {
   return `#/experience/${encodeURIComponent(id)}`;
 }
 
+/** AI 로 정리(응답 되받기) 주소 (TODO 258 · 3단계.md 6절) */
+export function experienceImportLink(name: string): string {
+  return `#/experience-import/${encodeURIComponent(name)}`;
+}
+
 /**
  * 사람별 이력의 [경험] 카드 (TODO 257 · 253 의 2단계 — 원본 UX S-04 를 줄여 옮김).
  *
  * 경험 = 과제 하나에서 나온 "상황 · 목표 · 행동 · 결과 · 교훈" 한 묶음. 2단계는 **초안**만 — 담당과 역할 · 회고에서 만들고 고친다.
- * 구조화(AI 응답 되받기)는 3단계, 확정은 4단계. 팀원 PC 는 자기 것을 보기만, 읽기 전용 공유 바깥에는 이 카드가 없다(면담과 같다).
+ * [AI 로 정리](응답 되받기 — TODO 258)로 구조화, 확정은 4단계. 팀원 PC 는 자기 것을 보기만, 읽기 전용 공유 바깥에는 이 카드가 없다(면담과 같다).
  */
 export default function ExperienceCard({
   name,
@@ -83,6 +88,10 @@ export default function ExperienceCard({
         <IconTitle icon={Award}>경험 {data?.total ?? 0}건</IconTitle>
         {manager && (
           <div className="person-tools">
+            <button onClick={() => { window.location.hash = experienceImportLink(name); }}
+              title="고른 과제의 기록으로 경험 정리 프롬프트를 만들고, 사내 AI 의 응답을 붙여 넣어 경험으로 저장합니다">
+              AI 로 정리
+            </button>
             <button className="ghost" onClick={() => void addBlank()}>+ 새 경험</button>
             <button className="ghost" disabled={busy || missing.length === 0} onClick={() => void draftAll()}
               title="회고가 있는 맡은 과제마다 초안 하나 — 이미 경험이 있는 과제는 건너뜁니다">
@@ -93,7 +102,7 @@ export default function ExperienceCard({
       </div>
       <CardIntro id="experiences">
         과제 하나에서 나온 <b>상황 · 목표 · 행동 · 결과 · 교훈</b> 한 묶음입니다. 담당과 역할 · 회고 · 과제 개요 · 효과 금액에서 <b>초안</b>을 만들고,
-        AI 로 다듬어 되받기(구조화)와 확정은 다음 단계에서 붙습니다. 통합 검색 · 과제 내보내기에는 들어가지 않습니다.
+        <b>[AI 로 정리]</b>에서 사내 AI 의 응답을 붙여 넣으면 <b>구조화</b>가 됩니다. 확정은 다음 단계에서 붙습니다. 통합 검색 · 과제 내보내기에는 들어가지 않습니다.
       </CardIntro>
       {notice && <p className="hint notice">{notice}</p>}
       {data && data.total > 0 && (

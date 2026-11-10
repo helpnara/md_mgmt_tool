@@ -1474,3 +1474,109 @@ export interface Experience {
   problems: ExperienceProblem[];
   confirm_missing: string[];
 }
+
+// ── 응답 되받기 (TODO 258 · 253 의 3단계) ───────────────────
+export interface ExperiencePromptChoice {
+  id: string;
+  title: string;
+  period: string;
+  retro: boolean;
+  structured: boolean;
+  default: boolean;
+}
+
+export interface ExperiencePrompt {
+  person: string;
+  text: string;
+  chars: number;
+  projects: string[];
+  existing: number;
+  choices: ExperiencePromptChoice[];
+}
+
+/** 블록을 경험 칸으로 옮긴 모양 — 미리보기의 [펼치기] · 칸 비교가 쓴다 */
+export interface ImportFields {
+  title: string;
+  start: string;
+  end: string;
+  role: string;
+  kind: string;
+  situation: string;
+  goal: string;
+  actions: string[];
+  result_qual: string;
+  impact: string;
+  lesson: string;
+  lesson_source: string;
+  open_questions: string[];
+  skills: ExperienceSkill[];
+  quants: ExperienceQuant[];
+  affiliation: string;
+  evidences: ExperienceEvidence[];
+}
+
+export type ImportAction = "새로" | "이어서" | "버림";
+
+export interface ImportBlock {
+  index: number;
+  first_line: number;
+  fields: ImportFields;
+  continues: string;
+  continues_known: boolean;
+  project: string;
+  action: ImportAction;
+  target: string;
+  counts: { open: number; quant: number; skill: number; action: number };
+  warnings: { code: string; message: string }[];
+  bad_lines: { line: number; text: string; reason: string }[];
+  unknown: string[];
+}
+
+/** 이어 붙일 수 있는 경험 — 칸 비교용 값(기간은 "시작 ~ 끝" 한 칸) */
+export interface ImportTarget {
+  id: string;
+  title: string;
+  project: string;
+  status: string;
+  source: string;
+  touched: boolean;
+  [field: string]: string | boolean;
+}
+
+export interface ImportPreview {
+  response: string;
+  person: string;
+  projects: string[];
+  blocks: ImportBlock[];
+  notice: string;
+  found_fence: boolean;
+  duplicates: [number, number][];
+  outside_lines: number;
+  stripped_markers: number;
+  stripped_controls: number;
+  chars: number;
+  lines: number;
+  bad_count: number;
+  unknown_count: number;
+  targets: ImportTarget[];
+  project_choices: { id: string; title: string }[];
+}
+
+export interface ImportDecision {
+  index: number;
+  action: ImportAction;
+  target?: string;
+  project?: string;
+  choose?: Record<string, "old" | "new">;
+}
+
+export interface ExperienceResponseFile {
+  name: string;
+  person: string;
+  created_at: string;
+  created_by: string;
+  projects: string[];
+  blocks: number;
+  saved: string[];
+  text: string;
+}

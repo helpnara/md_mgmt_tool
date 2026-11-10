@@ -164,15 +164,16 @@ def _evidences(value: object) -> list[dict[str, str]]:
     return out[:LIST_MAX]
 
 
-def clean(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dict[str, Any]:
-    """들어온 값을 저장할 모양으로. 바뀌지 않는 칸(id · 사람 · 만든 때 · 출처)은 stored 를 따른다."""
+def clean(data: dict[str, Any], stored: dict[str, Any] | None = None, opened: tuple[str, ...] = STAGE2_STATUSES) -> dict[str, Any]:
+    """들어온 값을 저장할 모양으로. 바뀌지 않는 칸(id · 사람 · 만든 때 · 출처)은 stored 를 따른다.
+    `opened` — 이 길로 바꿀 수 있는 상태. 고치기(PATCH)는 초안만, 응답 되받기(3단계)는 구조화까지."""
     base = stored or {}
     merged = {**base, **data}
     status = _text(merged.get("status"), "상태", 10) or "초안"
     if status not in STATUSES:
         raise ExperienceError(f"상태는 {' · '.join(STATUSES)} 중 하나입니다.")
-    if status not in STAGE2_STATUSES and status != base.get("status"):
-        raise ExperienceError("구조화는 AI 응답 되받기(3단계), 확정은 정합성 검사와 함께(4단계)에서 엽니다 — 지금은 초안만.")
+    if status not in opened and status != base.get("status"):
+        raise ExperienceError("구조화는 [AI 로 정리](응답 되받기)로만, 확정은 정합성 검사와 함께(4단계)에서 엽니다.")
     kind = _text(merged.get("kind"), "구분", 10)
     if kind and kind not in KINDS:
         raise ExperienceError(f"구분은 {' · '.join(KINDS)} 중 하나입니다.")
@@ -295,8 +296,9 @@ def _write(path: Path, experience_id: str, fields: dict[str, Any], stamps: dict[
 
 # ── 쓰기 ──────────────────────────────────────────────────────────────────────
 
-def create(conn: sqlite3.Connection, data: dict[str, Any]) -> str:
-    fields = clean({**data, "status": "초안"})
+def create(conn: sqlite3.Connection, data: dict[str, Any], status: str = "초안") -> str:
+    """새 경험. 상태는 초안 — 응답 되받기(3단계)만 `구조화` 로 만든다."""
+    fields = clean({**data, "status": status}, opened=(status,))
     experience_id = next_id()
     directory = person_dir(fields["person"])
     directory.mkdir(parents=True, exist_ok=True)
@@ -320,6 +322,17 @@ def update(conn: sqlite3.Connection, experience_id: str, updates: dict[str, Any]
     reindex(conn)
     conn.commit()
     return get(conn, experience_id)
+
+
+def replace(conn: sqlite3.Connection, experience_id: str, fields: dict[str, Any], status: str) -> None:
+    """응답 되받기의 "이어서" — 합친 칸 전부로 다시 쓴다(만든 때 · 만든 사람 · 출처는 그대로). 커밋은 부르는 쪽."""
+    path = file_path(conn, experience_id)
+    stored = read_file(path)
+    cleaned = clean({**{k: v for k, v in fields.items() if k not in ("id", "person", "source", "created_at", "created_by")},
+                     "status": status}, stored, opened=(status,))
+    _write(path, experience_id, cleaned,
+           {"created_at": stored["created_at"], "updated_at": now_iso(), "created_by": stored["created_by"]})
+    reindex(conn)
 
 
 def delete(conn: sqlite3.Connection, experience_id: str) -> None:
@@ -356,6 +369,9 @@ def move_person(conn: sqlite3.Connection, old: str, new: str) -> int:
             paths.move(path, target)
             versions.follow(path, target)
             emptied.add(path.parent)
+    from .experience_import import move_responses
+
+    move_responses(old, new)   # 응답 원문(3단계)도 함께 — 남으면 옛 폴더가 지워지지 않는다
     for folder in emptied:
         for candidate in (folder, folder.parent):
             try:

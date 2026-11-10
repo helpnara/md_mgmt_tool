@@ -4,7 +4,7 @@ import { api } from "../api";
 import { isManager } from "../me";
 import { notifyError } from "../notify";
 import { personLink, projectLink, setPageTitle } from "../nav";
-import type { Experience, ExperienceQuant, ExperienceSkill } from "../types";
+import type { Experience, ExperienceQuant, ExperienceResponseFile, ExperienceSkill } from "../types";
 import IconTitle from "./IconTitle";
 import { useEditedUnsaved } from "../util";
 
@@ -29,7 +29,8 @@ const lines = (text: string) => text.split("\n").map((line) => line.trim()).filt
 /**
  * 경험 상세 (TODO 257 · 253 의 2단계 — 원본 UX S-05 의 2단계 몫).
  *
- * 2단계는 **초안**을 고친다. [확정하기] · 정합성 경고(4단계)와 AI 응답 붙여넣기(3단계)는 자리만 둔다.
+ * 초안 · 구조화를 고친다(구조화는 고쳐도 구조화 — 3단계.md ⑨). [확정하기] · 정합성 경고(4단계)는 자리만 둔다.
+ * 응답 되받기(TODO 258)로 만든 경험은 재료에 **AI 응답 원문**이 걸린다 — 눌러서 읽기 전용으로 본다.
  * 확인 필요는 본문 위(원본 원칙 4) — 남아 있으면 확정할 수 없다는 것을 늘 보이게.
  */
 export default function ExperienceDetail({ id }: { id: string }) {
@@ -38,6 +39,7 @@ export default function ExperienceDetail({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [raw, setRaw] = useState<ExperienceResponseFile | null>(null);
   const editable = isManager();
 
   useEffect(() => {
@@ -56,6 +58,14 @@ export default function ExperienceDetail({ id }: { id: string }) {
 
   if (error) return <section className="experience-detail"><div className="card"><p className="error">{error}</p></div></section>;
   if (!item || !form) return <section className="experience-detail"><p className="muted">불러오는 중…</p></section>;
+
+  async function openRaw(name: string) {
+    try {
+      setRaw(await api.experienceResponse(item!.person, name));
+    } catch (err) {
+      notifyError((err as Error).message);
+    }
+  }
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm({ ...form, [key]: value });
   const setQuant = (index: number, patch: Partial<ExperienceQuant>) =>
@@ -114,7 +124,9 @@ export default function ExperienceDetail({ id }: { id: string }) {
           {" "}· 만든 때 {item.created_at.slice(0, 10)}{item.created_by ? ` (${item.created_by})` : ""} · 출처 {item.source}
         </p>
         <p className="hint experience-stage">
-          지금은 <b>초안</b> 단계입니다 — AI 로 다듬어 붙여 넣는 [응답 되받기]와 [확정하기]는 다음 단계에서 붙습니다.
+          {item.status === "초안"
+            ? <>지금은 <b>초안</b>입니다 — 사람별 이력의 [경험] 카드에서 <b>[AI 로 정리]</b>로 다듬어 붙이면 <b>구조화</b>가 됩니다.</>
+            : <>AI 응답을 읽어 채운 <b>{item.status}</b> 경험입니다 — 고쳐도 상태는 그대로이고, [확정하기]는 다음 단계에서 붙습니다.</>}
           {item.confirm_missing.length > 0 && <> 확정하려면: {item.confirm_missing.join(" / ")}</>}
         </p>
       </div>
@@ -217,10 +229,30 @@ export default function ExperienceDetail({ id }: { id: string }) {
           {editable && <button type="button" className="ghost small" onClick={() => set("skills", [...form.skills, { axis: "기술", name: "" }])}>+ 역량 태그</button>}
           {item.materials.length > 0 && (
             <>
-              <h3>재료 — ★성과 일지</h3>
+              <h3>재료 — ★성과 일지 · AI 응답 원문</h3>
               <ul className="exp-materials">
-                {item.materials.map((text) => <li key={text}>{text.replace(/^entry:\d+\s*/, "")}</li>)}
+                {item.materials.map((text) =>
+                  text.startsWith("response:") ? (
+                    <li key={text}>
+                      <button type="button" className="link-button" data-response={text.slice(9)} onClick={() => void openRaw(text.slice(9))}>
+                        AI 응답 원문 {text.slice(9)}
+                      </button>
+                    </li>
+                  ) : (
+                    <li key={text}>{text.replace(/^entry:\d+\s*/, "")}</li>
+                  ),
+                )}
               </ul>
+              {raw && (
+                <div className="exp-raw" data-testid="experience-raw">
+                  <div className="exp-raw-head">
+                    <b>AI 응답 원문 {raw.name}</b>
+                    <span className="muted">고치지 않습니다</span>
+                    <button type="button" className="ghost small" onClick={() => setRaw(null)}>닫기</button>
+                  </div>
+                  <pre>{raw.text}</pre>
+                </div>
+              )}
             </>
           )}
           {item.evidences.length > 0 && (

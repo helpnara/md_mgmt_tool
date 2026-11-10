@@ -6627,6 +6627,99 @@ async function main() {
     expect(trash.some((item) => item.kind === "experience"), "보관함에");
   });
 
+  console.log("\n[66] AI 로 정리 — 응답 되받기 (TODO 258)");
+  const FIX = join(REPO, "backend/tests/fixtures/experience");
+
+  await check("[AI 로 정리] → 프롬프트를 먼저 보이고, 이름 · 금액은 없고, 복사된다 (258)", async () => {
+    await go(`#/person/${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(800);
+    await page.locator("[data-testid=experience-card]").getByRole("button", { name: "AI 로 정리" }).click();
+    await page.waitForTimeout(1000);
+    expect(page.url().includes("#/experience-import/"), `정리 화면: ${page.url()}`);
+    const screen = page.locator("[data-testid=experience-import]");
+    const box = screen.locator(`input[type=checkbox]`).first();
+    expect(await box.isChecked(), "회고가 있는 과제가 처음부터 골라져 있다");
+    const text = await screen.locator('textarea[aria-label="경험 정리 프롬프트"]').inputValue();
+    expect(text.includes("형식: slow-way-experience/0.1") && text.includes(seeded.projectA), "블록 형식 · 과제 번호");
+    expect(!text.includes("권경락") && !text.includes("억원"), "팀원 이름 · 효과 금액은 넣지 않는다");
+    expect((await screen.innerText()).includes("사내 AI 로 갑니다"), "고정 문구");
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
+    await screen.getByRole("button", { name: "전문 복사" }).click();
+    await page.waitForTimeout(300);
+    equal(await page.evaluate(() => navigator.clipboard.readText()), text, "복사한 글 = 보인 글");
+    await box.uncheck();
+    await page.waitForTimeout(600);
+    equal(await screen.locator('textarea[aria-label="경험 정리 프롬프트"]').inputValue(), "", "과제를 다 빼면 빈 글");
+    await box.check();
+    await page.waitForTimeout(600);
+  });
+
+  await check("응답을 붙여 [읽기] → 블록 미리보기 → 저장하면 구조화, 상세에서 원문을 연다 (258)", async () => {
+    const screen = page.locator("[data-testid=experience-import]");
+    await screen.locator('textarea[aria-label="AI 응답"]').fill(await readFile(join(FIX, "fenced.md"), "utf8"));
+    await screen.getByRole("button", { name: "읽기", exact: true }).click();
+    await page.waitForTimeout(1000);
+    const preview = page.locator("[data-testid=import-preview]");
+    equal(await preview.locator(".import-block").count(), 2, "블록 둘");
+    expect((await preview.locator(".import-summary").innerText()).includes("블록 2"), "요약 줄");
+    equal(await preview.locator('select[aria-label="과제"]').first().inputValue(), seeded.projectA, "고른 과제가 하나면 그 과제");
+    await preview.getByRole("button", { name: "펼치기" }).first().click();
+    expect((await preview.locator(".import-fields").innerText()).includes("상황"), "[펼치기] 로 모든 칸");
+    await preview.getByRole("button", { name: /저장 — 2건/ }).click();
+    await page.waitForTimeout(1200);
+    const done = page.locator("[data-testid=import-done]");
+    expect((await done.innerText()).includes("경험 2건을 저장했습니다"), "저장 알림");
+    await done.locator("a").first().click();
+    await page.waitForTimeout(900);
+    const detail = page.locator(".experience-detail");
+    expect((await detail.locator(".experience-head").innerText()).includes("구조화"), "구조화 딱지");
+    await detail.locator("button[data-response]").click();
+    await page.waitForTimeout(600);
+    expect((await page.locator("[data-testid=experience-raw]").innerText()).includes("slow-way"), "재료에서 응답 원문");
+    await go(`#/person/${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(900);
+    expect((await page.locator(".experience-counts").innerText()).includes("구조화 2"), "카드의 상태별 수");
+  });
+
+  await check("이어서 저장 — 칸이 다르면 나란히, 사람이 고친 경험은 기존 값이 기본 (258)", async () => {
+    const base = await api.post("/api/experiences", { person: "권경락", title: "사람이 쓴 제목", situation: "사람이 쓴 상황" });
+    await go(`#/experience-import/${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(900);
+    const screen = page.locator("[data-testid=experience-import]");
+    await screen.locator('textarea[aria-label="AI 응답"]').fill(await readFile(join(FIX, "span_markers.md"), "utf8"));
+    await screen.getByRole("button", { name: "읽기", exact: true }).click();
+    await page.waitForTimeout(1000);
+    const block = page.locator(".import-block").first();
+    await block.getByRole("radio", { name: "기존 경험에 이어서" }).check();
+    await block.locator('select[aria-label="이어 붙일 경험"]').selectOption(base.id);
+    await page.waitForTimeout(300);
+    const title = block.locator('.import-compare tr[data-field="title"]');
+    equal(await title.count(), 1, "제목이 다르면 비교 줄");
+    expect(await title.locator("td").nth(1).locator("input").isChecked(), "사람이 고친 경험 — 기존 값이 기본");
+    await page.locator("[data-testid=import-preview]").getByRole("button", { name: /저장 — 1건/ }).click();
+    await page.waitForTimeout(1200);
+    const after = await api.get(`/api/experiences/${base.id}`);
+    equal(after.title, "사람이 쓴 제목", "제목은 그대로");
+    equal(after.status, "구조화", "상태는 구조화");
+    expect(after.materials.some((m) => m.startsWith("response:")), "원문이 재료에");
+  });
+
+  await check("블록이 없는 응답은 안내 + 원문은 남는다 · [실험 요약 복사]는 값을 담지 않는다 (258)", async () => {
+    await go(`#/experience-import/${encodeURIComponent("권경락")}`);
+    await page.waitForTimeout(900);
+    const screen = page.locator("[data-testid=experience-import]");
+    await screen.locator('textarea[aria-label="AI 응답"]').fill("죄송합니다. 지금은 비밀정리문장 을 정리할 수 없습니다.");
+    await screen.getByRole("button", { name: "읽기", exact: true }).click();
+    await page.waitForTimeout(900);
+    const preview = page.locator("[data-testid=import-preview]");
+    expect((await preview.innerText()).includes("형식 블록이 없습니다"), "블록 없음 안내");
+    await preview.getByRole("button", { name: "실험 요약 복사" }).click();
+    await page.waitForTimeout(400);
+    const summary = await page.evaluate(() => navigator.clipboard.readText());
+    expect(summary.startsWith("[실험 요약]") && summary.includes("블록 0"), `요약: ${summary}`);
+    expect(!summary.includes("비밀정리문장"), "응답 값은 담지 않는다");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

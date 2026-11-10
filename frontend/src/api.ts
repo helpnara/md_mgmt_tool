@@ -1,4 +1,4 @@
-import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing } from "./types";
+import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -232,6 +232,22 @@ export const api = {
     request<{ made: string[]; skipped: { project: string; reason: string }[] }>("/api/experiences/draft", {
       method: "POST", body: JSON.stringify({ person, projects }),
     }),
+  // ── 응답 되받기 (TODO 258) ──────────────────────────
+  experiencePrompt: (person: string, projects?: string[]) =>
+    request<ExperiencePrompt>(
+      `/api/experiences/prompt?person=${encodeURIComponent(person)}` +
+        (projects ? `&projects=${encodeURIComponent(projects.join(","))}` : ""),
+    ),
+  readExperienceResponse: (payload: { person: string; text: string; projects: string[]; append_to?: string }) =>
+    request<ImportPreview>("/api/experiences/read", { method: "POST", body: JSON.stringify(payload) }),
+  importExperiences: (payload: { person: string; response: string; items: ImportDecision[] }) =>
+    request<{ made: string[]; merged: string[]; dropped: number }>("/api/experiences/import", {
+      method: "POST", body: JSON.stringify(payload),
+    }),
+  experienceResponse: (person: string, name: string) =>
+    request<ExperienceResponseFile>(`/api/experiences/responses/${encodeURIComponent(person)}/${encodeURIComponent(name)}`),
+  experienceResponseSummary: (person: string, name: string) =>
+    request<{ text: string }>(`/api/experiences/responses/${encodeURIComponent(person)}/${encodeURIComponent(name)}/summary`),
   personHistory: (name: string) => request<PersonHistory>(`/api/person-history?name=${encodeURIComponent(name)}`),
   /** 나의 한 해 (TODO 244) */
   yearReview: (name: string, year: string) =>

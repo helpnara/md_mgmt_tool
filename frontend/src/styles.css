@@ -2748,3 +2748,43 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .experience-side h3 { font-size: var(--fs-sm); margin: 16px 0 6px; }
 .exp-materials { margin: 0; padding-left: 18px; font-size: var(--fs-sm); }
 .exp-stamps { margin-top: 16px; font-size: var(--fs-xs); }
+.link-button { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-align: left; }
+.exp-raw { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--neutral-0); }
+.exp-raw-head { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: var(--fs-xs); }
+.exp-raw-head button { margin-left: auto; }
+.exp-raw pre { margin: 0; padding: 8px 10px; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: var(--fs-xs); }
+/* AI 로 정리 — 응답 되받기 (TODO 258 · 원본 UX S-03 의 두 칸: 왼쪽 44 · 오른쪽 56) */
+.import-title { font-size: var(--fs-xl); margin: 4px 0 2px; }
+.import-steps { margin: 0 0 12px; font-size: var(--fs-sm); }
+.import-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 1093px) {
+  .import-columns { grid-template-columns: minmax(0, 44fr) minmax(0, 56fr); }
+}
+.import-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.import-left > .card, .import-columns > .card { margin: 0; }
+.import-projects { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow: auto; margin: 0 0 8px; font-size: var(--fs-sm); }
+.import-projects label { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.import-prompt { height: 300px; max-height: 360px; background: var(--neutral-0); }
+.import-note { margin: 6px 0; }
+.import-paste { width: 100%; min-height: 0; height: 180px; font-size: var(--fs-xs); }
+.import-summary { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 0 0 10px; font-size: var(--fs-sm); }
+.import-summary .warn { color: var(--warning-700); font-weight: 600; }
+.import-summary button { margin-left: auto; }
+.import-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 10px; background: var(--surface); min-width: 0; }
+.import-block.dropped { opacity: 0.55; }
+.import-block-head { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; overflow-wrap: anywhere; }
+.import-block-line { margin: 2px 0 6px; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.import-block-controls, .import-actions { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 6px 0; font-size: var(--fs-sm); }
+.import-block-controls select, .import-actions select { max-width: 100%; }
+.import-actions label { display: inline-flex; gap: 4px; align-items: center; }
+.import-compare { width: 100%; margin: 6px 0; font-size: var(--fs-xs); table-layout: fixed; }
+.import-compare td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+.import-compare th:first-child, .import-compare td:first-child { width: 72px; }
+.import-compare td.picked { background: var(--primary-50); }
+.import-block-foot { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 6px; font-size: var(--fs-xs); }
+.import-fields { margin: 8px 0 0; font-size: var(--fs-xs); }
+.import-fields > div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; padding: 3px 0; border-top: 1px dashed var(--border); }
+.import-fields dt { color: var(--muted); }
+.import-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.import-empty, .import-done { margin: 8px 0; }
+.import-done a { margin-right: 4px; }

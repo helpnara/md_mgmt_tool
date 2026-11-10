@@ -10,7 +10,7 @@
  */
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 const require = createRequire(import.meta.url);
@@ -54,7 +54,7 @@ const routes = [
   ["projects", "#/projects"], ["board", "#/projects?view=board"], ["detail", `#/projects/${ids[0]}`], ["detail-long", `#/projects/${ids[5]}`],
   ["report-editor", `#/projects/${ids[0]}?report=${draft2?.id}`], ["roadmap", "#/roadmap"], ["reports", "#/reports"], ["history", "#/history"],
   ["skills", "#/skills"], ["skills-records", `#/skills?tab=records&person=${encodeURIComponent(names[1])}`], ["skills-meetings", `#/skills?tab=meetings&person=${encodeURIComponent(names[1])}`],
-  ["person", `#/person/${encodeURIComponent(names[0])}`], ["experience", "#/experience/E-001"], ["search", `#/search?q=${encodeURIComponent("과제")}`], ["help", "#/help"],
+  ["person", `#/person/${encodeURIComponent(names[0])}`], ["experience", "#/experience/E-001"], ["experience-import", `#/experience-import/${encodeURIComponent(names[0])}`], ["search", `#/search?q=${encodeURIComponent("과제")}`], ["help", "#/help"],
   ...["", "class", "report", "forms", "backup", "check"].map((t) => [`settings-${t || "basic"}`, `#/settings${t ? `?tab=${t}` : ""}`]),
 ];
 const AUDIT = () => {
@@ -138,6 +138,15 @@ for (const width of [900, 1100, 1440, 1920]) {
     await btn.click().catch(() => {}); await page.waitForTimeout(700);
     for (const f of await page.evaluate(AUDIT)) all.push({ width, route: name, ...f });
   }
+  // AI 로 정리 — 미리보기 · 칸 비교가 찬 상태 (TODO 258)
+  await page.goto(`${BASE}/#/experience-import/${encodeURIComponent(names[0])}`); await page.reload(); await page.waitForTimeout(1300);
+  await page.locator('textarea[aria-label="AI 응답"]').fill(await readFile(join(REPO, "backend/tests/fixtures/experience/continued.md"), "utf8"));
+  await page.getByRole("button", { name: "읽기", exact: true }).click(); await page.waitForTimeout(1200);
+  const first = page.locator(".import-block").first();
+  await first.getByRole("radio", { name: "기존 경험에 이어서" }).check().catch(() => {}); await page.waitForTimeout(300);
+  for (const button of await page.getByRole("button", { name: "펼치기" }).all()) await button.click().catch(() => {});
+  await page.waitForTimeout(300);
+  for (const f of await page.evaluate(AUDIT)) all.push({ width, route: "experience-import+미리보기", ...f });
   await page.close();
 }
 const key = (f) => `${f.kind}|${f.route}|${f.where}|${f.text ?? ""}`;
