@@ -6516,6 +6516,18 @@ async function main() {
       const text = await page.evaluate(() => navigator.clipboard.readText());
       expect(text.startsWith("■ 2026년 — 권경락") && text.includes("맡은 과제"), `글: ${text.slice(0, 120)}`);
     });
+    await check("'나의 한 해' — 다음 해에 시작하는 과제가 있어도 처음엔 올해 (269)", async () => {
+      const next = await api.post("/api/projects", { title: "내년 시작 과제", owners: ["권경락"], status: "planned", start_date: "2027-02-01" });
+      try {
+        await go(`#/person/${encodeURIComponent("권경락")}`);
+        await page.reload(); await page.waitForSelector("[data-year-card] .year-stats", { timeout: 8000 });
+        const pick = page.locator("[data-year-card] .year-pick");
+        expect(await pick.locator('option[value="2027"]').count() === 1, "2027 도 고를 수 있다");
+        equal(await pick.inputValue(), "2026", "처음 값");
+      } finally {
+        if (next?.id) await fetch(`${BASE}/api/projects/${next.id}/archive`, { method: "POST" });
+      }
+    });
     await check("[STAR 정리 프롬프트] — 배경 · 목표 · 중간 성과 · 성과 후보 일지까지, 이름 · 금액은 없다 (244 B6)", async () => {
       await api.patch(`/api/projects/${(await api.get("/api/projects")).find((p) => p.title === "회고 시험 과제").id}`, { body: "## 배경\n\n월말 집계를 손으로 함\n\n## 목표\n\n- 주 30분 이하" });
       await page.reload(); await page.waitForSelector(".person-projects");

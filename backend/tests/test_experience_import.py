@@ -405,3 +405,40 @@ def test_project_key_from_spec_v03(team):  # noqa: F811
     assert block["unknown"] == [] and not any("과제" in q for q in block["fields"]["open_questions"])
     outside = _read(owner, text.replace(other, "2099-999"), projects=[pid, other]).json()["blocks"][0]
     assert outside["project"] == "" and outside["project_reason"] == ""      # 고른 과제 밖의 번호는 믿지 않는다
+
+
+# ── 270 — 프롬프트가 `과제:` 를 쓰게 하고, 섞인 값 · 이어짐과의 충돌을 다룬다 ───────────────
+def test_prompt_asks_for_project_key_before_title(team):  # noqa: F811
+    owner, pid = team["owner"], team["shared"]
+    _prepare(owner, pid)
+    text = owner.get("/api/experiences/prompt", params={"person": "가팀원"}).json()["text"]
+    assert "12. \"과제\"에는" in text
+    assert "이어짐:\n과제:\n제목:" in text                                         # 스펙 3.2 — 제목 앞
+
+
+def test_project_key_reads_id_inside_mixed_value(team):  # noqa: F811
+    owner, pid = team["owner"], team["shared"]
+    other = owner.post("/api/projects", json={"title": "다른 과제", "owners": ["가팀원"], "status": "in_progress",
+                                              "start_date": "2026-01-01"}).json()["id"]
+    for value in (f"다른 과제 ({other})", f"과제 2. {other}", f"[{other}]"):
+        text = _block(title="제목만으로는 모름").replace("제목: 제목만으로는 모름", f"과제: {value}\n제목: 제목만으로는 모름")
+        block = _read(owner, text, projects=[pid, other]).json()["blocks"][0]
+        assert (block["project"], block["project_reason"]) == (other, "key"), value
+    empty = _block(title="제목만으로는 모름").replace("제목: 제목만으로는 모름", "과제: 없음\n제목: 제목만으로는 모름")
+    assert _read(owner, empty, projects=[pid, other]).json()["blocks"][0]["project_reason"] == ""
+
+
+def test_sure_continuation_beats_project_key_and_warns(team):  # noqa: F811
+    owner, pid = team["owner"], team["shared"]
+    other = owner.post("/api/projects", json={"title": "다른 과제", "owners": ["가팀원"], "status": "in_progress",
+                                              "start_date": "2026-01-01"}).json()["id"]
+    draft = owner.post("/api/experiences/draft", json={"person": "가팀원", "projects": [pid]}).json()
+    eid = (draft.get("created") or draft.get("items") or [{}])[0].get("id") if isinstance(draft, dict) else None
+    eid = eid or owner.get("/api/experiences", params={"person": "가팀원"}).json()["items"][0]["id"]
+    text = _block(cont=eid).replace("제목: ", f"과제: {other}\n제목: ", 1)
+    block = _read(owner, text, projects=[pid, other]).json()["blocks"][0]
+    assert (block["project"], block["project_reason"]) == (pid, "continues")
+    assert any(w["code"] == "project_conflict" for w in block["warnings"])
+    # 물음표 이어짐이면 AI 가 적은 과제를 따른다
+    unsure = _read(owner, _block(cont=f"{eid}?").replace("제목: ", f"과제: {other}\n제목: ", 1), projects=[pid, other]).json()["blocks"][0]
+    assert (unsure["project"], unsure["project_reason"]) == (other, "key")

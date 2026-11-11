@@ -39,7 +39,9 @@ export function yearText(review: YearReview): string {
 export default function YearCard({ name, years }: { name: string; years: string[] }) {
   const thisYear = String(new Date().getFullYear());
   const choices = [...new Set([thisYear, ...years])].sort().reverse();
-  const [year, setYear] = useState(choices[0]);
+  // 처음엔 늘 올해 (TODO 269) — 다음 해에 시작하는 과제가 있어도 맨 위(가장 큰 해)가 아니라 오늘의 해. 사람을 바꾸면 다시 올해로
+  const [year, setYear] = useState(thisYear);
+  useEffect(() => setYear(thisYear), [name]); // eslint-disable-line react-hooks/exhaustive-deps
   const [review, setReview] = useState<YearReview | null>(null);
   const [copied, setCopied] = useState(false);
 

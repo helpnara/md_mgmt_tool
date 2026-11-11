@@ -60,6 +60,7 @@ PROMPT_HEAD = """[역할]
 9. 과제 하나에서 경험이 여럿이면 블록도 여럿입니다. 블록 하나에 경험 하나.
 10. 사람 이름 · 부서명 · 라인 번호 · 사내 시스템명은 일반화합니다(예: "냉연 2라인" → "냉연 공정 라인"). 금액은 쓰지 않습니다.
 11. 역량은 [역량 목록]의 이름으로 씁니다. "개발 · 구축" 같은 넓은 말 대신 무엇을 잘했는지를 씁니다. 프로그래밍 언어 · 소프트웨어 이름(예: Python, SQL)은 역량에 쓰지 않습니다.
+12. "과제"에는 이 경험이 나온 [기록]의 과제 번호(제목 뒤 괄호 안) 하나만 적습니다. 여러 과제에 걸치면 가장 중심이 된 과제 하나, 어느 과제인지 모르면 비워 둡니다.
 
 [출력 형식]
 - 아래 모양의 블록만 출력합니다. 블록 밖에 설명을 쓰지 않습니다.
@@ -72,6 +73,7 @@ PROMPT_HEAD = """[역할]
 ```slow-way
 형식: slow-way-experience/0.1
 이어짐:
+과제:
 제목:
 기간: YYYY-MM ~ YYYY-MM
 회사:
@@ -347,11 +349,26 @@ PROJECT_REASONS = {"key": "과제 칸", "continues": "이어짐", "single": "고
 ACTION_REASONS = {"continues": "이어짐", "draft": "담당 초안", "shared": "같은 경험이 앞 블록에", "": "기본"}
 
 
+def key_project(value: str, projects: list[str]) -> str:
+    """블록의 `과제:` 칸에서 **고른 과제의 번호**를 찾는다(TODO 270) — AI 가 "제목 (2026-001)" · "과제 1 2026-001" 처럼 적어도 읽는다.
+    고른 과제가 아니면 빈칸(다음 근거로). 번호가 둘 이상 들었으면 맨 앞의 것."""
+    value = (value or "").strip()
+    if not value or value in ("없음", "-"):
+        return ""
+    if value in projects:
+        return value
+    found = sorted(((value.find(pid), -len(pid), pid) for pid in projects if pid and pid in value))
+    return found[0][2] if found else ""
+
+
 def _guess_project(fields: dict[str, Any], target: dict[str, Any] | None, projects: list[str], titles: dict[str, str],
-                   key: str = "") -> tuple[str, str]:
-    """정할 것 ② — (과제, 근거). 블록의 `과제:` 칸(원본 스펙 v0.3 선택 키, 고른 과제 안일 때) → 이어짐 경험의 과제 →
-    고른 과제가 하나면 그것 → 제목이 과제명과 닮은 것 → 빈칸."""
-    if key and key in projects:
+                   key: str = "", sure: bool = False) -> tuple[str, str]:
+    """정할 것 ② — (과제, 근거). **확실한 이어짐 경험의 과제** → 블록의 `과제:` 칸(원본 스펙 v0.3 선택 키 · TODO 270 부터
+    프롬프트가 쓰게 함, 고른 과제 안일 때) → 물음표 이어짐 경험의 과제 → 고른 과제가 하나면 그것 → 제목이 과제명과 닮은 것 → 빈칸.
+    270 — 이어짐이 확실하면 그 경험의 과제를 먼저 믿는다(AI 가 고른 과제 중 엉뚱한 번호를 적어도 따라가지 않게). 둘이 다르면 미리보기가 알린다."""
+    if sure and target and target.get("project"):
+        return target["project"], "continues"
+    if key:
         return key, "key"
     if target and target.get("project"):
         return target["project"], "continues"
@@ -389,7 +406,9 @@ def plan(conn: sqlite3.Connection, person: str, result: ParseResult, projects: l
     for block in result.blocks:
         fields = block_fields(block)
         suggested = (block.continues or "").rstrip("?")
-        project, project_reason = _guess_project(fields, items.get(suggested), projects, titles, block.get("과제").strip())
+        key = key_project(block.get("과제"), projects)
+        sure = bool(block.continues) and not block.continues.endswith("?")
+        project, project_reason = _guess_project(fields, items.get(suggested), projects, titles, key, sure)
         action, target, action_reason = _default_target(block, project, items)
         if action == "이어서" and target in taken:
             action, action_reason = "새로", "shared"
@@ -399,7 +418,9 @@ def plan(conn: sqlite3.Connection, person: str, result: ParseResult, projects: l
             taken.add(target)
         out.append({"block": block, "fields": fields, "suggested": suggested, "known": bool(suggested and suggested in items),
                     "project": project, "project_reason": project_reason, "action": action, "target": target,
-                    "action_reason": action_reason})
+                    "action_reason": action_reason, "key_project": key,
+                    # 270 — AI 가 적은 과제와 이어지는 경험의 과제가 다르다(이어짐을 따랐다)
+                    "key_conflict": bool(key and project_reason == "continues" and project and key != project)})
     return out
 
 
@@ -415,6 +436,10 @@ def preview(conn: sqlite3.Connection, person: str, name: str, result: ParseResul
         role_note = role_warning(fields["role"])
         if role_note:
             warnings.append({"code": "role_subject", "message": role_note})
+        if row["key_conflict"]:
+            warnings.append({"code": "project_conflict",
+                             "message": f"AI 가 적은 과제({row['key_project']})와 이어지는 경험의 과제({project})가 다릅니다 — "
+                                        "이어지는 경험의 과제로 두었습니다. 맞는 과제를 골라 주세요."})
         blocks.append({
             "index": block.index, "first_line": block.first_line, "fields": fields,
             "continues": block.continues or "", "continues_known": row["known"],
