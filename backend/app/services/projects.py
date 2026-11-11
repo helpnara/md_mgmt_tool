@@ -221,11 +221,12 @@ def normalize_partners(value: object) -> list[dict]:
             team = str(row.get("team") or "").strip()
             people = activities_service.split_people(
                 row.get("people") if isinstance(row.get("people"), str) else None
-            ) or [
+            ) or list(dict.fromkeys(
+                # 281 — 목록으로 와도 칸 안의 쉼표는 나눈다(["김철수, 박민수"] → 둘)
                 name
-                for name in (str(item).strip() for item in (row.get("people") or []))
-                if name
-            ]
+                for item in (row.get("people") or [])
+                for name in activities_service.split_people(item)
+            ))
         else:
             continue
         team = str(team).strip()

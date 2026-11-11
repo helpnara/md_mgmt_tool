@@ -236,7 +236,10 @@ def _sync_partners(conn: sqlite3.Connection, project_id: str, partners: list[dic
         team = str(row.get("team") or "").strip()
         if not team:
             continue
-        people = [str(name).strip() for name in (row.get("people") or [])]
+        # 281 — 칸 하나에 "김철수, 박민수" 처럼 여럿을 적은 것도 사람마다 한 줄(쉼표 · 세미콜론 · 줄바꿈)
+        from ..services.activities import split_people
+
+        people = [name for cell in (row.get("people") or []) for name in split_people(cell)]
         for person in people or [""]:
             conn.execute(
                 "INSERT OR IGNORE INTO project_partner(project_id, team, person, position)"

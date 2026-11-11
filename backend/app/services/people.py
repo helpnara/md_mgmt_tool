@@ -43,18 +43,27 @@ def overview(conn: sqlite3.Connection) -> dict[str, Any]:
     }
     # 과제 담당 말고 이 이름이 적힌 기록 (TODO 275) — 면담 · 교육 · 경험 · 접수 리더 · 유관부서 담당.
     # 명부에서 이름을 고치거나 뺄 때 "기록이 남는다" 를 알리고, 명부에 없는 이름도 [통일]로 고칠 수 있게
+    # 281 — 한 칸에 쉼표로 여럿을 적은 이름("홍길동, 김철수")은 **사람마다** 센다(접수 리더 · 유관부서 담당자 등)
+    from .activities import split_people
+
     records: dict[str, int] = {}
     for sql in ("SELECT person AS name, COUNT(*) AS n FROM meeting GROUP BY person",
                 "SELECT person AS name, COUNT(*) AS n FROM activity GROUP BY person",
                 "SELECT person AS name, COUNT(*) AS n FROM experience GROUP BY person",
                 "SELECT leader AS name, COUNT(*) AS n FROM intake WHERE leader IS NOT NULL AND leader != '' GROUP BY leader",
+                "SELECT person AS name, COUNT(*) AS n FROM project_partner WHERE person != '' GROUP BY person",
                 "SELECT name, COUNT(*) AS n FROM project_contribution WHERE derived = 0 GROUP BY name"):
         try:
             for row in conn.execute(sql):
-                if row["name"]:
-                    records[row["name"]] = records.get(row["name"], 0) + row["n"]
+                for name in split_people(row["name"]):
+                    records[name] = records.get(name, 0) + row["n"]
         except sqlite3.Error:
             continue
+    split_used: dict[str, int] = {}
+    for name, count in used.items():
+        for one in split_people(name):
+            split_used[one] = split_used.get(one, 0) + count
+    used = split_used
     others = {name: n for name, n in records.items() if name not in names and name not in used}
     return {
         "people": [
@@ -194,16 +203,22 @@ def _rename_intake_leaders(conn: sqlite3.Connection, old: str, new: str, *, pool
     from ..config import INTAKE_POOL_STATUSES
     from . import intakes as intakes_service
 
-    sql, params = "SELECT id FROM intake WHERE leader = ?", [old]
+    # 281 — "홍길동, 김철수" 처럼 여럿이 적힌 리더 칸도 — 그 사람만 바꾸고 나머지는 그대로
+    from .activities import split_people
+
+    sql, params = "SELECT id, leader FROM intake WHERE leader LIKE ?", [f"%{old}%"]
     if pool_only:
         sql += f" AND status IN ({','.join('?' for _ in INTAKE_POOL_STATUSES)})"
         params.extend(INTAKE_POOL_STATUSES)
     count = 0
     for row in conn.execute(sql + " ORDER BY id", params).fetchall():
+        names = split_people(row["leader"])
+        if old not in names:
+            continue
         directory = intakes_service.intake_dir(conn, row["id"])
         request = directory / intakes_service.REQUEST_FILE
         doc = md.load(request)
-        doc.meta["leader"] = new
+        doc.meta["leader"] = ", ".join(_swap(names, old, new)) if len(names) > 1 else new
         doc.meta["updated_at"] = now_iso()
         md.save(request, doc)
         intakes_service.index_intake(conn, directory)

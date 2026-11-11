@@ -952,10 +952,16 @@ def promotion_plan(conn: sqlite3.Connection, intake_id: str) -> dict[str, Any]:
     team = (row["leader_team"] or "").strip()
     # 떠난 날이 아직 오지 않은 사람(전배 예정)은 그날까지 지금 있는 사람 (TODO 214 D8)
     active = settings_service.active_names()
-    leader_in_roster = bool(leader) and leader in active
-    owners = [leader] if leader_in_roster else []
-    partners = [] if leader_in_roster or not (leader or team) else [
-        {"team": team or "(소속 미기재)", "people": [leader] if leader else []}
+    # 281 — 리더 칸에 여럿("홍길동, 김철수")이면 사람마다: 명부에 있는 사람은 담당, 없는 사람은 유관부서 담당자로
+    from .activities import split_people
+
+    leaders = split_people(leader)
+    in_roster = [name for name in leaders if name in active]
+    outside = [name for name in leaders if name not in active]
+    leader_in_roster = bool(leaders) and not outside
+    owners = in_roster
+    partners = [] if not outside and (leaders or not team) else [
+        {"team": team or "(소속 미기재)", "people": outside}
     ]
     mapped = map_body(doc.body, intake_id, row["title"])
     return {

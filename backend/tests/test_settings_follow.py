@@ -127,3 +127,35 @@ def test_pool_marks_scores_made_under_old_criteria(team):  # noqa: F811
     row = next(i for i in owner.get("/api/intakes").json()["items"] if i["id"] == made["id"])
     assert row["precheck_stale"] is True
     assert items is None or items == items
+
+
+# ── 281 — 쉼표로 묶인 이름을 한 사람씩 ───────────────────────────────────────────
+def test_comma_joined_names_are_separate_people_in_unregistered(team):  # noqa: F811
+    owner = team["owner"]
+    _intake(owner, leader="홍길동, 김철수")
+    owner.post("/api/projects", json={"title": "유관 과제", "partners": [{"team": "설비팀", "people": ["박민수, 이영희"]}]})
+    names = {u["name"] for u in owner.get("/api/people").json()["unregistered"]}
+    assert {"홍길동", "김철수", "박민수", "이영희"} <= names
+    assert not any("," in n for n in names)
+
+
+def test_add_and_unify_touch_only_that_person(team):  # noqa: F811
+    owner = team["owner"]
+    made = _intake(owner, leader="홍길동, 김철수")
+    p = owner.post("/api/projects", json={"title": "유관 과제", "partners": [{"team": "설비팀", "people": "박민수, 이영희"}]}).json()
+    assert owner.post("/api/people", json={"name": "김철수"}).status_code in (200, 201)
+    names = {u["name"] for u in owner.get("/api/people").json()["unregistered"]}
+    assert "김철수" not in names and "홍길동" in names
+    out = owner.post("/api/people/rename", json={"old": "홍길동", "new": "홍길순"}).json()
+    assert out["counts"]["intakes"] == 1
+    assert owner.get(f"/api/intakes/{made['id']}").json()["leader"] == "홍길순, 김철수"
+    owner.post("/api/people/rename", json={"old": "이영희", "new": "이영이"})
+    partners = owner.get(f"/api/projects/{p['id']}").json()["partners"]
+    assert partners[0]["people"] == ["박민수", "이영이"]
+
+
+def test_promotion_splits_leaders_between_owners_and_partners(team):  # noqa: F811
+    owner = team["owner"]
+    made = _intake(owner, leader="가팀원, 외부사람", leader_team="생산팀")
+    plan = owner.get(f"/api/intakes/{made['id']}/promote").json()
+    assert plan["owners"] == ["가팀원"] and plan["partners"] == [{"team": "생산팀", "people": ["외부사람"]}]
