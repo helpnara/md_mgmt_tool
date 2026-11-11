@@ -87,3 +87,12 @@ def test_smart_type_cannot_be_removed(team):  # noqa: F811
     assert owner.put("/api/settings/project-types", json={"types": []}).status_code == 200
     from app.services import intakes
     assert intakes._promote_type() is None
+
+
+def test_pool_listing_carries_unlisted_values_for_remote_screens(team):  # noqa: F811
+    """접수 풀의 거르기 상자 — 옛 값은 접수 목록이 함께 준다(설정 끝점은 서버 PC 밖에서 막혀 있다)."""
+    owner, member = team["owner"], team["member"]
+    _intake(owner, nature="옛 성격")
+    assert owner.get("/api/intakes").json()["unlisted"]["nature"] == ["옛 성격"]
+    assert member.get("/api/settings/classifications/usage").status_code == 403
+    assert member.get("/api/intakes").json()["unlisted"]["nature"] == ["옛 성격"]

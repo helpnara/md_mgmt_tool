@@ -258,7 +258,12 @@ def list_intakes(
         "SELECT DISTINCT SUBSTR(received_on, 1, 4) AS y FROM intake WHERE received_on IS NOT NULL"
         " ORDER BY y DESC"
     )]
-    return {"items": items, "summary": svc.summary(conn), "teams": teams, "years": years}
+    # 275 — 접수에 적혀 있는데 설정 목록에 없는 옛 분류 값(거르기 상자에 함께). 설정 끝점은 서버 PC 밖에서 막혀 있어 여기로 준다
+    lists = settings_service.classifications()
+    unlisted = {key: [row["v"] for row in conn.execute(
+        f"SELECT DISTINCT TRIM({key}) AS v FROM intake WHERE {key} IS NOT NULL AND TRIM({key}) <> '' ORDER BY v")
+        if row["v"] not in lists[key]] for key in ("nature", "category")}
+    return {"items": items, "summary": svc.summary(conn), "teams": teams, "years": years, "unlisted": unlisted}
 
 
 @router.get("/api/intakes/next-id")

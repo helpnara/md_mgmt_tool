@@ -899,6 +899,8 @@ export interface IntakeDetail extends Intake {
 export interface IntakeListing {
   items: Intake[];
   summary: IntakeSummary;
+  /** 접수에 적혀 있는데 설정 목록에 없는 옛 분류 값 (TODO 275) */
+  unlisted?: Record<string, string[]>;
   teams: string[];
   years: string[];
 }
