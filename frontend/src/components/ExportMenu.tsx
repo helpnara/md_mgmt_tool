@@ -64,6 +64,11 @@ export default function ExportMenu({ projectId }: Props) {
     return () => window.clearInterval(timer);
   }, [making?.job, making?.finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 다 만들면 다음 내보내기의 표를 새로
+  useEffect(() => {
+    if (making?.finished) setNextJob(newJob());
+  }, [making?.finished]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!open) return;
     const onClick = (event: MouseEvent) => {
@@ -103,8 +108,8 @@ export default function ExportMenu({ projectId }: Props) {
                       event.preventDefault();   // 만드는 중에 또 누르지 않게
                       return;
                     }
+                    // 표는 여기서 바꾸지 않는다 — 바꾸면 브라우저가 따라가기 전에 링크가 새 표로 다시 그려져, 화면이 다른 표를 본다
                     setMaking({ job: nextJob, label: option.label, started: Date.now(), task: null, seen: false, finished: false });
-                    setNextJob(newJob());
                   }}
                 >
                   <strong>{option.label}</strong>
