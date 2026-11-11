@@ -247,6 +247,19 @@ def list_intakes(
     rows = conn.execute(f"SELECT i.* FROM intake i {clause} ORDER BY {order_by}", params).fetchall()
     stale_days = settings_service.intake_stale_days()
     items = [svc.serialize(row, stale_days) for row in rows]
+    # 276 ⑤ — 사전점검 항목 · 점수를 설정에서 고친 뒤에도 풀 목록이 옛 기준 점수를 표시 없이 보였다. 매긴 접수만 파일의 스냅샷을 지금 기준과 견준다
+    from ..services import precheck as precheck_service
+    from ..vault import markdown as md_files
+
+    current = precheck_service.definition()
+    for item in items:
+        item["precheck_stale"] = False
+        if item.get("precheck_rated"):
+            try:
+                doc = md_files.load(svc.intake_dir(conn, item["id"]) / svc.REQUEST_FILE)
+                item["precheck_stale"] = bool(precheck_service.summarize(doc.meta.get("precheck"), current)["stale"])
+            except Exception:  # noqa: BLE001 — 표시 하나 때문에 목록이 넘어지지 않게
+                pass
     if stale:
         # 묵힘은 날짜 셈이라 SQL 보다 여기서 가르는 편이 규칙이 한 곳에 모인다 (svc.is_stale)
         items = [item for item in items if item["stale"]]

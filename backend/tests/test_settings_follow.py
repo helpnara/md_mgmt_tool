@@ -96,3 +96,34 @@ def test_pool_listing_carries_unlisted_values_for_remote_screens(team):  # noqa:
     assert owner.get("/api/intakes").json()["unlisted"]["nature"] == ["옛 성격"]
     assert member.get("/api/settings/classifications/usage").status_code == 403
     assert member.get("/api/intakes").json()["unlisted"]["nature"] == ["옛 성격"]
+
+
+# ── 276 — 작은 보완 ──────────────────────────────────────────────────────────────
+def test_orphan_type_key_survives_editing_other_fields(team, tmp_path):  # noqa: F811
+    owner = team["owner"]
+    made = owner.post("/api/projects", json={"title": "옛 속성 과제", "type": "maintenance"}).json()
+    types = owner.get("/api/settings/project-types").json()["types"]
+    from app.services import settings as settings_service
+    settings_service.save({"project_types": [{"key": t["key"], "label": t["label"]} for t in types if t["key"] != "maintenance"]})
+    owner.post("/api/reindex")
+    assert owner.get(f"/api/projects/{made['id']}").json()["type"] is None
+    assert owner.patch(f"/api/projects/{made['id']}", json={"title": "옛 속성 과제 고침", "type": None}).status_code == 200
+    settings_service.save({"project_types": [{"key": t["key"], "label": t["label"]} for t in types]})
+    owner.post("/api/reindex")
+    assert owner.get(f"/api/projects/{made['id']}").json()["type"] == "maintenance"      # 되돌리니 살아났다
+
+
+def test_pool_marks_scores_made_under_old_criteria(team):  # noqa: F811
+    owner = team["owner"]
+    made = _intake(owner)
+    items = owner.get("/api/settings").json().get("precheck_items")
+    from app.services import precheck
+    first = precheck.definition()[0]
+    owner.put(f"/api/intakes/{made['id']}/precheck", json={"items": [{"group": first["group"], "item": first["item"], "choice": first["choices"][0][0]}]})
+    row = next(i for i in owner.get("/api/intakes").json()["items"] if i["id"] == made["id"])
+    assert row["precheck_stale"] is False
+    changed = [{**d, "choices": [[c[0], c[1] + 1] for c in d["choices"]]} for d in precheck.definition()]
+    assert owner.put("/api/settings", json={"precheck_items": changed}).status_code == 200
+    row = next(i for i in owner.get("/api/intakes").json()["items"] if i["id"] == made["id"])
+    assert row["precheck_stale"] is True
+    assert items is None or items == items

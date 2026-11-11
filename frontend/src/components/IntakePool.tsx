@@ -425,6 +425,9 @@ export default function IntakePool({ meta, query, onMetaChange }: Props) {
                       ) : (
                         <span className="muted">{DASH}</span>
                       )}
+                      {item.precheck_stale && (
+                        <span className="tag warn-tag precheck-stale" title="사전점검 항목 · 점수를 설정에서 고친 뒤입니다 — 이 점수는 옛 기준으로 매긴 것입니다(TODO 276)">옛 기준</span>
+                      )}
                     </td>
                     <td className="one-line">
                       <span className={`intake-status intake-${item.status}`}>{item.status_label}</span>

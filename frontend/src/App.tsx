@@ -268,6 +268,25 @@ export default function App() {
 
   useEffect(loadMeta, [loadMeta]);
 
+  // 276 ⑦ — 다른 PC(팀장 · 팀원 · 읽기)의 열린 화면은 설정이 바뀌어도 새로 고칠 때까지 옛 목록(속성 이름 · 분류 · 면담 구분)이었다.
+  // 창으로 돌아올 때(포커스 · 탭 보임) 메타만 다시 읽어 바뀌었으면 바꾼다 — 30초에 한 번까지, 설정 끝점은 부르지 않는다(바깥에서 막혀 있다)
+  useEffect(() => {
+    let last = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== "visible" || Date.now() - last < 30_000) return;
+      last = Date.now();
+      api.meta()
+        .then((loaded) => setMeta((now) => (now && JSON.stringify(now) === JSON.stringify(loaded) ? now : loaded)))
+        .catch(() => undefined);
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   // 브라우저 탭 제목 (TODO 169) — 과제 · 접수를 여러 탭으로 열어도 구분되게. 과제 · 접수 화면은
   // 제목을 알고 나서 스스로 고친다(pageTitle).
   useEffect(() => {

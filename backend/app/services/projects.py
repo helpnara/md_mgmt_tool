@@ -756,6 +756,12 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         raise ValueError(f"알 수 없는 상태: {updates['status']}")
     if updates.get("type") and updates["type"] not in settings_service.type_keys():
         raise ValueError(f"알 수 없는 속성: {updates['type']}")
+    # 276 ⑧ — 설정에서 사라진 속성 열쇠는 색인에서만 비운다(설정을 되돌리면 살아나게). 화면은 색인 값(없음)을 보내므로,
+    # 다른 칸을 고쳐 저장할 때 파일의 그 열쇠가 지워지지 않게 — "없음" 이 왔고 파일의 값이 목록에 없는 열쇠면 그대로 둔다
+    if "type" in updates and not updates["type"]:
+        stored_type = str(doc.meta.get("type") or "").strip()
+        if stored_type and stored_type not in settings_service.type_keys():
+            updates.pop("type")
 
     body = updates.pop("body", None)
     if body is not None and body != doc.body:

@@ -858,6 +858,8 @@ export interface Intake {
   precheck_rated: number | null;
   precheck_total: number | null;
   precheck_band: PrecheckBand | null;
+  /** 사전점검을 지금과 다른 기준으로 매겼나 (TODO 276 ⑤ — 목록에서만) */
+  precheck_stale?: boolean;
 }
 
 export interface IntakeLog {
