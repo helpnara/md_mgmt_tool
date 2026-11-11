@@ -61,6 +61,7 @@ PROMPT_HEAD = """[역할]
 10. 사람 이름 · 부서명 · 라인 번호 · 사내 시스템명은 일반화합니다(예: "냉연 2라인" → "냉연 공정 라인"). 금액은 쓰지 않습니다.
 11. 역량은 [역량 목록]의 이름으로 씁니다. "개발 · 구축" 같은 넓은 말 대신 무엇을 잘했는지를 씁니다. 프로그래밍 언어 · 소프트웨어 이름(예: Python, SQL)은 역량에 쓰지 않습니다.
 12. "과제"에는 이 경험이 나온 [기록]의 과제 번호(제목 뒤 괄호 안) 하나만 적습니다. 여러 과제에 걸치면 가장 중심이 된 과제 하나, 어느 과제인지 모르면 비워 둡니다.
+13. "도구"에는 [기록]에 나온 프로그래밍 언어 · 소프트웨어 · 장비 · 플랫폼 이름만 쉼표로 적습니다(예: Python, MES). 분석 기법 · 방법(예: 회귀 분석)은 도구가 아니라 역량입니다. 기록에 없으면 비워 둡니다.
 
 [출력 형식]
 - 아래 모양의 블록만 출력합니다. 블록 밖에 설명을 쓰지 않습니다.
@@ -93,6 +94,7 @@ PROMPT_HEAD = """[역할]
 역량_업무:
 역량_리더십:
 역량_문제해결:
+도구:
 교훈:
 증빙:
 -
@@ -124,7 +126,7 @@ def record_text(item: dict[str, Any], index: int) -> str:
     if item.get("part"):
         lines.append(f"- 맡은 부분: {item['part']}")
     if item.get("skills"):
-        lines.append(f"- 기술 · 도구: {', '.join(item['skills'])}")
+        lines.append(f"- 도구(보유 기술): {', '.join(item['skills'])}")
     if item.get("milestones"):
         lines.append("- 중간 성과:")
         lines += [f"  - {m['date']} {m['text']}" for m in item["milestones"]]
@@ -271,6 +273,8 @@ def block_fields(block: ParsedBlock) -> dict[str, Any]:
         "lesson": _cut(block.get("교훈"), exp.TEXT_MAX), "lesson_source": _cut(block.lesson_source, 100),
         "open_questions": [_cut(q, 500) for q in questions][: exp.LIST_MAX], "skills": skills[: exp.LIST_MAX],
         "quants": quants[: exp.LIST_MAX], "affiliation": _cut(affiliation, 100),
+        # 273 — 선택 키 `도구:` (쉼표로). 저장할 때 보유 기술 사전에 맞춘다
+        "tools": [_cut(name.strip(), 60) for name in re.split(r"[,，、]", block.get("도구") or "") if name.strip()][: exp.LIST_MAX],
         "evidences": [{"type": "문서", "text": _cut(text, 300), "year": "", "file": ""} for text in block.lists.get("증빙") or []][: exp.LIST_MAX],
     }
 
@@ -446,6 +450,7 @@ def preview(conn: sqlite3.Connection, person: str, name: str, result: ParseResul
             "project": project, "action": action, "target": target,
             "project_reason": row["project_reason"], "action_reason": row["action_reason"],
             "counts": {"open": len(fields["open_questions"]), "quant": len(fields["quants"]), "skill": len(fields["skills"]),
+                       "tool": len(fields["tools"]),
                        "action": len(fields["actions"])},
             "warnings": warnings,
             "bad_lines": [{"line": b.line, "text": b.text, "reason": b.reason} for b in block.bad_lines],

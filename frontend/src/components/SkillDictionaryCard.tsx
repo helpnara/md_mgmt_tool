@@ -3,7 +3,7 @@ import { Tags } from "lucide-react";
 import { api } from "../api";
 import { notifyError } from "../notify";
 import type { ExperienceSkill, SkillDictionary, SkillEntry } from "../types";
-import { useEditedUnsaved } from "../util";
+import { axisLabel, useEditedUnsaved } from "../util";
 import CardIntro from "./CardIntro";
 import IconTitle from "./IconTitle";
 
@@ -81,7 +81,7 @@ export default function SkillDictionaryCard() {
         <div className="person-tools">
           <select aria-label="축으로 거르기" value={axis} onChange={(event) => setAxis(event.target.value as ExperienceSkill["axis"] | "")}>
             <option value="">축 전체</option>
-            {AXES.map((a) => <option key={a}>{a}</option>)}
+            {AXES.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
           </select>
         </div>
       </div>
@@ -99,7 +99,7 @@ export default function SkillDictionaryCard() {
                 <tr key={index} data-skill={row.name}>
                   <td>
                     <select aria-label="축" value={row.axis} onChange={(event) => set(index, { axis: event.target.value as ExperienceSkill["axis"] })}>
-                      {AXES.map((a) => <option key={a}>{a}</option>)}
+                      {AXES.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
                     </select>
                   </td>
                   <td><input aria-label="대표 이름" value={row.name} maxLength={60} onChange={(event) => set(index, { name: event.target.value })} /></td>
@@ -111,7 +111,7 @@ export default function SkillDictionaryCard() {
                         onChange={(event) => void merge(row, event.target.value)}>
                         <option value="">다른 역량으로 합치기 ▾</option>
                         {rows.filter((other) => other.origin && other.origin !== row.origin).map((other) => (
-                          <option key={other.origin} value={other.origin}>{other.axis} · {other.name}</option>
+                          <option key={other.origin} value={other.origin}>{axisLabel(other.axis)} · {other.name}</option>
                         ))}
                       </select>
                     ) : (

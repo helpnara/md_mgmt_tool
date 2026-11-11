@@ -228,6 +228,42 @@ def rematch(payload: RematchIn, request: Request, conn: sqlite3.Connection = Dep
     return svc.rematch_person(conn, _name(payload.person))
 
 
+# ── 보유 기술 사전 (TODO 273) ─────────────────────────────────────────────────
+
+@router.get("/tools")
+def tools(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """지금 쓰는 보유 기술 사전 + 이름마다 쓰인 횟수 + 사전에 없는데 쓰인 이름([쓰인 이름 불러오기])."""
+    from ..experience import skills as skill_rules
+    from ..experience import tools as tool_rules
+    from ..services import settings as settings_service
+
+    dictionary = settings_service.tool_dictionary()
+    table = tool_rules.index(dictionary)
+    usage: dict[str, int] = {}
+    unlisted: dict[str, int] = {}
+    for name, count in svc.used_tool_names(conn).items():
+        canonical = table.get(skill_rules.key(name))
+        if canonical:
+            usage[canonical] = usage.get(canonical, 0) + count
+        else:
+            unlisted[name] = unlisted.get(name, 0) + count
+    skill_names = set(skill_rules.index(settings_service.skill_dictionary()))
+    return {"dictionary": dictionary, "usage": usage, "custom": settings_service.load().get("tool_dictionary") is not None,
+            # 역량 사전에 있는 이름(회귀 분석 등)은 보유 기술 후보에서 뺀다 — 정의: 분석 기법 · 방법은 역량
+            "unlisted": [{"name": n, "count": c, "skill_like": skill_rules.key(n) in skill_names}
+                         for n, c in sorted(unlisted.items(), key=lambda p: (-p[1], p[0]))]}
+
+
+@router.post("/tools/rematch")
+def rematch_tools(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """보유 기술 사전을 고친 뒤 — 모든 경험과 과제 색인을 지금 사전으로 다시 맞춘다."""
+    _manager(request)
+    from ..services import running
+
+    with running.track("보유 기술 다시 맞추기", "tools-rematch"):
+        return svc.rematch_tools(conn)
+
+
 # ── 역량 태그 정리함 (TODO 262 · 261 — 역량태그입력.md) ──────────────────────
 
 @router.get("/skills/unknown")

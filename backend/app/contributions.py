@@ -39,7 +39,7 @@ OUTCOME_MAX = 200
 LABELS = {
     "role": "역할", "part": "맡은 부분", "from": "담당 시작", "to": "담당 끝",
     "did": "내가 한 일", "result": "결과", "outcome": "그 밖의 성과",
-    "skills": "기술 · 도구", "praise": "인정 한 줄", "milestones": "중간 성과",
+    "skills": "보유 기술", "praise": "인정 한 줄", "milestones": "중간 성과",
 }
 
 
@@ -248,7 +248,7 @@ def clean_skills(value: object) -> list[str]:
     for item in items:
         rules.one_line(item, LABELS["skills"], SKILL_MAX)
     if len(items) > SKILLS_MAX:
-        raise ValueError(f"기술 · 도구는 {SKILLS_MAX}개까지입니다 (지금 {len(items)}개).")
+        raise ValueError(f"보유 기술은 {SKILLS_MAX}개까지입니다 (지금 {len(items)}개).")
     return items
 
 

@@ -68,6 +68,8 @@ DEFAULTS: dict[str, Any] = {
     "meeting_cycle_days": 90,
     # 역량 사전 (TODO 260 · 253 의 4단계). **null 이면 기본**(설계 원본 9절의 46개) — [{"axis", "name", "aliases"}]
     "skill_dictionary": None,
+    # 보유 기술 사전 (TODO 273). **null 이면 기본**(언어 · 소프트웨어 · 장비 서른 개쯤) — [{"name", "aliases"}]
+    "tool_dictionary": None,
     # 업무 이력 파일의 익명화 치환표 (TODO 262). null 이면 비어 있음 — {"rules": [{kind, from, to}], "patterns": [{kind, regex, to}]}
     "anonymize_rules": None,
     # 백업에 첨부(assets)를 넣지 않는다 (TODO 202 · 197) — 첨부가 GB 단위면 백업이 조용히 실패했다.
@@ -90,7 +92,7 @@ def _path():
 # 값의 모양 (TODO 163). 손으로 고친 설정 파일의 값 하나가 모양이 다르면(`"backup_every_hours": "매일"`)
 # 그 값을 쓰는 곳이 모두 넘어졌다. 읽을 때 한 번 걸러 **그 값만** 기본값으로 둔다.
 _NULLABLE_SHAPES: dict[str, type] = {"project_types": list, "classifications": dict, "precheck_items": list,
-                                      "meeting_kinds": list, "skill_dictionary": list,
+                                      "meeting_kinds": list, "skill_dictionary": list, "tool_dictionary": list,
                                       "anonymize_rules": dict}
 _POSITIVE_KEYS = ("backup_keep", "backup_every_hours", "intake_stale_days", "meeting_cycle_days")
 _ZERO_OK_KEYS = ("backup_keep_weekly", "backup_keep_monthly")
@@ -209,6 +211,10 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             from ..experience import skills as skill_rules
 
             current[key] = skill_rules.validate(updates[key])
+        elif key == "tool_dictionary":
+            from ..experience import tools as tool_rules
+
+            current[key] = tool_rules.validate(updates[key])
         elif key == "anonymize_rules":
             from . import experience_export
 
@@ -373,6 +379,19 @@ def skill_dictionary() -> list[dict[str, Any]]:
         except ValueError:
             return skill_rules.default_dictionary()
     return skill_rules.default_dictionary()
+
+
+def tool_dictionary() -> list[dict[str, Any]]:
+    """지금 쓰는 보유 기술 사전(TODO 273) — 설정에 없거나 비면 기본."""
+    from ..experience import tools as tool_rules
+
+    stored = load().get("tool_dictionary")
+    if isinstance(stored, list) and stored:
+        try:
+            return tool_rules.validate(stored) or tool_rules.default_dictionary()
+        except ValueError:
+            return tool_rules.default_dictionary()
+    return tool_rules.default_dictionary()
 
 
 # ── 팀원 면담 (TODO 182) ────────────────────

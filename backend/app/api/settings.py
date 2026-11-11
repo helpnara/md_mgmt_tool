@@ -45,6 +45,7 @@ class SettingsUpdate(BaseModel):
     meeting_cycle_days: int | None = None
     # 역량 사전 (TODO 260) — [{axis, name, aliases}] · null 이면 기본
     skill_dictionary: list[dict] | None = None
+    tool_dictionary: list[dict] | None = None      # 보유 기술 사전 (TODO 273)
     # 업무 이력 파일 익명화 치환표 (TODO 262) — {rules, patterns} · 빈 {} 이면 비움
     anonymize_rules: dict | None = None
     # 백업에 첨부를 넣지 않는다 (TODO 202) — 참/거짓만

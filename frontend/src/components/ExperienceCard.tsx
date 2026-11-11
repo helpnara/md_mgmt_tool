@@ -5,6 +5,7 @@ import { getMe, isManager, isMember } from "../me";
 import { notifyError } from "../notify";
 import type { ExperienceListing } from "../types";
 import IconTitle from "./IconTitle";
+import { axisLabel } from "../util";
 import CardIntro from "./CardIntro";
 
 const AXES = ["기술", "업무", "리더십", "문제해결"] as const;
@@ -127,7 +128,7 @@ export default function ExperienceCard({
             </button>
             {/* 272 — 과제 경험은 초안 → [AI 로 정리]. 이 단추는 과제 기록에서 나오지 않는 경험(TF · 강사 · 발표 · 특허 · 도구 이전 과제 · 입사 전)용 */}
             <button className="ghost" onClick={() => void addBlank()}
-              title="과제 기록에서 나오지 않는 경험 — 사내 TF · 위원회, 교육 강사 · 멘토링, 발표 · 특허 · 수상, 이 도구 이전의 과제, 입사 전 경력">
+              title="과제 기록에서 나오지 않는 경험 — 사내 TF · 위원회, 교육 강사 · 멘토링, 발표 · 특허 · 수상, 이 도구 이전의 과제, 입사 전에 한 일">
               + 과제 밖 경험 직접 쓰기
             </button>
             <button className="ghost" disabled={busy || missing.length === 0} onClick={() => void draftAll()}
@@ -144,7 +145,7 @@ export default function ExperienceCard({
       {manager && (
         <p className="hint experience-how" data-testid="experience-how">
           과제 경험은 <b>[회고 있는 과제 모두 초안]</b> → <b>[AI 로 정리]</b>로 만듭니다. <b>[+ 과제 밖 경험 직접 쓰기]</b>는 사내 TF · 강사 · 발표 · 특허처럼
-          과제 기록에 없는 일, 이 도구 이전의 과제, 입사 전 경력에 씁니다.
+          과제 기록에 없는 일, 이 도구 이전의 과제, 입사 전에 한 일에 씁니다.
         </p>
       )}
       {notice && <p className="hint notice">{notice}</p>}
@@ -160,7 +161,7 @@ export default function ExperienceCard({
             const chips = data.skills.filter((skill) => skill.axis === axis);
             return chips.length === 0 ? null : (
               <div key={axis} className="exp-skill-axis">
-                <span className="exp-label">{axis}</span>
+                <span className="exp-label">{axisLabel(axis)}</span>
                 {chips.map((skill) => (
                   <span key={skill.name} className={skill.known ? "exp-chip" : "exp-chip unknown"} title={skill.known ? "" : "역량 사전에 없음"}>
                     {skill.name} <b>{skill.count}</b>
@@ -174,6 +175,20 @@ export default function ExperienceCard({
               사전에 다시 맞추기
             </button>
           )}
+        </div>
+      )}
+      {/* 보유 기술 요약 (TODO 273) — 과제(담당과 역할)와 경험을 합쳐: 이름 · 쓴 곳 수 · 마지막으로 쓴 해. 사전에 없는 이름은 점선 */}
+      {data && (data.tools?.length ?? 0) > 0 && (
+        <div className="experience-skills experience-tools" data-testid="experience-tools">
+          <div className="exp-skill-axis">
+            <span className="exp-label">보유 기술</span>
+            {data.tools.map((tool) => (
+              <span key={tool.name} className={tool.known ? "exp-chip tool" : "exp-chip tool unknown"}
+                title={`과제 ${tool.projects}건 · 경험 ${tool.experiences}건${tool.last ? ` · 마지막 ${tool.last}년` : ""}${tool.known ? "" : " · 보유 기술 사전에 없음"}`}>
+                {tool.name} <b>{tool.projects + tool.experiences}</b>{tool.last && <span className="muted"> ’{tool.last.slice(2)}</span>}
+              </span>
+            ))}
+          </div>
         </div>
       )}
       {!data ? (

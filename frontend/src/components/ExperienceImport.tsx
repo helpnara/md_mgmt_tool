@@ -5,7 +5,7 @@ import { copyText, COPY_FAILED } from "../clipboard";
 import { isManager } from "../me";
 import { notifyError } from "../notify";
 import { personLink, setPageTitle } from "../nav";
-import { useEditedUnsaved } from "../util";
+import { useEditedUnsaved, axisLabel } from "../util";
 import type { ExperiencePrompt, ImportAction, ImportBlock, ImportDecision, ImportPreview, ImportTarget } from "../types";
 import IconTitle from "./IconTitle";
 import { experienceLink } from "./ExperienceCard";
@@ -404,7 +404,7 @@ function BlockFields({ block }: { block: ImportBlock }) {
     ["구분", f.kind], ["소속", f.affiliation], ["상황", f.situation], ["목표", f.goal], ["행동", f.actions.map((a) => `- ${a}`).join("\n")],
     ["정량", f.quants.map((q) => `${q.metric} | ${q.value} | 기준: ${q.baseline} (${q.baseline_kind}) | 시점: ${q.when}`).join("\n")],
     ["결과(정성)", f.result_qual], ["영향", f.impact], ["교훈", f.lesson + (f.lesson_source ? ` (${f.lesson_source})` : "")],
-    ["역량", f.skills.map((s) => `${s.axis}: ${s.name}`).join(", ")], ["증빙", f.evidences.map((e) => e.text).join(", ")],
+    ["역량", f.skills.map((s) => `${axisLabel(s.axis)}: ${s.name}`).join(", ")], ["증빙", f.evidences.map((e) => e.text).join(", ")],
     ["확인 필요", f.open_questions.map((q) => `- ${q}`).join("\n")],
   ];
   return (

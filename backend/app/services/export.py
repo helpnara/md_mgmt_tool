@@ -180,7 +180,7 @@ def _contribution_lines(conn: sqlite3.Connection, project: sqlite3.Row) -> list[
         head = " · ".join(filter(None, [f"**{row['name']}**", row["role"], row["part"], period]))
         lines.append(f"- {head}")
         if row["skills"]:
-            lines.append(f"  - 기술 · 도구: {', '.join(row['skills'])}")
+            lines.append(f"  - 보유 기술: {', '.join(row['skills'])}")
         if row["milestones"]:
             lines.append("  - 중간 성과:")
             lines += [f"    - {item['date']} {item['text']}" for item in row["milestones"]]

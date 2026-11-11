@@ -425,6 +425,8 @@ export interface AppSettings {
   meeting_cycle_days: number;
   /** 역량 사전 (TODO 260) — null 이면 기본(46개). 빈 목록을 보내면 기본으로 */
   skill_dictionary?: SkillEntry[] | null;
+  /** 보유 기술 사전 (TODO 273) — 빈 목록이면 기본 */
+  tool_dictionary?: ToolEntry[] | null;
   /** 업무 이력 파일 익명화 치환표 (TODO 262) */
   anonymize_rules?: { rules: AnonymizeRule[]; patterns?: { kind: string; regex: string; to: string }[] } | null;
   /** 자동 백업에서 첨부를 빼고 문서만 (TODO 202 · 197 ③) — 서버가 아직 모르면 없다 */
@@ -1509,6 +1511,20 @@ export interface ExperienceListing {
   total: number;
   /** 사람별 역량 칩 (TODO 260) */
   skills: { axis: ExperienceSkill["axis"]; name: string; count: number; known: boolean }[];
+  /** 보유 기술 요약 (TODO 273) — 과제(담당과 역할)와 경험을 합쳐. last = 마지막으로 쓴 해 */
+  tools: { name: string; projects: number; experiences: number; last: string; known: boolean }[];
+}
+/** 보유 기술 사전 (TODO 273) */
+export interface ToolEntry {
+  name: string;
+  aliases: string[];
+}
+export interface ToolDictionary {
+  dictionary: ToolEntry[];
+  usage: Record<string, number>;
+  custom: boolean;
+  /** 사전에 없는데 과제 · 경험에 쓰인 이름. skill_like = 역량 사전에 있는 이름(보유 기술이 아니라 역량) */
+  unlisted: { name: string; count: number; skill_like: boolean }[];
 }
 /** 정합성 경고 (TODO 260 · 4단계.md 3절) */
 export interface ConsistencyWarning {
@@ -1566,6 +1582,8 @@ export interface Experience {
   // 4단계 (TODO 260)
   consistency: ConsistencyWarning[];
   skills_unknown: string[];
+  /** 확정 전에 알릴 것 (TODO 273) — 보유 기술이 비었거나 글에 나오는데 칸에 없다. 막지 않는다 */
+  tool_notes?: string[];
   acknowledged: { code: string; key: string; at: string; by: string }[];
   confirmed_at: string;
   confirmed_by: string;

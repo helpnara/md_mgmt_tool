@@ -37,14 +37,15 @@ def test_default_dictionary_and_settings_roundtrip(team):  # noqa: F811
 
 def test_tags_match_dictionary_names_and_axes(team):  # noqa: F811
     owner = team["owner"]
-    made = _make(owner, skills=[{"axis": "업무", "name": "객체 탐지"}, {"axis": "기술", "name": "Python"},
-                                {"axis": "업무", "name": "PoC"}])
-    assert made["skills"] == [{"axis": "기술", "name": "비전 AI 객체탐지"}, {"axis": "기술", "name": "Python"},
+    made = _make(owner, skills=[{"axis": "업무", "name": "객체 탐지"}, {"axis": "기술", "name": "현장 감각"},
+                                {"axis": "업무", "name": "PoC"}, {"axis": "기술", "name": "파이썬"}])
+    assert made["skills"] == [{"axis": "기술", "name": "비전 AI 객체탐지"}, {"axis": "기술", "name": "현장 감각"},
                               {"axis": "문제해결", "name": "가설 검증·파일럿"}]           # 동의어 → 대표 이름 · 사전의 축
-    assert made["skills_unknown"] == ["Python"]                                         # ② 사전에 없음 — 그대로 둔다
+    assert made["skills_unknown"] == ["현장 감각"]                                      # ② 사전에 없음 — 그대로 둔다
+    assert made["tools"] == ["Python"]                                                  # 273 — 보유 기술 사전의 이름은 보유 기술로(대표 이름)
     listing = owner.get("/api/experiences", params={"person": "가팀원"}).json()
     chips = {(s["axis"], s["name"]): s for s in listing["skills"]}
-    assert chips[("기술", "Python")]["known"] is False and chips[("기술", "비전 AI 객체탐지")]["count"] == 1
+    assert chips[("기술", "현장 감각")]["known"] is False and chips[("기술", "비전 AI 객체탐지")]["count"] == 1
 
 
 def test_same_alias_twice_goes_to_first():
@@ -68,8 +69,8 @@ def test_merge_skill_rewrites_tags_and_keeps_old_name_as_alias(team):  # noqa: F
 
 def test_rematch_after_dictionary_change(team):  # noqa: F811
     owner = team["owner"]
-    _make(owner, skills=[{"axis": "기술", "name": "Python"}])
-    owner.put("/api/settings", json={"skill_dictionary": [{"axis": "기술", "name": "데이터 분석 도구", "aliases": ["Python"]}]})
+    _make(owner, skills=[{"axis": "기술", "name": "현장 통계"}])
+    owner.put("/api/settings", json={"skill_dictionary": [{"axis": "기술", "name": "데이터 분석 도구", "aliases": ["현장 통계"]}]})
     assert owner.post("/api/experiences/skills/rematch", json={"person": "가팀원"}).json()["changed"] == ["E-001"]
     item = owner.get("/api/experiences/E-001").json()
     assert item["skills"] == [{"axis": "기술", "name": "데이터 분석 도구"}] and item["skills_unknown"] == []

@@ -21,6 +21,7 @@ from .. import clock
 from ..config import get_settings
 from ..experience import consistency as consistency_rules
 from ..experience import skills as skill_rules
+from ..experience import tools as tool_rules
 from ..experience.check import check as check_block
 from ..experience.check import confirm_ready
 from ..experience.parse import ParsedBlock, Quant
@@ -218,33 +219,44 @@ def clean(data: dict[str, Any], stored: dict[str, Any] | None = None, opened: tu
 
 
 def team_tools() -> set[str]:
-    """팀의 기술 · 도구 목록(모든 담당과 역할의 기술 · 도구, TODO 239) — 맞추기 열쇠로."""
-    from .. import db
+    """보유 기술로 보는 이름의 열쇠(TODO 273) — **보유 기술 사전**(설정)의 대표 이름 · 다른 이름.
+    예전(261)에는 담당과 역할의 기술 · 도구 칸에 누가 적은 적 있는 이름 전부였다 — 그 칸에 적힌 역량 이름까지 도구로 넘어갔다."""
+    return set(tool_rules.index(settings_service.tool_dictionary()))
+
+
+def used_tool_names(conn: sqlite3.Connection) -> dict[str, int]:
+    """과제(담당과 역할)와 경험에 실제로 적힌 보유 기술 이름 → 쓴 횟수. 사전 카드의 "쓰는 곳" · [쓰인 이름 불러오기]."""
     from .. import schemas as rules
 
-    conn = db.connect()
-    try:
-        names = {name for row in conn.execute("SELECT skills FROM project_contribution WHERE skills IS NOT NULL AND skills != ''")
-                 for name in rules.split_list(row["skills"])}
-    finally:
-        conn.close()
-    return {skill_rules.key(name) for name in names if name}
+    counts: dict[str, int] = {}
+    for row in conn.execute("SELECT skills FROM project_contribution WHERE skills IS NOT NULL AND skills != ''"):
+        for name in rules.split_list(row["skills"]):
+            counts[name] = counts.get(name, 0) + 1
+    for path in sorted(get_settings().people_dir.glob("*/experiences/E-*.md")):
+        try:
+            item = read_file(path)
+        except Exception:  # noqa: BLE001 — 읽지 못하는 파일은 색인 문제 목록이 알린다
+            continue
+        for name in item.get("tools") or []:
+            counts[name] = counts.get(name, 0) + 1
+    return counts
 
 
 def _skills_and_tools(merged: dict[str, Any]) -> dict[str, Any]:
+    """역량 태그는 역량 사전에, 보유 기술은 보유 기술 사전에 맞춘다(273).
+    역량 칸에 들어온 이름이 **보유 기술 사전에 있으면** 보유 기술 칸으로 옮긴다 — 역량 사전의 (옛) 동의어보다 먼저."""
     dictionary = settings_service.skill_dictionary()
-    known = skill_rules.index(dictionary)
-    tools = list(dict.fromkeys(_lines(merged.get("tools"), "도구")))
-    skills = []
-    team = None
-    for skill in skill_rules.match(_skills(merged.get("skills")), dictionary):
-        if skill_rules.key(skill["name"]) not in known:
-            team = team_tools() if team is None else team
-            if skill_rules.key(skill["name"]) in team:
-                if skill["name"] not in tools:
-                    tools.append(skill["name"])
-                continue
-        skills.append(skill)
+    tool_dictionary = settings_service.tool_dictionary()
+    tool_index = tool_rules.index(tool_dictionary)
+    tools = list(_lines(merged.get("tools"), "도구"))
+    kept = []
+    for skill in _skills(merged.get("skills")):
+        if skill_rules.key(skill["name"]) in tool_index:
+            tools.append(skill["name"])
+        else:
+            kept.append(skill)
+    skills = skill_rules.match(kept, dictionary)
+    tools = tool_rules.normalize(tools, tool_dictionary)
     return {"skills": skills, "tools": [_text(t, "도구", 60) for t in tools][:LIST_MAX]}
 
 
@@ -565,7 +577,62 @@ def listing(conn: sqlite3.Connection, person: str) -> dict[str, Any]:
                 tally[mark] = tally.get(mark, 0) + 1
     skills = [{"axis": axis, "name": name, "count": count, "known": (axis, name) in known}
               for (axis, name), count in sorted(tally.items(), key=lambda pair: (AXES.index(pair[0][0]) if pair[0][0] in AXES else 9, -pair[1], pair[0][1]))]
-    return {"items": items, "counts": counts, "total": len(items), "skills": skills}
+    return {"items": items, "counts": counts, "total": len(items), "skills": skills,
+            "tools": tool_summary(conn, person, list(full.values()))}
+
+
+def tool_summary(conn: sqlite3.Connection, person: str, items: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """한 사람의 보유 기술 요약(TODO 273) — 과제(담당과 역할)와 경험을 합쳐 이름마다 과제 수 · 경험 수 · 마지막으로 쓴 해 · 사전에 있나.
+    `items` 가 None 이면 과제만(경험을 볼 수 없는 화면)."""
+    from .. import schemas as rules
+
+    dictionary = settings_service.tool_dictionary()
+    known = set(tool_rules.index(dictionary))
+    rows: dict[str, dict[str, Any]] = {}
+
+    def add(name: str, kind: str, year: str) -> None:
+        row = rows.setdefault(skill_rules.key(name), {"name": name, "projects": 0, "experiences": 0, "last": ""})
+        row[kind] += 1
+        if year and year > row["last"]:
+            row["last"] = year
+
+    this_year = str(clock.today().year)
+    for row in conn.execute(
+            "SELECT c.skills, c.from_date, c.to_date, c.current, p.start_date, p.due_date FROM project_contribution c"
+            " JOIN project p ON p.id = c.project_id WHERE c.name = ? AND c.skills IS NOT NULL AND c.skills != ''", (person,)):
+        year = (row["to_date"] or "")[:4] or (this_year if row["current"] else (row["due_date"] or row["from_date"] or row["start_date"] or "")[:4])
+        for name in tool_rules.normalize(rules.split_list(row["skills"]), dictionary):
+            add(name, "projects", min(year, this_year) if year else "")
+    for item in items or []:
+        year = (item.get("end") or "")[:4] or ((this_year if item.get("start") else ""))
+        for name in tool_rules.normalize(item.get("tools") or [], dictionary):
+            add(name, "experiences", min(year, this_year) if year else "")
+    out = [{**row, "known": skill_rules.key(row["name"]) in known} for row in rows.values()]
+    return sorted(out, key=lambda r: (-(r["projects"] + r["experiences"]), r["name"]))
+
+
+def tool_notes(item: dict[str, Any]) -> list[str]:
+    """확정 전에 알릴 것(TODO 273 — 막지 않는다): 보유 기술이 비었거나, 글에 사전의 이름이 있는데 칸에 없다."""
+    dictionary = settings_service.tool_dictionary()
+    have = {skill_rules.key(name) for name in tool_rules.normalize(item.get("tools") or [], dictionary)}
+    text = "\n".join([item.get("role") or "", item.get("situation") or "", *(item.get("actions") or []), item.get("result_qual") or ""])
+    missing = [name for name in tool_rules.mentioned(text, dictionary) if skill_rules.key(name) not in have]
+    notes = []
+    if missing:
+        notes.append(f"글에 나오는 보유 기술이 칸에 없습니다 — {', '.join(missing[:8])}")
+    elif not have:
+        notes.append("보유 기술이 비어 있습니다 — 이 일에 쓴 언어 · 소프트웨어 · 장비가 있으면 적어 주세요(없으면 그대로 둡니다).")
+    return notes
+
+
+def rematch_tools(conn: sqlite3.Connection) -> dict[str, Any]:
+    """[사전에 다시 맞추기](TODO 273) — 보유 기술 사전을 고친 뒤 모든 경험의 보유 기술 · 역량 태그와 과제 색인을 지금 사전으로."""
+    from ..vault.indexer import reindex_all
+
+    changed = _rewrite_skills(conn, sorted(get_settings().people_dir.glob("*/experiences/E-*.md")), lambda skills: skills)
+    reindex_all(conn)
+    conn.commit()
+    return {"changed": changed}
 
 
 # ── 정합성 · 확정 (4단계.md 3 · 4절) ─────────────────────────────────────────────
@@ -706,6 +773,7 @@ def get(conn: sqlite3.Connection, experience_id: str) -> dict[str, Any]:
             "problems": problems_of(item),
             "consistency": warnings,
             "skills_unknown": skill_rules.unknown(item["skills"], settings_service.skill_dictionary()),
+            "tool_notes": tool_notes(item) if item["status"] != "확정" else [],
             "confirm_missing": confirm_missing(item, warnings)}
 
 

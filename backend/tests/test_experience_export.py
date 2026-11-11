@@ -55,7 +55,7 @@ def test_unknown_tags_and_cleanup_actions(team):  # noqa: F811
     a = _make(owner, skills=[{"axis": "기술", "name": "알고리즘 개발"}, {"axis": "기술", "name": "현장 데이터 정제"},
                              {"axis": "업무", "name": "설비 담당 협의"}])
     owner.put(f"/api/projects/{pid}/contributions/가팀원", json={"skills": ["이미지 판정", "Python", "MES"]})
-    _make(owner, title="둘째", skills=[{"axis": "기술", "name": "알고리즘 개발"}, {"axis": "기술", "name": "Matlab"}])
+    _make(owner, title="둘째", skills=[{"axis": "기술", "name": "알고리즘 개발"}, {"axis": "기술", "name": "현장계측기"}])
     items = {t["name"]: t for t in owner.get("/api/experiences/skills/unknown").json()["items"]}
     assert items["알고리즘 개발"]["count"] == 2 and items["알고리즘 개발"]["people"] == ["가팀원"]
     assert items["현장 데이터 정제"]["suggest"]                                          # 비슷한 대표 역량 제안
@@ -65,13 +65,13 @@ def test_unknown_tags_and_cleanup_actions(team):  # noqa: F811
     done = owner.post("/api/experiences/skills/cleanup", json={"actions": [
         {"axis": "기술", "name": "현장 데이터 정제", "action": "alias", "target_axis": "기술", "target_name": "데이터 파이프라인"},
         {"axis": "업무", "name": "설비 담당 협의", "action": "new", "target_axis": "리더십"},
-        {"axis": "기술", "name": "Matlab", "action": "tool"},
+        {"axis": "기술", "name": "현장계측기", "action": "tool"},
         {"axis": "기술", "name": "알고리즘 개발", "action": "drop"}]}).json()
     assert len(done["changed"]) == 2
     first = owner.get(f"/api/experiences/{a['id']}").json()
     assert first["skills"] == [{"axis": "기술", "name": "데이터 파이프라인"}, {"axis": "리더십", "name": "설비 담당 협의"}]
     second = owner.get("/api/experiences/E-002").json()
-    assert second["skills"] == [] and second["tools"] == ["Matlab"]
+    assert second["skills"] == [] and second["tools"] == ["현장계측기"]
     dictionary = owner.get("/api/experiences/skills").json()["dictionary"]
     assert "현장 데이터 정제" in next(d for d in dictionary if d["name"] == "데이터 파이프라인")["aliases"]
     assert {"axis": "리더십", "name": "설비 담당 협의", "aliases": []} in dictionary
@@ -80,19 +80,19 @@ def test_unknown_tags_and_cleanup_actions(team):  # noqa: F811
 
 def test_tag_prompt_and_answer_become_proposals_only(team):  # noqa: F811
     owner = team["owner"]
-    _make(owner, skills=[{"axis": "기술", "name": "알고리즘 개발"}, {"axis": "기술", "name": "Matlab"},
+    _make(owner, skills=[{"axis": "기술", "name": "알고리즘 개발"}, {"axis": "기술", "name": "현장계측기"},
                          {"axis": "업무", "name": "현업 협의 회의"}, {"axis": "기술", "name": "현장 데이터 정제"}])
     prompt = owner.get("/api/experiences/skills/prompt").json()
     assert prompt["tags"] == 4 and "- 기술 — 알고리즘 개발 · 1" in prompt["text"] and "[역량 사전]" in prompt["text"]
     answer = """설명은 무시합니다.
 - 알고리즘 개발 | 버림
-- Matlab | 도구
+- 현장계측기 | 도구
 - 현업 협의 회의 | 요구사항 관리 ?
 - 현장 데이터 정제 | 새 역량(기술)
 - 없는 태그 | 도구
 - 알고리즘 개발2 | 엉뚱한 이름"""
     rows = {r["name"]: r for r in owner.post("/api/experiences/skills/answer", json={"text": answer}).json()["items"]}
-    assert rows["알고리즘 개발"]["action"] == "drop" and rows["Matlab"]["action"] == "tool"
+    assert rows["알고리즘 개발"]["action"] == "drop" and rows["현장계측기"]["action"] == "tool"
     assert (rows["현업 협의 회의"]["action"], rows["현업 협의 회의"]["target_name"], rows["현업 협의 회의"]["unsure"]) == ("alias", "요구사항 관리", True)
     assert (rows["현장 데이터 정제"]["action"], rows["현장 데이터 정제"]["target_axis"]) == ("new", "기술")
     assert "없는 태그" not in rows

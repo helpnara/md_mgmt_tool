@@ -207,7 +207,7 @@ def _sync_contributions(conn: sqlite3.Connection, project_id: str, meta: dict) -
             " did, result, skills, praise, praise_at, milestones, derived, current, position)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (project_id, row["name"], row["role"] or None, row["part"] or None, row["from"], row["to"],
-             row["did"] or None, row["result"] or None, ", ".join(row["skills"]) or None, row["praise"] or None, row["praise_at"],
+             row["did"] or None, row["result"] or None, ", ".join(_tool_names(row["skills"])) or None, row["praise"] or None, row["praise_at"],
              json.dumps(row["milestones"], ensure_ascii=False) if row["milestones"] else None,
              1 if row["derived"] else 0, 1 if row["current"] else 0, position),
         )
@@ -911,6 +911,15 @@ def predecessor_problems(conn: sqlite3.Connection, project_ids: list[str] | None
 
 
 from ..services import running  # noqa: E402
+
+
+def _tool_names(names: list[str]) -> list[str]:
+    """담당과 역할의 보유 기술을 보유 기술 사전의 대표 이름으로(TODO 273) — 색인에서 맞춘다(파일은 적은 그대로).
+    사전을 고치면 [사전에 다시 맞추기]가 색인을 다시 만든다."""
+    from ..experience import tools as tool_rules
+    from ..services import settings as settings_service
+
+    return tool_rules.normalize(names, settings_service.tool_dictionary())
 
 
 def reindex_all(conn: sqlite3.Connection, progress=None) -> tuple[int, list[IndexProblem]]:

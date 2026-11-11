@@ -6,6 +6,7 @@ import { isManager } from "../me";
 import { notifyError } from "../notify";
 import { personLink, setPageTitle } from "../nav";
 import type { AnonymizeCandidates, AnonymizeRule, ExperienceSummary, ExportLogRow, ExportOptions, ExportResult } from "../types";
+import { axisLabel } from "../util";
 import IconTitle from "./IconTitle";
 
 const KINDS = ["회사", "조직", "인명", "제품", "공정", "고객", "기관", "기타"];
@@ -200,7 +201,7 @@ export default function ExperienceExport({ name }: { name: string }) {
                 {opt.anonymize && <span>치환 {Object.values(s.replaced).reduce((a, b) => a + b, 0)}회</span>}
               </div>
               <div className="export-axes">
-                {Object.entries(s.axes).map(([axis, n]) => <span key={axis} className="exp-chip">{axis} <b>{n}</b></span>)}
+                {Object.entries(s.axes).map(([axis, n]) => <span key={axis} className="exp-chip">{axisLabel(axis)} <b>{n}</b></span>)}
                 {s.top_skills.length > 0 && <span className="muted">많이 쓴 역량: {s.top_skills.join(" · ")}</span>}
               </div>
             </>

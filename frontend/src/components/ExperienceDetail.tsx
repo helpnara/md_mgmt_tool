@@ -7,7 +7,7 @@ import { personLink, projectLink, setPageTitle } from "../nav";
 import type { ConsistencyWarning, Experience, ExperienceQuant, ExperienceResponseFile, ExperienceSkill, SkillDictionary } from "../types";
 import { ConfirmBar, ConsistencyCard, QuestionAnswers, guessKind, type AnswerTarget } from "./ExperienceConfirm";
 import IconTitle from "./IconTitle";
-import { useEditedUnsaved } from "../util";
+import { useEditedUnsaved, axisLabel } from "../util";
 
 const AXES: ExperienceSkill["axis"][] = ["기술", "업무", "리더십", "문제해결"];
 const KINDS: ExperienceQuant["baseline_kind"][] = ["비교", "집계", "조건", "미확인"];
@@ -307,7 +307,7 @@ export default function ExperienceDetail({ id }: { id: string }) {
             {form.skills.map((skill, index) => (
               <li key={index}>
                 <select aria-label="축" disabled={!editable} value={skill.axis} onChange={(event) => setSkill(index, { axis: event.target.value as ExperienceSkill["axis"] })}>
-                  {AXES.map((axis) => <option key={axis}>{axis}</option>)}
+                  {AXES.map((axis) => <option key={axis} value={axis}>{axisLabel(axis)}</option>)}
                 </select>
                 <input aria-label="역량 태그" list="exp-skill-names" disabled={!editable} value={skill.name}
                   onChange={(event) => {
@@ -342,9 +342,11 @@ export default function ExperienceDetail({ id }: { id: string }) {
               {dictionary.dictionary.flatMap((d) => [d.name, ...d.aliases]).map((name) => <option key={name} value={name} />)}
             </datalist>
           )}
-          <label className="exp-tools">도구 <span className="muted">— 프로그래밍 언어 · 소프트웨어 · 장비(쉼표로). 역량 태그와 따로 업무 이력 파일에 들어갑니다</span>
-            <input aria-label="도구" disabled={!editable} value={form.tools} placeholder="Python, SQL" onChange={(event) => set("tools", event.target.value)} />
+          <label className="exp-tools">보유 기술 <span className="muted">— 무엇으로 했는가: 프로그래밍 언어 · 소프트웨어 · 장비(쉼표로, 사전의 대표 이름으로 맞춰집니다). 분석 기법 · 방법은 위의 역량 태그에. 역량 태그와 따로 업무 이력 파일에 들어갑니다</span>
+            <input aria-label="보유 기술" disabled={!editable} value={form.tools} placeholder="Python, SQL" onChange={(event) => set("tools", event.target.value)} />
           </label>
+          {/* 확정 전에 알린다 — 막지 않는다 (TODO 273) */}
+          {(item.tool_notes ?? []).map((note) => <p key={note} className="hint exp-tool-note" data-testid="tool-note">ⓘ {note}</p>)}
           {item.materials.length > 0 && (
             <>
               <h3>재료 — ★성과 일지 · AI 응답 원문</h3>

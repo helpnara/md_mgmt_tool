@@ -28,7 +28,7 @@ function period(item: PersonProject): string {
 }
 
 /**
- * 이력 채움 정도 (TODO 242 B1) — 역할 · 맡은 부분 · 기술 · 도구 · 회고 · 그 밖의 성과(끝난 과제만) 가운데 찬 칸.
+ * 이력 채움 정도 (TODO 242 B1) — 역할 · 맡은 부분 · 보유 기술 · 회고 · 그 밖의 성과(끝난 과제만) 가운데 찬 칸.
  * 진행 중 과제의 회고 · 성과는 아직 쓸 때가 아니라 빈 칸으로 세지 않는다.
  */
 export function fillOf(item: PersonProject): { filled: number; total: number } {
@@ -40,7 +40,7 @@ export function fillOf(item: PersonProject): { filled: number; total: number } {
 type Gap = "" | "retro" | "skills" | "role" | "part";
 const GAPS: { key: Exclude<Gap, "">; label: string; test: (item: PersonProject) => boolean }[] = [
   { key: "retro", label: "회고 빈 과제", test: (item) => item.status === "done" && !hasRetro(item) },
-  { key: "skills", label: "기술 · 도구 빈 과제", test: (item) => item.skills.length === 0 },
+  { key: "skills", label: "보유 기술 빈 과제", test: (item) => item.skills.length === 0 },
   { key: "role", label: "역할 빈 과제", test: (item) => !item.role },
   { key: "part", label: "맡은 부분 빈 과제", test: (item) => !item.part },
 ];
@@ -60,7 +60,7 @@ export function historyText(items: PersonProject[]): string {
     .map((item) => {
       const head = [`${item.title} (${period(item)})`, item.role, item.part].filter(Boolean).join(" · ");
       const lines = [`■ ${head}`];
-      if (item.skills.length > 0) lines.push(`  - 기술 · 도구: ${item.skills.join(", ")}`);
+      if (item.skills.length > 0) lines.push(`  - 보유 기술: ${item.skills.join(", ")}`);
       for (const line of RETRO_LINES) {
         const text = item[line.key].trim();
         if (!text) continue;
@@ -74,7 +74,7 @@ export function historyText(items: PersonProject[]): string {
     .join("\n\n") + "\n";
 }
 
-export const HISTORY_HEADERS = ["과제 번호", "과제명", "기간", "역할", "맡은 부분", "기술 · 도구", "내가 한 일", "결과", "그 밖의 성과"];
+export const HISTORY_HEADERS = ["과제 번호", "과제명", "기간", "역할", "맡은 부분", "보유 기술", "내가 한 일", "결과", "그 밖의 성과"];
 
 export function historyRows(items: PersonProject[]): string[][] {
   return items.map((item) => [
@@ -109,7 +109,7 @@ export function refinePrompt(items: PersonProject[]): string {
     "",
     "[출력 형식] — 마크다운으로, 과제마다",
     "1. 한 줄 요약 (50자 이내 — 무엇을 해서 어떤 숫자를 바꿨는지)",
-    "2. 머리 표 (프로젝트명 · 기간 · 역할 · 기술 · 도구)",
+    "2. 머리 표 (프로젝트명 · 기간 · 역할 · 보유 기술)",
     "3. STAR 표 (단계 | 내용 1~2줄 | 근거 — 기록의 어느 칸)",
     "4. 불릿 3~5개",
     "5. 말로 설명할 때 (60~90초 분량, 말하듯이)",
@@ -125,7 +125,7 @@ export function refinePrompt(items: PersonProject[]): string {
     if (item.context?.goal) lines.push(`- 목표: ${item.context.goal}`);
     if (item.role) lines.push(`- 역할: ${item.role}`);
     if (item.part) lines.push(`- 맡은 부분: ${item.part}`);
-    if (item.skills.length > 0) lines.push(`- 기술 · 도구: ${item.skills.join(", ")}`);
+    if (item.skills.length > 0) lines.push(`- 보유 기술: ${item.skills.join(", ")}`);
     if ((item.milestones?.length ?? 0) > 0) {
       lines.push("- 중간 성과:");
       for (const m of item.milestones!) lines.push(`  - ${m.date} ${m.text}`);
@@ -270,9 +270,10 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
           {data.left_on && <span className="tag left-tag">떠남 {data.left_on}</span>}
           <span className="muted person-head-sub"> — 이력</span>
         </h1>
-        {data.skills.length > 0 && (
-          <div className="skill-chips person-top-skills" title="많이 쓴 기술 · 도구 — 숫자는 과제 수">
-            <span className="muted">많이 쓴 기술 · 도구</span>
+        {/* 273 — 경험 카드가 보이는 화면(팀장 · 본인)에서는 그 카드의 보유 기술 요약(과제 + 경험)이 대신한다 */}
+        {data.skills.length > 0 && !(isManager(me) || (isMember() && me.name === name)) && (
+          <div className="skill-chips person-top-skills" title="보유 기술 — 숫자는 과제 수">
+            <span className="muted">보유 기술</span>
             {data.skills.map((item) => (
               <span key={item.name} className="skill-chip">
                 {item.name}
@@ -411,7 +412,7 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                         {(() => {
                           const fill = fillOf(item);
                           return (
-                            <span className={fill.filled === fill.total ? "fill-chip full" : "fill-chip"} title="역할 · 맡은 부분 · 기술 · 도구 · (끝난 과제는) 회고 · 그 밖의 성과 가운데 찬 칸">
+                            <span className={fill.filled === fill.total ? "fill-chip full" : "fill-chip"} title="역할 · 맡은 부분 · 보유 기술 · (끝난 과제는) 회고 · 그 밖의 성과 가운데 찬 칸">
                               채움 {fill.filled}/{fill.total}
                             </span>
                           );

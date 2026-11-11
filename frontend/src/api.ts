@@ -1,4 +1,4 @@
-import type { RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
+import type { ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -234,6 +234,9 @@ export const api = {
     }),
   // ── 역량 사전 · 정합성 · 확정 (TODO 260) ─────────────
   experienceSkills: () => request<SkillDictionary>("/api/experiences/skills"),
+  // 보유 기술 사전 (TODO 273)
+  experienceTools: () => request<ToolDictionary>("/api/experiences/tools"),
+  rematchTools: () => request<{ changed: string[] }>("/api/experiences/tools/rematch", { method: "POST" }),
   mergeSkill: (source: { axis: string; name: string }, target: { axis: string; name: string }) =>
     request<{ changed: string[] }>("/api/experiences/skills/merge", { method: "POST", body: JSON.stringify({ source, target }) }),
   rematchSkills: (person: string) =>

@@ -6319,7 +6319,7 @@ async function main() {
       await page.reload(); await page.waitForTimeout(900);
       const row = page.locator('[data-contributions] [data-person="권경락"]');
       await row.getByRole("button", { name: "고치기" }).click();
-      await row.getByLabel("기술 · 도구").fill("Python, SQL");
+      await row.getByLabel("보유 기술").fill("Python, SQL");
       await row.getByRole("button", { name: "저장", exact: true }).click();
       await page.waitForTimeout(800);
       equal((await row.locator(".skill-chip").allInnerTexts()).join(","), "Python,SQL", "딱지");
@@ -6327,7 +6327,7 @@ async function main() {
       const other = page.locator('[data-contributions] [data-person="이수진"]');
       await other.getByRole("button", { name: "적기" }).click();
       await other.locator(".contrib-skill-suggest").getByRole("button", { name: "SQL" }).click();
-      equal(await other.getByLabel("기술 · 도구").inputValue(), "SQL", "골라 넣기");
+      equal(await other.getByLabel("보유 기술").inputValue(), "SQL", "골라 넣기");
       // 담당 기간의 빈 칸은 과제 기간으로 채워 둔다 (239 ④) — 끝난 과제라 끝은 완료일
       equal(await other.getByLabel("담당 끝").inputValue(), FIXED_TODAY, "담당 끝 기본값 = 완료일");
       expect((await other.innerText()).includes("과제 기간으로 채워 두었습니다"), "채워 두었다는 안내");
@@ -6336,18 +6336,18 @@ async function main() {
     await check("이력 화면 — 많이 쓴 기술 · 도구 · 과제 줄 딱지 · 표 복사에 기술 칸 (239 ②)", async () => {
       await page.locator('[data-contributions] .contrib-name a', { hasText: "권경락" }).click();
       await page.waitForSelector(".person-history", { timeout: 5000 });
-      expect((await page.locator(".person-top-skills").innerText()).includes("Python"), "많이 쓴 기술 · 도구");
+      expect((await page.locator("[data-testid=experience-tools]").innerText()).includes("Python"), "보유 기술 요약(경험 카드)");
       const item = page.locator(".person-project", { hasText: "회고 시험 과제" });
       equal((await item.locator(".skill-chip").allInnerTexts()).join(","), "Python,SQL", "과제 줄 딱지");
       await item.locator('input[type="checkbox"]').check();
       await page.getByRole("button", { name: "표로 복사" }).click();
       const table = await page.evaluate(() => navigator.clipboard.readText());
-      expect(table.startsWith("과제 번호\t과제명\t기간\t역할\t맡은 부분\t기술 · 도구") && table.includes("Python, SQL"), `표: ${table.slice(0, 160)}`);
+      expect(table.startsWith("과제 번호\t과제명\t기간\t역할\t맡은 부분\t보유 기술") && table.includes("Python, SQL"), `표: ${table.slice(0, 160)}`);
     });
     await check("[STAR 정리 프롬프트] — 먼저 보여 주고 [복사], 이름 · 금액은 없다 (239 ③ · 244 B6)", async () => {
       await page.getByRole("button", { name: "STAR 정리 프롬프트" }).click();
       const shown = await page.locator(".refine-text").inputValue();
-      expect(shown.includes("[반드시 지킬 것]") && shown.includes("STAR") && shown.includes("회고 시험 과제") && shown.includes("기술 · 도구: Python, SQL"), `프롬프트: ${shown.slice(0, 200)}`);
+      expect(shown.includes("[반드시 지킬 것]") && shown.includes("STAR") && shown.includes("회고 시험 과제") && shown.includes("보유 기술: Python, SQL"), `프롬프트: ${shown.slice(0, 200)}`);
       expect(!shown.includes("권경락") && !shown.includes("억"), "이름 · 금액이 없다");
       await page.locator(".refine-panel").getByRole("button", { name: "복사" }).click();
       equal(await page.evaluate(() => navigator.clipboard.readText()), shown, "복사한 글 = 보인 글");
@@ -6920,7 +6920,7 @@ async function main() {
     await api.put("/api/settings", { anonymize_rules: {} });
   });
 
-  await check("역량 태그 정리함 — 사전에 없는 태그를 빼기 · 도구로, AI 로 맞추기 프롬프트 (262)", async () => {
+  await check("역량 태그 정리함 — 사전에 없는 태그를 빼기 · 보유 기술로, AI 로 맞추기 프롬프트 (262)", async () => {
     await go("#/settings?tab=class");
     await page.waitForTimeout(1200);
     const card = page.locator("[data-testid=skill-cleanup]");
@@ -6938,7 +6938,7 @@ async function main() {
     await page.waitForTimeout(1500);
     equal(await card.locator('tr[data-tag="알고리즘 개발"]').count(), 0, "정리된 태그는 사라진다");
     const after = await api.get(`/api/experiences/${seeded.exportExp}`);
-    expect(after.tools.includes("Matlab") && !after.skills.some((sk) => sk.name === "알고리즘 개발"), `도구로 · 빼기: ${JSON.stringify(after.skills)}`);
+    expect(after.tools.some((t) => t.toLowerCase() === "matlab") && !after.skills.some((sk) => sk.name === "알고리즘 개발"), `도구로 · 빼기: ${JSON.stringify(after.skills)}`);
   });
 
   console.log("\n[70] 검색 고도화 1차 · 상세의 태그 한 줄 (TODO 254 · 263)");
@@ -7130,6 +7130,38 @@ async function main() {
     } finally {
       await page.unroute("**/api/projects/*/attachments");
     }
+  });
+
+  console.log("\n[74] 역량과 보유 기술 가르기 — 용어 · 보유 기술 사전 · 요약 · 확정 전 알림 (TODO 273)");
+
+  await check("설정 → 분류 · 접수에 보유 기술 사전 — 다른 이름을 더해 저장하면 이미 적힌 것도 맞춘다 (273)", async () => {
+    const made = await api.post("/api/experiences", { person: "권경락", title: "보유 기술 시험 경험", kind: "업무", tools: ["현장계측기"], actions: ["SQL 로 이력 추출"] });
+    await go("#/settings?tab=class");
+    const card = page.locator("[data-testid=tool-dictionary]");
+    await card.waitFor({ timeout: 8000 });
+    expect((await card.innerText()).includes("무엇으로 했는가"), "정의 안내");
+    expect((await card.locator("[data-testid=tool-candidates]").innerText()).includes("현장계측기"), "사전에 없는데 쓰인 이름");
+    await card.getByRole("button", { name: "+ 보유 기술" }).click();
+    await card.locator('input[aria-label="보유 기술 대표 이름"]').last().fill("계측기");
+    await card.locator('input[aria-label="보유 기술 다른 이름"]').last().fill("현장계측기");
+    await card.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=tool-dictionary]")?.textContent?.includes("저장했습니다"), null, { timeout: 15000 });
+    const after = await api.get(`/api/experiences/${made.id}`);
+    expect(after.tools.includes("계측기") && !after.tools.includes("현장계측기"), `대표 이름으로: ${after.tools}`);
+    nextDialog((d) => d.accept());
+    await card.getByRole("button", { name: "기본으로" }).click();
+    await page.waitForTimeout(1500);
+    seeded.toolExp = made.id;
+  });
+
+  await check("경험 상세 — 칸 이름 '보유 기술', 축은 '전문 기술', 글에 나오는데 칸에 없으면 알림 (273)", async () => {
+    await go(`#/experience/${seeded.toolExp}`);
+    const detail = page.locator(".experience-detail");
+    await detail.waitFor({ timeout: 8000 });
+    equal(await detail.getByLabel("보유 기술", { exact: true }).count(), 1, "보유 기술 칸");
+    expect((await detail.locator("[data-testid=tool-note]").first().innerText()).includes("SQL"), "글에 나오는 SQL 알림");
+    const labels = await detail.locator('select[aria-label="축"] option').allInnerTexts().catch(() => []);
+    expect(labels.length === 0 || labels.includes("전문 기술"), `축 이름: ${labels.slice(0, 4)}`);
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

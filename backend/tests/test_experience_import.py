@@ -70,7 +70,7 @@ def test_prompt_has_rules_format_records_and_leaves_out_names_and_money(team):  
     assert data["chars"] == len(text)
     for piece in ("형식: slow-way-experience/0.1", "```slow-way", "이어짐: E-nnn?", "결과_정량", "확인_필요",
                   f"## 과제 1. 함께 하는 과제 ({pid})", "- 배경: 출하 검사를 육안으로 해서 편차가 컸다.", "- 목표: 재검을 줄인다.",
-                  "- 역할: 주관", "- 맡은 부분: 판정 기준 정리", "- 기술 · 도구: 이미지 판정, Python",
+                  "- 역할: 주관", "- 맡은 부분: 판정 기준 정리", "- 도구(보유 기술): 이미지 판정, Python",
                   "  - 2026-06-30 시범 라인 적용", "- 내가 한 일:", "  - 불량 유형 재분류", "- 결과: 재검 월 30건 → 12건",
                   "[역량 목록]", "- 기술: 비전 AI 객체탐지", "- 문제해결: 문제 재정의", "[기존 경험 목록]"):
         assert piece in text, piece
@@ -190,7 +190,7 @@ def test_save_new_makes_structured_with_fields_and_material(team):  # noqa: F811
     assert item["title"] == "출하 검사 판정 기준 정리" and (item["start"], item["end"]) == ("2026-03", "2026-09")
     assert item["actions"] == ["불량 유형을 형태 기준으로 다시 나눔", "두 단계 판정 설계"]
     assert item["quants"][0]["metric"] == "재검 건수" and item["quants"][0]["baseline_kind"] == "비교"
-    assert {"axis": "기술", "name": "Python"} in item["skills"] and {"axis": "문제해결", "name": "문제 재정의"} in item["skills"]
+    assert item["tools"] == ["Python"] and {"axis": "문제해결", "name": "문제 재정의"} in item["skills"]   # 273 — 사전의 이름은 보유 기술로
     assert item["evidences"][0]["text"] == "판정 기준서" and item["open_questions"] == ["재검 건수의 정확한 값은?"]
     assert item["materials"] == [f"response:{data['response']}"]
     assert md.load(_responses()[0]).meta["saved"] == ["E-001"]
@@ -232,8 +232,9 @@ def test_merge_into_untouched_draft_takes_ai_values_and_keeps_money_and_question
     # 합치는 칸 — 초안의 효과 금액 정량 · "본인 몫" 질문이 남는다
     assert [q["metric"] for q in item["quants"]] == ["과제 기대효과", "재검 건수"]
     assert any("본인이 기여한 몫" in q for q in item["open_questions"]) and "재검 건수의 정확한 값은?" in item["open_questions"]
-    # 261 — AI 가 역량_기술에 적은 Python · 이미지 판정은 팀의 기술 · 도구라 도구 칸으로(한 번씩)
-    assert item["tools"] == ["이미지 판정", "Python"] and not any(s["name"] in ("Python", "이미지 판정") for s in item["skills"])
+    # 273 — Python 은 보유 기술 사전에 있어 보유 기술로(한 번), "이미지 판정" 은 사전에 없으니 역량 태그로 남는다(초안의 보유 기술 칸에도 그대로)
+    assert item["tools"] == ["이미지 판정", "Python"] and not any(s["name"] == "Python" for s in item["skills"])
+    assert any(s["name"] == "이미지 판정" for s in item["skills"])
     assert f"response:{data['response']}" in item["materials"]
 
 

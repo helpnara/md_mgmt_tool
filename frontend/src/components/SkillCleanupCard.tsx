@@ -5,6 +5,7 @@ import { copyText, COPY_FAILED } from "../clipboard";
 import { notifyError } from "../notify";
 import type { SkillEntry, TagAction, TagDecision, UnknownTag } from "../types";
 import CardIntro from "./CardIntro";
+import { axisLabel } from "../util";
 import IconTitle from "./IconTitle";
 
 const AXES = ["기술", "업무", "리더십", "문제해결"];
@@ -122,7 +123,7 @@ export default function SkillCleanupCard() {
       </div>
       <CardIntro id="skill-cleanup">
         모든 팀원 경험에서 <b>사전에 없는 태그</b>를 모았습니다. 태그마다 <b>동의어로</b>(사전의 역량에 다른 이름으로 더함) · <b>새 역량으로</b> ·
-        <b> 도구로</b>(Python 같은 이름 — 도구 칸으로) · <b>빼기</b>(“개발 · 구축” 같은 넓은 말)를 고르고 [적용]합니다. 경험 하나씩 고치지 않아도 됩니다.
+        <b> 보유 기술로</b>(Python 같은 이름 — 보유 기술 칸으로) · <b>빼기</b>(“개발 · 구축” 같은 넓은 말)를 고르고 [적용]합니다. 경험 하나씩 고치지 않아도 됩니다.
       </CardIntro>
       {prompt !== null && (
         <div className="refine-panel" data-testid="tag-prompt">
@@ -146,8 +147,8 @@ export default function SkillCleanupCard() {
                 const c = choices[key] ?? { action: "", target: "", axis: t.axis };
                 return (
                   <tr key={key} data-tag={t.name}>
-                    <td className="muted">{t.axis}</td>
-                    <td>{t.name}{t.tool_like && <span className="muted" title="팀의 기술 · 도구 목록에 있는 이름"> · 도구?</span>}</td>
+                    <td className="muted">{axisLabel(t.axis)}</td>
+                    <td>{t.name}{t.tool_like && <span className="muted" title="보유 기술 사전에 있는 이름"> · 보유 기술?</span>}</td>
                     <td className="num">{t.count}</td>
                     <td className="muted">{t.people.join(" · ")}</td>
                     <td className="cleanup-choice">
@@ -155,19 +156,19 @@ export default function SkillCleanupCard() {
                         <option value="">그대로</option>
                         <option value="alias">동의어로</option>
                         <option value="new">새 역량으로</option>
-                        <option value="tool">도구로</option>
+                        <option value="tool">보유 기술로</option>
                         <option value="drop">빼기</option>
                       </select>
                       {c.action === "alias" && (
                         <select aria-label="맞출 역량" value={c.target} onChange={(e) => set(key, { target: e.target.value })}>
                           <option value="">— 고르기 —</option>
                           {t.suggest.length > 0 && <optgroup label="비슷한 것">{t.suggest.map((sg) => <option key={`s${keyOf(sg)}`} value={keyOf(sg)}>{sg.axis} · {sg.name}</option>)}</optgroup>}
-                          <optgroup label="사전 전체">{dictionary.map((d) => <option key={keyOf(d)} value={keyOf(d)}>{d.axis} · {d.name}</option>)}</optgroup>
+                          <optgroup label="사전 전체">{dictionary.map((d) => <option key={keyOf(d)} value={keyOf(d)}>{axisLabel(d.axis)} · {d.name}</option>)}</optgroup>
                         </select>
                       )}
                       {c.action === "new" && (
                         <select aria-label="새 역량의 축" value={c.axis} onChange={(e) => set(key, { axis: e.target.value })}>
-                          {AXES.map((a) => <option key={a}>{a}</option>)}
+                          {AXES.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
                         </select>
                       )}
                       {c.unsure && <span className="form-warn" title="AI 가 확실하지 않다고 한 것">?</span>}
