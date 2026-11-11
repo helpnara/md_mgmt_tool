@@ -2385,9 +2385,7 @@ body.readonly .meeting-panel input[type="checkbox"] { pointer-events: none; }
 .people-table .person-left-cell select { flex: 0 1 84px; width: 84px; min-width: 60px; }
 .people-table th { white-space: nowrap; }
 .people-table .person-actions .cell-row { justify-content: flex-start; }   /* 277 — 남는 폭은 오른쪽에, 단추는 그 줄의 칸 바로 옆에 */
-@media (max-width: 1399px) {
-  .people-table .person-left-cell .cell-row { flex-wrap: wrap; }
-}
+/* 279 — 좁은 화면에서 떠난 날 · 사유를 두 줄로 접던 규칙은 뺐다 — 명부 상자가 가로로 민다 */
 /* 팀장 줄 — 딱지 대신 이름 칸을 보라 테두리로(줄 높이가 늘지 않게) */
 .people-table tr.person-leader .name-with-leader input:not(.leader-pick) { border-color: var(--ai-300); font-weight: 600; }
 .people-table td .ip-error { display: block; }
@@ -2973,15 +2971,29 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-right { min-width: 0; }
 .import-done a { margin-right: 4px; }
 
-/* 278 — 담당자 명부 두 단: 명부 표는 글자에 맞춘 폭(277) 그대로, 오른쪽 남는 자리에 접속 주소 · 명부에 없는 이름 */
-.people-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (min-width: 1100px) {
-  .people-split { grid-template-columns: max-content minmax(260px, 1fr); }
-  .people-split .people-scroll .people-table { width: auto; }
-}
-.people-main { min-width: 0; }
-.people-side { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.people-side .unregistered, .people-side .people-visitors { margin: 8px 0 0; padding: 0; border: 0; }
-.people-side .trash-list li { flex-wrap: wrap; row-gap: 4px; }
-.people-side-empty { margin-top: 8px; }
-
+/* 279 — 담당자 명부 두 단(278 을 다시): 왼쪽 명부 · 오른쪽 명부에 없는 이름 · 오늘 접속한 주소를 **같은 모양의 상자**로.
+   제목 줄의 높이 · 위치를 맞추고, 왼쪽 상자는 명부 표 폭만큼(글자에 맞춘 칸 — 277), 오른쪽 상자가 나머지를 가진다.
+   명부에 없는 이름은 오른쪽 상자 안에서 타일로 — 넓으면 여러 열. 좁은 화면은 위아래 */
+.people-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: stretch; margin-top: 10px; }
+@media (min-width: 1100px) { .people-split { grid-template-columns: max-content minmax(320px, 1fr); } }
+.people-main, .people-side { min-width: 0; }
+.people-side { display: flex; flex-direction: column; gap: 12px; }
+.people-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); display: flex; flex-direction: column; min-width: 0; }
+.people-panel-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 10px 12px; border-bottom: 1px solid var(--border); min-height: 44px; }
+.people-panel-head .muted { font-size: var(--fs-xs); }
+.people-panel-head .people-find { margin: 0 0 0 auto; }
+.people-main .people-scroll { border: 0; border-radius: 0; margin: 0; max-height: 360px; }
+.people-main .people-scroll .people-table { width: auto; }
+.people-side .unregistered, .people-side .people-visitors { margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.people-side .people-panel { flex: 1 1 auto; }
+.people-side .people-visitors { flex: 0 0 auto; }
+.people-side .people-visitors > .hint { padding: 8px 12px 0; margin: 0; }
+.people-side .people-visitors .visitor-list { padding: 8px 12px 10px; }
+.unregistered-list { list-style: none; margin: 0; padding: 10px 12px; max-height: 340px; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; align-content: start; }
+.unregistered-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; flex-wrap: wrap;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--neutral-50, var(--card)); }
+.unregistered-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.unregistered-who .muted { font-size: var(--fs-xs); }
+.unregistered-act { display: flex; gap: 6px; flex-wrap: wrap; }
+.people-side-empty { padding: 10px 12px; margin: 0; }

@@ -288,7 +288,17 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         적지 않은 PC 는 지금처럼 보기만 됩니다. IP 가 바뀌면 여기서 고치면 됩니다.
       </CardIntro>
 
-      {people.length > 8 && (
+
+      {people.length > 0 && !leaderRow && (
+        <p className="hint warn-text leader-missing">아직 팀장을 고르지 않았습니다 — 이름 왼쪽 동그라미로 고르면 작성자 · 면담 대상이 따라갑니다.</p>
+      )}
+      {/* 278 — 두 단: 왼쪽 명부(칸 폭이 글자에 맞아 좁아졌다 — 277), 오른쪽에 오늘 접속한 주소 · 명부에 없는 이름. 좁은 화면은 위아래 */}
+      <div className="people-split">
+      <div className="people-main people-panel">
+        <div className="people-panel-head">
+          <b>명부 {people.length}명</b>
+          <span className="muted">이름 · 사번 · PC 주소 · 떠난 날</span>
+          {people.length > 8 && (
         <label className="people-find">
           찾기
           <input
@@ -300,13 +310,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
           {needle && <span className="muted">{shown.length}명</span>}
         </label>
       )}
-
-      {people.length > 0 && !leaderRow && (
-        <p className="hint warn-text leader-missing">아직 팀장을 고르지 않았습니다 — 이름 왼쪽 동그라미로 고르면 작성자 · 면담 대상이 따라갑니다.</p>
-      )}
-      {/* 278 — 두 단: 왼쪽 명부(칸 폭이 글자에 맞아 좁아졌다 — 277), 오른쪽에 오늘 접속한 주소 · 명부에 없는 이름. 좁은 화면은 위아래 */}
-      <div className="people-split">
-      <div className="people-main">
+        </div>
       {/* 인원이 늘어도 카드 키가 자라지 않게 목록 안에서만 스크롤한다 (TODO 121) */}
       {people.length > 0 && (
         <div className="people-scroll">
@@ -463,9 +467,36 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
       </div>
       <aside className="people-side">
 
+      {/* 279 — 명부에 없는 이름: 왼쪽 명부와 같은 모양의 상자(제목 줄 · 같은 높이 · 안쪽 스크롤). 줄마다 이름 · 어디에 쓰였나 · 단추 둘 */}
+      <div className="unregistered people-panel" data-testid="unregistered">
+        <div className="people-panel-head">
+          <b className={unregistered.length ? "warn-text" : undefined}>명부에 없는 이름 {unregistered.length}건</b>
+          <span className="muted">오타이거나 명부에 넣어야 할 사람</span>
+        </div>
+        {unregistered.length === 0 ? (
+          <p className="hint people-side-empty">없습니다 — 과제 · 면담 · 교육 · 경험 · 접수에 적힌 이름이 모두 명부에 있습니다.</p>
+        ) : (
+          <ul className="unregistered-list">
+            {unregistered.map((item) => (
+              <li key={item.name}>
+                <div className="unregistered-who">
+                  <b>{item.name}</b>
+                  <span className="muted">
+                    {[item.used ? `과제 ${item.used}건` : "", item.records ? `다른 기록 ${item.records}건` : ""].filter(Boolean).join(" · ")}
+                  </span>
+                </div>
+                <div className="unregistered-act">
+                  <button className="ghost small" disabled={busy} onClick={() => void add(item.name)}>명부에 넣기</button>
+                  <button className="ghost small" disabled={busy} onClick={() => unify(item.name)}>다른 이름으로 통일</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {/* 오늘 접속한 주소 (TODO 233) — IP 를 묻고 받아 적지 않아도 되게. 팀원이 공유 주소로 한 번 들어오면 여기 선다 */}
       {visitors.length > 0 && (
-        <div className="people-visitors">
+        <div className="people-visitors people-panel">
           <p className="hint">
             <b>오늘 접속한 주소</b> — 다른 PC 에서 공유 주소로 들어온 기록입니다. 등록 안 된 주소는 사람을 골라 <b>[붙이기]</b> 한 뒤{" "}
             <b>[명부 저장]</b> 하면, 그 PC 에서 연 화면이 그 사람의 담당 과제를 고칠 수 있게 됩니다.
@@ -539,30 +570,6 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         </div>
       )}
 
-      {unregistered.length > 0 && (
-        <div className="unregistered">
-          <p className="hint warn-text">
-            <b>명부에 없는 이름 {unregistered.length}건</b> — 오타이거나, 명부에 넣어야 할 사람입니다.
-          </p>
-          <ul className="trash-list">
-            {unregistered.map((item) => (
-              <li key={item.name}>
-                <span className="trash-label">{item.name}</span>
-                <span className="muted trash-when">{item.used ? `과제 ${item.used}건` : ""}{item.used && item.records ? " · " : ""}{item.records ? `다른 기록 ${item.records}건` : ""}</span>
-                <button className="ghost small" disabled={busy} onClick={() => void add(item.name)}>
-                  명부에 넣기
-                </button>
-                <button className="ghost small" disabled={busy} onClick={() => unify(item.name)}>
-                  다른 이름으로 통일
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {visitors.length === 0 && unregistered.length === 0 && (
-        <p className="hint people-side-empty">명부에 없는 이름이 없습니다 — 과제 · 면담 · 교육 · 경험 · 접수에 적힌 이름이 모두 명부에 있습니다.</p>
-      )}
       </aside>
       </div>
 
