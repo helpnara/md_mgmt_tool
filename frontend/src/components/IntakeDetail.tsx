@@ -47,6 +47,7 @@ import TagSuggestions from "./TagSuggestions";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import StatusBadge from "./StatusBadge";
 import VersionPanel from "./VersionPanel";
+import { UploadMeter } from "./RunningLine";
 import XlsxPreview from "./XlsxPreview";
 
 /**
@@ -661,11 +662,23 @@ function useMarkdownField(initial: string) {
   return { value, setValue, ref, insert };
 }
 
+// 올리기 진행을 첨부 판에 알린다 (TODO 268) — 올리는 쪽(편집기 · 카드)이 여럿이라 창 사건으로 건넨다
+const UPLOAD_EVENT = "intake-upload-progress";
+type UploadTick = { name: string; loaded: number; total: number; started: number } | null;
+
 async function uploadFiles(intakeId: string, files: File[]): Promise<IntakeAttachment[]> {
   const out: IntakeAttachment[] = [];
-  for (const file of files) {
-    const handle = uploadAttachment(`/api/intakes/${encodeURIComponent(intakeId)}/attachments`, file, () => undefined);
-    out.push((await handle.promise) as unknown as IntakeAttachment);
+  const tell = (detail: UploadTick) => window.dispatchEvent(new CustomEvent<UploadTick>(UPLOAD_EVENT, { detail }));
+  try {
+    for (const file of files) {
+      const started = Date.now();
+      tell({ name: file.name, loaded: 0, total: file.size, started });
+      const handle = uploadAttachment(`/api/intakes/${encodeURIComponent(intakeId)}/attachments`, file,
+        (loaded, total) => tell({ name: file.name, loaded, total, started }));
+      out.push((await handle.promise) as unknown as IntakeAttachment);
+    }
+  } finally {
+    tell(null);
   }
   return out;
 }
@@ -735,6 +748,12 @@ function AttachPanel({
 }) {
   const items = only ? intake.attachments.filter(only) : intake.attachments;
   const [busy, setBusy] = useState(0);
+  const [meter, setMeter] = useState<UploadTick>(null);
+  useEffect(() => {
+    const listen = (event: Event) => setMeter((event as CustomEvent<UploadTick>).detail);
+    window.addEventListener(UPLOAD_EVENT, listen);
+    return () => window.removeEventListener(UPLOAD_EVENT, listen);
+  }, []);
   const [previewing, setPreviewing] = useState<Attachment | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const Title = heading;
@@ -774,6 +793,7 @@ function AttachPanel({
           </div>
         )}
       </div>
+      {busy > 0 && <UploadMeter meter={meter} />}
       {items.length === 0 ? (
         <p className="hint">
           {emptyText ?? "과제정의서(PPT)·부연 설명·공정 설명·활용 화면을 붙여 두세요. 승격하면 과제로 복사됩니다."}

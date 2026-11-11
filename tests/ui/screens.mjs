@@ -7032,6 +7032,80 @@ async function main() {
     expect((await page.locator("[data-testid=health-workspace]").innerText()).includes(".work"), "점검에 작업 파일 자리");
   });
 
+  console.log("\n[73] 오래 걸리는 일의 진행 표시 — 되살리기 단계 · 다시 읽기 · 내보내기 · 첨부 (TODO 268)");
+
+  await check("되살리기 — 도는 작업이 있으면 다섯 단계와 지금 단계 · n / N · [그만두기] 를 보인다 (268)", async () => {
+    const fake = {
+      id: "f".repeat(32), state: "running", stage: "extract", stages: ["check", "safety", "extract", "swap", "index"],
+      stages_done: ["check", "safety"], cancellable: true, files_done: 12, files_total: 40, bytes_done: 3 * 1024 * 1024,
+      bytes_total: 10 * 1024 * 1024, elapsed: 20, eta: 14, error: "", result: null,
+    };
+    await page.route("**/api/backup/restore/jobs/**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(route.request().url().endsWith("/current") ? { job: fake } : fake) }));
+    try {
+      await go("#/settings?tab=backup");
+      const box = page.locator("[data-testid=restore-progress]");
+      await box.waitFor({ timeout: 8000 });
+      const text = await box.innerText();
+      for (const word of ["백업 살펴보기", "지금 데이터 먼저 백업", "백업 풀기", "데이터 폴더 바꾸기", "색인 다시 만들기", "12 / 40", "남은 시간 약 14초"]) {
+        expect(text.includes(word), `${word} 없음: ${text}`);
+      }
+      equal(await box.locator("li.now").innerText().then((t) => t.includes("백업 풀기")), true, "지금 단계 = 풀기");
+      equal(await box.locator("li.done").count(), 2, "끝난 단계 둘");
+      equal(await box.getByRole("button", { name: "그만두기" }).count(), 1, "그만두기");
+      equal(await page.locator("[data-restore-card] input[type=file]").isDisabled(), true, "도는 동안 파일 고르기 막힘");
+    } finally {
+      await page.unroute("**/api/backup/restore/jobs/**");
+    }
+  });
+
+  await check("[다시 읽기] 가 오래 걸리면 진행 줄이 선다 (268)", async () => {
+    await page.route("**/api/reindex", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      await route.continue();
+    });
+    try {
+      await go("#/projects");
+      await page.getByRole("button", { name: "다시 읽기", exact: true }).first().click();
+      const line = page.locator("[data-testid=running-line]");
+      await line.waitFor({ timeout: 4000 });
+      expect((await line.innerText()).includes("다시 읽기 — "), "진행 글");
+      await line.waitFor({ state: "detached", timeout: 15000 });
+    } finally {
+      await page.unroute("**/api/reindex");
+    }
+  });
+
+  await check("과제 [내보내기] — 누르면 메뉴 안에 만드는 진행, 다 만들면 내려받기를 시작했다고 말한다 (268)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.getByRole("button", { name: "내보내기", exact: true }).click();
+    const panel = page.locator(".export-panel");
+    const download = page.waitForEvent("download", { timeout: 30000 });
+    await panel.getByText("과제 폴더 백업 (zip)").click();
+    await download;
+    await page.waitForFunction(() => document.querySelector("[data-testid=export-progress]")?.textContent?.includes("다 만들었습니다"), null, { timeout: 8000 });
+    expect(await panel.isVisible(), "메뉴가 남아 진행을 보인다");
+    await page.keyboard.press("Escape");
+  });
+
+  await check("과제 개요 [📎 파일 첨부] — 올리는 동안 크기 · % 진행 줄 (268)", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.route("**/api/projects/*/attachments", async (route) => {
+      if (route.request().method() === "POST") await new Promise((resolve) => setTimeout(resolve, 2000));
+      await route.continue();
+    });
+    try {
+      const input = page.locator("[data-testid=overview-file]");
+      await input.setInputFiles({ name: "진행시험.txt", mimeType: "text/plain", buffer: Buffer.alloc(200 * 1024, 120) });
+      const meter = page.locator("[data-testid=upload-meter]");
+      await meter.waitFor({ timeout: 4000 });
+      expect((await meter.innerText()).includes("진행시험.txt"), "파일 이름");
+      await meter.waitFor({ state: "detached", timeout: 15000 });
+    } finally {
+      await page.unroute("**/api/projects/*/attachments");
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

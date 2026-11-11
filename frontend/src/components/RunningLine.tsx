@@ -88,3 +88,38 @@ export default function RunningLine({ active, runKey, label }: { active: boolean
     </div>
   );
 }
+
+type Meter = { name: string; loaded: number; total: number; started: number };
+
+/**
+ * 파일 올리기의 진행 (TODO 268) — 과제 개요 · 접수의 [📎 파일 첨부] 도 진행일지 편집기처럼 크기 · % · 속도 · 남은 시간을 보인다.
+ * `progress(file)` 를 `uploadAttachment` 의 onProgress 로 넘기고, 다 올리면 `clear()`.
+ */
+export function useUploadMeter() {
+  const [meter, setMeter] = useState<Meter | null>(null);
+  const progress = (file: File) => {
+    const started = Date.now();
+    setMeter({ name: file.name, loaded: 0, total: file.size, started });
+    return (loaded: number, total: number) => setMeter({ name: file.name, loaded, total, started });
+  };
+  return { meter, progress, clear: () => setMeter(null) };
+}
+
+export function UploadMeter({ meter }: { meter: Meter | null }) {
+  if (!meter) return null;
+  const spent = (Date.now() - meter.started) / 1000;
+  const rate = spent > 0 ? meter.loaded / spent : 0;
+  const eta = rate > 0 && meter.loaded < meter.total ? (meter.total - meter.loaded) / rate : null;
+  const ratio = meter.total ? meter.loaded / meter.total : null;
+  return (
+    <div className="running-line" data-testid="upload-meter" aria-live="polite">
+      <ProgressBar ratio={meter.loaded >= meter.total ? null : ratio} label="올리기" />
+      <p className="muted">
+        {meter.loaded >= meter.total
+          ? `${meter.name} — 다 올렸습니다, 서버가 저장하는 중…`
+          : `올리는 중 — ${meter.name} · ${formatBytes(meter.loaded)} / ${formatBytes(meter.total)} (${ratio !== null ? Math.floor(ratio * 100) : 0}%)` +
+            `${rate ? ` · ${formatBytes(rate)}/초` : ""}${eta !== null ? ` · 남은 시간 약 ${seconds(eta)}` : ""}`}
+      </p>
+    </div>
+  );
+}

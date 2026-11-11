@@ -25,6 +25,7 @@ import ProjectForm from "./ProjectForm";
 import StatusBadge, { TypeBadge } from "./StatusBadge";
 import { isLeader, leftLabel } from "../people";
 import StageBand from "./StageBand";
+import { UploadMeter, useUploadMeter } from "./RunningLine";
 import { FORM_SHOWN_WARNING, REPORT_DRAFT_DAYS, addDays, reportDateProblem, warningList } from "../inputRules";
 
 interface Props {
@@ -147,6 +148,7 @@ export default function ProjectDetail({
   // 개요에 직접 붙이는 첨부 — 효과 산출 근거(엑셀·PPT)를 위한 자리다.
   const overviewFileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+  const overviewMeter = useUploadMeter();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [overviewDraft, setOverviewDraft] = useState("");
   // 개요 저장 중 — 두 번 누르면 두 번 저장되던 것을 막는다 (TODO 161)
@@ -351,7 +353,7 @@ export default function ProjectDetail({
           const saved = await uploadAttachment(
             `/api/projects/${project.id}/attachments`,
             file,
-            () => undefined,
+            overviewMeter.progress(file),   // 크기 · % · 속도 · 남은 시간 (TODO 268)
           ).promise;
           links.push(saved.markdown);
           // 편집 중에 올린 것만 장부에 — [취소] 하면 지운다. 같은 파일을 돌려받은 것(deduplicated)은 남의 것이라 빼고 (TODO 213 ⑤)
@@ -370,6 +372,7 @@ export default function ProjectDetail({
         setUploadError((err as Error).message);
       } finally {
         setUploading(null);
+        overviewMeter.clear();
       }
     },
     // overviewLedger 의 함수는 ref 를 본다 — 렌더마다 새 객체여도 같은 장부다
@@ -1029,6 +1032,7 @@ export default function ProjectDetail({
           <div className="overview-actions">
             <input
               ref={overviewFileRef}
+              data-testid="overview-file"
               type="file"
               multiple
               hidden
@@ -1076,6 +1080,7 @@ export default function ProjectDetail({
             </button>
           </div>
         </div>
+        <UploadMeter meter={overviewMeter.meter} />
         {uploadError && <p className="form-error">{uploadError}</p>}
         {showOverviewVersions && (
           <VersionPanel
