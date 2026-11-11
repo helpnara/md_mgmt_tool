@@ -197,11 +197,11 @@ export default function ExperienceCard({
         <p className="muted">아직 경험이 없습니다.{manager && missing.length > 0 ? " 위의 [회고 있는 과제 모두 초안] 으로 시작하세요." : ""}</p>
       ) : (
         <div className="table-scroll">
-          <table className="grid experience-table">
+          <table className="grid experience-table fit-cols">
             <thead>
               <tr>
                 <th>번호</th>
-                <th>제목</th>
+                <th className="fill-col">제목</th>
                 <th>기간</th>
                 <th>과제</th>
                 <th>상태</th>

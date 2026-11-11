@@ -355,11 +355,11 @@ export default function ReportCandidates({ meta, query }: Props) {
       {loaded === null && !error && <p className="hint list-loading">불러오는 중…</p>}
 
       {loaded !== null && (
-      <table className="grid">
+      <table className="grid fit-cols">
         <thead>
           <tr>
             {!readonly && <th className="pick-col">담기</th>}
-            <SortHeader sortKey="title" current={sortState} onSort={onSort}>과제</SortHeader>
+            <SortHeader sortKey="title" current={sortState} onSort={onSort} className="fill-col">과제</SortHeader>
             <SortHeader sortKey="status" current={sortState} onSort={onSort}>상태</SortHeader>
             <SortHeader sortKey="last_reported_at" current={sortState} onSort={onSort}>
               마지막 보고

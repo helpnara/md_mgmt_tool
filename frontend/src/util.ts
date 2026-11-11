@@ -235,3 +235,12 @@ export function openRowClick(event: React.MouseEvent, href: string): void {
 export function axisLabel(axis: string): string {
   return axis === "기술" ? "전문기술" : axis;
 }
+
+/**
+ * 글자 수에 맞춘 입력 칸 폭 (TODO 277) — 고정 폭(%)이면 세 글자 이름에도 250px 칸이 서서 표에 빈 공간이 컸다.
+ * 한 열의 값들(자리표시 글 포함) 중 가장 긴 것에 맞춘다 — 한글 · 전각은 영문 두 칸쯤. `min` · `max` 는 글자 칸(ch) 수.
+ */
+export function fitWidth(texts: (string | undefined | null)[], min = 4, max = 40): string {
+  const units = Math.max(0, ...texts.map((text) => [...(text ?? "")].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 0x2e7f ? 1.9 : 1.05), 0)));
+  return `calc(${Math.min(max, Math.max(min, Math.ceil(units)))}ch + 26px)`;
+}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Person, Visitor } from "../types";
 import { splitPeople } from "../people";
-import { useEditedUnsaved } from "../util";
+import { useEditedUnsaved, fitWidth } from "../util";
 import { DATE_MAX, DATE_MIN, LEFT_REASONS, dateProblem, isDeparted, isFuture, personNameProblem } from "../inputRules";
 import NameDialog, { changeCounts } from "./NameDialog";
 import { enterToSave } from "./enterSave";
@@ -24,7 +24,7 @@ function ipProblem(ip: string): string | null {
 }
 
 /** PC 주소 칸 — 쓰는 동안의 글자는 그대로 두고(쉼표를 막 친 순간), 주소 목록만 위로 올린다 */
-function IpCell({ ips, onChange, problem, locked }: { ips: string[]; onChange: (ips: string[]) => void; problem: string | null; locked?: string }) {
+function IpCell({ ips, onChange, problem, locked, width }: { ips: string[]; onChange: (ips: string[]) => void; problem: string | null; locked?: string; width?: string }) {
   const [text, setText] = useState(ips.join(", "));
   useEffect(() => {
     // 바깥(오늘 접속한 주소 [붙이기] · 다시 읽기)에서 바뀌었으면 글자를 따라간다
@@ -41,6 +41,7 @@ function IpCell({ ips, onChange, problem, locked }: { ips: string[]; onChange: (
         }}
         placeholder="개인 PC 만"
         aria-label="PC 주소"
+        style={width ? { width } : undefined}
         aria-invalid={problem ? true : undefined}
         disabled={Boolean(locked)}
         title={locked ?? problem ?? "이 사람 PC 의 IP. 여기서 연 화면은 이 사람으로 보고, 담당 과제의 진행일지 · 첨부 · 개요를 고칠 수 있습니다. 여럿이면 쉼표로"}
@@ -228,6 +229,12 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
     return null;
   });
   const problemCount = rowProblems.filter((row) => row.name || row.id || row.left).length + ipProblems.filter(Boolean).length;
+  // 277 — 칸 폭을 글자 수에 맞춘다(열마다 가장 긴 값). 남는 폭은 맨 오른쪽으로
+  const widths = {
+    name: fitWidth(people.map((p) => p.name), 5, 16),
+    id: fitWidth([...people.map((p) => p.employee_id), "나중에"], 5, 14),
+    ip: fitWidth([...people.map((p) => (p.ips ?? []).join(", ")), "개인 PC 만"], 8, 32),
+  };
   const setIps = (index: number, ips: string[]) => setPeople((prev) => prev.map((p, i) => (i === index ? { ...p, ips } : p)));
   // 팀장 (TODO 235) — 한 명. 고르면 다른 사람의 표시는 풀린다
   const setLeader = (index: number) => setPeople((prev) => prev.map((p, i) => ({ ...p, leader: i === index })));
@@ -347,6 +354,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                   />
                   <input
                     value={person.name}
+                    style={{ width: widths.name }}
                     onChange={(e) => update(index, "name", e.target.value)}
                     aria-invalid={rowProblems[index]?.name ? true : undefined}
                     disabled={!admin && Boolean(person.leader)}
@@ -358,6 +366,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                 <td>
                   <input
                     value={person.employee_id}
+                    style={{ width: widths.id }}
                     onChange={(e) => update(index, "employee_id", e.target.value)}
                     placeholder="나중에"
                     aria-invalid={rowProblems[index]?.id ? true : undefined}
@@ -378,6 +387,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                     onChange={(ips) => setIps(index, ips)}
                     problem={ipProblems[index]}
                     locked={!admin && person.leader ? LEADER_LOCKED : undefined}
+                    width={widths.ip}
                   />
                 </td>
                 <td className="person-left-cell">

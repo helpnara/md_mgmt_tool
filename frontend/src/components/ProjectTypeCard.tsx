@@ -123,10 +123,10 @@ export default function ProjectTypeCard({ onSaved }: { onSaved: () => void }) {
             </span>
             <button data-write
               className="ghost small danger"
-              disabled={row.count > 0 || row.key === "smart"}
+              disabled={row.count > 0 || (row.key === "smart" && rows.length > 1)}
               title={
-                row.key === "smart"
-                  ? "스마트과제는 분류(성격 · 분류 …) 칸과 접수 승격이 쓰는 속성이라 뺄 수 없습니다 — 이름은 바꿀 수 있습니다 (TODO 275)"
+                row.key === "smart" && rows.length > 1
+                  ? "스마트과제는 분류(성격 · 분류 …) 칸과 접수 승격이 쓰는 속성이라 뺄 수 없습니다 — 이름은 바꿀 수 있습니다. 속성을 아예 안 쓰려면 다른 속성을 먼저 모두 빼세요 (TODO 275)"
                   : row.count > 0
                   ? `${row.count}건이 쓰고 있어 뺄 수 없습니다. 그 과제들의 속성을 먼저 바꿔 주세요.`
                   : "이 속성을 뺍니다"

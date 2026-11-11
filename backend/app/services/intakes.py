@@ -114,6 +114,11 @@ class IntakeClosedError(ValueError):
 
 # ── 번호 · 폴더 ─────────────────────────────────────────────────────────────
 
+
+def _promote_type() -> str | None:
+    """승격 때의 속성 — 스마트과제가 목록에 있으면 그것, 속성을 안 쓰는 팀(목록을 비움 — TODO 100)이면 없음(TODO 275)."""
+    return CLASSIFIED_TYPE if CLASSIFIED_TYPE in settings_service.type_labels() else None
+
 def now_iso() -> str:
     return clock.now().replace(microsecond=0).isoformat()
 
@@ -955,7 +960,7 @@ def promotion_plan(conn: sqlite3.Connection, intake_id: str) -> dict[str, Any]:
     mapped = map_body(doc.body, intake_id, row["title"])
     return {
         "title": row["title"],
-        "type": CLASSIFIED_TYPE,
+        "type": _promote_type(),
         "status": "in_progress",
         "owners": owners,
         "partners": partners,
@@ -1026,7 +1031,7 @@ def promote(
     project_id = projects_service.create_project(conn, {
         "title": title,
         "status": data.get("status") or "in_progress",
-        "type": data.get("type") if data.get("type") is not None else CLASSIFIED_TYPE,
+        "type": data.get("type") if data.get("type") is not None else _promote_type(),
         "owners": data.get("owners") or [],
         "partners": data.get("partners") or [],
         "start_date": data.get("start_date"),

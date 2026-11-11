@@ -184,7 +184,8 @@ def save_project_types(
     # 275 — 스마트과제(`smart`)는 분류 넷 · 홈의 스마트과제 · 접수 승격이 기대는 속성이라 뺄 수 없다(이름은 바꿀 수 있다)
     from ..config import CLASSIFIED_TYPE
 
-    if not any(item["key"] == CLASSIFIED_TYPE for item in wanted):
+    # 목록을 통째로 비우는 것은 된다(속성을 안 쓰는 팀 — TODO 100). 다른 속성은 남기고 스마트과제만 빼는 것을 막는다
+    if wanted and not any(item["key"] == CLASSIFIED_TYPE for item in wanted) and CLASSIFIED_TYPE in svc.type_labels():
         raise HTTPException(status_code=400, detail="스마트과제 속성은 분류(성격 · 분류 …) 칸과 접수 승격이 쓰는 속성이라 뺄 수 없습니다 — 이름은 바꿀 수 있습니다.")
 
     # 쓰고 있는 속성이 사라지면 그 과제들이 색인에서 미지정이 된다. 먼저 옮기게 한다.

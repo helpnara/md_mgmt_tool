@@ -83,3 +83,7 @@ def test_smart_type_cannot_be_removed(team):  # noqa: F811
     assert r.status_code == 400 and "스마트과제" in r.json()["detail"]
     renamed = [{"key": t["key"], "label": "스마트 과제" if t["key"] == "smart" else t["label"]} for t in types]
     assert owner.put("/api/settings/project-types", json={"types": renamed}).status_code == 200
+    # 속성을 안 쓰는 팀(목록을 통째로 비움 — TODO 100)은 되고, 그때 승격한 과제는 속성 없음
+    assert owner.put("/api/settings/project-types", json={"types": []}).status_code == 200
+    from app.services import intakes
+    assert intakes._promote_type() is None

@@ -7168,6 +7168,46 @@ async function main() {
     expect(labels.length === 0 || labels.includes("전문기술"), `축 이름: ${labels.slice(0, 4)}`);
   });
 
+  console.log("\n[75] 설정을 바꾸면 쓰는 곳도 따라가게 · 칸 폭을 글자에 맞게 (TODO 275 · 277)");
+
+  await check("분류 값 정리 — 쓰는 수가 보이고 [이름 바꾸기]가 과제의 값도 함께 바꾼다 (275)", async () => {
+    const made = await api.post("/api/projects", { title: "분류 이름 시험 과제", type: "smart", nature: "옛 성격 이름" });
+    await go("#/settings?tab=class");
+    const panel = page.locator("[data-testid=class-values]");
+    await panel.waitFor({ timeout: 8000 });
+    const row = panel.locator('li[data-class-value="옛 성격 이름"]');
+    expect((await row.innerText()).includes("목록에 없음") && (await row.innerText()).includes("과제 1"), `옛 값 줄: ${await row.innerText()}`);
+    await row.getByRole("button", { name: "이름 바꾸기" }).click();
+    await row.locator('input[aria-label="옛 성격 이름 새 이름"]').fill("기타");
+    nextDialog((d) => d.accept());
+    await row.getByRole("button", { name: "합치기" }).click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=class-values]")?.textContent?.includes("합쳤습니다"), null, { timeout: 8000 });
+    equal((await api.get(`/api/projects/${made.id}`)).nature, "기타", "과제의 값도 바뀜");
+    await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+  });
+
+  await check("스마트과제 속성의 [빼기]는 잠겨 있다 (275)", async () => {
+    await go("#/settings");
+    const item = page.locator("li", { has: page.locator(".type-badge", { hasText: /스마트/ }) }).first();
+    await item.waitFor({ timeout: 8000 });
+    expect(await item.getByRole("button", { name: "빼기" }).isDisabled(), "빼기 꺼짐");
+  });
+
+  await check("담당자 명부 — 이름 · 사번 칸이 글자 수에 맞고, [빼기]가 그 줄 칸 바로 옆에 (277)", async () => {
+    await go("#/settings");
+    const table = page.locator(".people-table");
+    await table.waitFor({ timeout: 8000 });
+    const nameBox = await table.locator("tbody tr").first().locator("td").first().locator('input:not([type="radio"])').boundingBox();
+    expect(nameBox && nameBox.width < 200, `이름 칸 폭: ${nameBox?.width}`);
+    const gap = await table.locator("tbody tr").first().evaluate((tr) => {
+      const cells = tr.querySelectorAll("td");
+      const left = cells[cells.length - 2].querySelector("select")?.getBoundingClientRect();
+      const btn = cells[cells.length - 1].querySelector("button.danger")?.getBoundingClientRect();
+      return left && btn ? btn.left - left.right : -1;
+    });
+    expect(gap >= 0 && gap < 60, `사유 상자와 [빼기] 사이: ${gap}px`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

@@ -443,10 +443,10 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
       {projects !== null && view === "table" && (
       /* 좁은 화면에서는 표만 가로로 민다 — 한 줄 칸을 다시 꺾지 않는다 (TODO 160) */
       <div className="table-scroll">
-      <table className="grid project-table">
+      <table className="grid project-table fit-cols">
         <thead>
           <tr>
-            <SortHeader {...header("과제", "col-title")}>과제</SortHeader>
+            <SortHeader {...header("과제", "col-title fill-col")}>과제</SortHeader>
             <SortHeader {...header("상태", "one-line")}>상태</SortHeader>
             <SortHeader {...header("속성", "one-line")}>속성</SortHeader>
             {/* 스마트과제는 성격이 중요하다 — 속성 바로 옆 (TODO 159) */}
