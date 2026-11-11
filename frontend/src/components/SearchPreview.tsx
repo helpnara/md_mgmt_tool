@@ -20,7 +20,7 @@ function itemsOf(results: SearchResults): Item[] {
 
 /**
  * 머리줄 검색 칸의 입력 중 미리보기 (TODO 254 2차 D) — 두 글자부터 0.25초 쉬면 위 몇 건을 펼친다.
- * 누르면 바로 그곳으로, [엔터]는 지금처럼 전체 결과. Esc · 칸 밖을 누르면 접는다. 검색 결과 화면에서는 띄우지 않는다.
+ * 누르면 바로 그곳으로, [엔터]는 지금처럼 전체 결과. Esc · 칸 밖을 누르면 접는다. 검색 결과 화면에서는 지금 결과와 다른 말일 때만.
  */
 export default function SearchPreview({ term, active, onClose }: { term: string; active: boolean; onClose: () => void }) {
   const [items, setItems] = useState<Item[] | null>(null);

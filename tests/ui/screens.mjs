@@ -6968,6 +6968,18 @@ async function main() {
     await first.click();
     await page.waitForTimeout(600);
     expect(page.url().endsWith(href), `누르면 그곳으로: ${page.url()} / ${href}`);
+    // 검색 결과 화면에서도 — 지금 결과와 다른 말을 치면(v56 확인 뒤)
+    await go(`#/search?q=${encodeURIComponent("주요업무")}`);
+    await page.waitForTimeout(900);
+    await box.click();
+    await box.fill("시제품");
+    await page.waitForTimeout(900);
+    equal(await page.locator("[data-testid=search-preview]").count(), 1, "결과 화면에서도 새 말이면 미리보기");
+    const shown = await page.locator("[data-testid=search-preview]").evaluate((el) => {
+      const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.left + 20, r.top + 15));
+    });
+    expect(shown, "미리보기가 맨 위에 보인다(다른 것에 가리지 않음)");
+    await box.press("Escape");
   });
 
   await check("초성 · 띄어쓰기 무시로 찾는다 (254 2차)", async () => {

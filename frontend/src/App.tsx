@@ -352,7 +352,9 @@ export default function App() {
             aria-label="검색"
             ref={searchRef}
           />
-          <SearchPreview term={term} active={previewOpen && route.name !== "search"} onClose={() => setPreviewOpen(false)} />
+          {/* 검색 결과 화면에서도 — 지금 결과와 다른 말을 칠 때(v56 확인: 결과 화면에서 새로 치면 안 떴다) */}
+          <SearchPreview term={term} active={previewOpen && (route.name !== "search" || term.trim() !== route.query.trim())}
+            onClose={() => setPreviewOpen(false)} />
           <button type="submit" className="ghost">
             검색
           </button>
