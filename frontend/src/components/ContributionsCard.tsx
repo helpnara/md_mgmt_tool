@@ -9,7 +9,7 @@ import { RetroField, RetroText } from "./RetroText";
 import { DoneCard } from "./YearCard";
 
 /**
- * 담당과 역할 (TODO 237 · 239) — 사람마다 역할 · 맡은 부분 · 보유 기술 · 담당 기간 · 회고(내가 한 일 · 결과).
+ * 담당과 역할 (TODO 237 · 239) — 사람마다 역할 · 맡은 부분 · 보유 기술(도구) · 담당 기간 · 회고(내가 한 일 · 결과).
  * 회고는 둘 — 배경 · 목적은 과제 개요에 있어 담당자마다 적지 않는다(239 ⑤).
  *
  * 팀원이 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료다. 업무 이력 한 줄은 **과제 · 기간 · 내 역할 · 내가 한 일 · 성과**인데,
@@ -94,7 +94,7 @@ export default function ContributionsCard({
       {project.done_summary && <DoneCard summary={project.done_summary} fresh={celebrate} />}
       <Explain
         id="contributions"
-        lead={<>사람마다 <b>역할 · 맡은 부분 · 보유 기술 · 담당 기간 · 회고</b>를 남깁니다 — 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료입니다.</>}
+        lead={<>사람마다 <b>역할 · 맡은 부분 · 보유 기술(도구) · 담당 기간 · 회고</b>를 남깁니다 — 나중에 본인의 업무 이력 · 성과를 정리할 때의 재료입니다.</>}
       >
         담당 기간은 담당자를 바꾸면 저절로 적힙니다(든 사람은 그날부터, 빠진 사람은 그날까지). 기록이 없던 담당자는 시작일부터로 읽습니다.
         팀원은 자기 줄의 역할 · 맡은 부분 · 회고를 고치고, 담당 기간은 팀장이 고칩니다. 과제 [내보내기]에도 이 내용이 함께 나갑니다.
@@ -207,7 +207,7 @@ export function ContributionForm({
 }) {
   const [role, setRole] = useState(row.role);
   const [part, setPart] = useState(row.part);
-  // 보유 기술 (TODO 239) — 쉼표로. 팀에서 쓴 것을 골라 넣을 수 있다
+  // 보유 기술(도구) (TODO 239) — 쉼표로. 팀에서 쓴 것을 골라 넣을 수 있다
   const [skills, setSkills] = useState(row.skills.join(", "));
   const chosenSkills = skills.split(",").map((item) => item.trim()).filter(Boolean);
   const chosenKeys = new Set(chosenSkills.map((item) => item.toLowerCase()));
@@ -289,9 +289,9 @@ export function ContributionForm({
       </div>
       <div className="contrib-form-row">
         <label className="contrib-skills-label">
-          <span>보유 기술 <span className="muted">(쉼표로 여러 개 · 10개까지)</span></span>
+          <span>보유 기술(도구) <span className="muted">(쉼표로 여러 개 · 10개까지)</span></span>
           <input value={skills} onChange={(event) => setSkills(event.target.value)}
-                 placeholder="예: Python, SQL, MES — 언어 · 소프트웨어 · 장비 (분석 기법 · 방법은 경험의 역량 태그로)" aria-label="보유 기술" />
+                 placeholder="예: Python, SQL, MES — 언어 · 소프트웨어 · 장비 (분석 기법 · 방법은 경험의 역량 태그로)" aria-label="보유 기술(도구)" />
         </label>
       </div>
       {suggestions.length > 0 && (

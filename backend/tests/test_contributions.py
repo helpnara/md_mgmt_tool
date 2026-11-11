@@ -225,7 +225,7 @@ def test_skills_per_person_row(team):
     assert history["projects"][0]["skills"] == ["Python", "SQL", "python 회귀"]
     assert {"name": "SQL", "count": 1} in history["skills"]
     text = owner.get(f"/api/projects/{pid}/export?format=md").text
-    assert "보유 기술: Python, SQL, python 회귀" in text
+    assert "보유 기술(도구): Python, SQL, python 회귀" in text
     # 비우기
     assert owner.put(url, json={"skills": []}).json()["contributions"][0]["skills"] == []
     assert "skills" not in md.load(_index_md(pid)).meta["contributions"][0]

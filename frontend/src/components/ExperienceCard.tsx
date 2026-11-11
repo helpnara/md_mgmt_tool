@@ -181,7 +181,7 @@ export default function ExperienceCard({
       {data && (data.tools?.length ?? 0) > 0 && (
         <div className="experience-skills experience-tools" data-testid="experience-tools">
           <div className="exp-skill-axis">
-            <span className="exp-label">보유 기술</span>
+            <span className="exp-label">보유 기술(도구)</span>
             {data.tools.map((tool) => (
               <span key={tool.name} className={tool.known ? "exp-chip tool" : "exp-chip tool unknown"}
                 title={`과제 ${tool.projects}건 · 경험 ${tool.experiences}건${tool.last ? ` · 마지막 ${tool.last}년` : ""}${tool.known ? "" : " · 보유 기술 사전에 없음"}`}>

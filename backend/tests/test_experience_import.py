@@ -70,7 +70,7 @@ def test_prompt_has_rules_format_records_and_leaves_out_names_and_money(team):  
     assert data["chars"] == len(text)
     for piece in ("형식: slow-way-experience/0.1", "```slow-way", "이어짐: E-nnn?", "결과_정량", "확인_필요",
                   f"## 과제 1. 함께 하는 과제 ({pid})", "- 배경: 출하 검사를 육안으로 해서 편차가 컸다.", "- 목표: 재검을 줄인다.",
-                  "- 역할: 주관", "- 맡은 부분: 판정 기준 정리", "- 도구(보유 기술): 이미지 판정, Python",
+                  "- 역할: 주관", "- 맡은 부분: 판정 기준 정리", "- 보유 기술(도구): 이미지 판정, Python",
                   "  - 2026-06-30 시범 라인 적용", "- 내가 한 일:", "  - 불량 유형 재분류", "- 결과: 재검 월 30건 → 12건",
                   "[역량 목록]", "- 기술: 비전 AI 객체탐지", "- 문제해결: 문제 재정의", "[기존 경험 목록]"):
         assert piece in text, piece

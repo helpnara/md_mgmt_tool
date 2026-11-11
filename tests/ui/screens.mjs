@@ -6347,7 +6347,7 @@ async function main() {
     await check("[STAR 정리 프롬프트] — 먼저 보여 주고 [복사], 이름 · 금액은 없다 (239 ③ · 244 B6)", async () => {
       await page.getByRole("button", { name: "STAR 정리 프롬프트" }).click();
       const shown = await page.locator(".refine-text").inputValue();
-      expect(shown.includes("[반드시 지킬 것]") && shown.includes("STAR") && shown.includes("회고 시험 과제") && shown.includes("보유 기술: Python, SQL"), `프롬프트: ${shown.slice(0, 200)}`);
+      expect(shown.includes("[반드시 지킬 것]") && shown.includes("STAR") && shown.includes("회고 시험 과제") && shown.includes("보유 기술(도구): Python, SQL"), `프롬프트: ${shown.slice(0, 200)}`);
       expect(!shown.includes("권경락") && !shown.includes("억"), "이름 · 금액이 없다");
       await page.locator(".refine-panel").getByRole("button", { name: "복사" }).click();
       equal(await page.evaluate(() => navigator.clipboard.readText()), shown, "복사한 글 = 보인 글");
@@ -6867,13 +6867,16 @@ async function main() {
     await page.waitForTimeout(900);
     const card = page.locator("[data-testid=skill-dictionary]");
     expect((await card.locator(".icon-title, h2").first().innerText()).includes("역량 사전 47개"), "46 + 더한 하나");
-    equal(await card.locator('tr[data-skill="사내 점검 도구"]').count(), 1, "더한 역량");
-    await card.locator('select[aria-label="축으로 거르기"]').selectOption("리더십");
-    equal(await card.locator("tbody tr").count(), 10, "리더십 10개");
+    await card.locator('input[aria-label="역량 찾기"]').fill("사내점검");      // 274 — 찾기(띄어쓰기 무시)
+    equal(await card.locator('li[data-entry="사내 점검 도구"]').count(), 1, "더한 역량");
+    await card.locator('input[aria-label="역량 찾기"]').fill("");
+    await card.getByRole("button", { name: /^리더십 \d+/ }).click();
+    equal(await card.locator("li.dict-item").count(), 10, "리더십 10개");
+    await card.locator("li.dict-item .dict-line").first().click();
+    equal(await card.locator('input[aria-label="역량 대표 이름"]').count(), 1, "누르면 고치는 칸");
     nextDialog((d) => d.accept());
     await card.getByRole("button", { name: "기본으로" }).click();
     await page.waitForTimeout(1000);
-    await card.locator('select[aria-label="축으로 거르기"]').selectOption("");
     expect((await card.innerText()).includes("역량 사전 46개 (기본)"), "기본으로 돌아왔다");
   });
 
@@ -7144,6 +7147,7 @@ async function main() {
     await card.getByRole("button", { name: "+ 보유 기술" }).click();
     await card.locator('input[aria-label="보유 기술 대표 이름"]').last().fill("계측기");
     await card.locator('input[aria-label="보유 기술 다른 이름"]').last().fill("현장계측기");
+    await card.locator('input[aria-label="보유 기술 다른 이름"]').last().press("Enter");     // 274 — 다른 이름은 칩으로
     await card.getByRole("button", { name: "저장", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("[data-testid=tool-dictionary]")?.textContent?.includes("저장했습니다"), null, { timeout: 15000 });
     const after = await api.get(`/api/experiences/${made.id}`);
@@ -7154,14 +7158,14 @@ async function main() {
     seeded.toolExp = made.id;
   });
 
-  await check("경험 상세 — 칸 이름 '보유 기술', 축은 '전문 기술', 글에 나오는데 칸에 없으면 알림 (273)", async () => {
+  await check("경험 상세 — 칸 이름 '보유 기술(도구)', 축은 '전문기술', 글에 나오는데 칸에 없으면 알림 (273)", async () => {
     await go(`#/experience/${seeded.toolExp}`);
     const detail = page.locator(".experience-detail");
     await detail.waitFor({ timeout: 8000 });
-    equal(await detail.getByLabel("보유 기술", { exact: true }).count(), 1, "보유 기술 칸");
+    equal(await detail.getByLabel("보유 기술(도구)", { exact: true }).count(), 1, "보유 기술(도구) 칸");
     expect((await detail.locator("[data-testid=tool-note]").first().innerText()).includes("SQL"), "글에 나오는 SQL 알림");
     const labels = await detail.locator('select[aria-label="축"] option').allInnerTexts().catch(() => []);
-    expect(labels.length === 0 || labels.includes("전문 기술"), `축 이름: ${labels.slice(0, 4)}`);
+    expect(labels.length === 0 || labels.includes("전문기술"), `축 이름: ${labels.slice(0, 4)}`);
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

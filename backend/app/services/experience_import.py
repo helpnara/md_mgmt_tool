@@ -126,7 +126,7 @@ def record_text(item: dict[str, Any], index: int) -> str:
     if item.get("part"):
         lines.append(f"- 맡은 부분: {item['part']}")
     if item.get("skills"):
-        lines.append(f"- 도구(보유 기술): {', '.join(item['skills'])}")
+        lines.append(f"- 보유 기술(도구): {', '.join(item['skills'])}")
     if item.get("milestones"):
         lines.append("- 중간 성과:")
         lines += [f"  - {m['date']} {m['text']}" for m in item["milestones"]]

@@ -231,7 +231,7 @@ export function openRowClick(event: React.MouseEvent, href: string): void {
   window.location.hash = href;
 }
 
-/** 역량 축의 보이는 이름 (TODO 273) — 저장 값 · 응답 형식의 키는 "기술" 그대로, 화면에서는 보유 기술과 헷갈리지 않게 "전문 기술" */
+/** 역량 축의 보이는 이름 (TODO 273) — 저장 값 · 응답 형식의 키는 "기술" 그대로, 화면에서는 보유 기술과 헷갈리지 않게 "전문기술"(붙여 씀 — 274) */
 export function axisLabel(axis: string): string {
-  return axis === "기술" ? "전문 기술" : axis;
+  return axis === "기술" ? "전문기술" : axis;
 }

@@ -123,7 +123,7 @@ export default function SkillCleanupCard() {
       </div>
       <CardIntro id="skill-cleanup">
         모든 팀원 경험에서 <b>사전에 없는 태그</b>를 모았습니다. 태그마다 <b>동의어로</b>(사전의 역량에 다른 이름으로 더함) · <b>새 역량으로</b> ·
-        <b> 보유 기술로</b>(Python 같은 이름 — 보유 기술 칸으로) · <b>빼기</b>(“개발 · 구축” 같은 넓은 말)를 고르고 [적용]합니다. 경험 하나씩 고치지 않아도 됩니다.
+        <b> 보유 기술(도구)로</b>(Python 같은 이름 — 보유 기술(도구) 칸으로) · <b>빼기</b>(“개발 · 구축” 같은 넓은 말)를 고르고 [적용]합니다. 경험 하나씩 고치지 않아도 됩니다.
       </CardIntro>
       {prompt !== null && (
         <div className="refine-panel" data-testid="tag-prompt">
@@ -148,7 +148,7 @@ export default function SkillCleanupCard() {
                 return (
                   <tr key={key} data-tag={t.name}>
                     <td className="muted">{axisLabel(t.axis)}</td>
-                    <td>{t.name}{t.tool_like && <span className="muted" title="보유 기술 사전에 있는 이름"> · 보유 기술?</span>}</td>
+                    <td>{t.name}{t.tool_like && <span className="muted" title="보유 기술 사전에 있는 이름"> · 보유 기술(도구)?</span>}</td>
                     <td className="num">{t.count}</td>
                     <td className="muted">{t.people.join(" · ")}</td>
                     <td className="cleanup-choice">
@@ -156,7 +156,7 @@ export default function SkillCleanupCard() {
                         <option value="">그대로</option>
                         <option value="alias">동의어로</option>
                         <option value="new">새 역량으로</option>
-                        <option value="tool">보유 기술로</option>
+                        <option value="tool">보유 기술(도구)로</option>
                         <option value="drop">빼기</option>
                       </select>
                       {c.action === "alias" && (

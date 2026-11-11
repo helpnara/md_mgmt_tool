@@ -2889,6 +2889,39 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .exp-chip b { color: var(--accent); font-weight: 600; }
 .experience-skills .link-button { align-self: flex-start; font-size: var(--fs-xs); }
 .skill-table-wrap { max-height: 420px; overflow: auto; }
+/* 274 — 사전 편집: 찾기 · 축 칩 · 짧은 목록 · 누르면 고치는 칸 (두 사전이 나란히 두 단) */
+.dict-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dict-tools { display: flex; gap: 8px; align-items: center; }
+.dict-search { flex: 1; min-width: 0; }
+.dict-axes { display: flex; flex-wrap: wrap; gap: 6px; }
+.dict-axes .chip { padding: 2px 10px; min-height: 26px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--card); font-size: var(--fs-xs); }
+.dict-axes .chip.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.dict-axes .chip b { color: var(--muted); font-weight: 500; margin-left: 2px; }
+.dict-list { list-style: none; margin: 0; padding: 2px; max-height: 380px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.dict-item + .dict-item { border-top: 1px solid var(--border); }
+.dict-line { display: flex; gap: 8px; align-items: baseline; width: 100%;
+  padding: 6px 8px; border: 0; border-radius: 0; background: transparent; text-align: left; min-height: 0; font-weight: 400; color: var(--text); }
+.dict-line:hover { background: var(--neutral-100); }
+.dict-item.open > .dict-line { background: var(--neutral-100); }
+.dict-name { font-weight: 600; white-space: nowrap; }
+.dict-axis { font-size: var(--fs-xs); white-space: nowrap; }
+.dict-aliases { flex: 1; font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dict-used { margin-left: auto; flex: none; font-size: var(--fs-xs); color: var(--accent); font-weight: 600; }
+.dict-used.zero { color: var(--muted); font-weight: 400; }
+.dict-dirty { color: var(--accent); font-size: 10px; flex: none; }
+.dict-name, .dict-axis { flex: none; }
+.dict-edit { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; background: var(--card); }
+.dict-edit-row { display: flex; gap: 8px; }
+.dict-edit-row select { width: auto; }
+.dict-edit-row input { flex: 1; min-width: 0; }
+.dict-alias-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dict-alias-input { flex: 1; min-width: 160px; }
+.chip-x { border: 0; background: transparent; padding: 0 0 0 2px; min-height: 0; color: var(--muted); cursor: pointer; font-size: var(--fs-sm); }
+.chip-x:hover { color: var(--danger); }
+.dict-edit-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dict-edit-actions select { width: auto; max-width: 100%; }
+.dict-empty { padding: 10px; }
+
 .skill-table { width: 100%; }
 .skill-table td:nth-child(2) { min-width: 180px; }
 .skill-table td:nth-child(3) { min-width: 260px; width: 100%; }

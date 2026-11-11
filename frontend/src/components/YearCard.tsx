@@ -8,7 +8,7 @@ import { effectNumber } from "../util";
 
 /**
  * 나의 한 해 (TODO 244 A3) — 이력 화면 위. 그 해에 맡은 과제 · 마친 과제 · 주관 · 내가 쓴 일지 · 보고 · 중간 성과 · 교육,
- * 새로 쓴 보유 기술, 마친 과제의 그 밖의 성과. 숫자 옆의 작은 글은 **나의 지난해** — 다른 사람과는 비교하지 않는다(242).
+ * 새로 쓴 보유 기술(도구), 마친 과제의 그 밖의 성과. 숫자 옆의 작은 글은 **나의 지난해** — 다른 사람과는 비교하지 않는다(242).
  */
 
 const STATS: { key: keyof YearNumbers; label: string; unit: string }[] = [
@@ -32,7 +32,7 @@ export function yearText(review: YearReview): string {
     lines.push("그 밖의 성과:");
     for (const item of review.outcomes) lines.push(`  - ${item.title} — ${item.outcome}`);
   }
-  if (review.new_skills.length) lines.push(`새로 쓴 보유 기술: ${review.new_skills.join(", ")}`);
+  if (review.new_skills.length) lines.push(`새로 쓴 보유 기술(도구): ${review.new_skills.join(", ")}`);
   return lines.join("\n") + "\n";
 }
 
@@ -116,7 +116,7 @@ export default function YearCard({ name, years }: { name: string; years: string[
           )}
           {review.new_skills.length > 0 && (
             <div className="skill-chips">
-              <span className="muted">새로 쓴 보유 기술</span>
+              <span className="muted">새로 쓴 보유 기술(도구)</span>
               {review.new_skills.map((item) => (
                 <span key={item} className="skill-chip">
                   {item}

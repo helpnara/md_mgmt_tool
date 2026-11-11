@@ -6,13 +6,14 @@ import type { ExperienceSkill, SkillDictionary, SkillEntry } from "../types";
 import { axisLabel, useEditedUnsaved } from "../util";
 import CardIntro from "./CardIntro";
 import IconTitle from "./IconTitle";
+import DictionaryEditor, { type DictRow } from "./DictionaryEditor";
 
 const AXES: ExperienceSkill["axis"][] = ["기술", "업무", "리더십", "문제해결"];
 
-type Row = { axis: ExperienceSkill["axis"]; name: string; aliases: string; origin: string };
+type Row = DictRow;
 
 const toRows = (entries: SkillEntry[]): Row[] =>
-  entries.map((e) => ({ axis: e.axis, name: e.name, aliases: e.aliases.join(", "), origin: `${e.axis}|${e.name}` }));
+  entries.map((e) => ({ axis: e.axis, name: e.name, aliases: [...e.aliases], origin: `${e.axis}|${e.name}` }));
 
 /**
  * 역량 사전 (TODO 260 · 253 의 4단계 — 4단계.md 2절 · 정할 것 ①). 설정 → [분류 · 접수] 탭.
@@ -23,7 +24,6 @@ const toRows = (entries: SkillEntry[]): Row[] =>
 export default function SkillDictionaryCard() {
   const [data, setData] = useState<SkillDictionary | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
-  const [axis, setAxis] = useState<ExperienceSkill["axis"] | "">("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -39,7 +39,6 @@ export default function SkillDictionaryCard() {
   useEditedUnsaved("settings:skills", dirty ? "1" : "0", "0", busy);
 
   const usage = (row: Row) => data?.usage[row.origin] ?? 0;
-  const set = (index: number, patch: Partial<Row>) => setRows(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   const names = rows.map((row) => row.name.trim()).filter(Boolean);
   const duplicate = names.find((name, i) => names.indexOf(name) !== i);
 
@@ -73,62 +72,30 @@ export default function SkillDictionaryCard() {
     }
   }
 
-  const shown = rows.map((row, index) => ({ row, index })).filter(({ row }) => !axis || row.axis === axis);
   return (
-    <div className="card skill-dictionary settings-wide" data-testid="skill-dictionary">
+    <div className="card skill-dictionary" data-testid="skill-dictionary">
       <div className="card-head">
         <IconTitle icon={Tags}>역량 사전 {rows.length}개{data && !data.custom ? " (기본)" : ""}</IconTitle>
-        <div className="person-tools">
-          <select aria-label="축으로 거르기" value={axis} onChange={(event) => setAxis(event.target.value as ExperienceSkill["axis"] | "")}>
-            <option value="">축 전체</option>
-            {AXES.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
-          </select>
-        </div>
       </div>
       <CardIntro id="skill-dictionary">
-        경험의 <b>역량 태그</b>를 맞추는 표입니다 — 저장하거나 AI 응답을 되받을 때 다른 이름(동의어)을 대표 이름 · 축으로 바꿉니다. 팀원역량(교육 · 행사)과는 다른 것입니다.
-        쓰는 경험이 있는 역량은 지우지 않고 <b>다른 역량으로 합치기</b>로 정리합니다. [기본으로]는 처음 46개로 돌아갑니다.
+        경험의 <b>역량 태그</b>(무엇을 할 줄 아는가 — 분석 기법 · 방법 포함)를 맞추는 사전입니다 — 저장하거나 AI 응답을 되받을 때 다른 이름을 대표 이름 · 축으로 바꿉니다.
+        쓰는 역량은 지우지 않고 <b>다른 역량으로 합치기</b>로 정리합니다. [기본으로]는 처음 46개로 돌아갑니다.
       </CardIntro>
-      <div className="table-scroll skill-table-wrap">
-        <table className="grid skill-table">
-          <thead><tr><th>축</th><th>대표 이름</th><th>다른 이름 (쉼표로)</th><th title="이 역량 태그가 붙은 경험 수">경험</th><th /></tr></thead>
-          <tbody>
-            {shown.map(({ row, index }) => {
-              const used = usage(row);
-              return (
-                <tr key={index} data-skill={row.name}>
-                  <td>
-                    <select aria-label="축" value={row.axis} onChange={(event) => set(index, { axis: event.target.value as ExperienceSkill["axis"] })}>
-                      {AXES.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
-                    </select>
-                  </td>
-                  <td><input aria-label="대표 이름" value={row.name} maxLength={60} onChange={(event) => set(index, { name: event.target.value })} /></td>
-                  <td><input aria-label="다른 이름" value={row.aliases} onChange={(event) => set(index, { aliases: event.target.value })} /></td>
-                  <td className={used ? "num" : "zero num"}>{used || "-"}</td>
-                  <td className="one-line">
-                    {used > 0 && row.origin ? (
-                      <select aria-label="다른 역량으로 합치기" value="" disabled={busy || dirty} title={dirty ? "고친 것을 먼저 저장하세요" : ""}
-                        onChange={(event) => void merge(row, event.target.value)}>
-                        <option value="">다른 역량으로 합치기 ▾</option>
-                        {rows.filter((other) => other.origin && other.origin !== row.origin).map((other) => (
-                          <option key={other.origin} value={other.origin}>{axisLabel(other.axis)} · {other.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <button type="button" className="ghost small danger" onClick={() => setRows(rows.filter((_, i) => i !== index))}>빼기</button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DictionaryEditor rows={rows} saved={savedRows} setRows={setRows} axes={AXES} usage={usage} itemLabel="역량"
+        removable={(row) => !usage(row)}
+        extraActions={(row) => usage(row) > 0 && row.origin ? (
+          <select aria-label="다른 역량으로 합치기" value="" disabled={busy || dirty} title={dirty ? "고친 것을 먼저 저장하세요" : ""}
+            onChange={(event) => void merge(row, event.target.value)}>
+            <option value="">다른 역량으로 합치기 ▾ (쓰는 경험 {usage(row)}건)</option>
+            {rows.filter((other) => other.origin && other.origin !== row.origin).map((other) => (
+              <option key={other.origin} value={other.origin}>{axisLabel(other.axis ?? "")} · {other.name}</option>
+            ))}
+          </select>
+        ) : null} />
       {duplicate && <p className="form-warn">같은 대표 이름이 둘 있습니다: {duplicate}</p>}
       {notice && <p className="hint notice">{notice}</p>}
       <div className="form-actions">
-        <button type="button" className="ghost" onClick={() => setRows([...rows, { axis: axis || "기술", name: "", aliases: "", origin: "" }])}>+ 역량</button>
-        <button type="button" className="ghost" disabled={busy || dirty} title="실제 팀원 태그에서 본 다른 이름(운영 최적화 → 최적화·시뮬레이션 등)을 한 번에 더합니다(TODO 261)"
+                <button type="button" className="ghost" disabled={busy || dirty} title="실제 팀원 태그에서 본 다른 이름(운영 최적화 → 최적화·시뮬레이션 등)을 한 번에 더합니다(TODO 261)"
           onClick={() => void (async () => {
             setBusy(true);
             try {
@@ -147,7 +114,7 @@ export default function SkillDictionaryCard() {
         </button>
         <button disabled={busy || !dirty || Boolean(duplicate)}
           onClick={() => void save(rows.filter((row) => row.name.trim()).map((row) => ({
-            axis: row.axis, name: row.name.trim(), aliases: row.aliases.split(",").map((a) => a.trim()).filter(Boolean),
+            axis: row.axis as ExperienceSkill["axis"], name: row.name.trim(), aliases: row.aliases,
           })), "저장했습니다.")}>
           {busy ? "저장 중…" : "저장"}
         </button>

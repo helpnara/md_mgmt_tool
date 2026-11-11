@@ -342,8 +342,8 @@ export default function ExperienceDetail({ id }: { id: string }) {
               {dictionary.dictionary.flatMap((d) => [d.name, ...d.aliases]).map((name) => <option key={name} value={name} />)}
             </datalist>
           )}
-          <label className="exp-tools">보유 기술 <span className="muted">— 무엇으로 했는가: 프로그래밍 언어 · 소프트웨어 · 장비(쉼표로, 사전의 대표 이름으로 맞춰집니다). 분석 기법 · 방법은 위의 역량 태그에. 역량 태그와 따로 업무 이력 파일에 들어갑니다</span>
-            <input aria-label="보유 기술" disabled={!editable} value={form.tools} placeholder="Python, SQL" onChange={(event) => set("tools", event.target.value)} />
+          <label className="exp-tools">보유 기술(도구) <span className="muted">— 무엇으로 했는가: 프로그래밍 언어 · 소프트웨어 · 장비(쉼표로, 사전의 대표 이름으로 맞춰집니다). 분석 기법 · 방법은 위의 역량 태그에. 역량 태그와 따로 업무 이력 파일에 들어갑니다</span>
+            <input aria-label="보유 기술(도구)" disabled={!editable} value={form.tools} placeholder="Python, SQL" onChange={(event) => set("tools", event.target.value)} />
           </label>
           {/* 확정 전에 알린다 — 막지 않는다 (TODO 273) */}
           {(item.tool_notes ?? []).map((note) => <p key={note} className="hint exp-tool-note" data-testid="tool-note">ⓘ {note}</p>)}
