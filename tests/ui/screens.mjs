@@ -5376,7 +5376,18 @@ async function main() {
     const date = editor.locator('input[type="date"]');
     equal(await date.getAttribute("max"), dayFromToday(0), "날짜 달력의 상한은 오늘");
     const save = editor.locator(".editor-footer").getByRole("button", { name: "저장", exact: true });
-    await date.fill(dayFromToday(3));
+    // 편집기는 열린 뒤 데이터 폴더의 쓰다 만 초안을 늦게 되살린다 — 그 되살리기가 방금 적은 날짜를 덮지 않게,
+    // 적은 값이 남을 때까지 다시 적는다 (2026-11-11 한 번 — 앞 시험이 남긴 초안이 날짜를 오늘로 덮었다)
+    const fillDate = async (value) => {
+      for (let i = 0; i < 10; i += 1) {
+        await date.fill(value);
+        await page.waitForTimeout(150);
+        if ((await date.inputValue()) === value) return;
+      }
+      throw new Error(`날짜 칸에 ${value} 가 남지 않는다`);
+    };
+    await page.waitForTimeout(300);
+    await fillDate(dayFromToday(3));
     // 화면이 바뀔 때까지 기다린다 — 200ms 고정 대기는 바쁜 PC 에서 가끔 모자랐다 (252 때 한 번 · 첫 실행 때 한 번)
     const settle = async (want) => { for (let i = 0; i < 30 && (await save.isDisabled()) !== want; i += 1) await page.waitForTimeout(100); };
     await settle(true);
@@ -5384,7 +5395,7 @@ async function main() {
     expect((await editor.locator(".date-warn").innerText()).includes("오늘"), "날짜 경고");
     // 막는 까닭은 단추 바로 위 (U5)
     equal(await editor.locator(".editor-footer .entry-error").count(), 1, "단추 위 오류 줄");
-    await date.fill(dayFromToday(-1));
+    await fillDate(dayFromToday(-1));
     await settle(false);
     expect(!(await save.isDisabled()), "지난 날짜인데 꺼져 있다");
     nextDialog((d) => d.accept());
