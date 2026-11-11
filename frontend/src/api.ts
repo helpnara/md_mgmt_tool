@@ -1,4 +1,4 @@
-import type { DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
+import type { RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -521,6 +521,14 @@ export const api = {
   currentBackupJob: () => request<{ job: BackupJob | null }>("/api/backup/jobs/current"),
   backupJob: (id: string) => request<BackupJob>(`/api/backup/jobs/${id}`),
   cancelBackupJob: (id: string) => request<BackupJob>(`/api/backup/jobs/${id}/cancel`, { method: "POST" }),
+  // 되살리기를 뒤에서 · 단계별 진행 (TODO 268)
+  startRestoreJob: (token: string) =>
+    request<RestoreJob>("/api/backup/restore/jobs", { method: "POST", body: JSON.stringify({ token }) }),
+  currentRestoreJob: () => request<{ job: RestoreJob | null }>("/api/backup/restore/jobs/current"),
+  restoreJob: (id: string) => request<RestoreJob>(`/api/backup/restore/jobs/${id}`),
+  cancelRestoreJob: (id: string) => request<RestoreJob>(`/api/backup/restore/jobs/${id}/cancel`, { method: "POST" }),
+  // 지금 도는 오래 걸리는 일 (TODO 268)
+  running: (key = "") => request<{ tasks: RunningTask[] }>(`/api/running${key ? `?key=${encodeURIComponent(key)}` : ""}`),
 };
 
 // ── TODO 214 D11 — 같은 이름 과제를 저장 **전에** 묻는다 ─────────────────────────────

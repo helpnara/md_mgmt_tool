@@ -65,3 +65,39 @@ def apply(payload: ApplyRequest, conn: sqlite3.Connection = Depends(get_db)) -> 
         return svc.apply(conn, payload.token)
     except svc.RestoreError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── 뒤에서 되살리기 · 단계별 진행 (TODO 268) ─────────────────────────────────
+# 쓰기 차례(`get_db` 의 잠금)는 작업 스레드가 잡는다 — 이 끝점들은 DB 를 쓰지 않는다.
+from ..services import restore_jobs as jobs  # noqa: E402
+
+
+@router.post("/jobs")
+def start_job(payload: ApplyRequest) -> dict:
+    """되살리기를 뒤에서 시작한다 — 도는 것이 있으면 그것을 돌려준다(한 번에 하나)."""
+    try:
+        return jobs.start(payload.token).as_dict()
+    except svc.RestoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/jobs/current")
+def current_job() -> dict:
+    job = jobs.current()
+    return {"job": job.as_dict() if job else None}
+
+
+@router.get("/jobs/{job_id}")
+def job_state(job_id: str) -> dict:
+    try:
+        return jobs.get(job_id).as_dict()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="그 되살리기 작업이 없습니다(끝난 지 오래됐거나 서버를 다시 켰습니다).") from exc
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> dict:
+    try:
+        return jobs.cancel(job_id).as_dict()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="그 되살리기 작업이 없습니다.") from exc

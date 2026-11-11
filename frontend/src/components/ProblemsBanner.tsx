@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
+import RunningLine from "./RunningLine";
 import { attempt } from "../notify";
 
 /**
@@ -44,6 +45,7 @@ export default function ProblemsBanner({
           </button>
         </div>
       </div>
+      <RunningLine active={busy} runKey="reindex" label="다시 읽기" />
       {open && (
         <>
           <p className="hint">

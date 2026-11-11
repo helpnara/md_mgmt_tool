@@ -216,6 +216,7 @@ def run(conn: sqlite3.Connection, reason: str = "manual") -> dict[str, Any]:
 
 
 def _run_locked(reason: str) -> dict[str, Any]:
+    from . import running
     from .export import write_backup_all
 
     directory, keep, _ = _settings_values()
@@ -245,7 +246,7 @@ def _run_locked(reason: str) -> dict[str, Any]:
     # `.part` 에 흘려 쓰고(메모리에 올리지 않는다 — TODO 202 ⑬) 다 쓴 뒤에만 `.zip` 으로 바꾼다 (⑤).
     # 어떤 예외든(MemoryError 포함) 조각을 지우고 실패를 기록한다 — 설정 화면이 그것을 보여 준다.
     try:
-        write_backup_all(part, assets=not skip_assets)
+        write_backup_all(part, assets=not skip_assets, progress=running.phase("zip 만들기"))  # 화면 진행(TODO 268)
         os.replace(part, target)
     except Exception as exc:
         _discard(part)

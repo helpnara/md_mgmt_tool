@@ -145,6 +145,7 @@ def export_project(
     format: str = Query("zip", pattern="^(md|zip|html|backup)$"),
     assets: str = Query("zip", pattern="^(zip|inline|link)$"),
     include_reports_full: bool = False,
+    job: str = Query("", max_length=64),
     conn: sqlite3.Connection = Depends(get_db),
 ) -> Response:
     """과제 이력을 한 덩어리로 내보낸다.
@@ -160,18 +161,41 @@ def export_project(
     # 팀장 PC(TODO 247)는 팀의 자료를 맡은 쪽이라 연다 — 전체 백업을 내려받을 수 있는 것과 같다
     if format == "backup" and share.is_remote(request) and not who.of(request).manages:
         raise HTTPException(status_code=403, detail=share.READONLY_DETAIL)
-    try:
-        if format == "zip":
-            filename, content = svc.export_zip(conn, project_id, include_reports_full)
-            return _attachment(content, filename, "application/zip")
-        if format == "backup":
-            filename, content = svc.backup_zip(conn, project_id)
-            return _attachment(content, filename, "application/zip")
-        if format == "html":
-            filename, text = svc.export_html(conn, project_id, include_reports_full)
-            return _attachment(text, filename, "text/html; charset=utf-8")
+    from ..services import running, workspace
 
-        filename, text, _ = svc.merged_markdown(conn, project_id, assets, include_reports_full)
-        return _attachment(text, filename, "text/markdown; charset=utf-8")
+    # 화면은 `job` 을 붙여 보내고 /api/running?key= 로 진행을 본다(TODO 268) — 링크로 받는 일이라 끝났는지도 거기서 안다
+    try:
+        with running.track("과제 내보내기", job):
+            if format in ("zip", "backup"):
+                # zip 은 데이터 폴더 드라이브의 작업 자리에 흘려 쓰고 보낸 뒤 지운다 — 첨부가 GB 여도 메모리에 올리지 않는다
+                import uuid
+
+                folder = workspace.work_dir("export")
+                part = folder / f"{uuid.uuid4().hex}.zip.part"
+                try:
+                    if format == "zip":
+                        filename = svc.write_export_zip(conn, project_id, part, include_reports_full,
+                                                        progress=running.phase("zip 만들기"))
+                    else:
+                        filename = svc.write_backup_zip(conn, project_id, part, progress=running.phase("zip 만들기"))
+                    done = part.with_suffix("")
+                    part.replace(done)
+                except BaseException:
+                    part.unlink(missing_ok=True)
+                    raise
+                return FileResponse(done, media_type="application/zip", headers={"Content-Disposition": _disposition(filename)},
+                                    background=BackgroundTask(lambda: done.unlink(missing_ok=True)))
+            if format == "html":
+                filename, text = svc.export_html(conn, project_id, include_reports_full)
+                return _attachment(text, filename, "text/html; charset=utf-8")
+
+            filename, text, _ = svc.merged_markdown(conn, project_id, assets, include_reports_full)
+            return _attachment(text, filename, "text/markdown; charset=utf-8")
+    except workspace.SpaceError as exc:
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+    except OSError as exc:
+        if exc.errno == 28:
+            raise HTTPException(status_code=507, detail=str(workspace.space_error_from(exc, workspace.work_dir("export"), "과제 내보내기"))) from exc
+        raise
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.") from exc

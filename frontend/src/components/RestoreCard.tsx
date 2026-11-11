@@ -1,27 +1,73 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { RestoreReport, RestoreResult } from "../types";
+import type { RestoreJob, RestoreReport, RestoreResult, RestoreStage } from "../types";
 import { formatBytes, uploadRaw } from "../upload";
 import CardIntro from "./CardIntro";
 import { ArchiveRestore } from "lucide-react";
 import IconTitle from "./IconTitle";
+import { ProgressBar, progressText, seconds } from "./RunningLine";
+
+const STAGE_LABEL: Record<RestoreStage, string> = {
+  check: "백업 살펴보기",
+  safety: "지금 데이터 먼저 백업",
+  extract: "백업 풀기",
+  swap: "데이터 폴더 바꾸기",
+  index: "색인 다시 만들기",
+};
+const STAGE_UNIT: Record<RestoreStage, string> = { check: "", safety: "개 파일", extract: "개 파일", swap: "", index: "개 과제 폴더" };
+
+type Upload = { name: string; loaded: number; total: number; started: number; abort: () => void };
 
 /**
  * 전체 백업에서 되살리기 (TODO 246) — 새 서버로 옮길 때.
  * 고르면 먼저 살펴보기(무엇이 든 백업인가 · 지금 데이터는 얼마나 바뀌나), [되살리기]는 그다음에.
  * 지금 데이터는 서버가 **먼저 통째로 백업**하고 바꾼다(합치지 않는다). 공유 바깥에는 끝점이 막혀 있고 설정 화면도 열리지 않는다.
+ *
+ * 268 — 백업이 크면 몇 분 걸려 화면이 멈춘 듯했다(사용자 2026-11-11). 이제 ① 올리기: 막대 · % · 속도 · 남은 시간 · [올리기 그만두기]
+ * ② 되살리기: 서버가 뒤에서 하고 단계(먼저 백업 → 풀기 → 바꾸기 → 색인)마다 n / N · 크기 · 남은 시간, 바꾸기 전에는 [그만두기].
+ * 다른 화면에 갔다 와도 이어 보인다.
  */
 export default function RestoreCard() {
   const input = useRef<HTMLInputElement>(null);
   const [report, setReport] = useState<RestoreReport | null>(null);
   const [result, setResult] = useState<RestoreResult | null>(null);
-  const [progress, setProgress] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [upload, setUpload] = useState<Upload | null>(null);
+  const [inspecting, setInspecting] = useState(false);
+  const [job, setJob] = useState<RestoreJob | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const running = job?.state === "running";
+  const busy = Boolean(upload) || inspecting || running;
+
+  // 다른 화면에 갔다 와도 — 도는 되살리기를 이어 본다
+  useEffect(() => {
+    api.currentRestoreJob().then(({ job: now }) => now && now.state === "running" && setJob(now)).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!job || job.state !== "running") return;
+    const timer = window.setInterval(() => {
+      api.restoreJob(job.id).then(setJob).catch((err: Error) => { setJob(null); setError(err.message); });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [job?.id, job?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!job) return;
+    if (job.state === "done" && job.result) {
+      setResult(job.result);
+      setReport(null);
+      setNotice(null);
+      if (input.current) input.current.value = "";
+    }
+    if (job.state === "cancelled") setNotice("되살리기를 그만두었습니다 — 지금 데이터는 그대로이고, 만들던 파일은 지웠습니다.");
+    if (job.state === "error") setError(job.error);
+  }, [job?.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reset = () => {
     setReport(null);
     setError(null);
+    setNotice(null);
     if (input.current) input.current.value = "";
   };
 
@@ -30,18 +76,23 @@ export default function RestoreCard() {
     setReport(null);
     setResult(null);
     setError(null);
-    setBusy(true);
-    setProgress("올리는 중…");
+    setNotice(null);
+    setJob(null);
+    const handle = uploadRaw<RestoreReport>("/api/backup/restore/inspect", file, (loaded, total) => {
+      setUpload((now) => (now ? { ...now, loaded, total } : now));
+      if (loaded >= total) setInspecting(true);
+    });
+    setUpload({ name: file.name, loaded: 0, total: file.size, started: Date.now(), abort: handle.abort });
     try {
-      const handle = uploadRaw<RestoreReport>("/api/backup/restore/inspect", file, (loaded, total) =>
-        setProgress(loaded < total ? `올리는 중… ${formatBytes(loaded)} / ${formatBytes(total)}` : "살펴보는 중…"),
-      );
       setReport(await handle.promise);
     } catch (err) {
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      if (message.includes("취소")) setNotice("올리기를 그만두었습니다.");
+      else setError(message);
+      if (input.current) input.current.value = "";
     } finally {
-      setBusy(false);
-      setProgress(null);
+      setUpload(null);
+      setInspecting(false);
     }
   };
 
@@ -53,20 +104,28 @@ export default function RestoreCard() {
         "지금 데이터는 먼저 통째로 백업해 둡니다(자동 백업 폴더 · 없으면 데이터 폴더 옆). 되살릴까요?"
       : "이 백업으로 데이터 폴더를 채웁니다. 되살릴까요?";
     if (!window.confirm(question)) return;
-    setBusy(true);
     setError(null);
-    setProgress("되살리는 중… (첨부가 많으면 몇 분 걸립니다)");
+    setNotice(null);
     try {
-      setResult(await api.restoreBackup(report.token));
-      setReport(null);
-      if (input.current) input.current.value = "";
+      setJob(await api.startRestoreJob(report.token));
     } catch (err) {
       setError((err as Error).message);
-    } finally {
-      setBusy(false);
-      setProgress(null);
     }
   };
+
+  const cancel = async () => {
+    if (!job) return;
+    try {
+      setJob(await api.cancelRestoreJob(job.id));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const spent = upload ? (Date.now() - upload.started) / 1000 : 0;
+  const rate = upload && spent > 0 ? upload.loaded / spent : 0;
+  const uploadEta = upload && rate > 0 && upload.loaded < upload.total ? (upload.total - upload.loaded) / rate : null;
+  const jobRatio = job ? (job.bytes_total ? job.bytes_done / job.bytes_total : job.files_total ? job.files_done / job.files_total : null) : null;
 
   return (
     <div className="card restore-card" data-restore-card>
@@ -88,8 +147,52 @@ export default function RestoreCard() {
             onChange={(event) => void pick(event.target.files?.[0])}
           />
         </label>
-        {progress && <span className="muted">{progress}</span>}
       </div>
+      {upload && (
+        <div className="backup-progress" data-testid="restore-upload" aria-live="polite">
+          <ProgressBar ratio={inspecting ? null : upload.total ? upload.loaded / upload.total : null} label="올리기" />
+          <p className="muted">
+            {inspecting
+              ? `올렸습니다 — 무엇이 든 백업인지 살펴보는 중… (${formatBytes(upload.total)})`
+              : `올리는 중 — ${upload.name} · ${formatBytes(upload.loaded)} / ${formatBytes(upload.total)} (${upload.total ? Math.floor((upload.loaded / upload.total) * 100) : 0}%)` +
+                `${rate ? ` · ${formatBytes(rate)}/초` : ""} · 지난 시간 ${seconds(spent)}${uploadEta !== null ? ` · 남은 시간 약 ${seconds(uploadEta)}` : ""}`}
+          </p>
+          {!inspecting && (
+            <div className="form-actions">
+              <button className="ghost" onClick={() => upload.abort()}>올리기 그만두기</button>
+            </div>
+          )}
+        </div>
+      )}
+      {job && job.state === "running" && (
+        <div className="backup-progress" data-testid="restore-progress" aria-live="polite">
+          <ol className="restore-stages">
+            {job.stages.map((stage) => {
+              const done = job.stages_done.includes(stage);
+              const now = stage === job.stage;
+              return (
+                <li key={stage} className={now ? "now" : done ? "done" : ""}>
+                  <span className="mark" aria-hidden>{done ? "✓" : now ? "▶" : "·"}</span>
+                  {STAGE_LABEL[stage]}
+                </li>
+              );
+            })}
+          </ol>
+          <ProgressBar ratio={jobRatio} label={STAGE_LABEL[job.stage]} />
+          <p className="muted">
+            {STAGE_LABEL[job.stage]} — {progressText({ ...job, phase: "", done: job.files_done, total: job.files_total }, STAGE_UNIT[job.stage])}
+            {" "}(전체 지난 시간 {seconds(job.elapsed)})
+          </p>
+          <div className="form-actions">
+            {job.cancellable ? (
+              <button className="ghost danger" onClick={() => void cancel()}>그만두기</button>
+            ) : (
+              <span className="hint">데이터 폴더를 바꾸는 중이라 멈출 수 없습니다 — 곧 끝납니다.</span>
+            )}
+          </div>
+        </div>
+      )}
+      {notice && <p className="hint notice">{notice}</p>}
       {error && <p className="error">{error}</p>}
 
       {report && (

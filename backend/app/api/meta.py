@@ -209,7 +209,10 @@ def me(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
 
 @router.post("/reindex")
 def reindex(conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    indexed, problems = reindex_all(conn)
+    from ..services import running
+
+    with running.track("다시 읽기", "reindex"):     # 화면이 진행을 본다(TODO 268)
+        indexed, problems = reindex_all(conn)
     return {
         "indexed": indexed,
         # 읽지 못한 파일은 조용히 넘기지 않고 화면에 알린다.
@@ -227,3 +230,11 @@ def _precheck_meta() -> dict:
         "max": sum(max(c[1] for c in item["choices"]) for item in items),
         "bands": [{"key": key, "label": label} for key, label in precheck.BANDS],
     }
+
+
+@router.get("/running")
+def running_tasks(key: str = "") -> dict:
+    """지금 도는 오래 걸리는 일과 그 진행 (TODO 268) — 화면이 요청을 보낸 뒤 1초마다 본다. 끝난 일은 1분 남는다."""
+    from ..services import running
+
+    return {"tasks": running.listing(key)}

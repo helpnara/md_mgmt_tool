@@ -5,6 +5,7 @@ import { PROJECT_CODE_RULE, projectCodeProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
 import { Hash } from "lucide-react";
+import RunningLine from "./RunningLine";
 import IconTitle from "./IconTitle";
 
 /**
@@ -182,6 +183,8 @@ export default function ProjectCodeCard({ onSaved }: { onSaved: () => void }) {
               </button>
             )}
           </div>
+          {/* 폴더 옮기기 뒤 색인 다시 만들기 — 과제 n / N (TODO 268) */}
+          <RunningLine active={busy} runKey="renumber" label="과제 번호 바꾸기" />
         </div>
       )}
     </div>

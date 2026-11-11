@@ -292,8 +292,38 @@ def merged_markdown(
     return filename, "\n".join(header).rstrip() + "\n", sorted(set(used))
 
 
-def export_zip(conn: sqlite3.Connection, project_id: str, include_reports_full: bool = False) -> tuple[str, bytes]:
-    """병합 md + 참조된 첨부 폴더. 압축을 풀면 링크가 그대로 살아 있다."""
+def _zip_files(destination, first: tuple[str, str] | None, files: list[tuple[Path, str]], progress=None) -> None:
+    """파일들을 zip 으로 **흘려 쓴다**(TODO 268 — 예전에는 메모리에 통째로 만들었다). `progress(n, N, 크기, 전체 크기)`."""
+    import os
+
+    sizes = []
+    for path, _name in files:
+        try:
+            sizes.append(os.path.getsize(path))
+        except OSError:
+            sizes.append(0)
+    total, done = sum(sizes), 0
+    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
+        if first:
+            archive.writestr(*first)
+        for index, ((path, name), size) in enumerate(zip(files, sizes), start=1):
+            try:
+                archive.write(path, name)
+            except FileNotFoundError:
+                continue
+            done += size
+            if progress is not None:
+                progress(index, len(files), done, total)
+
+
+def export_zip_name(conn: sqlite3.Connection, project_id: str, kind: str) -> str:
+    directory = project_dir(conn, project_id)
+    return f"{directory.name}-백업.zip" if kind == "backup" else f"{directory.name}.zip"
+
+
+def write_export_zip(conn: sqlite3.Connection, project_id: str, destination, include_reports_full: bool = False,
+                     progress=None) -> str:
+    """병합 md + 참조된 첨부 폴더. 압축을 풀면 링크가 그대로 살아 있다. zip 이름을 돌려준다."""
     directory = project_dir(conn, project_id)
     filename, text, used = merged_markdown(conn, project_id, "zip", include_reports_full)
 
@@ -305,26 +335,29 @@ def export_zip(conn: sqlite3.Connection, project_id: str, include_reports_full: 
             (project_id,),
         )
     ]
+    files = [(directory / rel, rel) for rel in sorted(set(used) | set(report_files)) if (directory / rel).is_file()]
+    _zip_files(destination, (filename, text), files, progress)
+    return f"{filename[:-3]}.zip"
 
+
+def export_zip(conn: sqlite3.Connection, project_id: str, include_reports_full: bool = False) -> tuple[str, bytes]:
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(filename, text)
-        for rel_path in sorted(set(used) | set(report_files)):
-            path = directory / rel_path
-            if path.is_file():
-                archive.write(path, rel_path)
-    return f"{filename[:-3]}.zip", buffer.getvalue()
+    name = write_export_zip(conn, project_id, buffer, include_reports_full)
+    return name, buffer.getvalue()
+
+
+def write_backup_zip(conn: sqlite3.Connection, project_id: str, destination, progress=None) -> str:
+    """원본 폴더 구조 그대로. 다른 도구로 옮겨 갈 때 쓴다."""
+    directory = project_dir(conn, project_id)
+    files = [(path, path.relative_to(directory).as_posix()) for path in sorted(directory.rglob("*")) if path.is_file()]
+    _zip_files(destination, None, files, progress)
+    return f"{directory.name}-백업.zip"
 
 
 def backup_zip(conn: sqlite3.Connection, project_id: str) -> tuple[str, bytes]:
-    """원본 폴더 구조 그대로. 다른 도구로 옮겨 갈 때 쓴다."""
-    directory = project_dir(conn, project_id)
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(directory.rglob("*")):
-            if path.is_file():
-                archive.write(path, path.relative_to(directory).as_posix())
-    return f"{directory.name}-백업.zip", buffer.getvalue()
+    name = write_backup_zip(conn, project_id, buffer)
+    return name, buffer.getvalue()
 
 
 # 백업에 넣지 않는 것 (TODO 202 ㉜) — 저장 도중의 임시 파일(`markdown.save` 의 `.tmp`, 업로드 · 백업의 `.part`).

@@ -2792,6 +2792,18 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .backup-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.4s ease; }
 .backup-progress .muted { margin: 6px 0 0; font-size: var(--fs-xs); }
 .backup-estimate { margin: 0 0 8px; }
+.backup-bar.indeterminate > span { width: 30%; animation: bar-flow 1.4s ease-in-out infinite; }
+@keyframes bar-flow { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .backup-bar.indeterminate > span { animation: none; width: 100%; opacity: 0.4; } }
+/* 268 — 오래 걸리는 일의 진행 줄 · 되살리기 단계 */
+.running-line { margin: 8px 0; min-width: 0; flex-basis: 100%; }
+.running-line .muted { margin: 6px 0 0; font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.restore-stages { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px; font-size: var(--fs-sm); }
+.restore-stages li { display: flex; gap: 8px; align-items: baseline; color: var(--muted); }
+.restore-stages li.now { color: var(--text); font-weight: 600; }
+.restore-stages li.done { color: var(--text); }
+.restore-stages .mark { width: 1.2em; flex: none; text-align: center; }
+.export-progress { padding: 8px 4px 0; max-width: 340px; }
 /* 265 — 체크박스가 든 스크롤 목록은 안쪽 여백을 둔다. 상자 끝에 붙으면 체크했을 때 채움 · 포커스 테두리의 끝이 깎여 보였다 */
 .import-projects, .export-pick { padding: 3px 4px; }
 /* 검색 고도화 1차 (TODO 254) — 종류 칩 · 정렬 · 읽은 조건 */

@@ -910,8 +910,13 @@ def predecessor_problems(conn: sqlite3.Connection, project_ids: list[str] | None
     return out
 
 
-def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
+from ..services import running  # noqa: E402
+
+
+def reindex_all(conn: sqlite3.Connection, progress=None) -> tuple[int, list[IndexProblem]]:
     """vault 전체 재인덱싱. DB를 지운 뒤에도 이것만 돌리면 복구된다.
+
+    `progress(done, total, 0, 0)` — 과제 폴더마다(TODO 268 되살리기 진행 표시). 멈추지는 않는다.
 
     파일 하나가 깨져 있어도 나머지는 정상적으로 인덱싱하고, 문제 파일 목록을 함께 돌려준다.
     """
@@ -925,7 +930,12 @@ def reindex_all(conn: sqlite3.Connection) -> tuple[int, list[IndexProblem]]:
     problems: list[IndexProblem] = []
     found: list[str] = []
     seen: dict[str, str] = {}
-    for project_dir in sorted(settings.projects_dir.iterdir()):
+    project_dirs = sorted(settings.projects_dir.iterdir())
+    for position, project_dir in enumerate(project_dirs, start=1):
+        if progress is not None:
+            progress(position, len(project_dirs), 0, 0)
+        else:
+            running.report(position, len(project_dirs), phase="과제 읽기")   # 화면이 보는 진행(TODO 268) — 감싼 일이 없으면 하지 않는다
         if not project_dir.is_dir() or project_dir.name.startswith("."):
             continue
         if not (project_dir / "index.md").exists():

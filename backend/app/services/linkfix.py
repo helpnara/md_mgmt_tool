@@ -66,7 +66,11 @@ def run(conn: sqlite3.Connection, *, apply: bool, include_frozen: bool) -> dict[
     total_links = 0
     touched_dirs: list[Path] = []
 
-    for project in conn.execute("SELECT id, title FROM project ORDER BY id").fetchall():
+    from . import running
+
+    projects = conn.execute("SELECT id, title FROM project ORDER BY id").fetchall()
+    for position, project in enumerate(projects, start=1):
+        running.report(position, len(projects), phase="과제 문서 살피기")   # 화면 진행(TODO 268)
         rel_paths = [
             row["rel_path"]
             for row in conn.execute("SELECT rel_path FROM attachment WHERE project_id = ?", (project["id"],))

@@ -467,6 +467,38 @@ export interface BackupJob {
   filename: string;
   size: number;
 }
+/** 되살리기 작업 (TODO 268) — 단계별 진행 */
+export type RestoreStage = "check" | "safety" | "extract" | "swap" | "index";
+export interface RestoreJob {
+  id: string;
+  state: "running" | "done" | "error" | "cancelled";
+  stage: RestoreStage;
+  stages: RestoreStage[];
+  stages_done: RestoreStage[];
+  cancellable: boolean;
+  files_done: number;
+  files_total: number;
+  bytes_done: number;
+  bytes_total: number;
+  elapsed: number;
+  eta: number | null;
+  error: string;
+  result: RestoreResult | null;
+}
+/** 지금 도는 오래 걸리는 일 (TODO 268 — /api/running) */
+export interface RunningTask {
+  id: string;
+  label: string;
+  key: string;
+  phase: string;
+  state: "running" | "done" | "error";
+  done: number;
+  total: number;
+  bytes_done: number;
+  bytes_total: number;
+  elapsed: number;
+  eta: number | null;
+}
 export interface BackupEstimate {
   files: number;
   bytes: number;

@@ -8,6 +8,7 @@ import { numberProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
 import { CalendarClock } from "lucide-react";
+import RunningLine from "./RunningLine";
 import IconTitle from "./IconTitle";
 
 /** 서버와 같은 범위 (TODO 214 F12 · F14) — 일 · 주기는 1~999, 주 · 월은 0~999(0 = 그 층은 안 씀) */
@@ -41,6 +42,7 @@ export default function BackupCard() {
   // 목록은 최근 세 줄만. 나머지는 눌러서 편다.
   const [showAll, setShowAll] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
   /** 폴더 고르기를 펼쳤나 (TODO 97). 경로를 손으로 치지 않아도 되게 한다. */
   const [picking, setPicking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -266,6 +268,7 @@ export default function BackupCard() {
       <div className="form-actions">
         <button className="ghost" disabled={busy || !status?.enabled} onClick={async () => {
           setBusy(true);
+          setBackingUp(true);
           setError(null);
           setNotice(null);
           try {
@@ -276,14 +279,17 @@ export default function BackupCard() {
             setError((err as Error).message);
           } finally {
             setBusy(false);
+            setBackingUp(false);
           }
         }}>
-          지금 백업
+          {backingUp ? "백업 중…" : "지금 백업"}
         </button>
         <button disabled={busy || hasProblem} onClick={() => void save()}>
-          {busy ? "저장 중…" : "저장"}
+          {busy && !backingUp ? "저장 중…" : "저장"}
         </button>
       </div>
+      {/* 데이터 전체를 zip 으로 — 파일 n / N · 크기 · 남은 시간 (TODO 268) */}
+      <RunningLine active={backingUp} runKey="backup-run" label="지금 백업" />
     </div>
   );
 }

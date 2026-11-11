@@ -4,6 +4,7 @@ import { projectLink } from "../nav";
 import type { LinkFixReport } from "../types";
 import CardIntro from "./CardIntro";
 import { Link2 } from "lucide-react";
+import RunningLine from "./RunningLine";
 import IconTitle from "./IconTitle";
 
 const KIND_LABEL = { overview: "개요", entry: "진행일지", report: "보고" } as const;
@@ -19,6 +20,7 @@ export default function LinkFixCard() {
   const [includeFrozen, setIncludeFrozen] = useState(false);
   const [report, setReport] = useState<LinkFixReport | null>(null);
   const [busy, setBusy] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function scan(withFrozen = includeFrozen) {
@@ -40,6 +42,7 @@ export default function LinkFixCard() {
     }\n저장 전 내용은 이전 버전에 남습니다. 진행할까요?`;
     if (!window.confirm(what)) return;
     setBusy(true);
+    setApplying(true);
     setError(null);
     try {
       setReport(await api.linkFixApply(includeFrozen));
@@ -47,6 +50,7 @@ export default function LinkFixCard() {
       setError((err as Error).message);
     } finally {
       setBusy(false);
+      setApplying(false);
     }
   }
 
@@ -56,11 +60,11 @@ export default function LinkFixCard() {
         <IconTitle icon={Link2}>첨부 링크 정리</IconTitle>
         <div className="form-actions" style={{ margin: 0 }}>
           <button className="ghost small" disabled={busy} onClick={() => void scan()}>
-            {report ? "다시 세기" : "점검하기"}
+            {busy && !applying ? "세는 중…" : report ? "다시 세기" : "점검하기"}
           </button>
           {report && !report.applied && report.document_count > 0 && (
             <button className="small" disabled={busy} onClick={() => void apply()}>
-              고치기
+              {applying ? "고치는 중…" : "고치기"}
             </button>
           )}
         </div>
@@ -87,6 +91,8 @@ export default function LinkFixCard() {
         <span className="hint">확정된 보고는 "그때 무엇을 보고했는가"라 기본으로 두지 않습니다.</span>
       </label>
 
+      {/* 과제가 많으면 오래 — 과제 n / N (TODO 268) */}
+      <RunningLine active={busy} runKey="link-fix" label={applying ? "첨부 링크 고치기" : "첨부 링크 세기"} />
       {error && <p className="form-error">{error}</p>}
 
       {report && (

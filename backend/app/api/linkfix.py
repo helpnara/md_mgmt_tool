@@ -19,9 +19,15 @@ class LinkFixRequest(BaseModel):
 @router.get("")
 def scan(include_frozen: bool = False, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """세기만 한다. 아무것도 바꾸지 않는다."""
-    return svc.run(conn, apply=False, include_frozen=include_frozen)
+    from ..services import running
+
+    with running.track("첨부 링크 세기", "link-fix"):   # TODO 268
+        return svc.run(conn, apply=False, include_frozen=include_frozen)
 
 
 @router.post("")
 def apply(payload: LinkFixRequest, conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    return svc.run(conn, apply=True, include_frozen=payload.include_frozen)
+    from ..services import running
+
+    with running.track("첨부 링크 고치기", "link-fix"):   # TODO 268
+        return svc.run(conn, apply=True, include_frozen=payload.include_frozen)

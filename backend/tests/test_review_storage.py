@@ -51,7 +51,7 @@ def test_backup_interrupted_midway_leaves_no_zip_and_stays_due(client, tmp_path,
 
     from app.services import export
 
-    def half_then_fail(destination, assets=True):
+    def half_then_fail(destination, assets=True, progress=None):
         with open(destination, "wb") as handle:
             handle.write(b"PK\x03\x04 half written")
         raise OSError(28, "No space left on device")
@@ -77,7 +77,7 @@ def test_any_exception_in_auto_backup_is_recorded(client, tmp_path, monkeypatch,
 
     from app.services import export
 
-    def boom(destination, assets=True):
+    def boom(destination, assets=True, progress=None):
         raise MemoryError("too big")
 
     monkeypatch.setattr(export, "write_backup_all", boom)

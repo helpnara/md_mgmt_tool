@@ -224,7 +224,10 @@ def preview_renumber(
 def run_renumber(payload: RenumberRequest, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """미리보기대로 실제로 바꾸고, 설정의 팀 코드도 함께 맞춘다."""
     try:
-        result = renumber_svc.apply(conn, payload.code)
+        from ..services import running
+
+        with running.track("과제 번호 바꾸기", "renumber"):   # 폴더 옮기기 · 색인 다시 만들기(TODO 268)
+            result = renumber_svc.apply(conn, payload.code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileInUseError as exc:
@@ -248,7 +251,10 @@ def backup_now(conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """지금 한 벌 내보낸다. 설정을 바꾼 직후 실제로 되는지 확인하는 자리이기도 하다."""
     from ..services import backup as backup_svc
 
+    from ..services import running
+
     try:
-        return backup_svc.run(conn, reason="manual")
+        with running.track("지금 백업", "backup-run"):   # zip 만들기 진행(TODO 268)
+            return backup_svc.run(conn, reason="manual")
     except backup_svc.BackupError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

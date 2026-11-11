@@ -15,6 +15,7 @@ import ProjectForm from "./ProjectForm";
 import CopyTableButton from "./CopyTableButton";
 import { isLeader, leftLabel } from "../people";
 import { TypeBadge, YearStatusBadge, shownStatus } from "./StatusBadge";
+import RunningLine from "./RunningLine";
 import StageBand from "./StageBand";
 
 interface Props {
@@ -407,6 +408,8 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           <button onClick={() => setCreating(true)}>과제 추가</button>
         </div>
       </div>
+      {/* 첨부가 많으면 몇 분 — 과제 폴더 n / N 을 보인다 (TODO 268) */}
+      <RunningLine active={reindexing} runKey="reindex" label="다시 읽기" />
 
       {creating && (
         <div className="card">

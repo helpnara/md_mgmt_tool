@@ -45,6 +45,10 @@ class RestoreError(Exception):
     """되살릴 수 없는 이유 — 그대로 화면에 보여 준다."""
 
 
+class Cancelled(Exception):
+    """[그만두기] — 바꾸기 전에만 멈출 수 있다. 지금 데이터는 그대로."""
+
+
 # ── 올린 파일 ─────────────────────────────────────────────
 
 def _upload_dir() -> Path:
@@ -228,13 +232,13 @@ def inspect(path: Path, filename: str = "") -> dict[str, Any]:
 
 # ── 되살리기 ──────────────────────────────────────────────
 
-def _safety_backup() -> str | None:
+def _safety_backup(progress=None) -> str | None:
     """지금 데이터를 통째로(첨부 포함) 한 벌. 자동 백업 폴더 → 데이터 폴더 옆 → 임시 폴더 순으로 쓸 수 있는 곳에.
 
     자동 백업의 층 보관이 지우지 않도록 이름 머리를 다르게 둔다(`과제이력-되살리기전-`).
     """
     from . import settings as settings_service
-    from .export import write_backup_all
+    from .export import BackupCancelled, write_backup_all
 
     vault = get_settings().vault_dir
     candidates: list[Path] = []
@@ -256,19 +260,25 @@ def _safety_backup() -> str | None:
             last_error = OSError(28, f"{folder} 의 남은 자리 {workspace.human(free)} < 필요 {workspace.human(needed)}")
             continue
         try:
-            write_backup_all(part, assets=True)
+            write_backup_all(part, assets=True, progress=progress)
             part.replace(target)
             return str(target)
+        except BackupCancelled:
+            part.unlink(missing_ok=True)
+            raise
         except OSError as exc:
             last_error = exc
             part.unlink(missing_ok=True)
     raise RestoreError(f"지금 데이터를 먼저 백업하지 못해 되살리기를 멈췄습니다: {last_error}")
 
 
-def _extract(path: Path, into: Path) -> None:
+def _extract(path: Path, into: Path, progress=None) -> None:
+    """`progress(files_done, files_total, bytes_done, bytes_total)` — 파일마다(TODO 268). False 면 멈춘다(Cancelled)."""
     with zipfile.ZipFile(path) as archive:
         entries, _, _ = _plan(archive)
-        for info, rel in entries:
+        total = sum(info.file_size for info, _ in entries)
+        done = 0
+        for index, (info, rel) in enumerate(entries, start=1):
             target = into.joinpath(*rel.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(info) as source, target.open("wb") as handle:
@@ -279,6 +289,9 @@ def _extract(path: Path, into: Path) -> None:
                     os.utime(target, (stamp, stamp))
                 except OSError:
                     pass
+            done += info.file_size
+            if progress is not None and progress(index, len(entries), done, total) is False:
+                raise Cancelled()
 
 
 def _swap(vault: Path, new: Path, old: Path) -> None:
@@ -311,8 +324,15 @@ def _swap(vault: Path, new: Path, old: Path) -> None:
         ) from exc
 
 
-def apply(conn: sqlite3.Connection, token: str) -> dict[str, Any]:
-    """올린 백업으로 데이터 폴더를 바꾼다 — 먼저 지금 데이터를 백업하고, 다 푼 뒤 맞바꾸고, 색인을 다시 만든다."""
+def apply(conn: sqlite3.Connection, token: str, stage=None) -> dict[str, Any]:
+    """올린 백업으로 데이터 폴더를 바꾼다 — 먼저 지금 데이터를 백업하고, 다 푼 뒤 맞바꾸고, 색인을 다시 만든다.
+
+    `stage(name)` 은 단계가 바뀔 때 부르고 그 단계의 `progress(files_done, files_total, bytes_done, bytes_total)` 를 돌려준다
+    (TODO 268 진행 표시 — check · safety · extract · swap · index). progress 가 False 면 바꾸기 전까지는 멈춘다(`Cancelled`).
+    """
+    def enter(name: str):
+        return stage(name) if stage is not None else None
+
     from .. import readcache
     from ..db import reset_index
     from ..vault.indexer import reindex_all
@@ -320,12 +340,18 @@ def apply(conn: sqlite3.Connection, token: str) -> dict[str, Any]:
     from . import settings as settings_service
 
     path = upload_path(token)
+    enter("check")
     report = inspect(path)
     if not report["ok"]:
         raise RestoreError(report["problems"][0])
     vault = get_settings().vault_dir
     with backup_service._run_lock:  # 자동 백업이 도중에 데이터 폴더를 읽지 않게
-        safety = _safety_backup() if report["current"]["has_data"] else None
+        from .export import BackupCancelled
+
+        try:
+            safety = _safety_backup(enter("safety")) if report["current"]["has_data"] else None
+        except BackupCancelled as exc:
+            raise Cancelled() from exc
         work = vault / WORK_DIR
         shutil.rmtree(work, ignore_errors=True)
         new, old = work / "new", work / "old"
@@ -342,16 +368,23 @@ def apply(conn: sqlite3.Connection, token: str) -> dict[str, Any]:
             shutil.rmtree(work, ignore_errors=True)
             raise RestoreError(str(exc)) from exc
         try:
-            _extract(path, new)
+            _extract(path, new, enter("extract"))
+        except Cancelled:
+            shutil.rmtree(work, ignore_errors=True)
+            if safety:
+                Path(safety).unlink(missing_ok=True)   # 바꾸지 않았으니 안전 백업도 필요 없다
+            raise
         except (OSError, zipfile.BadZipFile) as exc:
             shutil.rmtree(work, ignore_errors=True)
             raise RestoreError(f"백업을 풀지 못했습니다 — 지금 데이터는 그대로입니다. ({exc})") from exc
+        enter("swap")
         _swap(vault, new, old)
         shutil.rmtree(work, ignore_errors=True)
     discard_upload(token)
 
+    index_progress = enter("index")
     reset_index(conn)
-    indexed, problems = reindex_all(conn)
+    indexed, problems = reindex_all(conn, progress=index_progress)
     conn.commit()
     readcache.bump()
 

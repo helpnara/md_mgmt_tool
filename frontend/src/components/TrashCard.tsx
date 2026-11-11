@@ -4,6 +4,7 @@ import type { TrashItem } from "../types";
 import { formatDateTime } from "../util";
 import CardIntro from "./CardIntro";
 import { Trash2 } from "lucide-react";
+import RunningLine from "./RunningLine";
 import IconTitle from "./IconTitle";
 
 /**
@@ -101,6 +102,8 @@ export default function TrashCard() {
           ))}
         </ul>
       )}
+      {/* 되돌린 뒤 색인을 다시 만든다 — 과제 n / N (TODO 268) */}
+      <RunningLine active={busy !== null} runKey="trash-restore" label="삭제 보관함에서 되돌리기" />
     </div>
   );
 }
