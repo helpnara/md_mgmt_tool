@@ -7210,6 +7210,40 @@ async function main() {
     expect(gap >= 0 && gap < 60, `사유 상자와 [빼기] 사이: ${gap}px`);
   });
 
+  console.log("\n[76] 표 폭 다시 · 명부 두 단 · 설정 반영 작은 보완 (TODO 278 · 276)");
+
+  await check("보고대상 · 접수 표 — 제목 칸이 절반을 넘지 않고, 다른 칸은 줄바꿈 없이 한 줄 (278)", async () => {
+    for (const [route, sel] of [["#/reports", ".report-candidates-table"], ["#/intakes", ".intake-table"]]) {
+      await go(route);
+      const table = page.locator(sel).first();
+      await table.waitFor({ timeout: 8000 });
+      const ratio = await table.evaluate((t) => {
+        const fill = t.querySelector("th.fill-col") ?? t.querySelector("thead th:nth-child(3)");
+        return fill ? fill.getBoundingClientRect().width / t.getBoundingClientRect().width : 1;
+      });
+      expect(ratio < 0.5, `${route} 제목 칸 비율 ${ratio.toFixed(2)}`);
+      const wrapped = await table.evaluate((t) => [...t.querySelectorAll("tbody tr:first-child td:not(.fill-col)")]
+        .filter((td) => td.textContent.trim() && td.getBoundingClientRect().height > 64).length);
+      equal(wrapped, 0, `${route} 줄바꿈된 칸`);
+    }
+  });
+
+  await check("담당자 명부 두 단 — 명부에 없는 이름이 명부 표 오른쪽에 (278)", async () => {
+    await api.post("/api/experiences", { person: "명부밖사람", title: "명부 밖 경험", kind: "업무" });
+    await go("#/settings");
+    const side = page.locator(".people-side .unregistered");
+    await side.waitFor({ timeout: 8000 });
+    const [table, aside] = await Promise.all([page.locator(".people-scroll").boundingBox(), side.boundingBox()]);
+    expect(table && aside && aside.x >= table.x + table.width - 1, `오른쪽에: 표 ${table?.x}+${table?.width}, 옆 ${aside?.x}`);
+  });
+
+  await check("로드맵 — 단계 · 과제 번호 칸이 넓어졌다(300px 안팎) (278)", async () => {
+    await go("#/roadmap");
+    await page.waitForTimeout(1200);
+    const width = await page.evaluate(() => getComputedStyle(document.querySelector(".roadmap") ?? document.body).getPropertyValue("--rm-label").trim());
+    expect(["300px", "276px", "405px"].includes(width), `라벨 칸: ${width}`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
