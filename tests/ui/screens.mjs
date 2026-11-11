@@ -7000,6 +7000,8 @@ async function main() {
     expect((await preview.locator(".search-preview-item").count()) >= 1, "결과 줄");
     expect((await preview.locator(".search-preview-all").innerText()).includes("전체 결과 보기"), "전체 결과로");
     await box.press("Escape");
+    // 접히는 것은 다음 그리기에서 — 바로 세면 가끔 아직 남아 있다(2026-11-11 한 번)
+    await preview.waitFor({ state: "detached", timeout: 3000 }).catch(() => undefined);
     equal(await preview.count(), 0, "Esc 로 접힌다");
     await box.fill("시제품 ");
     await page.waitForTimeout(900);
