@@ -181,6 +181,12 @@ def save_project_types(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # 275 — 스마트과제(`smart`)는 분류 넷 · 홈의 스마트과제 · 접수 승격이 기대는 속성이라 뺄 수 없다(이름은 바꿀 수 있다)
+    from ..config import CLASSIFIED_TYPE
+
+    if not any(item["key"] == CLASSIFIED_TYPE for item in wanted):
+        raise HTTPException(status_code=400, detail="스마트과제 속성은 분류(성격 · 분류 …) 칸과 접수 승격이 쓰는 속성이라 뺄 수 없습니다 — 이름은 바꿀 수 있습니다.")
+
     # 쓰고 있는 속성이 사라지면 그 과제들이 색인에서 미지정이 된다. 먼저 옮기게 한다.
     counts = _type_counts(conn)
     labels = svc.type_labels()
@@ -259,3 +265,31 @@ def backup_now(conn: sqlite3.Connection = Depends(get_db)) -> dict:
             return backup_svc.run(conn, reason="manual")
     except backup_svc.BackupError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── 분류 넷의 값 정리 (TODO 275) — 쓰는 수 · 이름 바꾸기(합치기) ─────────────
+
+class ClassRename(BaseModel):
+    field: str
+    old: str
+    new: str
+
+
+@router.get("/classifications/usage")
+def classification_usage(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """칸마다 값 · 쓰는 과제 수 · 접수 수 · 목록에 있나(목록에 없는 옛 값까지)."""
+    from ..services import classify
+
+    return {"usage": classify.usage(conn)}
+
+
+@router.post("/classifications/rename")
+def classification_rename(payload: ClassRename, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """값 이름 바꾸기 — 쓰는 과제 · 접수 파일과 목록을 함께. 새 이름이 목록에 있으면 합친다."""
+    from ..services import classify
+
+    try:
+        return classify.rename(conn, payload.field, payload.old, payload.new)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+

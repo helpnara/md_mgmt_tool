@@ -751,6 +751,23 @@ def merge_skill(conn: sqlite3.Connection, source: dict[str, str], target: dict[s
     return {"changed": changed}
 
 
+def rename_skill_tags(conn: sqlite3.Connection, source: dict[str, str], target: dict[str, str]) -> dict[str, Any]:
+    """사전에서 이름 · 축을 고친 역량(TODO 275) — 쓰는 경험의 태그를 새 이름 · 축으로. 사전은 이미 저장돼 있어야 한다."""
+    src = (str(source.get("axis") or ""), " ".join(str(source.get("name") or "").split()))
+    dst = (str(target.get("axis") or ""), " ".join(str(target.get("name") or "").split()))
+    if not src[1] or not dst[1] or dst[0] not in AXES:
+        raise ExperienceError("바꿀 역량 둘을 골라 주세요.")
+    if src == dst:
+        return {"changed": []}
+    if not any((d["axis"], d["name"]) == dst for d in settings_service.skill_dictionary()):
+        raise ExperienceError(f"사전에 없는 역량으로는 바꾸지 않습니다: {dst[1]}")
+    changed = _rewrite_skills(conn, sorted(get_settings().people_dir.glob("*/experiences/E-*.md")),
+                              lambda skills: [{"axis": dst[0], "name": dst[1]} if (s.get("axis"), s.get("name")) == src else s for s in skills])
+    reindex(conn)
+    conn.commit()
+    return {"changed": changed}
+
+
 def rematch_person(conn: sqlite3.Connection, person: str) -> dict[str, Any]:
     """[사전에 다시 맞추기] — 그 사람의 경험 태그를 지금 사전으로 다시 맞춘다(사전을 고친 뒤)."""
     paths_ = [paths.safe_join(get_settings().vault_dir, r["rel_path"]) for r in conn.execute(

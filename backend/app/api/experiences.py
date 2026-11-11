@@ -222,6 +222,21 @@ def merge_skill(payload: MergeIn, request: Request, conn: sqlite3.Connection = D
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+class SkillRenameIn(BaseModel):
+    source: SkillRef
+    target: SkillRef
+
+
+@router.post("/skills/rename")
+def rename_skill(payload: SkillRenameIn, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """역량 사전에서 이름 · 축을 고친 뒤 — 그 역량을 쓰는 경험의 태그도 새 이름 · 축으로(TODO 275). 사전은 화면이 먼저 저장한다."""
+    _manager(request)
+    try:
+        return svc.rename_skill_tags(conn, payload.source.model_dump(), payload.target.model_dump())
+    except (svc.ExperienceError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/skills/rematch")
 def rematch(payload: RematchIn, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     _manager(request)

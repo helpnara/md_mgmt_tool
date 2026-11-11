@@ -56,6 +56,35 @@ export default function SkillDictionaryCard() {
     }
   }
 
+  /** 275 — 쓰는 역량의 이름 · 축을 고쳐 저장하면 경험의 태그도 함께(옛 이름은 다른 이름으로 남겨 AI 응답 · 손 입력도 맞춘다) */
+  async function saveWithRenames() {
+    const renamed = rows.filter((row) => row.origin && usage(row) > 0 && row.name.trim() && row.origin !== `${row.axis}|${row.name.trim()}`);
+    if (renamed.length && !window.confirm(`쓰는 역량 ${renamed.length}개의 이름 · 축을 바꿉니다:\n`
+      + renamed.map((row) => `${row.origin.replace("|", " · ")} → ${axisLabel(row.axis ?? "")} · ${row.name.trim()} (경험 ${usage(row)}건)`).join("\n")
+      + "\n\n그 역량을 쓰는 경험의 태그도 함께 바뀌고, 옛 이름은 다른 이름으로 남습니다. 진행할까요?")) return;
+    const entries = rows.filter((row) => row.name.trim()).map((row) => {
+      const oldName = row.origin ? row.origin.split("|")[1] : "";
+      const aliases = renamed.includes(row) && oldName && oldName !== row.name.trim() && !row.aliases.includes(oldName) ? [...row.aliases, oldName] : row.aliases;
+      return { axis: row.axis as ExperienceSkill["axis"], name: row.name.trim(), aliases };
+    });
+    setBusy(true);
+    try {
+      await api.saveSettings({ skill_dictionary: entries });
+      let changed = 0;
+      for (const row of renamed) {
+        const [axis, name] = row.origin.split("|");
+        changed += (await api.renameSkillTags({ axis, name }, { axis: row.axis ?? "기술", name: row.name.trim() })).changed.length;
+      }
+      await load();
+      setNotice(renamed.length ? `저장했습니다 — 경험 ${changed}건의 태그를 새 이름으로 바꿨습니다.` : "저장했습니다.");
+      window.setTimeout(() => setNotice(""), 4000);
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function merge(row: Row, target: string) {
     const [toAxis, toName] = target.split("|");
     if (!toName || !window.confirm(`‘${row.name}’ 을(를) ‘${toName}’ 으로 합칠까요? 쓰는 경험 ${usage(row)}건의 태그가 함께 바뀌고, 옛 이름은 동의어로 남습니다.`)) return;
@@ -109,13 +138,11 @@ export default function SkillDictionaryCard() {
             }
           })()}>추천 동의어 더하기</button>
         <button type="button" className="ghost" disabled={busy || !data?.custom}
-          onClick={() => window.confirm("역량 사전을 처음 46개로 되돌릴까요? 경험의 태그는 그대로입니다.") && void save(null, "기본 사전으로 되돌렸습니다.")}>
+          onClick={() => window.confirm("역량 사전을 처음 46개로 되돌릴까요? 경험의 태그는 그대로라, 고친 · 더한 역량을 쓰던 태그는 \"사전에 없음\" 이 됩니다(역량 태그 정리함에서 정리).") && void save(null, "기본 사전으로 되돌렸습니다.")}>
           기본으로
         </button>
         <button disabled={busy || !dirty || Boolean(duplicate)}
-          onClick={() => void save(rows.filter((row) => row.name.trim()).map((row) => ({
-            axis: row.axis as ExperienceSkill["axis"], name: row.name.trim(), aliases: row.aliases,
-          })), "저장했습니다.")}>
+          onClick={() => void saveWithRenames()}>
           {busy ? "저장 중…" : "저장"}
         </button>
       </div>

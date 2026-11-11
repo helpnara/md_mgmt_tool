@@ -236,6 +236,15 @@ export const api = {
   experienceSkills: () => request<SkillDictionary>("/api/experiences/skills"),
   // 보유 기술 사전 (TODO 273)
   experienceTools: () => request<ToolDictionary>("/api/experiences/tools"),
+  // 분류 넷의 값 정리 · 역량 이름 바꾸기 (TODO 275)
+  classificationUsage: () =>
+    request<{ usage: Record<string, { value: string; projects: number; intakes: number; listed: boolean }[]> }>("/api/settings/classifications/usage"),
+  renameClassification: (field: string, old: string, next: string) =>
+    request<{ field: string; old: string; new: string; merged: boolean; projects: number; intakes: number }>("/api/settings/classifications/rename", {
+      method: "POST", body: JSON.stringify({ field, old, new: next }),
+    }),
+  renameSkillTags: (source: { axis: string; name: string }, target: { axis: string; name: string }) =>
+    request<{ changed: string[] }>("/api/experiences/skills/rename", { method: "POST", body: JSON.stringify({ source, target }) }),
   rematchTools: () => request<{ changed: string[] }>("/api/experiences/tools/rematch", { method: "POST" }),
   mergeSkill: (source: { axis: string; name: string }, target: { axis: string; name: string }) =>
     request<{ changed: string[] }>("/api/experiences/skills/merge", { method: "POST", body: JSON.stringify({ source, target }) }),

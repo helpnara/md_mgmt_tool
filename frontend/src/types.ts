@@ -346,6 +346,10 @@ export interface Person {
   leader?: boolean;
   /** 이 사람의 PC 주소 (TODO 233) — 여기서 연 화면은 이 사람으로 본다(담당 과제의 진행일지 · 첨부 · 개요를 고친다) */
   ips?: string[];
+  /** 과제 담당 말고 이 이름이 적힌 기록 수 — 면담 · 교육 · 경험 · 접수 리더 · 담당과 역할 (TODO 275) */
+  records?: number;
+  /** 화면에서 이름 칸을 고쳤으면 옛 이름 — 서버가 계정 · PC 주소를 물려준다 (TODO 275) */
+  former?: string;
 }
 
 /** 지금 누구인가 (TODO 233) — `/api/me` */

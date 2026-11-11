@@ -251,6 +251,9 @@ function SliceTable({
               <tr key={item.key}>
                 <td>
                   <a href={link(item)}>{item.label}</a>
+                  {"listed" in item && (item as { listed?: boolean }).listed === false && item.key !== "none" && (
+                    <span className="muted unlisted-mark" title="설정 목록에 없는 값 — 설정 → 분류 · 접수 → 값 정리에서 이름을 바꾸거나 합칩니다"> (목록에 없음)</span>
+                  )}
                 </td>
                 <td>{item.count || DASH}</td>
                 <StatusCells

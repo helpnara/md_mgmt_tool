@@ -41,19 +41,36 @@ def overview(conn: sqlite3.Connection) -> dict[str, Any]:
             FINISHED_STATUSES,
         )
     }
+    # 과제 담당 말고 이 이름이 적힌 기록 (TODO 275) — 면담 · 교육 · 경험 · 접수 리더 · 유관부서 담당.
+    # 명부에서 이름을 고치거나 뺄 때 "기록이 남는다" 를 알리고, 명부에 없는 이름도 [통일]로 고칠 수 있게
+    records: dict[str, int] = {}
+    for sql in ("SELECT person AS name, COUNT(*) AS n FROM meeting GROUP BY person",
+                "SELECT person AS name, COUNT(*) AS n FROM activity GROUP BY person",
+                "SELECT person AS name, COUNT(*) AS n FROM experience GROUP BY person",
+                "SELECT leader AS name, COUNT(*) AS n FROM intake WHERE leader IS NOT NULL AND leader != '' GROUP BY leader",
+                "SELECT name, COUNT(*) AS n FROM project_contribution WHERE derived = 0 GROUP BY name"):
+        try:
+            for row in conn.execute(sql):
+                if row["name"]:
+                    records[row["name"]] = records.get(row["name"], 0) + row["n"]
+        except sqlite3.Error:
+            continue
+    others = {name: n for name, n in records.items() if name not in names and name not in used}
     return {
         "people": [
             {
                 **person,
                 "used": used.get(person["name"], 0),
                 "unfinished": unfinished.get(person["name"], 0),
+                "records": records.get(person["name"], 0),
             }
             for person in registered
         ],
         # 명부에 없는데 과제에 쓰이고 있는 이름. 오타이거나, 명부에 넣어야 할 사람이다.
+        # 275 — 과제 담당이 아니라 면담 · 교육 · 경험 · 접수에만 남은 이름도(used 0, records n)
         "unregistered": [
-            {"name": name, "used": count} for name, count in used.items() if name not in names
-        ],
+            {"name": name, "used": count, "records": records.get(name, 0)} for name, count in used.items() if name not in names
+        ] + [{"name": name, "used": 0, "records": n} for name, n in sorted(others.items())],
     }
 
 

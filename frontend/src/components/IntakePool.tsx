@@ -54,6 +54,13 @@ function readFilters(params: URLSearchParams): Filters {
 }
 
 export default function IntakePool({ meta, query, onMetaChange }: Props) {
+  // 275 — 목록에 없는 옛 분류 값(접수에 적힌 것). 서버 PC 밖에서는 설정 끝점이 막혀 있어 비어 있다 — 그래도 목록 값은 고를 수 있다
+  const [unlisted, setUnlisted] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    api.classificationUsage()
+      .then(({ usage }) => setUnlisted(Object.fromEntries(Object.entries(usage).map(([key, rows]) => [key, rows.filter((r) => !r.listed && r.intakes > 0).map((r) => r.value)]))))
+      .catch(() => setUnlisted({}));
+  }, []);
   const [filters, setFilters] = useState<Filters>(() => readFilters(new URLSearchParams(query)));
   const [data, setData] = useState<IntakeListing | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -239,6 +246,12 @@ export default function IntakePool({ meta, query, onMetaChange }: Props) {
                 {info.items.map((item) => (
                   <option key={item} value={item}>
                     {item}
+                  </option>
+                ))}
+                {/* 275 — 접수에 적혀 있는데 목록에 없는 옛 값도 고를 수 있게 */}
+                {(unlisted[info.key] ?? []).map((item) => (
+                  <option key={`u-${item}`} value={item}>
+                    {item} (목록에 없음)
                   </option>
                 ))}
                 <option value="none">미지정</option>

@@ -6,6 +6,7 @@ import { listProblem, numberProblem } from "../inputRules";
 import { enterToSave } from "./enterSave";
 import CardIntro from "./CardIntro";
 import { Inbox } from "lucide-react";
+import ClassValuesPanel from "./ClassValuesPanel";
 import IconTitle from "./IconTitle";
 
 /** 서버와 같은 상한 (TODO 214 U6) — 분류 30자 20개 · 사전점검 80자 30개 */
@@ -123,6 +124,19 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
 
   async function save() {
     if (!canSave) return;
+    // 275 — 쓰는 값을 목록에서 빼면(이름만 고친 경우 포함) 기존 과제 · 접수에는 옛 값이 남는다 — 먼저 묻는다
+    try {
+      const { usage } = await api.classificationUsage();
+      const dropped = meta.classifications.flatMap((info) => {
+        const now = (lists[info.key] ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+        return (usage[info.key] ?? []).filter((row) => row.listed && !now.includes(row.value) && row.projects + row.intakes > 0)
+          .map((row) => `${info.label} ‘${row.value}’ (과제 ${row.projects} · 접수 ${row.intakes})`);
+      });
+      if (dropped.length && !window.confirm(`쓰는 값을 목록에서 뺍니다:\n${dropped.join("\n")}\n\n기존 과제 · 접수에는 옛 값이 그대로 남습니다(목록에 없음). `
+        + "이름을 바꾸려는 것이면 [취소]하고 아래 [값 정리]의 [이름 바꾸기]를 쓰세요. 그대로 저장할까요?")) return;
+    } catch {
+      /* 쓰는 수를 못 읽어도 저장은 막지 않는다 */
+    }
     setBusy(true);
     setError(null);
     try {
@@ -175,6 +189,8 @@ export default function IntakeSettingsCard({ meta, onSaved }: { meta: Meta; onSa
           </label>
         ))}
       </div>
+      {/* 275 — 값마다 쓰는 수 · 이름 바꾸기(쓰는 과제 · 접수도 함께) */}
+      <ClassValuesPanel meta={meta} onChanged={onSaved} />
       <div className="form-row">
         <label>
           묵힘 기준 (일)

@@ -34,6 +34,8 @@ class Person(BaseModel):
     ips: list[str] | None = None
     # 팀장 (TODO 235) — 한 명. 보내지 않으면 지금 값을 물려준다
     leader: bool | None = None
+    # 275 — 화면에서 이름 칸을 고쳤으면 옛 이름. 계정 · PC 주소 · 팀장 표시를 옛 이름으로 찾아 물려준다(예전엔 새 이름으로 찾아 잃었다)
+    former: str | None = None
 
 
 class PeopleUpdate(BaseModel):
@@ -71,7 +73,8 @@ def replace_people(payload: PeopleUpdate, request: Request, conn: sqlite3.Connec
     rows = []
     for person in payload.people:
         row = person.model_dump()
-        kept = current.get(row["name"].strip(), {})
+        former = (row.pop("former", None) or "").strip()
+        kept = current.get(former or row["name"].strip(), {}) or current.get(row["name"].strip(), {})
         if row.get("account") is None:
             row["account"] = kept.get("account", "")
         if row.get("ips") is None:

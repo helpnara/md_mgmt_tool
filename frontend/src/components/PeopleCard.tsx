@@ -71,7 +71,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
   const [people, setPeople] = useState<Person[]>([]);
   // 마지막으로 불러온 명부 — 이것과 다르면 "저장 안 함" (TODO 211 ②). 여러 명의 떠난 날을 고치다 메뉴를 누르면 사라졌다
   const [saved, setSaved] = useState<Person[] | null>(null);
-  const [unregistered, setUnregistered] = useState<{ name: string; used: number }[]>([]);
+  const [unregistered, setUnregistered] = useState<{ name: string; used: number; records?: number }[]>([]);
   const [busy, setBusy] = useState(false);
   // 스무 명이 넘으면 스크롤보다 이름 한 글자가 빠르다 (TODO 121)
   const [find, setFind] = useState("");
@@ -86,8 +86,10 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
     api
       .people()
       .then((data) => {
-        setPeople(data.people);
-        setSaved(data.people);
+        // 275 — 줄마다 불러온 이름을 former 로 — 이름 칸을 고치면 [저장] 때 "기록도 함께 바꿀까요?"
+        const rows = data.people.map((person) => ({ ...person, former: person.name }));
+        setPeople(rows);
+        setSaved(rows);
         setUnregistered(data.unregistered);
       })
       .catch((err: Error) => setError(err.message));
@@ -116,11 +118,23 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
     }
   }
 
-  const save = () =>
-    run(async () => {
+  const save = () => {
+    // 275 — 이름 칸을 고친 줄: 명부만 바뀌면 과제 · 면담 · 교육 · 경험은 옛 이름으로 남는다. 함께 바꿀지 묻는다
+    const renamed = people.filter((p) => p.former && p.name.trim() && p.former !== p.name.trim());
+    const withRecords = renamed.filter((p) => (p.used ?? 0) + (p.records ?? 0) > 0);
+    let follow = false;
+    if (withRecords.length) {
+      const list = withRecords.map((p) => `${p.former} → ${p.name.trim()} (과제 ${p.used ?? 0} · 다른 기록 ${p.records ?? 0})`).join("\n");
+      follow = window.confirm(`이름을 바꾼 사람이 있습니다:\n${list}\n\n[확인] 과제 · 면담 · 교육 · 경험 · 접수의 이름도 함께 바꿉니다(권장).\n[취소] 명부의 이름만 바꿉니다 — 기록은 옛 이름으로 남습니다.`);
+    }
+    return run(async () => {
+      if (follow) {
+        for (const p of withRecords) await api.renameOwner(p.former!, p.name.trim());
+      }
       await api.savePeople(people);
-      return "명부를 저장했습니다.";
+      return follow ? `명부를 저장하고 기록의 이름도 함께 바꿨습니다(${withRecords.length}명).` : "명부를 저장했습니다.";
     });
+  };
 
   const add = (name: string) =>
     run(async () => {
@@ -415,7 +429,12 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
                     className="ghost small danger"
                     disabled={!admin && Boolean(person.leader)}
                     title={!admin && person.leader ? LEADER_LOCKED : undefined}
-                    onClick={() => setPeople((prev) => prev.filter((_, i) => i !== index))}
+                    onClick={() => {
+                      // 275 — 기록이 있는 사람은 빼도 기록은 남는다(명부에 없는 이름으로) — 먼저 알린다
+                      const records = (person.used ?? 0) + (person.records ?? 0);
+                      if (records > 0 && !window.confirm(`${person.name} 의 기록(과제 ${person.used ?? 0} · 다른 기록 ${person.records ?? 0})은 그대로 남고 "명부에 없는 이름" 으로 보입니다. 떠난 사람이면 [빼기] 대신 떠난 날을 적는 것을 권합니다. 그래도 뺄까요?`)) return;
+                      setPeople((prev) => prev.filter((_, i) => i !== index));
+                    }}
                   >
                     빼기
                   </button>
@@ -514,7 +533,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
             {unregistered.map((item) => (
               <li key={item.name}>
                 <span className="trash-label">{item.name}</span>
-                <span className="muted trash-when">과제 {item.used}건</span>
+                <span className="muted trash-when">{item.used ? `과제 ${item.used}건` : ""}{item.used && item.records ? " · " : ""}{item.records ? `다른 기록 ${item.records}건` : ""}</span>
                 <button className="ghost small" disabled={busy} onClick={() => void add(item.name)}>
                   명부에 넣기
                 </button>

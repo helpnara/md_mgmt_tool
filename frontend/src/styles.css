@@ -2921,6 +2921,17 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .dict-edit-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .dict-edit-actions select { width: auto; max-width: 100%; }
 .dict-empty { padding: 10px; }
+/* 275 — 분류 값 정리 */
+.class-values { margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.class-values-head { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.class-values-list { max-height: 260px; }
+.dict-line.static { cursor: default; }
+.dict-line.static:hover { background: transparent; }
+.class-rename { display: inline-flex; gap: 6px; align-items: center; margin-left: auto; }
+.class-rename input { width: 160px; }
+.dict-line.static > .ghost.small { margin-left: auto; flex: none; }
+.unlisted-mark { font-size: var(--fs-xs); }
+
 
 .skill-table { width: 100%; }
 .skill-table td:nth-child(2) { min-width: 180px; }
