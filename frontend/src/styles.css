@@ -2982,7 +2982,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .people-panel-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 10px 12px; border-bottom: 1px solid var(--border); min-height: 44px; }
 .people-panel-head .muted { font-size: var(--fs-xs); }
 .people-panel-head .people-find { margin: 0 0 0 auto; }
-.people-main .people-scroll { border: 0; border-radius: 0; margin: 0; max-height: 360px; }
+.people-main .people-scroll { border: 0; border-radius: 0; margin: 0; max-height: 320px; }   /* 121 — 목록 높이 고정(320) 그대로 */
 .people-main .people-scroll .people-table { width: auto; }
 .people-side .unregistered, .people-side .people-visitors { margin: 0; padding: 0; border-top: 1px solid var(--border); }
 .people-side .people-panel { flex: 1 1 auto; }
