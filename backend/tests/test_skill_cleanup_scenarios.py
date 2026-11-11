@@ -163,3 +163,30 @@ def test_answer_words(team, right, action, axis):  # noqa: F811
     assert len(items) == 1 and items[0]["action"] == action
     if axis:
         assert items[0].get("target_axis") == axis
+
+
+# ── 282 — 맥락 · 새 역량 이름 다듬기 ─────────────────────────────────────────────
+def test_unknown_tags_carry_context(team):  # noqa: F811
+    owner = team["owner"]
+    _exp(owner, title="판정 기준 정리", skills=[{"axis": "기술", "name": "현장 데이터 정제"}], actions=["불량 유형 재분류", "기준서 작성"])
+    row = _unknown(owner)[("기술", "현장 데이터 정제")]
+    assert row["uses"][0]["title"] == "판정 기준 정리" and row["uses"][0]["line"] == "불량 유형 재분류" and row["uses"][0]["person"] == "가팀원"
+
+
+def test_new_with_trimmed_name_keeps_old_tag_as_alias(team):  # noqa: F811
+    owner = team["owner"]
+    made = _exp(owner, skills=[{"axis": "업무", "name": "현업 협의 회의"}])
+    out = _apply(owner, [{"axis": "업무", "name": "현업 협의 회의", "action": "new", "target_axis": "업무", "target_name": "현업 협의"}]).json()
+    assert out["changed"] == [made["id"]] and out["left"] == 0
+    entry = next(d for d in _dict(owner) if d["name"] == "현업 협의")
+    assert entry["axis"] == "업무" and "현업 협의 회의" in entry["aliases"]
+    assert owner.get(f"/api/experiences/{made['id']}").json()["skills"] == [{"axis": "업무", "name": "현업 협의"}]
+
+
+def test_new_with_name_that_already_exists_merges(team):  # noqa: F811
+    owner = team["owner"]
+    made = _exp(owner, skills=[{"axis": "업무", "name": "품질 관리 회의"}])
+    out = _apply(owner, [{"axis": "업무", "name": "품질 관리 회의", "action": "new", "target_axis": "업무", "target_name": "품질 관리"}]).json()
+    assert out["changed"] == [made["id"]] and out["left"] == 0
+    entry = next(d for d in _dict(owner) if d["name"] == "품질 관리")
+    assert "품질 관리 회의" in entry["aliases"] and sum(1 for d in _dict(owner) if d["name"] == "품질 관리") == 1

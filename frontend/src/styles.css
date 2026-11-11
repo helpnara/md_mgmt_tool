@@ -2997,3 +2997,33 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .unregistered-who .muted { font-size: var(--fs-xs); }
 .unregistered-act { display: flex; gap: 6px; flex-wrap: wrap; }
 .people-side-empty { padding: 10px 12px; margin: 0; }
+
+/* 282 — 역량 태그 정리함: 줄마다 추천 단추 · 결정 표시 · 맥락 · 여럿 고르기 */
+.cleanup-progress { font-size: var(--fs-sm); color: var(--muted); }
+.cleanup-progress b { color: var(--accent); }
+.cleanup-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0 8px; }
+.cleanup-tools .dict-search { max-width: 260px; }
+.cleanup-tools .chip, .cleanup-actions .chip { padding: 3px 10px; min-height: 28px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--card); font-size: var(--fs-xs); font-weight: 500; color: var(--text); }
+.cleanup-tools .chip.on, .cleanup-actions .chip.on { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+.cleanup-actions .chip.on.danger { border-color: var(--danger); color: var(--danger); background: var(--danger-50); }
+.cleanup-actions .ai-chip { border-style: dashed; border-color: var(--ai-300, var(--accent)); }
+.cleanup-bulk { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 8px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-soft); }
+.cleanup-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); max-height: 560px; overflow-y: auto; }
+.cleanup-row { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.cleanup-row + .cleanup-row { border-top: 1px solid var(--border); }
+.cleanup-row.decided { background: var(--neutral-50); box-shadow: inset 3px 0 0 var(--accent); }
+.cleanup-line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.cleanup-name { font-size: var(--fs-md, 15px); text-decoration: none; padding: 0; min-height: 0; }
+.cleanup-meta { font-size: var(--fs-xs); }
+.cleanup-decision { margin-left: auto; font-size: var(--fs-sm); color: var(--accent); font-weight: 600; display: inline-flex; gap: 8px; align-items: baseline; }
+.cleanup-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-left: 26px; }
+.cleanup-actions .cleanup-other { width: auto; min-height: 28px; padding: 2px 8px; font-size: var(--fs-xs); }
+.cleanup-new { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-left: 26px; }
+.cleanup-new select { width: auto; }
+.cleanup-new input { width: 240px; }
+.cleanup-uses { list-style: none; margin: 0 0 0 26px; padding: 8px 10px; border-left: 2px solid var(--border); font-size: var(--fs-sm); display: flex; flex-direction: column; gap: 4px; }
+.cleanup-use-line { font-size: var(--fs-xs); }
+
+.cleanup-line input[type="checkbox"], .cleanup-tools input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin: 0; align-self: center; }
+.cleanup-line { align-items: center; }
+.cleanup-actions .cleanup-other { max-width: 160px; }

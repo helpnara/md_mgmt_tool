@@ -6927,7 +6927,7 @@ async function main() {
     await go("#/settings?tab=class");
     await page.waitForTimeout(1200);
     const card = page.locator("[data-testid=skill-cleanup]");
-    const row = card.locator('tr[data-tag="알고리즘 개발"]');
+    const row = card.locator('li[data-tag="알고리즘 개발"]');
     equal(await row.count(), 1, "사전에 없는 태그");
     await card.getByRole("button", { name: "AI 로 맞추기" }).click();
     await page.waitForTimeout(600);
@@ -6935,11 +6935,14 @@ async function main() {
     await card.locator('textarea[aria-label="AI 의 답"]').fill("- 알고리즘 개발 | 버림\n- Matlab | 도구");
     await card.getByRole("button", { name: "답 읽기" }).click();
     await page.waitForTimeout(800);
-    equal(await row.locator('select[aria-label="정리"]').inputValue(), "drop", "AI 의 답이 고르는 칸을 채웠다");
+    // 282 G — AI 의 답은 줄 안의 칩으로, [AI 제안 모두 받기]로 결정
+    expect((await row.locator(".ai-chip").innerText()).includes("빼기"), "AI 제안 칩");
+    await card.getByRole("button", { name: "AI 제안 모두 받기" }).click();
+    expect((await row.locator("[data-testid=cleanup-decision]").innerText()).includes("빼기"), "결정이 줄에 보인다");
     nextDialog((d) => d.accept());
     await card.getByRole("button", { name: /적용 \(\d+\)/ }).click();
     await page.waitForTimeout(1500);
-    equal(await card.locator('tr[data-tag="알고리즘 개발"]').count(), 0, "정리된 태그는 사라진다");
+    equal(await card.locator('li[data-tag="알고리즘 개발"]').count(), 0, "정리된 태그는 사라진다");
     const after = await api.get(`/api/experiences/${seeded.exportExp}`);
     expect(after.tools.some((t) => t.toLowerCase() === "matlab") && !after.skills.some((sk) => sk.name === "알고리즘 개발"), `도구로 · 빼기: ${JSON.stringify(after.skills)}`);
   });
@@ -7250,10 +7253,9 @@ async function main() {
     const made = await api.post("/api/experiences", { person: "권경락", title: "정리함 시험 경험", kind: "업무", skills: [{ axis: "기술", name: "현장측정정리" }] });
     await go("#/settings?tab=class");
     const cleanup = page.locator("[data-testid=skill-cleanup]");
-    const row = cleanup.locator('tr[data-tag="현장측정정리"]');
+    const row = cleanup.locator('li[data-tag="현장측정정리"]');
     await row.waitFor({ timeout: 8000 });
-    await row.locator('select[aria-label="정리"]').selectOption("alias");
-    await row.locator('select[aria-label="맞출 역량"]').selectOption("기술|데이터 파이프라인");
+    await row.locator('select[aria-label="다른 역량으로"]').selectOption("기술|데이터 파이프라인");
     nextDialog((d) => d.accept());
     await cleanup.getByRole("button", { name: /적용 \(\d+\)/ }).click();
     await page.waitForFunction(() => document.querySelector("[data-testid=skill-cleanup]")?.textContent?.includes("정리했습니다"), null, { timeout: 10000 });
@@ -7263,6 +7265,47 @@ async function main() {
     expect((await dict.locator("li.dict-item").count()) >= 1, "사전 카드가 다시 읽혀 더한 다른 이름으로 찾아진다");
     const after = await api.get(`/api/experiences/${made.id}`);
     expect(!after.skills.some((sk) => sk.name === "현장측정정리"), `경험 태그가 바뀜: ${JSON.stringify(after.skills)}`);
+  });
+
+  console.log("\n[78] 역량 태그 정리함 편의 · 쉼표로 묶인 이름 (TODO 282 · 281)");
+
+  await check("정리함 — 추천 단추 한 번에 결정 · 줄에 결정 · 맥락 펼치기 · 여럿 고르기 · 새 역량 이름 다듬기 · 진행 (282)", async () => {
+    for (const name of ["편의시험 넓은말", "편의시험 회의진행"]) {
+      await api.post("/api/experiences", { person: "권경락", title: `${name} 경험`, kind: "업무", actions: ["첫 줄 행동"], skills: [{ axis: "업무", name }] });
+    }
+    await go("#/settings?tab=class");
+    const card = page.locator("[data-testid=skill-cleanup]");
+    const a = card.locator('li[data-tag="편의시험 넓은말"]');
+    await a.waitFor({ timeout: 8000 });
+    const before = await card.locator("[data-testid=cleanup-progress]").innerText();
+    await a.getByRole("button", { name: "빼기", exact: true }).click();
+    expect((await a.locator("[data-testid=cleanup-decision]").innerText()).includes("빼기"), "줄에 결정");
+    expect((await card.locator("[data-testid=cleanup-progress]").innerText()) !== before, "진행이 바뀐다");
+    await a.locator(".cleanup-name").click();
+    expect((await a.locator("[data-testid=cleanup-uses]").innerText()).includes("편의시험 넓은말 경험"), "맥락 — 경험 제목");
+    const b = card.locator('li[data-tag="편의시험 회의진행"]');
+    await b.getByRole("button", { name: "새 역량", exact: true }).click();
+    await b.locator('input[aria-label="새 역량 이름"]').fill("편의시험 회의");
+    await a.locator('input[type="checkbox"]').check();
+    expect((await card.locator("[data-testid=cleanup-bulk]").innerText()).includes("1개 고름"), "여럿 고르기 띠");
+    await card.locator("[data-testid=cleanup-bulk]").getByRole("button", { name: "고르기 풀기" }).click();
+    let asked = "";
+    nextDialog((d) => { asked = d.message(); d.accept(); });
+    await card.getByRole("button", { name: /적용 \(\d+\)/ }).click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=skill-cleanup]")?.textContent?.includes("정리했습니다"), null, { timeout: 10000 });
+    expect(asked.includes("새 역량으로 사전에 더함 1개") && asked.includes("빼기 1개"), `적용 전 요약: ${asked.slice(0, 160)}`);
+    const dict = await api.get("/api/experiences/skills");
+    expect(dict.dictionary.some((d) => d.name === "편의시험 회의" && d.aliases.includes("편의시험 회의진행")), "다듬은 이름 · 옛 태그는 다른 이름");
+    await go("#/settings?tab=class");
+  });
+
+  await check("명부에 없는 이름 — 쉼표로 여럿 적은 접수 리더가 사람마다 한 줄 (281)", async () => {
+    await api.post("/api/intakes", { title: "쉼표 리더 접수", leader: "쉼표가, 쉼표나" });
+    await go("#/settings");
+    const side = page.locator("[data-testid=unregistered]");
+    await side.waitFor({ timeout: 8000 });
+    const text = await side.innerText();
+    expect(text.includes("쉼표가") && text.includes("쉼표나") && !text.includes("쉼표가, 쉼표나"), `나뉘어 보인다: ${text.slice(0, 200)}`);
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

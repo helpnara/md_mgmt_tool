@@ -170,6 +170,13 @@ export default function ExperienceCard({
               </div>
             );
           })}
+          {/* 282 H — 정리함으로 바로 */}
+          {manager && data.skills.some((skill) => !skill.known) && (
+            <a className="link-button cleanup-link" href="#/settings?tab=class" data-testid="cleanup-link"
+              title="설정 → 분류 · 접수의 역량 태그 정리함 — 팀 전체의 사전에 없는 태그를 한 번에 정리합니다">
+              사전에 없는 태그 {data.skills.filter((skill) => !skill.known).length}개 — 정리함에서 정리
+            </a>
+          )}
           {manager && data.skills.some((skill) => !skill.known) && (
             <button className="link-button" onClick={() => void rematch()} title="역량 사전을 고친 뒤 — 이 사람 경험의 태그를 지금 사전으로 다시 맞춥니다">
               사전에 다시 맞추기

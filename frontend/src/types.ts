@@ -1608,6 +1608,8 @@ export interface UnknownTag {
   people: string[];
   suggest: { axis: ExperienceSkill["axis"]; name: string }[];
   tool_like: boolean;
+  /** 282 C — 그 태그가 붙은 경험(5건까지): 제목 · 사람 · 상태 · 행동 첫 줄 */
+  uses?: { id: string; title: string; person: string; status: string; line: string }[];
 }
 export type TagAction = "alias" | "new" | "tool" | "drop";
 export interface TagDecision {

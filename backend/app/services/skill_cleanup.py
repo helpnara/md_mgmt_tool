@@ -48,8 +48,13 @@ def unknown_tags(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             mark = (skill.get("axis") or "기술", skill["name"])
             if mark in known:
                 continue
-            row = found.setdefault(mark, {"axis": mark[0], "name": mark[1], "experiences": [], "people": []})
+            row = found.setdefault(mark, {"axis": mark[0], "name": mark[1], "experiences": [], "people": [], "uses": []})
             row["experiences"].append(item["id"])
+            # 282 C — 맥락: 그 태그가 붙은 경험의 제목 · 사람 · 행동 첫 줄(5건까지)
+            if len(row["uses"]) < 5:
+                first = next((a for a in item.get("actions") or [] if str(a).strip()), "") or (item.get("situation") or "").split("\n")[0]
+                row["uses"].append({"id": item["id"], "title": item["title"], "person": item["person"],
+                                    "status": item.get("status") or "", "line": str(first)[:120]})
             if item["person"] not in row["people"]:
                 row["people"].append(item["person"])
     out = []
@@ -80,7 +85,11 @@ def apply(conn: sqlite3.Connection, actions: list[dict[str, Any]]) -> dict[str, 
             axis = AXIS_WORDS.get(axis, axis)
             if axis not in skill_rules.AXES:
                 raise exp.ExperienceError(f"역량 축은 {' · '.join(skill_rules.AXES)} 중 하나입니다: {axis}")
-            target = (axis, mark[1])
+            # 282 J — 새 역량의 이름을 다듬을 수 있다("현업 협의 회의" → "현업 협의"). 옛 태그는 그 역량의 다른 이름으로 남는다
+            new_name = " ".join(str(raw.get("target_name") or "").split()) or mark[1]
+            if len(new_name) > skill_rules.NAME_MAX:
+                raise exp.ExperienceError(f"역량 이름은 {skill_rules.NAME_MAX}자까지입니다: {new_name[:20]}…")
+            target = (axis, new_name)
         plan[mark] = (action, target)
     # 사전 고치기
     taken = skill_rules.index(dictionary)
@@ -88,11 +97,18 @@ def apply(conn: sqlite3.Connection, actions: list[dict[str, Any]]) -> dict[str, 
         if action == "alias" and skill_rules.key(name) not in taken:
             by_name[target]["aliases"].append(name)
             taken[skill_rules.key(name)] = target
-        elif action == "new" and target not in by_name and skill_rules.key(name) not in taken:
-            entry = {"axis": target[0], "name": name, "aliases": []}
+        elif action == "new" and target not in by_name and skill_rules.key(target[1]) not in taken:
+            entry = {"axis": target[0], "name": target[1], "aliases": [name] if skill_rules.key(name) != skill_rules.key(target[1]) and skill_rules.key(name) not in taken else []}
             dictionary.append(entry)
             by_name[target] = entry
+            taken[skill_rules.key(target[1])] = target
             taken[skill_rules.key(name)] = target
+        elif action == "new" and skill_rules.key(target[1]) in taken and skill_rules.key(name) not in taken:
+            # 다듬은 이름이 이미 사전에 있으면 — 그 역량에 옛 태그를 다른 이름으로 더한다(합치기)
+            existing = taken[skill_rules.key(target[1])]
+            by_name[existing]["aliases"].append(name)
+            taken[skill_rules.key(name)] = existing
+            plan[(axis, name)] = ("alias", existing)
     settings_service.save({"skill_dictionary": skill_rules.validate(dictionary)})
     # 경험 고치기 — 280: 파일 하나가 잠겨 있어도(다른 프로그램 · 네트워크 드라이브) 나머지는 고치고, 못 고친 것을 알린다.
     # 사전은 이미 저장됐으니 [적용]을 다시 누르면 남은 것만 다시 고친다(같은 결정이 되풀이돼도 결과는 같다)
