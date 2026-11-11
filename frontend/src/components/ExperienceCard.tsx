@@ -42,6 +42,7 @@ export default function ExperienceCard({
   reloadKey: number;
   onChanged: (listing: ExperienceListing) => void;
 }) {
+  const [draftsOpen, setDraftsOpen] = useState(false);
   const [data, setData] = useState<ExperienceListing | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -101,6 +102,12 @@ export default function ExperienceCard({
   }
 
   const missing = retroProjects.filter((pid) => !data?.items.some((item) => item.project === pid));
+  // 271 — 확정 · 구조화를 먼저, 초안은 뒤에 접어 둔다(모두 초안이면 그대로 보인다)
+  const ORDER: Record<string, number> = { 확정: 0, 구조화: 1, 초안: 2 };
+  const sorted = [...(data?.items ?? [])].sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
+  const drafts = sorted.filter((item) => item.status === "초안");
+  const foldable = drafts.length > 0 && drafts.length < sorted.length;
+  const shown = foldable && !draftsOpen ? sorted.filter((item) => item.status !== "초안") : sorted;
   return (
     <div className="card person-experiences" data-testid="experience-card">
       <div className="card-head">
@@ -118,7 +125,11 @@ export default function ExperienceCard({
               title="고른 과제의 기록으로 경험 정리 프롬프트를 만들고, 사내 AI 의 응답을 붙여 넣어 경험으로 저장합니다">
               AI 로 정리
             </button>
-            <button className="ghost" onClick={() => void addBlank()}>+ 새 경험</button>
+            {/* 272 — 과제 경험은 초안 → [AI 로 정리]. 이 단추는 과제 기록에서 나오지 않는 경험(TF · 강사 · 발표 · 특허 · 도구 이전 과제 · 입사 전)용 */}
+            <button className="ghost" onClick={() => void addBlank()}
+              title="과제 기록에서 나오지 않는 경험 — 사내 TF · 위원회, 교육 강사 · 멘토링, 발표 · 특허 · 수상, 이 도구 이전의 과제, 입사 전 경력">
+              + 과제 밖 경험 직접 쓰기
+            </button>
             <button className="ghost" disabled={busy || missing.length === 0} onClick={() => void draftAll()}
               title="회고가 있는 맡은 과제마다 초안 하나 — 이미 경험이 있는 과제는 건너뜁니다">
               {busy ? "만드는 중…" : `회고 있는 과제 모두 초안${missing.length ? ` (${missing.length})` : ""}`}
@@ -130,6 +141,12 @@ export default function ExperienceCard({
         과제 하나에서 나온 <b>상황 · 목표 · 행동 · 결과 · 교훈</b> 한 묶음입니다. 담당과 역할 · 회고 · 과제 개요 · 효과 금액에서 <b>초안</b>을 만들고,
         <b>[AI 로 정리]</b>에서 사내 AI 의 응답을 붙여 넣으면 <b>구조화</b>가 됩니다. 확정은 다음 단계에서 붙습니다. 통합 검색 · 과제 내보내기에는 들어가지 않습니다.
       </CardIntro>
+      {manager && (
+        <p className="hint experience-how" data-testid="experience-how">
+          과제 경험은 <b>[회고 있는 과제 모두 초안]</b> → <b>[AI 로 정리]</b>로 만듭니다. <b>[+ 과제 밖 경험 직접 쓰기]</b>는 사내 TF · 강사 · 발표 · 특허처럼
+          과제 기록에 없는 일, 이 도구 이전의 과제, 입사 전 경력에 씁니다.
+        </p>
+      )}
       {notice && <p className="hint notice">{notice}</p>}
       {data && data.total > 0 && (
         <p className="muted experience-counts">
@@ -179,7 +196,7 @@ export default function ExperienceCard({
               </tr>
             </thead>
             <tbody>
-              {data.items.map((item) => (
+              {shown.map((item) => (
                 <tr key={item.id} data-experience={item.id}>
                   <td className="project-id">{item.id}</td>
                   <td><a href={experienceLink(item.id)}>{item.title}</a></td>
@@ -195,6 +212,12 @@ export default function ExperienceCard({
               ))}
             </tbody>
           </table>
+          {/* 271 — 맨 위 카드가 길어지지 않게 초안은 접어 둔다(확정 · 구조화가 있을 때만) */}
+          {foldable && (
+            <button className="link-button exp-drafts-toggle" data-testid="experience-drafts-toggle" onClick={() => setDraftsOpen((v) => !v)}>
+              {draftsOpen ? "초안 접기 ▴" : `초안 ${drafts.length}건 ▾`}
+            </button>
+          )}
         </div>
       )}
     </div>

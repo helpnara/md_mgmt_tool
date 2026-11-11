@@ -6516,6 +6516,20 @@ async function main() {
       const text = await page.evaluate(() => navigator.clipboard.readText());
       expect(text.startsWith("■ 2026년 — 권경락") && text.includes("맡은 과제"), `글: ${text.slice(0, 120)}`);
     });
+    await check("이력 화면 — 경험 카드가 '나의 한 해' 위, [+ 과제 밖 경험 직접 쓰기] 와 만드는 길 안내 (271 · 272)", async () => {
+      await go(`#/person/${encodeURIComponent("권경락")}`);
+      await page.waitForSelector("[data-testid=experience-card]", { timeout: 8000 });
+      const first = await page.evaluate(() => {
+        const exp = document.querySelector("[data-testid=experience-card]");
+        const year = document.querySelector("[data-year-card]");
+        return Boolean(exp && year && exp.compareDocumentPosition(year) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+      expect(first, "경험이 위");
+      const card = page.locator("[data-testid=experience-card]");
+      equal(await card.getByRole("button", { name: "+ 과제 밖 경험 직접 쓰기" }).count(), 1, "단추 이름");
+      equal(await card.getByRole("button", { name: "+ 새 경험" }).count(), 0, "예전 이름 없음");
+      expect((await card.locator("[data-testid=experience-how]").innerText()).includes("AI 로 정리"), "만드는 길 안내");
+    });
     await check("'나의 한 해' — 다음 해에 시작하는 과제가 있어도 처음엔 올해 (269)", async () => {
       const next = await api.post("/api/projects", { title: "내년 시작 과제", owners: ["권경락"], status: "planned", start_date: "2027-02-01" });
       try {

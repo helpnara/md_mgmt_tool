@@ -327,6 +327,17 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
         </Explain>
       </div>
 
+      {/* 271 — 경험이 맨 위: 정리해 낸 결론이고, 아래(나의 한 해 · 과제 · 교육)는 그 근거다(사용자 2026-11-11) */}
+      {/* 팀원별 경험 (TODO 257) — 관리자 · 팀장, 그리고 팀원 PC 의 자기 이력에서만. 읽기 전용 공유 바깥에는 없다(면담과 같은 결) */}
+      {(isManager(me) || (isMember() && me.name === name)) && (
+        <ExperienceCard
+          name={name}
+          retroProjects={data.projects.filter((item) => hasRetro(item)).map((item) => item.id)}
+          reloadKey={expReload}
+          onChanged={(listing) => setExpProjects(new Set(listing.items.map((item) => item.project).filter(Boolean)))}
+        />
+      )}
+
       {/* 나의 한 해 (TODO 244 A3) */}
       <YearCard name={data.name} years={[...years, ...data.activities.map((item) => item.date.slice(0, 4))]} />
 
@@ -490,15 +501,6 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
         )}
       </div>
 
-      {/* 팀원별 경험 (TODO 257) — 관리자 · 팀장, 그리고 팀원 PC 의 자기 이력에서만. 읽기 전용 공유 바깥에는 없다(면담과 같은 결) */}
-      {(isManager(me) || (isMember() && me.name === name)) && (
-        <ExperienceCard
-          name={name}
-          retroProjects={data.projects.filter((item) => hasRetro(item)).map((item) => item.id)}
-          reloadKey={expReload}
-          onChanged={(listing) => setExpProjects(new Set(listing.items.map((item) => item.project).filter(Boolean)))}
-        />
-      )}
 
       <div className="card person-activities">
         <h2>교육 · 행사 {data.activities.length}건</h2>
