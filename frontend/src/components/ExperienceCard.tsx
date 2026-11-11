@@ -197,7 +197,7 @@ export default function ExperienceCard({
         <p className="muted">아직 경험이 없습니다.{manager && missing.length > 0 ? " 위의 [회고 있는 과제 모두 초안] 으로 시작하세요." : ""}</p>
       ) : (
         <div className="table-scroll">
-          <table className="grid experience-table fit-cols">
+          <table className="grid experience-table fit-cols nowrap-rest">
             <thead>
               <tr>
                 <th>번호</th>
@@ -214,7 +214,7 @@ export default function ExperienceCard({
               {shown.map((item) => (
                 <tr key={item.id} data-experience={item.id}>
                   <td className="project-id">{item.id}</td>
-                  <td><a href={experienceLink(item.id)}>{item.title}</a></td>
+                  <td className="fill-col"><a href={experienceLink(item.id)}>{item.title}</a></td>
                   <td className="muted one-line">{item.start || "?"} ~ {item.end || (item.start ? "진행 중" : "?")}</td>
                   <td className="muted">
                     {item.project ? (item.project_gone ? <span title="지운 과제 — 경험은 남습니다">{item.project} (지운 과제)</span> : item.project) : "—"}

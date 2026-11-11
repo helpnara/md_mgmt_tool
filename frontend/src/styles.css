@@ -1748,6 +1748,16 @@ a.class-chip:hover { background: var(--neutral-200); }
 /* 277 — 같은 규칙을 표에 붙이는 이름: 머리 칸은 글자에 맞추고(1% · 줄바꿈 없음), .fill-col 하나가 남는 폭을 가진다 */
 .fit-cols > thead > tr > th { width: 1%; white-space: nowrap; }
 .fit-cols > thead > tr > th.fill-col { width: auto; white-space: normal; }
+/* 278 — 제목 칸이 남는 폭을 다 가지자 다른 칸(날짜 · 상태 · 기간)이 줄바꿈됐다(사용자 2026-11-11).
+   .nowrap-rest: 제목 말고는 **줄바꿈 없이 글자 길이대로**, 제목 칸은 표마다 정한 비율까지만 — 남는 폭은 나머지 칸들이 나눠 가진다 */
+.nowrap-rest > tbody > tr > td:not(.fill-col), .nowrap-rest > tfoot > tr > td:not(.fill-col) { white-space: nowrap; }
+.nowrap-rest > thead > tr > th { white-space: nowrap; }
+.report-candidates-table > thead > tr > th.fill-col { width: 42%; }
+.experience-table > thead > tr > th.fill-col { width: 36%; }
+.intake-table.nowrap-rest col.col-title { width: 38%; }
+.nowrap-rest > thead > tr > th:not(.fill-col) { width: auto; }
+.intake-table.nowrap-rest col:not(.col-title):not(.col-pick) { width: auto; }
+
 .intake-table col.col-pick { width: 32px; }
 .intake-detail .intake-id-head { display: block; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); letter-spacing: 0.01em; }
 .intake-link { white-space: nowrap; }
@@ -1945,7 +1955,7 @@ h1 .stage-band { font-size: var(--fs-xs); line-height: 22px; padding: 0 10px; }
 .board-card h3 .stage-band { margin-left: 4px; }
 
 /* ── 로드맵 (TODO 174) — 줄기마다 이름 칸 | 막대 칸 ───────────── */
-.roadmap { --rm-label: 200px; }
+.roadmap { --rm-label: 300px; }   /* 278 — 단계 · 과제 번호 칸 1.5배(200 → 300) — 이름이 덜 잘린다 */
 .roadmap-toolbar .filters input:not([type="checkbox"]) { width: 180px; }
 .roadmap-range { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 .roadmap-range select { min-width: 110px; }
@@ -2047,7 +2057,7 @@ h1 .stage-band { font-size: var(--fs-xs); line-height: 22px; padding: 0 10px; }
 .rm-swatch.rm-status-planned { border: 1px solid var(--neutral-300); }
 
 @media (max-width: 1200px) {
-  .roadmap { --rm-label: 184px; }
+  .roadmap { --rm-label: 276px; }
   .roadmap-legend { margin-left: 0; }
 }
 .rm-name .project-id, .rm-warning .project-id { display: inline; margin-right: 4px; }
@@ -2962,3 +2972,16 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .import-actions select { flex: 1 1 200px; width: 100%; min-width: 0; }
 .import-right { min-width: 0; }
 .import-done a { margin-right: 4px; }
+
+/* 278 — 담당자 명부 두 단: 명부 표는 글자에 맞춘 폭(277) 그대로, 오른쪽 남는 자리에 접속 주소 · 명부에 없는 이름 */
+.people-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 1100px) {
+  .people-split { grid-template-columns: max-content minmax(260px, 1fr); }
+  .people-split .people-scroll .people-table { width: auto; }
+}
+.people-main { min-width: 0; }
+.people-side { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.people-side .unregistered, .people-side .people-visitors { margin: 8px 0 0; padding: 0; border: 0; }
+.people-side .trash-list li { flex-wrap: wrap; row-gap: 4px; }
+.people-side-empty { margin-top: 8px; }
+

@@ -327,7 +327,7 @@ export default function Roadmap({ meta, query }: Props) {
               {/* 한 단계에 과제가 여럿인 줄기가 있으면 이름 칸에 "← 앞 과제" 를 적을 자리를 더 준다 (TODO 180) */}
               <div
                 className="roadmap-grid"
-                style={lineages.some(isBranching) ? ({ "--rm-label": "270px" } as CSSProperties) : undefined}
+                style={lineages.some(isBranching) ? ({ "--rm-label": "405px" } as CSSProperties) : undefined}
                 onMouseLeave={() => setActive(null)}
               >
                 <div className="rm-head-label">단계 · 과제 번호</div>

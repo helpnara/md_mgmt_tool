@@ -347,7 +347,7 @@ export default function IntakePool({ meta, query, onMetaChange }: Props) {
       {data && data.items.length > 0 && (
         <>
           <div className="table-scroll">
-            <table className="grid intake-table">
+            <table className="grid intake-table nowrap-rest">
               {/* 칸 폭은 번호가 아니라 **이름표**로 잡는다 — 칸이 늘거나 줄어도 밀리지 않는다 (134 · 139) */}
               <colgroup>
                 <col className="col-pick" />
@@ -397,7 +397,7 @@ export default function IntakePool({ meta, query, onMetaChange }: Props) {
                     <td className="intake-id">
                       <a href={screenLink(`intakes/${item.id}`)}>{item.id}</a>
                     </td>
-                    <td>
+                    <td className="fill-col">
                       <a className="intake-title" href={screenLink(`intakes/${item.id}`)}>
                         {item.title}
                       </a>

@@ -266,7 +266,7 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
       </div>
       <CardIntro id="people">
         과제의 담당자 자동완성이 이 목록을 씁니다. 명부에 없는 이름도 <b>쓸 수는 있고</b>,
-        아래 <b>명부에 없는 이름</b>에 모여 보입니다.
+        오른쪽 <b>명부에 없는 이름</b>에 모여 보입니다(좁은 화면에서는 아래).
         <br />
         사번 칸은 지금 비워 두어도 됩니다 — 나중에 로그인이 생기면 이름과 사번으로 확인합니다.
         <br />
@@ -304,6 +304,9 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
       {people.length > 0 && !leaderRow && (
         <p className="hint warn-text leader-missing">아직 팀장을 고르지 않았습니다 — 이름 왼쪽 동그라미로 고르면 작성자 · 면담 대상이 따라갑니다.</p>
       )}
+      {/* 278 — 두 단: 왼쪽 명부(칸 폭이 글자에 맞아 좁아졌다 — 277), 오른쪽에 오늘 접속한 주소 · 명부에 없는 이름. 좁은 화면은 위아래 */}
+      <div className="people-split">
+      <div className="people-main">
       {/* 인원이 늘어도 카드 키가 자라지 않게 목록 안에서만 스크롤한다 (TODO 121) */}
       {people.length > 0 && (
         <div className="people-scroll">
@@ -457,6 +460,8 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
         </table>
         </div>
       )}
+      </div>
+      <aside className="people-side">
 
       {/* 오늘 접속한 주소 (TODO 233) — IP 를 묻고 받아 적지 않아도 되게. 팀원이 공유 주소로 한 번 들어오면 여기 선다 */}
       {visitors.length > 0 && (
@@ -555,6 +560,11 @@ export default function PeopleCard({ onChanged }: { onChanged: () => void }) {
           </ul>
         </div>
       )}
+      {visitors.length === 0 && unregistered.length === 0 && (
+        <p className="hint people-side-empty">명부에 없는 이름이 없습니다 — 과제 · 면담 · 교육 · 경험 · 접수에 적힌 이름이 모두 명부에 있습니다.</p>
+      )}
+      </aside>
+      </div>
 
       {dupIds.length > 0 && (
         <p className="field-error people-dup-ids">같은 사번이 둘 이상입니다: {dupIds.join(", ")} — 사람마다 다른 사번이어야 저장됩니다.</p>

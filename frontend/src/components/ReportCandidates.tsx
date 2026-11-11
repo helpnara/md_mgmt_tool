@@ -355,7 +355,7 @@ export default function ReportCandidates({ meta, query }: Props) {
       {loaded === null && !error && <p className="hint list-loading">불러오는 중…</p>}
 
       {loaded !== null && (
-      <table className="grid fit-cols">
+      <table className="grid fit-cols nowrap-rest report-candidates-table">
         <thead>
           <tr>
             {!readonly && <th className="pick-col">담기</th>}
@@ -388,7 +388,7 @@ export default function ReportCandidates({ meta, query }: Props) {
                   />
                 </td>
               )}
-              <td>
+              <td className="fill-col">
                 <a className="plain-link" href={projectLink(item.id)}>
                   <span className="project-id">{item.id}</span>
                   <span className="project-title">{item.title}</span>
