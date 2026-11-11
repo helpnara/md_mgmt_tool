@@ -45,6 +45,9 @@ class FileInUseError(RuntimeError):
 
 # 윈도우의 일시적인 거부를 다시 시도하는 간격 (TODO 215). 합쳐 0.75초 — 사람이 느끼지 못할 만큼.
 RETRY_DELAYS = (0.05, 0.1, 0.2, 0.4)
+# 280 — 문서 · 설정 **저장**(바꿔 끼우기)의 다시 시도. 네트워크 드라이브 · 백신이 막 쓴 임시 파일을 잡는 시간은 더 길었다
+# (역량 태그 정리함이 경험 수십 개를 잇달아 쓸 때 "액세스가 거부되었습니다"). 합쳐 약 3초까지
+SAVE_RETRY_DELAYS = (0.05, 0.1, 0.2, 0.4, 0.8, 1.5)
 
 
 def retry_os(fn: Callable[..., _T], *args: Any, delays: tuple[float, ...] = RETRY_DELAYS, **kwargs: Any) -> _T:

@@ -19,7 +19,11 @@ from . import experiences as exp
 from . import settings as settings_service
 
 ACTIONS = ("alias", "new", "tool", "drop")
-ACTION_WORDS = {"도구": "tool", "버림": "drop", "빼기": "drop", "넓음": "drop"}
+ACTION_WORDS = {"도구": "tool", "버림": "drop", "빼기": "drop", "넓음": "drop",
+                # 280 — 화면 이름(274)을 본 AI · 사람이 쓰는 말도 받는다
+                "보유 기술": "tool", "보유기술": "tool", "보유 기술(도구)": "tool", "보유기술(도구)": "tool", "삭제": "drop"}
+# 280 — 축을 화면 이름("전문기술")으로 적어도 받는다
+AXIS_WORDS = {"전문기술": "기술", "전문 기술": "기술"}
 _NEW = re.compile(r"^새\s*역량\s*(?:[(（:：]\s*(?P<axis>[^)）]+?)\s*[)）]?)?$")
 
 
@@ -73,6 +77,7 @@ def apply(conn: sqlite3.Connection, actions: list[dict[str, Any]]) -> dict[str, 
                 raise exp.ExperienceError(f"사전에 없는 역량으로는 맞추지 않습니다: {target[1] or '(빈칸)'}")
         if action == "new":
             axis = str(raw.get("target_axis") or mark[0])
+            axis = AXIS_WORDS.get(axis, axis)
             if axis not in skill_rules.AXES:
                 raise exp.ExperienceError(f"역량 축은 {' · '.join(skill_rules.AXES)} 중 하나입니다: {axis}")
             target = (axis, mark[1])
@@ -89,10 +94,18 @@ def apply(conn: sqlite3.Connection, actions: list[dict[str, Any]]) -> dict[str, 
             by_name[target] = entry
             taken[skill_rules.key(name)] = target
     settings_service.save({"skill_dictionary": skill_rules.validate(dictionary)})
-    # 경험 고치기
-    changed = []
+    # 경험 고치기 — 280: 파일 하나가 잠겨 있어도(다른 프로그램 · 네트워크 드라이브) 나머지는 고치고, 못 고친 것을 알린다.
+    # 사전은 이미 저장됐으니 [적용]을 다시 누르면 남은 것만 다시 고친다(같은 결정이 되풀이돼도 결과는 같다)
+    from ..vault.paths import FileInUseError
+
+    changed: list[str] = []
+    failed: list[dict[str, str]] = []
     for path in _all_paths():
-        stored = exp.read_file(path)
+        try:
+            stored = exp.read_file(path)
+        except Exception as exc:  # noqa: BLE001 — 읽지 못하는 파일은 건너뛰고 알린다
+            failed.append({"id": path.stem, "person": path.parent.parent.name, "reason": f"읽지 못함 — {exc}"})
+            continue
         skills, tools = [], list(stored["tools"])
         touched = False
         for skill in stored["skills"]:
@@ -108,13 +121,21 @@ def apply(conn: sqlite3.Connection, actions: list[dict[str, Any]]) -> dict[str, 
                 tools.append(skill["name"])
         if not touched:
             continue
-        fields = exp.clean({**stored, "skills": skills, "tools": tools}, stored, opened=(stored["status"],))
-        exp._write(path, stored["id"], fields,
-                   {"created_at": stored["created_at"], "updated_at": exp.now_iso(), "created_by": stored["created_by"]})
+        try:
+            fields = exp.clean({**stored, "skills": skills, "tools": tools}, stored, opened=(stored["status"],))
+            exp._write(path, stored["id"], fields,
+                       {"created_at": stored["created_at"], "updated_at": exp.now_iso(), "created_by": stored["created_by"]})
+        except FileInUseError as exc:
+            failed.append({"id": stored["id"], "person": stored["person"], "reason": str(exc)})
+            continue
+        except (OSError, exp.ExperienceError, ValueError) as exc:
+            failed.append({"id": stored["id"], "person": stored["person"], "reason": f"{type(exc).__name__}: {exc}"})
+            continue
         changed.append(stored["id"])
     exp.reindex(conn)
     conn.commit()
-    return {"changed": changed, "dictionary": len(dictionary)}
+    return {"changed": changed, "failed": failed, "dictionary": len(dictionary),
+            "left": len(unknown_tags(conn))}
 
 
 # ── AI 로 맞추기 — 프롬프트 · 답 읽기 ─────────────────────────────────────────
@@ -170,10 +191,11 @@ def read_answer(conn: sqlite3.Connection, text: str) -> list[dict[str, Any]]:
             continue
         row: dict[str, Any] = {"axis": tag["axis"], "name": tag["name"], "unsure": unsure, "raw": right, "problem": ""}
         new = _NEW.match(right)
-        if right in ACTION_WORDS:
-            row["action"] = ACTION_WORDS[right]
+        if right in ACTION_WORDS or right.replace(" ", "") in {k.replace(" ", "") for k in ACTION_WORDS}:
+            row["action"] = ACTION_WORDS.get(right) or next(v for k, v in ACTION_WORDS.items() if k.replace(" ", "") == right.replace(" ", ""))
         elif new:
             axis = (new.group("axis") or tag["axis"]).strip()
+            axis = AXIS_WORDS.get(axis, axis)
             row.update(action="new", target_axis=axis if axis in skill_rules.AXES else tag["axis"])
         elif skill_rules.key(right) in table:
             axis, name = table[skill_rules.key(right)]

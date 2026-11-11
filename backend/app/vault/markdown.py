@@ -122,7 +122,10 @@ def save(path: Path, doc: MarkdownDoc) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         try:
-            os.replace(tmp_name, path)
+            # 280 — 윈도우의 잠깐 거부(WinError 5 · 32)는 몇 번 다시. 끝내 안 되면 아래 안내로
+            from .paths import SAVE_RETRY_DELAYS, retry_os
+
+            retry_os(os.replace, tmp_name, path, delays=SAVE_RETRY_DELAYS)
         except PermissionError as exc:
             # TODO 200 — 윈도우에서 다른 프로그램(엑셀 · 뷰어 · 편집기)이 md 를 잡고 있으면 덮어쓰기가
             # 거부된다. 500 이 아니라 "무엇을 닫아야 하는지" 로 — 옮기기(paths.move)와 같은 안내다.

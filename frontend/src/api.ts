@@ -257,7 +257,7 @@ export const api = {
   // ── 태그 정리함 · 업무 이력 파일 (TODO 262) ─────────
   unknownTags: () => request<{ items: UnknownTag[] }>("/api/experiences/skills/unknown"),
   cleanupTags: (actions: TagDecision[]) =>
-    request<{ changed: string[]; dictionary: number }>("/api/experiences/skills/cleanup", { method: "POST", body: JSON.stringify({ actions }) }),
+    request<{ changed: string[]; dictionary: number; failed?: { id: string; person: string; reason: string }[]; left?: number }>("/api/experiences/skills/cleanup", { method: "POST", body: JSON.stringify({ actions }) }),
   tagPrompt: () => request<{ text: string; chars: number; tags: number }>("/api/experiences/skills/prompt"),
   tagAnswer: (text: string) =>
     request<{ items: TagProposal[] }>("/api/experiences/skills/answer", { method: "POST", body: JSON.stringify({ text }) }),

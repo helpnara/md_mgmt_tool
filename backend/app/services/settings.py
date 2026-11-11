@@ -253,7 +253,10 @@ def write_atomic(path, text: str) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp, path)
+        # 280 — 윈도우의 잠깐 거부는 다시(문서 저장과 같은 규칙)
+        from ..vault.paths import SAVE_RETRY_DELAYS, retry_os
+
+        retry_os(os.replace, temp, path, delays=SAVE_RETRY_DELAYS)
     except BaseException:
         try:
             temp.unlink()

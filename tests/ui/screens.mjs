@@ -7244,6 +7244,27 @@ async function main() {
     expect(["300px", "276px", "405px"].includes(width), `라벨 칸: ${width}`);
   });
 
+  console.log("\n[77] 역량 태그 정리함 — 적용 뒤 사전 카드가 따라오고, 못 바꾼 것은 알린다 (TODO 280)");
+
+  await check("정리함 [적용] 뒤 역량 사전 카드가 다시 읽혀 더한 다른 이름이 보이고 · [저장]으로 덮지 않는다 (280)", async () => {
+    const made = await api.post("/api/experiences", { person: "권경락", title: "정리함 시험 경험", kind: "업무", skills: [{ axis: "기술", name: "현장측정정리" }] });
+    await go("#/settings?tab=class");
+    const cleanup = page.locator("[data-testid=skill-cleanup]");
+    const row = cleanup.locator('tr[data-tag="현장측정정리"]');
+    await row.waitFor({ timeout: 8000 });
+    await row.locator('select[aria-label="정리"]').selectOption("alias");
+    await row.locator('select[aria-label="맞출 역량"]').selectOption("기술|데이터 파이프라인");
+    nextDialog((d) => d.accept());
+    await cleanup.getByRole("button", { name: /적용 \(\d+\)/ }).click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=skill-cleanup]")?.textContent?.includes("정리했습니다"), null, { timeout: 10000 });
+    const dict = page.locator("[data-testid=skill-dictionary]");
+    await dict.locator('input[aria-label="역량 찾기"]').fill("현장측정정리");
+    await page.waitForTimeout(400);
+    expect((await dict.locator("li.dict-item").count()) >= 1, "사전 카드가 다시 읽혀 더한 다른 이름으로 찾아진다");
+    const after = await api.get(`/api/experiences/${made.id}`);
+    expect(!after.skills.some((sk) => sk.name === "현장측정정리"), `경험 태그가 바뀜: ${JSON.stringify(after.skills)}`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

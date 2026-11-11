@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Tags } from "lucide-react";
 import { api } from "../api";
 import { notifyError } from "../notify";
@@ -11,6 +11,9 @@ import DictionaryEditor, { type DictRow } from "./DictionaryEditor";
 const AXES: ExperienceSkill["axis"][] = ["기술", "업무", "리더십", "문제해결"];
 
 type Row = DictRow;
+
+/** 280 — 정리함 · 다른 길로 사전이 바뀌었다는 알림. 이 카드가 옛 사전을 들고 [저장]으로 덮지 않게 다시 읽는다 */
+export const SKILL_DICTIONARY_CHANGED = "skill-dictionary-changed";
 
 const toRows = (entries: SkillEntry[]): Row[] =>
   entries.map((e) => ({ axis: e.axis, name: e.name, aliases: [...e.aliases], origin: `${e.axis}|${e.name}` }));
@@ -33,9 +36,21 @@ export default function SkillDictionaryCard() {
       setRows(toRows(next.dictionary));
     }).catch((error: Error) => notifyError(error.message));
   useEffect(() => { void load(); }, []);
+  const dirtyRef = useRef(false);
+  const [staleWarn, setStaleWarn] = useState(false);
+  useEffect(() => {
+    const changed = () => {
+      // 고치던 것이 없으면 조용히 다시 읽고, 있으면 덮지 않게 알린다
+      if (dirtyRef.current) setStaleWarn(true);
+      else void load();
+    };
+    window.addEventListener(SKILL_DICTIONARY_CHANGED, changed);
+    return () => window.removeEventListener(SKILL_DICTIONARY_CHANGED, changed);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const savedRows = data ? toRows(data.dictionary) : [];
   const dirty = JSON.stringify(rows) !== JSON.stringify(savedRows);
+  dirtyRef.current = dirty;
   useEditedUnsaved("settings:skills", dirty ? "1" : "0", "0", busy);
 
   const usage = (row: Row) => data?.usage[row.origin] ?? 0;
@@ -121,6 +136,12 @@ export default function SkillDictionaryCard() {
             ))}
           </select>
         ) : null} />
+      {staleWarn && (
+        <p className="form-warn" data-testid="dictionary-stale">
+          역량 태그 정리함이 사전을 바꿨습니다 — 지금 고친 것을 저장하면 그 변경(더한 다른 이름 · 새 역량)을 덮습니다.{" "}
+          <button type="button" className="link-button" onClick={() => { setStaleWarn(false); void load(); }}>고친 것 버리고 다시 읽기</button>
+        </p>
+      )}
       {duplicate && <p className="form-warn">같은 대표 이름이 둘 있습니다: {duplicate}</p>}
       {notice && <p className="hint notice">{notice}</p>}
       <div className="form-actions">

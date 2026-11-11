@@ -6,6 +6,7 @@ import { notifyError } from "../notify";
 import type { SkillEntry, TagAction, TagDecision, UnknownTag } from "../types";
 import CardIntro from "./CardIntro";
 import { axisLabel } from "../util";
+import { SKILL_DICTIONARY_CHANGED } from "./SkillDictionaryCard";
 import IconTitle from "./IconTitle";
 
 const AXES = ["기술", "업무", "리더십", "문제해결"];
@@ -27,6 +28,22 @@ export default function SkillCleanupCard() {
   const [prompt, setPrompt] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
   const [copied, setCopied] = useState(false);
+  // 280 — 파일이 잠겨(다른 프로그램 · 네트워크 드라이브) 못 바꾼 경험. 사전은 이미 바뀌었으니 [다시 맞추기]로 끝낸다
+  const [failed, setFailed] = useState<{ id: string; person: string; reason: string }[]>([]);
+  async function retryFailed() {
+    setBusy(true);
+    try {
+      let changed = 0;
+      for (const person of [...new Set(failed.map((f) => f.person))]) changed += (await api.rematchSkills(person)).changed.length;
+      setFailed([]);
+      setNotice(`다시 맞췄습니다 — 경험 ${changed}건.`);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const keyOf = (t: { axis: string; name: string }) => `${t.axis}|${t.name}`;
   const load = async () => {
@@ -59,7 +76,11 @@ export default function SkillCleanupCard() {
     setBusy(true);
     try {
       const result = await api.cleanupTags(actions);
-      setNotice(`정리했습니다 — 경험 ${result.changed.length}건의 태그를 바꿨습니다.`);
+      setFailed(result.failed ?? []);
+      setNotice(`정리했습니다 — 경험 ${result.changed.length}건의 태그를 바꿨습니다.`
+        + ((result.failed ?? []).length ? ` 못 바꾼 경험 ${result.failed!.length}건이 있습니다 — 아래를 보세요.` : ""));
+      // 280 — 같은 화면의 역량 사전 카드가 옛 사전을 들고 있다가 [저장]으로 덮지 않게 알린다
+      window.dispatchEvent(new Event(SKILL_DICTIONARY_CHANGED));
       setPrompt(null);
       setAnswer("");
       await load();
@@ -135,6 +156,16 @@ export default function SkillCleanupCard() {
         </div>
       )}
       {notice && <p className="hint notice">{notice}</p>}
+      {failed.length > 0 && (
+        <div className="cleanup-failed" data-testid="cleanup-failed">
+          <p className="warn-text">
+            <b>못 바꾼 경험 {failed.length}건</b> — 파일을 다른 프로그램(탐색기 미리보기 · 편집기 · 백신)이 잡고 있었습니다. 그 프로그램을 닫고 [다시 맞추기]를 누르세요.
+            사전은 이미 바뀌어 있습니다.
+          </p>
+          <ul className="muted">{failed.slice(0, 8).map((f) => <li key={f.id}>{f.id} · {f.person} — {f.reason}</li>)}</ul>
+          <button type="button" className="small" disabled={busy} onClick={() => void retryFailed()}>다시 맞추기</button>
+        </div>
+      )}
       {!tags ? <p className="muted">불러오는 중…</p> : tags.length === 0 ? (
         <p className="muted">사전에 없는 태그가 없습니다.</p>
       ) : (
