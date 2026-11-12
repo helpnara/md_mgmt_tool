@@ -2305,3 +2305,6 @@ Nuvemshop *Nimbus* 디자인 시스템(MIT)의 **값만** 가져왔다 — 부�
 * **재료** — 숫자는 `person_history.year_review`(나의 한 해와 같은 셈), 과제 후보는 그 해에 맡은 과제(담당과 역할의 역할 · 결과 · 인정 한 줄). 안 고르면 마친 과제 → 인정 한 줄 → 결과 있는 순서로 위 셋.
 * **엽서** — `PostCard` 하나를 화면 미리보기(실제 크기, 넘치면 알림)와 인쇄가 같이 쓴다. 100 × 148mm, mm 단위.
 * **인쇄** — `body.yc-printing` + 포털 `.yc-print-root` → `@page A4 · margin 0`, `.yc-sheet` 2 × 2(엽서 테두리 점선 = 자를 선). 브라우저 인쇄 창의 "PDF 로 저장" — 서버에 PDF 라이브러리를 더하지 않는다.
+* **286 내용 보강** — 과제마다 수행 2줄 · 결과 2줄(`candidates` 의 `did_lines` · `result_lines` 원본, `picked` 의 `*_lines_card` 가 카드에 나갈 줄). 다듬은 줄은 머리말 `lines: {과제: {did, result}}` — 원본 앞 두 줄과 같으면 지운다.
+  역량 · 보유 기술은 `skill_options` · `tool_options`(자주 나온 순) 중 셋, 머리말 `skills` · `tools`(없으면 위 셋). 처음 고르는 과제는 둘(`PICK_DEFAULT`), 최대 셋.
+

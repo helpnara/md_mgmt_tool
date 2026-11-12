@@ -17,6 +17,10 @@ class CardIn(BaseModel):
     message: str = ""
     headline: str = ""
     projects: list[str] = Field(default_factory=list)
+    # 286 — 카드에서 다듬은 수행 · 결과 줄 {과제: {did: [..], result: [..]}} · 역량 · 보유 기술 3개씩(None 이면 자주 나온 순)
+    lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    skills: list[str] | None = None
+    tools: list[str] | None = None
 
 
 def _manager(request: Request) -> None:

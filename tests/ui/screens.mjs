@@ -7335,20 +7335,33 @@ async function main() {
   await check("팀원역량 → [연말 카드] — 편지를 저장하면 미리보기 엽서에 나오고, 인쇄는 A4 한 장에 엽서 칸 (285)", async () => {
     const roster = await api.get("/api/people");
     if (!roster.people.some((p) => p.name === "권경락")) await api.put("/api/people", { people: [...roster.people, { name: "권경락" }] });
+    const made = await api.post("/api/projects", { title: "연말카드 시험 과제", owners: ["권경락"], status: "in_progress", start_date: "2026-02-02" });
+    await api.put(`/api/projects/${made.id}/contributions/${encodeURIComponent("권경락")}`, { did: "- 카드 시험 수행 하나\n- 카드 시험 수행 둘\n- 카드 시험 수행 셋", result: "- 카드 시험 결과 하나" });
     await go("#/skills");
     await page.locator(".skills-tabs").getByRole("tab", { name: "연말 카드" }).click();
     const edit = page.locator("[data-testid=yc-edit]");
     await edit.waitFor({ timeout: 8000 });
     await page.locator(".yc-people").getByRole("button", { name: /권경락/ }).click();
     await page.waitForFunction(() => document.querySelector("[data-testid=yc-edit] h3")?.textContent?.includes("권경락"), null, { timeout: 8000 });
+    // 286 — 고른 과제마다 수행 2줄 · 결과 2줄, 카드에서만 다듬기
+    const box = edit.locator(`.yc-line-block[data-project="${made.id}"]`);
+    if (!(await box.count())) await edit.getByRole("checkbox", { name: "연말카드 시험 과제 넣기" }).check();
+    await box.waitFor({ timeout: 5000 });
+    equal(await box.getByRole("textbox", { name: "연말카드 시험 과제 수행 2" }).inputValue(), "카드 시험 수행 둘", "원본 앞 두 줄");
+    await box.getByRole("textbox", { name: "연말카드 시험 과제 수행 1" }).fill("카드에서 다듬은 수행");
+    expect((await page.locator(".yc-preview [data-testid=postcard]").innerText()).includes("카드에서 다듬은 수행"), "미리보기에 다듬은 줄");
+    expect(!(await page.locator(".yc-preview [data-testid=postcard]").innerText()).includes("카드 시험 수행 셋"), "셋째 줄은 안 나간다");
     await edit.locator(".yc-message").fill("한 해 동안 고마웠어요 — 시험 편지");
     await edit.getByRole("button", { name: "저장", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("[data-testid=yc-edit]")?.textContent?.includes("저장했습니다"), null, { timeout: 8000 });
     const card = page.locator(".yc-preview [data-testid=postcard]");
     const text = await card.innerText();
+    const project = await api.get(`/api/projects/${made.id}`);
+    expect(project.contributions.find((r) => r.name === "권경락").did.includes("카드 시험 수행 하나"), "원본 과제는 그대로");
+    expect(await box.locator(".tag", { hasText: "다듬음" }).count() === 1, "다듬음 표시");
     expect(text.includes("권경락 님") && text.includes("시험 편지"), `엽서: ${text.slice(0, 160)}`);
-    const box = await card.boundingBox();
-    expect(box && Math.abs(box.width / box.height - 100 / 148) < 0.01, `엽서 비율 100 × 148: ${JSON.stringify(box)}`);
+    const rect = await card.boundingBox();
+    expect(rect && Math.abs(rect.width / rect.height - 100 / 148) < 0.01, `엽서 비율 100 × 148: ${JSON.stringify(rect)}`);
     await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
     await edit.getByRole("button", { name: "이 카드만 인쇄 · PDF" }).click();
     await page.waitForFunction(() => window.__printed === true, null, { timeout: 5000 });

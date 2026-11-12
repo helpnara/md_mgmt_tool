@@ -3065,30 +3065,47 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .yc-pick { display: flex; flex-direction: column; gap: 6px; }
 .yc-candidate { align-items: flex-start; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: var(--fs-sm); }
 .yc-candidate input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin-top: 3px; }
+.yc-lines { display: flex; flex-direction: column; gap: 8px; }
+.yc-line-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px 10px; margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.yc-line-block legend { padding: 0 4px; display: flex; gap: 6px; align-items: center; font-size: var(--fs-sm); }
+.yc-line-block > button { align-self: flex-start; }
+.yc-line-row { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; align-items: start; }
+.yc-line-label { padding-top: 7px; font-size: var(--fs-sm); }
+.yc-line-inputs { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.yc-line-inputs input { width: 100%; min-width: 0; box-sizing: border-box; }
+.yc-chips { display: flex; flex-direction: column; gap: 6px; }
 .yc-message { min-height: 120px; font-family: inherit; font-size: var(--fs-sm); }
 .yc-preview { display: flex; flex-direction: column; gap: 6px; position: sticky; top: 120px; }
 .yc-edit > label { display: flex; flex-direction: column; gap: 4px; }
 .yc-edit > label > .muted { font-weight: 400; }
 
 /* 엽서 — 100 × 148mm. 화면도 인쇄도 mm 로 같은 크기 */
-.postcard { width: 100mm; height: 148mm; box-sizing: border-box; padding: 8mm 7mm 6mm; overflow: hidden; background: var(--neutral-0);
-  border: 1px solid var(--border); display: flex; flex-direction: column; gap: 3.2mm; color: var(--neutral-900);
+.postcard { width: 100mm; height: 148mm; box-sizing: border-box; padding: 6.5mm 7mm 5mm; overflow: hidden; background: var(--neutral-0);
+  border: 1px solid var(--border); display: flex; flex-direction: column; gap: 2.4mm; color: var(--neutral-900);
   font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-size: 8.6pt; line-height: 1.45; }
-.pc-top { display: flex; align-items: baseline; gap: 3mm; border-bottom: 0.6mm solid var(--accent); padding-bottom: 2mm; }
-.pc-year { font-size: 20pt; font-weight: 800; color: var(--accent); letter-spacing: -0.5pt; line-height: 1; }
+.pc-top { display: flex; align-items: baseline; gap: 3mm; border-bottom: 0.6mm solid var(--accent); padding-bottom: 1.6mm; }
+.pc-year { font-size: 18pt; font-weight: 800; color: var(--accent); letter-spacing: -0.5pt; line-height: 1; }
 .pc-headline { font-size: 9pt; color: var(--neutral-700); }
-.pc-name { font-size: 15pt; font-weight: 700; }
-.pc-stats { display: flex; gap: 2mm; flex-wrap: wrap; }
-.pc-stats span { display: inline-flex; flex-direction: column; align-items: center; min-width: 17mm; padding: 1.4mm 2mm; border-radius: 2mm; background: var(--primary-50, var(--neutral-100)); font-size: 7pt; color: var(--neutral-700); }
-.pc-stats b { font-size: 11pt; color: var(--accent); line-height: 1.1; }
-.pc-works { display: flex; flex-direction: column; gap: 2mm; }
-.pc-work b { font-size: 9pt; }
-.pc-role { font-size: 7.5pt; color: var(--neutral-700); }
-.pc-result { font-size: 8pt; }
-.pc-praise { font-size: 8pt; color: var(--accent); font-style: italic; }
-.pc-skills { font-size: 7.5pt; color: var(--neutral-700); }
+.pc-person { display: flex; align-items: center; justify-content: space-between; gap: 2mm; }
+.pc-name { font-size: 14pt; font-weight: 700; white-space: nowrap; }
+.pc-stats { display: flex; gap: 1.4mm; flex-wrap: wrap; justify-content: flex-end; }
+.pc-stats span { display: inline-flex; flex-direction: column; align-items: center; min-width: 13mm; padding: 0.8mm 1.6mm; border-radius: 2mm; background: var(--primary-50, var(--neutral-100)); font-size: 7pt; color: var(--neutral-700); }
+.pc-stats b { font-size: 10pt; color: var(--accent); line-height: 1.1; }
+.pc-works { display: flex; flex-direction: column; gap: 1.8mm; }
+.pc-work-title b { font-size: 8.8pt; }
+.pc-role { font-size: 7.2pt; color: var(--neutral-700); }
+.pc-did, .pc-result { list-style: none; margin: 0.4mm 0 0; padding: 0; font-size: 7.6pt; line-height: 1.38; }
+.pc-did li, .pc-result li { position: relative; padding-left: 3mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-did li::before { content: "·"; position: absolute; left: 0.8mm; color: var(--neutral-700); }
+.pc-result li { color: var(--accent); font-weight: 600; }
+.pc-result li::before { content: "▸"; position: absolute; left: 0; font-size: 6.5pt; top: 0.3mm; }
+.pc-praise { font-size: 7.6pt; color: var(--accent); font-style: italic; }
+.pc-chips { display: flex; flex-direction: column; gap: 1.2mm; font-size: 7.4pt; }
+.pc-chips > div { display: flex; flex-wrap: wrap; align-items: center; gap: 1.2mm; }
+.pc-chip-label { min-width: 13mm; color: var(--neutral-700); font-size: 7pt; }
+.pc-chip { padding: 0.3mm 1.8mm; border-radius: 3mm; border: 0.2mm solid var(--accent); color: var(--accent); }
 .pc-letter + .pc-sign { margin-top: 0; }
-.pc-letter { margin-top: auto; padding: 2.5mm 3mm; border-radius: 2mm; background: var(--neutral-50); border-left: 0.8mm solid var(--accent); white-space: pre-wrap; font-size: 8.6pt; }
+.pc-letter { margin-top: auto; padding: 2mm 3mm; border-radius: 2mm; background: var(--neutral-50); border-left: 0.8mm solid var(--accent); white-space: pre-wrap; font-size: 8.2pt; line-height: 1.45; }
 .pc-sign { margin-top: auto; text-align: right; font-size: 7.5pt; color: var(--neutral-700); }
 
 /* 인쇄 — 화면은 감추고 A4 한 장에 2 × 2 (자를 선: 엽서 테두리) */

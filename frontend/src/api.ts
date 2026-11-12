@@ -1,4 +1,4 @@
-import type { YearCard, YearCardListing, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
+import type { YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -239,7 +239,9 @@ export const api = {
   yearCard: (name: string, year: string) => request<YearCard>(`/api/yearcards/card?name=${encodeURIComponent(name)}&year=${year}`),
   yearCardsMany: (year: string, names: string[]) =>
     request<{ year: string; cards: YearCard[] }>(`/api/yearcards/cards?year=${year}&names=${encodeURIComponent(names.join(","))}`),
-  saveYearCard: (name: string, year: string, body: { message: string; headline: string; projects: string[] }) =>
+  saveYearCard: (name: string, year: string, body: {
+    message: string; headline: string; projects: string[]; lines: YearCardLines; skills: string[]; tools: string[];
+  }) =>
     request<YearCard>(`/api/yearcards/card?name=${encodeURIComponent(name)}&year=${year}`, { method: "PUT", body: JSON.stringify(body) }),
   // 보유 기술 사전 (TODO 273)
   experienceTools: () => request<ToolDictionary>("/api/experiences/tools"),
