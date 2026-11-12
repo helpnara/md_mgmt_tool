@@ -3041,3 +3041,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .quant-guide-more > summary { cursor: pointer; color: var(--accent); font-size: var(--fs-sm); margin: 4px 0; }
 .quant-guide-mistakes { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 2px; }
 
+/* 283 — 펼친 예시가 칸 밖으로 밀어 옆 카드와 겹쳤다(겹침 검사) — 상자 안에서만, 넓은 표는 상자 안에서 가로로 민다 */
+.quant-guide-box { min-width: 0; max-width: 100%; overflow: hidden; }
+.quant-guide { min-width: 0; }
+.quant-guide .table-scroll { max-width: 100%; overflow-x: auto; }
+.quant-guide-meaning { width: 100%; table-layout: fixed; }
+.quant-guide-meaning th { width: 4.5em; }
+.quant-guide-meaning td { overflow-wrap: anywhere; }
+.quant-guide-table td:nth-child(5), .quant-guide-table td:last-child, .quant-guide-table th[scope="row"] { white-space: normal; }
