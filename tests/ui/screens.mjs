@@ -7371,6 +7371,29 @@ async function main() {
     await page.waitForFunction(() => !document.querySelector(".yc-print-root") && !document.body.classList.contains("yc-printing"), null, { timeout: 5000 });
   });
 
+  await check("연말 카드 대상자 — TBD 같은 자리 이름은 없고, 떠난 사람은 접혀 있다 (288) · 칩은 줄을 넘어도 첫 칩에 맞춘다 (287)", async () => {
+    const roster = await api.get("/api/people");
+    await api.put("/api/people", { people: [...roster.people, { name: "TBD" }, { name: "미정(신규)" }, { name: "연말퇴사", left_on: "2026-06-30", left_reason: "퇴사" }] });
+    await go("#/skills");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "연말 카드" }).click();
+    const list = page.locator(".yc-people");
+    await list.locator("[data-testid=yc-left-toggle]").waitFor({ timeout: 8000 });
+    let text = await list.innerText();
+    expect(!text.includes("TBD") && !text.includes("미정(신규)") && !text.includes("연말퇴사"), `숨김: ${text.slice(0, 200)}`);
+    expect(text.includes("떠난 사람 1명 숨김"), "떠난 사람 접기");
+    await list.locator("[data-testid=yc-left-toggle]").click();
+    text = await list.innerText();
+    expect(text.includes("연말퇴사") && text.includes("퇴사"), "펼치면 보인다");
+    const rows = page.locator(".yc-preview .pc-chip-row");
+    for (let i = 0; i < await rows.count(); i++) {
+      const lefts = await rows.nth(i).locator(".pc-chip").evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().left)));
+      const tops = await rows.nth(i).locator(".pc-chip").evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+      const lineStarts = lefts.filter((_, j) => j === 0 || tops[j] > tops[j - 1]);
+      expect(new Set(lineStarts).size <= 1, `줄 첫 칩이 같은 자리: ${lineStarts}`);
+    }
+    await api.put("/api/people", { people: roster.people });
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

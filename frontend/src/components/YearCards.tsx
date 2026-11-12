@@ -12,7 +12,7 @@ import { useEditedUnsaved } from "../util";
  * 왼쪽 사람 목록(준비 상태) · 가운데 고치기 · 오른쪽 **실제 크기 미리보기**(넘치면 알림).
  * [인쇄 · PDF 로 저장] — A4 한 장에 네 장(2 × 2)과 자를 선. 브라우저 인쇄 창에서 "PDF 로 저장" 또는 사내 프린터로(배율 100% · 여백 없음).
  *
- * 286 — 과제마다 수행 2줄 · 결과 2줄(카드에서만 다듬기 — 원본 과제 · 경험은 그대로), 역량 3 · 보유 기술(도구) 3.
+ * 286 — 과제마다 수행 2줄 · 결과 2줄(카드에서만 다듬기 — 원본 과제 · 경험은 그대로), 역량 · 보유 기술(도구). 287 — 개수 제한 없음 · 288 — 떠난 사람은 접고 TBD 같은 자리 이름은 뺀다.
  */
 type Draft = { message: string; headline: string; projects: string[]; lines: YearCardLines; skills: string[]; tools: string[] };
 
@@ -41,7 +41,7 @@ export default function YearCards() {
     try {
       const next = await api.yearCards(year);
       setListing(next);
-      const first = next.people.find((p) => !p.leader)?.name ?? next.people[0]?.name ?? "";
+      const first = next.people.find((p) => !p.leader && !p.left)?.name ?? next.people.find((p) => !p.left)?.name ?? "";
       setName(keep && next.people.some((p) => p.name === keep) ? keep : first);
     } catch (error) {
       notifyError((error as Error).message);
@@ -101,7 +101,6 @@ export default function YearCards() {
 
   const toggle = (id: string) => setDraft((d) => {
     const has = d.projects.includes(id);
-    if (!has && d.projects.length >= (listing?.pick_max ?? 3)) return d;
     const source = card?.candidates.find((c) => c.id === id);
     const lines = { ...d.lines };
     if (!has && source && !lines[id]) lines[id] = sourceLines(source);
@@ -115,10 +114,12 @@ export default function YearCards() {
     list[i] = value;
     return { ...d, lines: { ...d.lines, [id]: { ...now, [key]: list } } };
   });
-  const chipMax = listing?.chip_max ?? 3;
+  // 287 — 과제 · 역량 · 보유 기술 개수 제한 없음(넘치면 미리보기가 알린다). 칩 후보는 처음 12개, 나머지는 [더 보기]
+  const [moreChips, setMoreChips] = useState<Record<string, boolean>>({});
+  // 288 — 떠난 사람(전배 · 퇴사)은 접어 둔다
+  const [showLeft, setShowLeft] = useState(false);
   const toggleChip = (key: "skills" | "tools", value: string) => setDraft((d) => {
     const has = d[key].includes(value);
-    if (!has && d[key].length >= chipMax) return d;
     return { ...d, [key]: has ? d[key].filter((v) => v !== value) : [...d[key], value] };
   });
   const cardLines = (c: YearCardProject) => {
@@ -134,7 +135,9 @@ export default function YearCards() {
     }),
   } : null;
   // 팀장 본인 카드는 [모두 인쇄] · 준비 수에서 뺀다 — 고르면 따로 인쇄할 수는 있다
-  const members = listing?.people.filter((p) => !p.leader) ?? [];
+  const members = listing?.people.filter((p) => !p.leader && !p.left) ?? [];
+  const leftPeople = listing?.people.filter((p) => p.left) ?? [];
+  const shownPeople = listing?.people.filter((p) => !p.left || showLeft || p.name === name) ?? [];
   const ready = members.filter((p) => p.missing.length === 0).length;
   const years = [String(Number(thisYear) - 1), thisYear];
 
@@ -154,21 +157,30 @@ export default function YearCards() {
           </div>
         </div>
         <p className="hint">
-          사람마다 <b>엽서 한 장</b>(100 × 148mm)입니다 — 그 해의 숫자 · 대표 과제 2 ~ 3개(과제마다 수행 2줄 · 결과 2줄) · 역량 3 · 보유 기술 3 · <b>감사 편지</b>.
+          사람마다 <b>엽서 한 장</b>(100 × 148mm)입니다 — 그 해의 숫자 · 대표 과제(과제마다 수행 2줄 · 결과 2줄) · 역량 · 보유 기술 · <b>감사 편지</b> — 개수는 미리보기를 보며 정하세요.
           인쇄는 <b>A4 한 장에 네 장</b>이 자를 선과 함께 나옵니다. 인쇄 창에서 <b>배율 100%(실제 크기) · 여백 없음</b>으로 출력하거나 "PDF 로 저장" 하세요. [모두 인쇄]에는 팀장 표시가 된 사람은 빠집니다.
           이 화면과 편지는 팀장 · 관리자만 봅니다(팀원 화면 · 업무 이력 파일에 나오지 않습니다). 면담 기록 · 효과 금액 · 다른 사람과의 비교는 넣지 않습니다.
         </p>
       </div>
       <div className="yc-cols">
         <ul className="yc-people card" aria-label="사람">
-          {listing?.people.map((p) => (
+          {shownPeople.map((p) => (
             <li key={p.name}>
               <button type="button" className={p.name === name ? "yc-person on" : "yc-person"} onClick={() => setName(p.name)}>
                 <b>{p.name}</b>{p.leader && <span className="tag leader-tag">팀장</span>}
+                {p.left && <span className="tag">{p.left_reason || "떠남"} {p.left_on}</span>}
                 <span className={p.missing.length ? "muted yc-state" : "yc-state ok"}>{p.missing.length ? `남음: ${p.missing.join(" · ")}` : "준비 끝 ✓"}</span>
               </button>
             </li>
           ))}
+          {leftPeople.length > 0 && (
+            <li className="yc-left-toggle">
+              <button type="button" className="link-button" onClick={() => setShowLeft(!showLeft)} data-testid="yc-left-toggle">
+                {showLeft ? `떠난 사람 ${leftPeople.length}명 접기` : `떠난 사람 ${leftPeople.length}명 숨김 · 보기`}
+              </button>
+              <span className="muted"> — [모두 인쇄]에는 들어가지 않습니다</span>
+            </li>
+          )}
         </ul>
         {card && preview && (
           <div className="card yc-edit" data-testid="yc-edit">
@@ -177,7 +189,7 @@ export default function YearCards() {
               <input value={draft.headline} maxLength={40} placeholder={`${year}년, 고마웠어요`} onChange={(e) => setDraft({ ...draft, headline: e.target.value })} />
             </label>
             <div className="yc-pick">
-              <span className="exp-label">넣을 과제 <span className="muted">— {draft.projects.length} / {listing?.pick_max ?? 3}, 대표 과제 2 ~ 3개. 마친 과제 · 인정 한 줄이 있는 과제가 위</span></span>
+              <span className="exp-label">넣을 과제 <span className="muted">— {draft.projects.length}개 고름, 몇 개든 됩니다(넘치면 미리보기 아래에 알림). 마친 과제 · 인정 한 줄이 있는 과제가 위</span></span>
               {card.candidates.length === 0 && <p className="muted">{year}년에 맡은 과제가 없습니다.</p>}
               {card.candidates.map((c) => (
                 <label key={c.id} className="check-label yc-candidate">
@@ -227,10 +239,11 @@ export default function YearCards() {
             )}
             {(["skills", "tools"] as const).map((key) => {
               const options = key === "skills" ? card.skill_options : card.tool_options;
-              const shown = [...new Set([...draft[key], ...options])].slice(0, 12);
+              const all = [...new Set([...draft[key], ...options])];
+              const shown = moreChips[key] ? all : all.slice(0, 12);
               return (
                 <div key={key} className="yc-chips" data-testid={`yc-${key}`}>
-                  <span className="exp-label">{key === "skills" ? "역량" : "보유 기술(도구)"} <span className="muted">— {draft[key].length} / {chipMax}, {key === "skills" ? "그 해 경험의 역량 태그" : "과제 담당과 역할 · 경험의 도구"} 자주 나온 순{key === "tools" ? " · ● 그 해 처음 쓴 것" : ""}</span></span>
+                  <span className="exp-label">{key === "skills" ? "역량" : "보유 기술(도구)"} <span className="muted">— {draft[key].length}개 고름, {key === "skills" ? "그 해 경험의 역량 태그" : "과제 담당과 역할 · 경험의 도구"} 자주 나온 순{key === "tools" ? " · ● 그 해 처음 쓴 것" : ""}</span></span>
                   {shown.length === 0 && <span className="muted">{key === "skills" ? "그 해 경험에 역량 태그가 없습니다" : "그 해 과제 · 경험에 보유 기술이 없습니다"}</span>}
                   <div className="dict-axes">
                     {shown.map((value) => (
@@ -239,6 +252,11 @@ export default function YearCards() {
                         {value}{key === "tools" && card.new_skills.includes(value) ? " ●" : ""}
                       </button>
                     ))}
+                    {all.length > 12 && (
+                      <button type="button" className="link-button" onClick={() => setMoreChips({ ...moreChips, [key]: !moreChips[key] })}>
+                        {moreChips[key] ? "접기" : `더 보기 (${all.length - 12})`}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -326,8 +344,8 @@ export function PostCard({ card, onOverflow }: { card: YearCard; onOverflow?: (o
       )}
       {(card.skills.length > 0 || card.tools.length > 0) && (
         <div className="pc-chips">
-          {card.skills.length > 0 && <div><span className="pc-chip-label">역량</span>{card.skills.map((v) => <span className="pc-chip" key={v}>{v}</span>)}</div>}
-          {card.tools.length > 0 && <div><span className="pc-chip-label">보유 기술</span>{card.tools.map((v) => <span className="pc-chip" key={v}>{v}</span>)}</div>}
+          {card.skills.length > 0 && <div className="pc-chip-row"><span className="pc-chip-label">역량</span><span className="pc-chip-list">{card.skills.map((v) => <span className="pc-chip" key={v}>{v}</span>)}</span></div>}
+          {card.tools.length > 0 && <div className="pc-chip-row"><span className="pc-chip-label">보유 기술</span><span className="pc-chip-list">{card.tools.map((v) => <span className="pc-chip" key={v}>{v}</span>)}</span></div>}
         </div>
       )}
       {card.message && <div className="pc-letter">{card.message}</div>}

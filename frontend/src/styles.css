@@ -3058,6 +3058,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .yc-person { width: 100%; text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 0; background: transparent; min-height: 0; font-weight: 400; color: var(--text); border-radius: var(--radius); }
 .yc-person:hover { background: var(--neutral-100); }
 .yc-person.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.yc-left-toggle { padding: 8px 10px 4px; font-size: var(--fs-xs); border-top: 1px solid var(--border); margin-top: 4px; }
 .yc-state { font-size: var(--fs-xs); white-space: normal; text-align: left; }
 .yc-state.ok { color: var(--success-700, var(--accent)); }
 .yc-edit { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -3101,8 +3102,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .pc-result li::before { content: "▸"; position: absolute; left: 0; font-size: 6.5pt; top: 0.3mm; }
 .pc-praise { font-size: 7.6pt; color: var(--accent); font-style: italic; }
 .pc-chips { display: flex; flex-direction: column; gap: 1.2mm; font-size: 7.4pt; }
-.pc-chips > div { display: flex; flex-wrap: wrap; align-items: center; gap: 1.2mm; }
-.pc-chip-label { min-width: 13mm; color: var(--neutral-700); font-size: 7pt; }
+/* 287 — 이름표 칸 | 칩 칸. 칩이 줄을 넘어도 첫 칩 왼쪽에 맞춰 이어진다 */
+.pc-chip-row { display: grid; grid-template-columns: 13mm minmax(0, 1fr); column-gap: 1.2mm; align-items: start; }
+.pc-chip-list { display: flex; flex-wrap: wrap; gap: 1.2mm; min-width: 0; }
+.pc-chip-label { color: var(--neutral-700); font-size: 7pt; padding-top: 0.5mm; white-space: nowrap; }
 .pc-chip { padding: 0.3mm 1.8mm; border-radius: 3mm; border: 0.2mm solid var(--accent); color: var(--accent); }
 .pc-letter + .pc-sign { margin-top: 0; }
 .pc-letter { margin-top: auto; padding: 2mm 3mm; border-radius: 2mm; background: var(--neutral-50); border-left: 0.8mm solid var(--accent); white-space: pre-wrap; font-size: 8.2pt; line-height: 1.45; }

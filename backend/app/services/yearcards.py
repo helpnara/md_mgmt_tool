@@ -24,11 +24,18 @@ from ..vault import markdown as md
 from ..vault import paths
 from . import settings as settings_service
 
-PICK_MAX = 3
-PICK_DEFAULT = 2           # 처음엔 위 둘 — 팀장이 2 ~ 3개 고른다 (286)
+PICK_DEFAULT = 2           # 처음엔 위 둘 — 몇 개든 고를 수 있다, 넘치면 미리보기가 알린다 (286 · 287)
 LINE_COUNT = 2             # 과제마다 수행 · 결과 각 2줄
 LINE_MAX = 80              # 한 줄 글자 — 엽서 한 줄 남짓
-CHIP_MAX = 3               # 역량 · 보유 기술 각 3개
+CHIP_DEFAULT = 3           # 역량 · 보유 기술 처음엔 위 셋 — 개수 제한은 없다 (287)
+# 사람이 아닌 자리 이름 (288) — 명부에 "TBD" · "미정" 처럼 적어 둔 줄. 대소문자 · 띄어쓰기 무시, 뒤의 괄호 덧붙임은 떼고 본다
+PLACEHOLDER_NAMES = {"tbd", "tba", "미정", "미배정", "공석", "채용예정", "담당자미정", "미지정", "없음", "-", "?", "??", "x"}
+
+
+def is_placeholder(name: str) -> bool:
+    key = re.sub(r"[\(\[（].*$", "", str(name or "")).strip()
+    key = re.sub(r"\s+", "", key).lower()
+    return not key or key in PLACEHOLDER_NAMES
 MESSAGE_MAX = 400          # 엽서 한 장에 들어갈 만큼 — 화면이 넘침을 따로 알린다
 HEADLINE_MAX = 40
 _YEAR = re.compile(r"^\d{4}$")
@@ -168,10 +175,10 @@ def card(conn: sqlite3.Connection, name: str, year: str) -> dict[str, Any]:
     options = candidates(conn, name, year, experiences)
     stored = _stored(name, year)
     chosen = stored["projects"] if stored["projects"] is not None else [c["id"] for c in options[:PICK_DEFAULT]]
-    picked = [_picked_lines(c, stored["lines"].get(pid)) for pid in chosen for c in options if c["id"] == pid][:PICK_MAX]
+    picked = [_picked_lines(c, stored["lines"].get(pid)) for pid in chosen for c in options if c["id"] == pid]
     offer = suggestions(options, experiences)
-    skills = stored["skills"] if stored["skills"] is not None else offer["skills"][:CHIP_MAX]
-    tools = stored["tools"] if stored["tools"] is not None else offer["tools"][:CHIP_MAX]
+    skills = stored["skills"] if stored["skills"] is not None else offer["skills"][:CHIP_DEFAULT]
+    tools = stored["tools"] if stored["tools"] is not None else offer["tools"][:CHIP_DEFAULT]
     roster = {p["name"]: p for p in settings_service.people()}
     missing = []
     if not stored["message"]:
@@ -186,7 +193,7 @@ def card(conn: sqlite3.Connection, name: str, year: str) -> dict[str, Any]:
                     "activities": review["activities"], "hours": review["hours"], "reports": review["reports"]},
         "new_skills": review["new_skills"],
         "skill_options": offer["skills"], "tool_options": offer["tools"],
-        "skills": skills[:CHIP_MAX], "tools": tools[:CHIP_MAX],
+        "skills": skills, "tools": tools,
         "candidates": options, "picked": picked, "chosen": [c["id"] for c in picked],
         "message": stored["message"], "headline": stored["headline"], "updated_at": stored["updated_at"],
         "saved": card_path(name, year).is_file(), "missing": missing,
@@ -200,13 +207,16 @@ def listing(conn: sqlite3.Connection, year: str) -> dict[str, Any]:
     people = []
     for person in settings_service.people():
         left_on = str(person.get("left_on") or "")
+        if is_placeholder(person["name"]):
+            continue            # 288 — 사람이 아닌 자리 이름
         if left_on and left_on[:4] < year:
             continue
         data = card(conn, person["name"], year)
-        people.append({"name": person["name"], "leader": data["leader"], "left_on": left_on, "saved": data["saved"],
+        # 288 — 떠난 사람(전배 · 퇴사)은 화면이 접어 두고 [모두 인쇄]에서 뺀다
+        people.append({"name": person["name"], "leader": data["leader"], "left_on": left_on, "left": bool(left_on),
+                       "left_reason": str(person.get("left_reason") or ""), "saved": data["saved"],
                        "missing": data["missing"], "picked": len(data["picked"]), "has_message": bool(data["message"])})
-    return {"year": year, "people": people, "pick_max": PICK_MAX, "message_max": MESSAGE_MAX,
-            "line_count": LINE_COUNT, "line_max": LINE_MAX, "chip_max": CHIP_MAX}
+    return {"year": year, "people": people, "message_max": MESSAGE_MAX, "line_count": LINE_COUNT, "line_max": LINE_MAX}
 
 
 def save(conn: sqlite3.Connection, name: str, year: str, data: dict[str, Any], by: str = "") -> dict[str, Any]:
@@ -222,7 +232,7 @@ def save(conn: sqlite3.Connection, name: str, year: str, data: dict[str, Any], b
         raise YearCardError(f"한 줄 제목은 {HEADLINE_MAX}자까지입니다.")
     options = {c["id"]: c for c in candidates(conn, name, year)}
     projects = [str(p) for p in (data.get("projects") or []) if str(p) in options]
-    projects = list(dict.fromkeys(projects))[:PICK_MAX]
+    projects = list(dict.fromkeys(projects))
     # 다듬은 줄 — 고른 과제만, 원본 앞 두 줄과 같으면 남기지 않는다(원본이 바뀌면 따라가게)
     lines: dict[str, dict[str, list[str]]] = {}
     raw_lines = data.get("lines") if isinstance(data.get("lines"), dict) else {}
@@ -246,7 +256,7 @@ def save(conn: sqlite3.Connection, name: str, year: str, data: dict[str, Any], b
         value = data.get(key)
         if not isinstance(value, list):
             return None
-        return list(dict.fromkeys(" ".join(str(v).split())[:40] for v in value if str(v).strip()))[:CHIP_MAX]
+        return list(dict.fromkeys(" ".join(str(v).split())[:40] for v in value if str(v).strip()))[:50]
 
     path = card_path(name, year)
     path.parent.mkdir(parents=True, exist_ok=True)

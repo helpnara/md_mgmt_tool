@@ -67,3 +67,30 @@ def test_result_falls_back_to_experience_quants(team):  # noqa: F811
                                          "quants": [{"metric": "전극봉 원단위", "value": "2.10 → 1.85 kg/t", "baseline": "2024 평균", "baseline_kind": "비교", "when": "2026"}]})
     work = owner.get("/api/yearcards/card", params={"name": "나팀원", "year": "2026"}).json()["picked"][0]
     assert work["did_lines_card"] == ["조업 조건 분석", "시험 3회"] and work["result_lines_card"] == ["전극봉 원단위 2.10 → 1.85 kg/t"]
+
+
+def test_no_count_limits(team):  # noqa: F811
+    """287 — 과제 · 역량 · 보유 기술 개수 제한 없음."""
+    owner = team["owner"]
+    ids = [team["shared"]] + [owner.post("/api/projects", json={"title": f"제한 없음 과제 {i}", "owners": ["가팀원"], "status": "in_progress",
+                                                                "start_date": "2026-03-02"}).json()["id"] for i in range(4)]
+    skills = [f"역량{i}" for i in range(5)]
+    tools = [f"도구{i}" for i in range(5)]
+    saved = owner.put("/api/yearcards/card", params={"name": "가팀원", "year": "2026"},
+                      json={"projects": ids, "skills": skills, "tools": tools}).json()
+    assert len(saved["picked"]) == 5 and saved["skills"] == skills and saved["tools"] == tools
+    fresh = owner.get("/api/yearcards/card", params={"name": "나팀원", "year": "2026"}).json()
+    assert len(fresh["chosen"]) <= 2            # 처음엔 위 둘
+
+
+def test_listing_hides_placeholder_names_and_marks_left(team):  # noqa: F811
+    """288 — TBD 같은 자리 이름은 빼고, 떠난 사람(그 해에 떠난 사람도)은 left 로 표시."""
+    owner = team["owner"]
+    people = owner.get("/api/people").json()["people"]
+    people += [{"name": "TBD"}, {"name": "미정 (신규)"}, {"name": "공석"},
+               {"name": "올해퇴사", "left_on": "2026-06-30", "left_reason": "퇴사"}, {"name": "작년전배", "left_on": "2025-05-01", "left_reason": "전배"}]
+    assert owner.put("/api/people", json={"people": people}).status_code == 200
+    listing = owner.get("/api/yearcards", params={"year": "2026"}).json()["people"]
+    names = {p["name"]: p for p in listing}
+    assert not {"TBD", "미정 (신규)", "공석", "작년전배"} & set(names)
+    assert names["올해퇴사"]["left"] is True and names["올해퇴사"]["left_reason"] == "퇴사" and names["가팀원"]["left"] is False

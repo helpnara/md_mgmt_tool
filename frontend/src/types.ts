@@ -1784,7 +1784,7 @@ export interface YearCard {
   message: string; headline: string; updated_at: string; saved: boolean; missing: string[]; signer: string;
 }
 export interface YearCardListing {
-  year: string; pick_max: number; message_max: number; line_count: number; line_max: number; chip_max: number;
-  people: { name: string; leader: boolean; left_on: string; saved: boolean; missing: string[]; picked: number; has_message: boolean }[];
+  year: string; message_max: number; line_count: number; line_max: number;
+  people: { name: string; leader: boolean; left_on: string; left: boolean; left_reason: string; saved: boolean; missing: string[]; picked: number; has_message: boolean }[];
 }
 

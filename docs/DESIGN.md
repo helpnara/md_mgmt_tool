@@ -2307,4 +2307,6 @@ Nuvemshop *Nimbus* 디자인 시스템(MIT)의 **값만** 가져왔다 — 부�
 * **인쇄** — `body.yc-printing` + 포털 `.yc-print-root` → `@page A4 · margin 0`, `.yc-sheet` 2 × 2(엽서 테두리 점선 = 자를 선). 브라우저 인쇄 창의 "PDF 로 저장" — 서버에 PDF 라이브러리를 더하지 않는다.
 * **286 내용 보강** — 과제마다 수행 2줄 · 결과 2줄(`candidates` 의 `did_lines` · `result_lines` 원본, `picked` 의 `*_lines_card` 가 카드에 나갈 줄). 다듬은 줄은 머리말 `lines: {과제: {did, result}}` — 원본 앞 두 줄과 같으면 지운다.
   역량 · 보유 기술은 `skill_options` · `tool_options`(자주 나온 순) 중 셋, 머리말 `skills` · `tools`(없으면 위 셋). 처음 고르는 과제는 둘(`PICK_DEFAULT`), 최대 셋.
+* **287 · 288** — 과제 · 역량 · 보유 기술 개수 제한 없음(처음 값만 둘 · 셋). 엽서 칩 줄은 이름표 | 칩 두 칸 격자.
+  대상자 — `is_placeholder`(TBD · 미정 · 공석 …)는 목록에서 뺌, 떠난 사람(`left`)은 화면이 접고 준비 수 · [모두 인쇄]에서 뺌.
 
