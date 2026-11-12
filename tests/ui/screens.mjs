@@ -7347,8 +7347,8 @@ async function main() {
     const box = edit.locator(`.yc-line-block[data-project="${made.id}"]`);
     if (!(await box.count())) await edit.getByRole("checkbox", { name: "연말카드 시험 과제 넣기" }).check();
     await box.waitFor({ timeout: 5000 });
-    equal(await box.getByRole("textbox", { name: "연말카드 시험 과제 수행 2" }).inputValue(), "카드 시험 수행 둘", "원본 앞 두 줄");
-    await box.getByRole("textbox", { name: "연말카드 시험 과제 수행 1" }).fill("카드에서 다듬은 수행");
+    equal(await box.locator(`input[aria-label="연말카드 시험 과제 수행 2"]`).inputValue(), "카드 시험 수행 둘", "원본 앞 두 줄");
+    await box.locator(`input[aria-label="연말카드 시험 과제 수행 1"]`).fill("카드에서 다듬은 수행");
     expect((await page.locator(".yc-preview [data-testid=postcard]").innerText()).includes("카드에서 다듬은 수행"), "미리보기에 다듬은 줄");
     expect(!(await page.locator(".yc-preview [data-testid=postcard]").innerText()).includes("카드 시험 수행 셋"), "셋째 줄은 안 나간다");
     await edit.locator(".yc-message").fill("한 해 동안 고마웠어요 — 시험 편지");
