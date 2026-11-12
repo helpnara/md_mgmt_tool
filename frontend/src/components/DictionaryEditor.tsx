@@ -14,7 +14,7 @@ const norm = (text: string) => text.replace(/[\s·・‧•_\-,]+/g, "").toLower
  * ④ 줄을 누르면 그 아래에 **고치는 칸**(이름 · 축 · 다른 이름을 칩으로 — 엔터로 더하고 ×로 뺀다) ⑤ 고친 줄은 ● 표시 — [저장]은 카드 아래 한 번.
  */
 export default function DictionaryEditor({
-  rows, saved: savedRows, setRows, axes, usage, itemLabel, extraActions, removable,
+  rows, saved: savedRows, setRows, axes, usage, itemLabel, extraActions, removable, axisName = "축", axisFree = false,
 }: {
   rows: DictRow[];
   /** 저장된 줄 — 고친 줄(●)을 가리는 기준 */
@@ -29,7 +29,13 @@ export default function DictionaryEditor({
   extraActions?: (row: DictRow, index: number) => ReactNode;
   /** 쓰는 항목도 뺄 수 있나(보유 기술 사전 — 빼도 적힌 이름은 남는다) */
   removable: (row: DictRow) => boolean;
+  /** 축 대신 부를 이름 — 보유 기술 사전은 "층"(TODO 284) */
+  axisName?: string;
+  /** 축을 글로 적는다(목록에서 고르거나 새 이름) · 비어도 된다 — 보유 기술의 층 */
+  axisFree?: boolean;
 }) {
+  const NONE = "\u0000none";
+  const label = (a: string) => (axisFree ? a || `${axisName} 없음` : axisLabel(a));
   const [query, setQuery] = useState("");
   const [axis, setAxis] = useState("");
   const [open, setOpen] = useState<number | null>(null);
@@ -39,15 +45,18 @@ export default function DictionaryEditor({
   const q = norm(query);
   const shown = rows
     .map((row, index) => ({ row, index }))
-    .filter(({ row }) => !axis || row.axis === axis)
+    .filter(({ row }) => !axis || (axis === NONE ? !row.axis : row.axis === axis))
     .filter(({ row }) => !q || norm(row.name).includes(q) || row.aliases.some((a) => norm(a).includes(q)) || !row.name.trim());
-  const counts = (axes ?? []).map((a) => ({ axis: a, n: rows.filter((r) => r.axis === a).length }));
+  const counts = [
+    ...(axes ?? []).map((a) => ({ axis: a, n: rows.filter((r) => r.axis === a).length })),
+    ...(axisFree ? [{ axis: NONE, n: rows.filter((r) => !r.axis).length }] : []),
+  ].filter((c) => !axisFree || c.n > 0);
 
   const set = (index: number, patch: Partial<DictRow>) => setRows(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   const changed = (row: DictRow) => {
     if (!row.origin) return true;
     const before = saved.get(row.origin);
-    return !before || before.name !== row.name || before.axis !== row.axis || before.aliases.join("|") !== row.aliases.join("|");
+    return !before || before.name !== row.name || (before.axis ?? "") !== (row.axis ?? "") || before.aliases.join("|") !== row.aliases.join("|");
   };
   const addAlias = (index: number) => {
     const parts = alias.split(",").map((a) => a.trim()).filter(Boolean);
@@ -57,7 +66,7 @@ export default function DictionaryEditor({
     setAlias("");
   };
   const addNew = () => {
-    setRows([{ axis: axes ? axis || axes[0] : undefined, name: "", aliases: [], origin: "" }, ...rows]);
+    setRows([{ axis: axes ? (axisFree ? (axis === NONE ? "" : axis) : axis || axes[0]) : undefined, name: "", aliases: [], origin: "" }, ...rows]);
     setOpen(0);
     setQuery("");
     setAlias("");
@@ -71,11 +80,11 @@ export default function DictionaryEditor({
         <button type="button" className="ghost small" onClick={addNew}>+ {itemLabel}</button>
       </div>
       {axes && (
-        <div className="dict-axes" role="group" aria-label="축으로 거르기">
+        <div className="dict-axes" role="group" aria-label={`${axisName}으로 거르기`}>
           <button type="button" className={axis ? "chip" : "chip on"} aria-pressed={!axis} onClick={() => setAxis("")}>전체 <b>{rows.length}</b></button>
           {counts.map(({ axis: a, n }) => (
             <button key={a} type="button" className={axis === a ? "chip on" : "chip"} aria-pressed={axis === a} onClick={() => setAxis(a)}>
-              {axisLabel(a)} <b>{n}</b>
+              {a === NONE ? label("") : label(a)} <b>{n}</b>
             </button>
           ))}
         </div>
@@ -90,17 +99,24 @@ export default function DictionaryEditor({
               <button type="button" className="dict-line" aria-expanded={isOpen} onClick={() => { setOpen(isOpen ? null : index); setAlias(""); }}>
                 {changed(row) && <span className="dict-dirty" title="고쳤습니다 — [저장]을 누르세요">●</span>}
                 <span className="dict-name">{row.name || <i className="muted">(이름 없음)</i>}</span>
-                {axes && !axis && <span className="dict-axis muted">{axisLabel(row.axis ?? "")}</span>}
+                {axes && !axis && <span className="dict-axis muted">{label(row.axis ?? "")}</span>}
                 <span className="dict-aliases muted">{row.aliases.join(", ")}</span>
                 <span className={used ? "dict-used" : "dict-used zero"} title="쓰는 곳 수">{used || "-"}</span>
               </button>
               {isOpen && (
                 <div className="dict-edit">
                   <div className="dict-edit-row">
-                    {axes && (
+                    {axes && !axisFree && (
                       <select aria-label="축" value={row.axis} onChange={(event) => set(index, { axis: event.target.value })}>
                         {axes.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
                       </select>
+                    )}
+                    {axes && axisFree && (
+                      <>
+                        <input aria-label={axisName} className="dict-layer" value={row.axis ?? ""} maxLength={20} list="dict-free-axes"
+                          placeholder={`${axisName} — 고르거나 새 이름`} onChange={(event) => set(index, { axis: event.target.value })} />
+                        <datalist id="dict-free-axes">{axes.map((a) => <option key={a} value={a} />)}</datalist>
+                      </>
                     )}
                     <input aria-label={`${itemLabel} 대표 이름`} value={row.name} maxLength={60} placeholder="대표 이름"
                       onChange={(event) => set(index, { name: event.target.value })} autoFocus={!row.name} />

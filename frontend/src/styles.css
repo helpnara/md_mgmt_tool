@@ -3125,3 +3125,58 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
   .yc-slot .postcard { border: 0.2mm dashed var(--neutral-400, var(--border)); }
 }
 
+/* 284 — 팀 역량 · 기술 스택 */
+.team-skills { display: flex; flex-direction: column; gap: 16px; }
+.ts-tools { flex-wrap: wrap; gap: 8px; }
+.ts-section h3 { margin: 0 0 8px; }
+.ts-summary { margin: 0 0 8px; font-size: var(--fs-sm); }
+.ts-complete-table td, .ts-complete-table th { text-align: center; }
+.ts-complete-table tbody th { text-align: left; }
+.ts-weak th, .ts-weak td { color: var(--neutral-700); }
+.ts-map { border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+.ts-map th, .ts-map td { white-space: nowrap; }
+.ts-map .ts-map-name { position: sticky; left: 0; background: var(--neutral-0); z-index: 1; text-align: left; min-width: 160px; }
+.ts-map-person { min-width: 56px; text-align: center; }
+.ts-axis-row th { background: var(--neutral-100); text-align: left; font-weight: 700; position: sticky; left: 0; }
+.ts-cell { text-align: center; min-width: 56px; }
+.ts-cell b { display: block; line-height: 1.1; }
+.ts-cell small { font-size: var(--fs-xs); opacity: 0.8; }
+.ts-cell.lv1 { background: var(--primary-50); }
+.ts-cell.lv2 { background: color-mix(in srgb, var(--accent) 25%, var(--neutral-0)); }
+.ts-cell.lv3 { background: color-mix(in srgb, var(--accent) 50%, var(--neutral-0)); color: var(--neutral-0); }
+.ts-cell.lv4 { background: var(--accent); color: var(--neutral-0); }
+.ts-holders { text-align: center; font-weight: 700; }
+.ts-holders.one { color: var(--warning-700); }
+.ts-stack { display: flex; flex-direction: column; gap: 10px; }
+.ts-layer { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; align-items: start; padding: 8px 0; border-top: 1px solid var(--border); }
+.ts-layer:first-child { border-top: 0; }
+.ts-layer-name { font-weight: 700; padding-top: 6px; }
+.ts-layer.unlayered .ts-layer-name { color: var(--neutral-700); font-weight: 400; }
+.ts-layer-tools { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.ts-tool { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 10px; border: 1px solid var(--accent); border-radius: var(--radius);
+  background: var(--neutral-0); color: var(--neutral-900); min-height: 0; font-weight: 400; text-align: left; }
+.ts-tool b { font-size: var(--fs-sm); color: var(--accent); }
+.ts-tool small { font-size: var(--fs-xs); color: var(--neutral-700); }
+.ts-tool.m { padding: 6px 12px; }
+.ts-tool.m b { font-size: var(--fs-md, 15px); }
+.ts-tool.l { padding: 8px 14px; background: var(--primary-50); }
+.ts-tool.l b { font-size: var(--fs-lg, 17px); }
+.ts-tool.on { box-shadow: 0 0 0 2px var(--accent); }
+.ts-uses { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius); background: var(--neutral-50); font-size: var(--fs-sm); }
+.ts-uses ul { margin: 6px 0 0; padding-left: 18px; }
+.ts-print-root { display: none; }
+@page ts-land { size: A4 landscape; margin: 10mm; }
+@media print {
+  body.ts-printing > *:not(.ts-print-root) { display: none !important; }
+  body.ts-printing { background: var(--neutral-0); }
+  body.ts-printing .ts-print-root { display: block; page: ts-land; font-size: 8pt; }
+  .ts-print-root .card { box-shadow: none; border: 1px solid var(--border); margin-bottom: 4mm; padding: 4mm; }
+  .ts-print-root tr, .ts-print-root .ts-layer { break-inside: avoid; }
+  .ts-print-root h3 { break-after: avoid; }
+  .ts-print-root .grid td, .ts-print-root .grid th { padding: 1mm 2mm; }
+  .ts-print-root .table-scroll { overflow: visible; }
+  .ts-print-root .ts-map .ts-map-name, .ts-print-root .ts-axis-row th { position: static; }
+  .ts-print-root .ts-cell, .ts-print-root .ts-tool { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .ts-print-title { font-size: 14pt; margin: 0 0 4mm; }
+}
+

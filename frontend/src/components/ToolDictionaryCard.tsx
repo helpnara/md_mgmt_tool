@@ -11,7 +11,8 @@ import DictionaryEditor, { type DictRow } from "./DictionaryEditor";
 
 type Row = DictRow;
 
-const toRows = (entries: ToolEntry[]): Row[] => entries.map((e) => ({ name: e.name, aliases: [...e.aliases], origin: e.name }));
+// 층(TODO 284)은 편집기의 "축" 자리를 빌린다 — 글로 적는 축(axisFree)
+const toRows = (entries: ToolEntry[]): Row[] => entries.map((e) => ({ name: e.name, aliases: [...e.aliases], axis: e.layer ?? "", origin: e.name }));
 
 /**
  * 보유 기술 사전 (TODO 273). 설정 → [분류 · 접수] 탭, 역량 사전 아래.
@@ -67,16 +68,17 @@ export default function ToolDictionaryCard() {
       <CardIntro id="tool-dictionary">
         <b>보유 기술(도구)</b>은 <b>무엇으로 했는가</b>입니다 — 프로그래밍 언어 · 소프트웨어 · 장비 · 플랫폼처럼 이름만으로 “쓸 줄 안다” 가 되는 것.
         회귀 분석 · 실험계획법 같은 <b>분석 기법 · 방법은 역량</b>(왼쪽 역량 사전)에 둡니다. 이 사전에 있는 이름만 보유 기술로 보고 다른 이름은 대표 이름으로 맞추며(파이썬 → Python),
-        저장하면 이미 적힌 경험 · 과제의 것도 다시 맞춥니다.
+        저장하면 이미 적힌 경험 · 과제의 것도 다시 맞춥니다. <b>층</b>(언어 · 분석/AI · 시각화 …)은 팀원역량 → [팀 역량]의 기술 스택 줄이 됩니다 — 새 층 이름을 적으면 새 줄이 생깁니다.
       </CardIntro>
       <DictionaryEditor rows={rows} saved={savedRows} setRows={setRows} usage={(row) => data?.usage[row.origin] ?? 0} itemLabel="보유 기술"
-        removable={() => true} />
+        removable={() => true} axisName="층" axisFree
+        axes={[...new Set([...(data?.layers ?? []), ...rows.map((r) => r.axis ?? "").filter(Boolean)])]} />
       {candidates.length > 0 && (
         <p className="hint" data-testid="tool-candidates">
           사전에 없는데 쓰인 이름 {candidates.length}개 — {candidates.slice(0, 12).map((item) => `${item.name}(${item.count})`).join(" · ")}
           {candidates.length > 12 ? " …" : ""}{" "}
           <button type="button" className="link-button"
-            onClick={() => setRows([...candidates.map((item) => ({ name: item.name, aliases: [], origin: "" })), ...rows])}>
+            onClick={() => setRows([...candidates.map((item) => ({ name: item.name, aliases: [], axis: "", origin: "" })), ...rows])}>
             쓰인 이름 불러오기
           </button>
           <span className="muted"> — 목록 맨 위에 ● 로 붙습니다. 보유 기술이 아닌 줄은 눌러 [빼기]하고 저장하세요.</span>
@@ -98,7 +100,7 @@ export default function ToolDictionaryCard() {
         </button>
         <button disabled={busy || !dirty || Boolean(duplicate)}
           onClick={() => void save(rows.filter((row) => row.name.trim()).map((row) => ({
-            name: row.name.trim(), aliases: row.aliases,
+            name: row.name.trim(), aliases: row.aliases, layer: (row.axis ?? "").trim(),
           })), "저장했습니다.")}>
           {busy ? "저장 중…" : "저장"}
         </button>

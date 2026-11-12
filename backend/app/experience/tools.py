@@ -48,16 +48,29 @@ DEFAULT_TOOLS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("RFID", ()),
     ("Teams Copilot", ("Copilot", "코파일럿")),
 )
+# 284 — 보유 기술의 층(기술 스택 그림의 줄). 층 이름은 사전 항목마다 글로 적는다 — 새 층 이름을 적으면 새 줄이 된다
+LAYER_MAX = 20
+DEFAULT_LAYERS = ("언어", "데이터", "분석/AI", "시각화", "개발/플랫폼", "설비/제어", "사내 시스템", "업무 도구")
+DEFAULT_LAYER: dict[str, str] = {
+    **{n: "언어" for n in ("Python", "SQL", "R", "C#", "C++", "Java", "JavaScript", "MATLAB", "VBA")},
+    "pandas": "데이터",
+    **{n: "분석/AI" for n in ("scikit-learn", "PyTorch", "TensorFlow", "Minitab")},
+    **{n: "시각화" for n in ("Power BI", "Tableau", "Spotfire")},
+    **{n: "개발/플랫폼" for n in ("Git", "GitHub Actions", "Docker", "Linux", "GPU", "HPC")},
+    **{n: "설비/제어" for n in ("PLC", "RFID")},
+    **{n: "사내 시스템" for n in ("MES", "ERP", "SAP")},
+    **{n: "업무 도구" for n in ("Excel", "Teams Copilot")},
+}
 # 273 — 역량 사전(기본)의 동의어에 있던 도구 이름. 고친 역량 사전에 남아 있어도 보유 기술 사전이 먼저다
 FORMER_SKILL_ALIASES = ("C#", "GPU", "HPC", "GitHub Actions", "RFID")
 
 
 def default_dictionary() -> list[dict[str, Any]]:
-    return [{"name": name, "aliases": list(aliases)} for name, aliases in DEFAULT_TOOLS]
+    return [{"name": name, "aliases": list(aliases), "layer": DEFAULT_LAYER.get(name, "")} for name, aliases in DEFAULT_TOOLS]
 
 
 def validate(value: Any) -> list[dict[str, Any]] | None:
-    """설정 `tool_dictionary` 의 모양 — None · 빈 목록이면 기본. 이름 60자 · 같은 이름(다른 이름 포함) 없음 · 다른 이름 20개까지."""
+    """설정 `tool_dictionary` 의 모양 — None · 빈 목록이면 기본. 이름 60자 · 같은 이름(다른 이름 포함) 없음 · 다른 이름 20개까지 · 층(284) 20자."""
     if value is None or value == []:
         return None
     if not isinstance(value, list):
@@ -86,7 +99,11 @@ def validate(value: Any) -> list[dict[str, Any]] | None:
         seen[key(name)] = name
         for label in aliases:
             seen[key(label)] = name
-        out.append({"name": name, "aliases": aliases})
+        # 층(284) — 층 칸이 없던 옛 사전은 기본 층으로 채운다(대표 이름이 기본과 같을 때)
+        layer = " ".join(str(raw.get("layer") or "").split()) if "layer" in raw else DEFAULT_LAYER.get(name, "")
+        if len(layer) > LAYER_MAX:
+            raise ValueError(f"층 이름은 {LAYER_MAX}자까지입니다: {name}")
+        out.append({"name": name, "aliases": aliases, "layer": layer})
     return out
 
 

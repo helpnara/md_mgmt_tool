@@ -1526,11 +1526,15 @@ export interface ExperienceListing {
 export interface ToolEntry {
   name: string;
   aliases: string[];
+  /** 기술 스택 그림의 층 (TODO 284) — 언어 · 분석/AI · 시각화 … 비면 "층 없음" */
+  layer?: string;
 }
 export interface ToolDictionary {
   dictionary: ToolEntry[];
   usage: Record<string, number>;
   custom: boolean;
+  /** 층 이름 — 기본 층 + 사전에 적힌 층 (TODO 284) */
+  layers: string[];
   /** 사전에 없는데 과제 · 경험에 쓰인 이름. skill_like = 역량 사전에 있는 이름(보유 기술이 아니라 역량) */
   unlisted: { name: string; count: number; skill_like: boolean }[];
 }
@@ -1786,5 +1790,22 @@ export interface YearCard {
 export interface YearCardListing {
   year: string; message_max: number; line_count: number; line_max: number;
   people: { name: string; leader: boolean; left_on: string; left: boolean; left_reason: string; saved: boolean; missing: string[]; picked: number; has_message: boolean }[];
+}
+
+/** 팀 역량 · 기술 스택 (TODO 284) */
+export interface TeamSkillTool {
+  name: string; known: boolean; people: string[]; person_count: number; project_count: number; experience_count: number;
+  uses: { person: string; kind: "project" | "experience"; id: string; title: string }[];
+}
+export interface TeamSkills {
+  period: "3y" | "year" | "all"; year: string; include_left: boolean;
+  people: { name: string; left: boolean; leader: boolean }[];
+  completeness: {
+    people: { name: string; 초안: number; 구조화: number; 확정: number; unknown_tags: number; empty_tools: number }[];
+    unknown_tags: number; unlisted_tools: string[]; no_layer_tools: string[]; empty_tool_projects: number;
+  };
+  skills: { axis: string; name: string; known: boolean; holders: number; experiences: number; cells: Record<string, { count: number; last: string }> }[];
+  stack: { layer: string; unlayered: boolean; tools: TeamSkillTool[] }[];
+  only_one: { kind: "역량" | "보유 기술"; group: string; name: string; person: string }[];
 }
 

@@ -1,4 +1,4 @@
-import type { YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
+import type { TeamSkills, YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -245,6 +245,8 @@ export const api = {
     request<YearCard>(`/api/yearcards/card?name=${encodeURIComponent(name)}&year=${year}`, { method: "PUT", body: JSON.stringify(body) }),
   // 보유 기술 사전 (TODO 273)
   experienceTools: () => request<ToolDictionary>("/api/experiences/tools"),
+  // 팀 역량 · 기술 스택 (TODO 284) — 팀장 · 관리자만
+  teamSkills: (period: string, left: boolean) => request<TeamSkills>(`/api/team-skills?period=${period}${left ? "&left=1" : ""}`),
   // 분류 넷의 값 정리 · 역량 이름 바꾸기 (TODO 275)
   classificationUsage: () =>
     request<{ usage: Record<string, { value: string; projects: number; intakes: number; listed: boolean }[]> }>("/api/settings/classifications/usage"),

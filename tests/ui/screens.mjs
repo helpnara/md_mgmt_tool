@@ -5946,7 +5946,7 @@ async function main() {
         }
         await go("#/skills");
         const tabs = await page.locator(".skills-tabs [role=tab]").allInnerTexts();
-        equal(tabs.map((text) => text.trim()).join(" "), "사람별 기록 면담 연말 카드", "탭 넷(연말 카드 — 285)");
+        equal(tabs.map((text) => text.trim()).join(" "), "사람별 기록 면담 팀 역량 연말 카드", "탭 다섯(팀 역량 284 · 연말 카드 285)");
         equal(await page.locator(".activity-list").count(), 0, "[사람별] 에는 기록 목록이 없다");
         equal(await page.locator(".meeting-panel").count(), 0, "[사람별] 에는 면담이 없다");
         await go(`#/skills?tab=records&person=${encodeURIComponent(person)}&year=all`);
@@ -7392,6 +7392,45 @@ async function main() {
       expect(new Set(lineStarts).size <= 1, `줄 첫 칩이 같은 자리: ${lineStarts}`);
     }
     await api.put("/api/people", { people: roster.people });
+  });
+
+  console.log("\n[81] 팀 역량 · 기술 스택 (TODO 284)");
+
+  await check("팀원역량 → [팀 역량] — 완성도 · 역량 지도 · 기술 스택(층) · 한 사람에게만, 이름 가리기 · 인쇄 (284)", async () => {
+    await go("#/skills");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "팀 역량" }).click();
+    const box = page.locator("[data-testid=team-skills]");
+    await box.locator("[data-testid=ts-completeness]").waitFor({ timeout: 8000 });
+    for (const id of ["ts-skill-map", "ts-stack", "ts-only-one"]) equal(await box.locator(`[data-testid=${id}]`).count(), 1, id);
+    expect((await box.locator("[data-testid=ts-completeness]").innerText()).includes("세는 경험"), "완성도 줄");
+    const firstPerson = await box.locator(".ts-complete-table tbody th").first().innerText();
+    await box.getByLabel("이름 가리기").check();
+    const masked = await box.locator(".ts-complete-table tbody th").first().innerText();
+    expect(masked.startsWith("팀원 A") && masked !== firstPerson, `이름 가리기: ${firstPerson} → ${masked}`);
+    await box.getByLabel("이름 가리기").uncheck();
+    if (await box.locator(".ts-tool").count()) {
+      await box.locator(".ts-tool").first().click();
+      expect((await box.locator("[data-testid=ts-uses]").innerText()).includes("쓴 사람"), "칩을 누르면 쓴 곳");
+    }
+    await page.evaluate(() => { window.print = () => { window.__tsPrinted = true; }; });
+    await box.getByRole("button", { name: "인쇄 · PDF" }).click();
+    await page.waitForFunction(() => window.__tsPrinted === true, null, { timeout: 5000 });
+    equal(await page.locator(".ts-print-root [data-testid=ts-skill-map]").count(), 1, "인쇄 판");
+    await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+    await page.waitForFunction(() => !document.querySelector(".ts-print-root"), null, { timeout: 5000 });
+  });
+
+  await check("설정 → 보유 기술(도구) 사전 — 층 칩으로 거르고, 고치는 칸에 층 (284)", async () => {
+    await go("#/settings?tab=class");
+    const card = page.locator("[data-testid=tool-dictionary]");
+    await card.waitFor({ timeout: 8000 });
+    const chip = card.getByRole("group", { name: "층으로 거르기" }).getByRole("button", { name: /^언어/ });
+    await chip.click();
+    const names = await card.locator(".dict-item .dict-name").allInnerTexts();
+    expect(names.includes("Python") && !names.includes("Excel"), `언어 층: ${names.slice(0, 10)}`);
+    await card.locator('.dict-item[data-entry="Python"] .dict-line').click();
+    equal(await card.locator('.dict-item[data-entry="Python"] input[aria-label="층"]').inputValue(), "언어", "고치는 칸의 층");
+    await card.locator('.dict-item[data-entry="Python"] .dict-line').click();
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

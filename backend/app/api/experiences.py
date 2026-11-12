@@ -263,7 +263,9 @@ def tools(conn: sqlite3.Connection = Depends(get_db)) -> dict:
         else:
             unlisted[name] = unlisted.get(name, 0) + count
     skill_names = set(skill_rules.index(settings_service.skill_dictionary()))
+    layers = list(dict.fromkeys([*tool_rules.DEFAULT_LAYERS, *(item.get("layer") or "" for item in dictionary)]))
     return {"dictionary": dictionary, "usage": usage, "custom": settings_service.load().get("tool_dictionary") is not None,
+            "layers": [layer for layer in layers if layer],
             # 역량 사전에 있는 이름(회귀 분석 등)은 보유 기술 후보에서 뺀다 — 정의: 분석 기법 · 방법은 역량
             "unlisted": [{"name": n, "count": c, "skill_like": skill_rules.key(n) in skill_names}
                          for n, c in sorted(unlisted.items(), key=lambda p: (-p[1], p[0]))]}
