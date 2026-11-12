@@ -7,6 +7,7 @@ import { personLink, projectLink, setPageTitle } from "../nav";
 import type { ConsistencyWarning, Experience, ExperienceQuant, ExperienceResponseFile, ExperienceSkill, SkillDictionary } from "../types";
 import { ConfirmBar, ConsistencyCard, QuestionAnswers, guessKind, type AnswerTarget } from "./ExperienceConfirm";
 import IconTitle from "./IconTitle";
+import QuantGuide from "./QuantGuide";
 import { useEditedUnsaved, axisLabel } from "../util";
 
 const AXES: ExperienceSkill["axis"][] = ["기술", "업무", "리더십", "문제해결"];
@@ -284,6 +285,11 @@ export default function ExperienceDetail({ id }: { id: string }) {
                   + 정량 성과
                 </button>
               )}
+              {/* 283 — 칸 뜻 · 대표 예시(전극봉 원단위 절감) · 여러 경우 · 자주 하는 실수. 고칠 수 있으면 [표에 넣기] */}
+              <details className="quant-guide-box" data-testid="quant-guide-box">
+                <summary>작성 예시 ▾ — 지표 · 값 · 기준 · 종류 · 시점을 어떻게 쓰나</summary>
+                <QuantGuide onPick={editable ? (quant) => set("quants", [...form.quants, quant]) : undefined} />
+              </details>
             </div>
             <label>결과 · 정성<textarea rows={3} value={form.result_qual} onChange={(event) => set("result_qual", event.target.value)} /></label>
             <label>업무 영향<input value={form.impact} onChange={(event) => set("impact", event.target.value)} /></label>

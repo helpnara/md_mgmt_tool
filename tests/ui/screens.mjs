@@ -7308,6 +7308,28 @@ async function main() {
     expect(text.includes("쉼표가") && text.includes("쉼표나") && !text.includes("쉼표가, 쉼표나"), `나뉘어 보인다: ${text.slice(0, 200)}`);
   });
 
+  console.log("\n[79] 결과 · 정량 작성 예시 (TODO 283)");
+
+  await check("경험 상세 — [작성 예시 ▾]에 칸 뜻 · 전극봉 대표 예시 · 여러 경우, [표에 넣기]로 줄이 들어간다 (283)", async () => {
+    const made = await api.post("/api/experiences", { person: "권경락", title: "정량 예시 시험 경험", kind: "업무" });
+    await go(`#/experience/${made.id}`);
+    const box = page.locator("[data-testid=quant-guide-box]");
+    await box.waitFor({ timeout: 8000 });
+    await box.locator("> summary").click();
+    const text = await box.innerText();
+    for (const word of ["단위를 꼭", "전극봉 원단위", "0.8억원/년", "조건", "여러 경우 예시", "자주 하는 실수"]) expect(text.includes(word), `${word} 없음`);
+    await box.locator(".quant-guide-table").first().getByRole("button", { name: "표에 넣기" }).first().click();
+    equal(await page.locator('.exp-quant-table input[aria-label="지표"]').last().inputValue(), "전극봉 원단위", "표에 들어감");
+    nextDialog((d) => d.accept());
+    await page.locator(".experience-detail").getByRole("button", { name: "저장", exact: true }).click().catch(() => undefined);
+    await page.waitForTimeout(600);
+  });
+
+  await check("도움말에도 같은 작성 예시가 있다 (283)", async () => {
+    await go("#/help");
+    expect((await page.locator(".quant-guide-box").first().innerText()).includes("결과 · 정량 작성 예시"), "도움말");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

@@ -1,3 +1,4 @@
+import QuantGuide from "./QuantGuide";
 /**
  * 도움말 (TODO 111).
  *
@@ -136,6 +137,11 @@ export default function Help() {
               [경험] 카드의 <b>[업무 이력 파일]</b>은 확정한 경험을 .md 파일 하나로 만들어 팀원 본인에게 건넵니다 — 범위 · 구조화 포함 · 근거 ID · 효과 금액(기본은 뺌) · 익명화를 고르고, 미리보기 그대로 저장 · 복사합니다. 누가 언제 내보냈는지 기록이 남습니다.
               팀원 PC 에서는 자기 경험(초안 · 구조화)의 확인 필요 · 칸을 보완할 수 있고, 고친 경험에는 "팀원이 고침" 이 표시됩니다.
             </p>
+            {/* 283 — 결과 · 정량 작성 예시(경험 상세의 "작성 예시 ▾" 와 같은 글) */}
+            <details className="quant-guide-box">
+              <summary><b>결과 · 정량 작성 예시</b> — 지표 · 값 · 기준 · 종류 · 시점(경험 상세의 결과 · 정량 아래에도 있습니다)</summary>
+              <QuantGuide />
+            </details>
           </div>
           <div className="card">
             <h2>로드맵</h2>

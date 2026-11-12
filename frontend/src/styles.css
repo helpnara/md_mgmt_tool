@@ -3027,3 +3027,17 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .cleanup-line input[type="checkbox"], .cleanup-tools input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin: 0; align-self: center; }
 .cleanup-line { align-items: center; }
 .cleanup-actions .cleanup-other { max-width: 160px; }
+
+/* 283 — 결과 · 정량 작성 예시 */
+.quant-guide-box { margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--neutral-50); }
+.quant-guide-box > summary { cursor: pointer; padding: 8px 12px; font-size: var(--fs-sm); color: var(--accent); }
+.quant-guide { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-sm); }
+.quant-guide-meaning th { width: 4.5em; white-space: nowrap; text-align: left; vertical-align: top; }
+.quant-guide-meaning td { white-space: normal; }
+.quant-guide-table { width: 100%; }
+.quant-guide-table th, .quant-guide-table td { font-size: var(--fs-xs); white-space: normal; word-break: keep-all; vertical-align: top; }
+.quant-guide-table td:nth-child(5), .quant-guide-table td:last-child, .quant-guide-table th[scope="row"] { white-space: nowrap; }
+.quant-guide-title { margin: 6px 0 0; }
+.quant-guide-more > summary { cursor: pointer; color: var(--accent); font-size: var(--fs-sm); margin: 4px 0; }
+.quant-guide-mistakes { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 2px; }
+
