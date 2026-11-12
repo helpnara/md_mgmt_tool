@@ -12,6 +12,7 @@ import TotalRow from "./TotalRow";
 import ViewTabs from "./ViewTabs";
 import Explain from "./Explain";
 import { cellCount, DASH, sumBy, todayIso, useLatest } from "../util";
+import YearCards from "./YearCards";
 import { isDeparted } from "../inputRules";
 
 /**
@@ -41,11 +42,12 @@ const PLANNED_PAGE = 10;
 const SIDE_PAST = 5;
 
 /** 화면 안 탭 (TODO 232 ②) — "" = 사람별 · records = 기록 · meetings = 면담(팀장 PC 만) */
-type SkillsTab = "" | "records" | "meetings";
+type SkillsTab = "" | "records" | "meetings" | "yearcards";
 function tabFrom(params: URLSearchParams, readonly: boolean): SkillsTab {
   const value = params.get("tab");
   if (value === "records") return "records";
   if (value === "meetings") return readonly ? "" : "meetings";
+  if (value === "yearcards") return readonly ? "" : "yearcards";
   // 탭 없이 조건(예정만 · 구분 · 찾기)만 실려 온 옛 주소는 기록 목록을 보려던 것이다
   if (params.get("when") || params.get("kind") || params.get("q")) return "records";
   return "";
@@ -402,6 +404,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
     { key: "", label: "사람별", title: "합계 · 면담에서 먼저 볼 사람 · 사람별 표" },
     { key: "records", label: "기록", title: "교육 · 행사 기록 — 예정과 지난 기록" },
     ...(!meetingsOpen ? [] : [{ key: "meetings", label: "면담", title: readonly ? "내 면담 기록 — 보기만" : "면담 기록 · 하기로 한 것 (팀장만)" }]),
+    // 285 — 연말 회고 카드(팀장 · 관리자만)
+    ...(readonly ? [] : [{ key: "yearcards", label: "연말 카드", title: "팀원마다 엽서 한 장 — 한 해의 한 일 · 감사 편지, A4 네 장씩 인쇄 (팀장만)" }]),
   ];
 
   return (
@@ -458,7 +462,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
 
       {/* ── 사람 줄 (TODO 248 ①) — 세 탭 공통, 사람을 고르고 바꾸고 푸는 자리는 여기 하나다(183 · 185 의 띠 · 기록 탭의 [사람] 상자를 합쳤다).
             팀원 PC 의 면담은 본인 것뿐이라 그 탭에서는 세우지 않는다 (233) ── */}
-      {!(tab === "meetings" && readonly) && strip.length > 0 && (
+      {!(tab === "meetings" && readonly) && tab !== "yearcards" && strip.length > 0 && (
         <div className="card wide skills-people-strip" role="group" aria-label="사람 고르기">
           <button
             type="button"
@@ -805,6 +809,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       )}
 
       {/* ── 기록 목록 ──────────────────────────────────────────────── */}
+      {tab === "yearcards" && !readonly && <YearCards />}
       {tab === "records" && (
       <div className="card wide skills-records">
         <div className="card-head">

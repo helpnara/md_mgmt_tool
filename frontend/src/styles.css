@@ -3049,3 +3049,59 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .quant-guide-meaning th { width: 4.5em; }
 .quant-guide-meaning td { overflow-wrap: anywhere; }
 .quant-guide-table td:nth-child(5), .quant-guide-table td:last-child, .quant-guide-table th[scope="row"] { white-space: normal; }
+
+/* 285 — 연말 회고 카드: 사람 목록 · 고치기 · 실제 크기 미리보기, 인쇄는 A4 에 2 × 2 */
+.yearcards { display: flex; flex-direction: column; gap: 16px; }
+.yc-cols { display: grid; grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+@media (max-width: 1279px) { .yc-cols { grid-template-columns: minmax(160px, 200px) minmax(0, 1fr); } .yc-preview { grid-column: 1 / -1; } }
+.yc-people { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; max-height: 640px; overflow-y: auto; }
+.yc-person { width: 100%; text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 0; background: transparent; min-height: 0; font-weight: 400; color: var(--text); border-radius: var(--radius); }
+.yc-person:hover { background: var(--neutral-100); }
+.yc-person.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.yc-state { font-size: var(--fs-xs); white-space: normal; text-align: left; }
+.yc-state.ok { color: var(--success-700, var(--accent)); }
+.yc-edit { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.yc-edit h3 { margin: 0; }
+.yc-pick { display: flex; flex-direction: column; gap: 6px; }
+.yc-candidate { align-items: flex-start; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: var(--fs-sm); }
+.yc-candidate input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin-top: 3px; }
+.yc-message { min-height: 120px; font-family: inherit; font-size: var(--fs-sm); }
+.yc-preview { display: flex; flex-direction: column; gap: 6px; position: sticky; top: 120px; }
+.yc-edit > label { display: flex; flex-direction: column; gap: 4px; }
+.yc-edit > label > .muted { font-weight: 400; }
+
+/* 엽서 — 100 × 148mm. 화면도 인쇄도 mm 로 같은 크기 */
+.postcard { width: 100mm; height: 148mm; box-sizing: border-box; padding: 8mm 7mm 6mm; overflow: hidden; background: var(--neutral-0);
+  border: 1px solid var(--border); display: flex; flex-direction: column; gap: 3.2mm; color: var(--neutral-900);
+  font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-size: 8.6pt; line-height: 1.45; }
+.pc-top { display: flex; align-items: baseline; gap: 3mm; border-bottom: 0.6mm solid var(--accent); padding-bottom: 2mm; }
+.pc-year { font-size: 20pt; font-weight: 800; color: var(--accent); letter-spacing: -0.5pt; line-height: 1; }
+.pc-headline { font-size: 9pt; color: var(--neutral-700); }
+.pc-name { font-size: 15pt; font-weight: 700; }
+.pc-stats { display: flex; gap: 2mm; flex-wrap: wrap; }
+.pc-stats span { display: inline-flex; flex-direction: column; align-items: center; min-width: 17mm; padding: 1.4mm 2mm; border-radius: 2mm; background: var(--primary-50, var(--neutral-100)); font-size: 7pt; color: var(--neutral-700); }
+.pc-stats b { font-size: 11pt; color: var(--accent); line-height: 1.1; }
+.pc-works { display: flex; flex-direction: column; gap: 2mm; }
+.pc-work b { font-size: 9pt; }
+.pc-role { font-size: 7.5pt; color: var(--neutral-700); }
+.pc-result { font-size: 8pt; }
+.pc-praise { font-size: 8pt; color: var(--accent); font-style: italic; }
+.pc-skills { font-size: 7.5pt; color: var(--neutral-700); }
+.pc-letter + .pc-sign { margin-top: 0; }
+.pc-letter { margin-top: auto; padding: 2.5mm 3mm; border-radius: 2mm; background: var(--neutral-50); border-left: 0.8mm solid var(--accent); white-space: pre-wrap; font-size: 8.6pt; }
+.pc-sign { margin-top: auto; text-align: right; font-size: 7.5pt; color: var(--neutral-700); }
+
+/* 인쇄 — 화면은 감추고 A4 한 장에 2 × 2 (자를 선: 엽서 테두리) */
+.yc-print-root { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 0; }
+  body.yc-printing > *:not(.yc-print-root) { display: none !important; }
+  body.yc-printing { background: var(--neutral-0); }
+  body.yc-printing .yc-print-root { display: block; }
+  .yc-sheet { width: 210mm; height: 297mm; box-sizing: border-box; padding: 0.5mm 5mm; display: grid;
+    grid-template-columns: 100mm 100mm; grid-template-rows: 148mm 148mm; justify-content: center; align-content: center; gap: 0;
+    page-break-after: always; break-after: page; }
+  .yc-sheet:last-child { page-break-after: auto; break-after: auto; }
+  .yc-slot .postcard { border: 0.2mm dashed var(--neutral-400, var(--border)); }
+}
+

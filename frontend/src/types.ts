@@ -1768,3 +1768,17 @@ export interface ExperienceResponseFile {
   saved: string[];
   text: string;
 }
+
+/** 연말 회고 카드 (TODO 285) */
+export interface YearCardProject { id: string; title: string; status: string; role: string; did: string; result: string; praise: string; done_this_year: boolean }
+export interface YearCard {
+  name: string; year: string; leader: boolean;
+  numbers: { projects: number; done: number; milestones: number; activities: number; hours: number; reports: number };
+  new_skills: string[]; candidates: YearCardProject[]; picked: YearCardProject[]; chosen: string[];
+  message: string; headline: string; updated_at: string; saved: boolean; missing: string[]; signer: string;
+}
+export interface YearCardListing {
+  year: string; pick_max: number; message_max: number;
+  people: { name: string; leader: boolean; left_on: string; saved: boolean; missing: string[]; picked: number; has_message: boolean }[];
+}
+

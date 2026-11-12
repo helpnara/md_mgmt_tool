@@ -7330,6 +7330,34 @@ async function main() {
     expect((await page.locator(".quant-guide-box").first().innerText()).includes("결과 · 정량 작성 예시"), "도움말");
   });
 
+  console.log("\n[80] 연말 회고 카드 — 엽서 한 장 · A4 에 네 장 (TODO 285)");
+
+  await check("팀원역량 → [연말 카드] — 편지를 저장하면 미리보기 엽서에 나오고, 인쇄는 A4 한 장에 엽서 칸 (285)", async () => {
+    const roster = await api.get("/api/people");
+    if (!roster.people.some((p) => p.name === "권경락")) await api.put("/api/people", { people: [...roster.people, { name: "권경락" }] });
+    await go("#/skills");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "연말 카드" }).click();
+    const edit = page.locator("[data-testid=yc-edit]");
+    await edit.waitFor({ timeout: 8000 });
+    await page.locator(".yc-people").getByRole("button", { name: /권경락/ }).click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=yc-edit] h3")?.textContent?.includes("권경락"), null, { timeout: 8000 });
+    await edit.locator(".yc-message").fill("한 해 동안 고마웠어요 — 시험 편지");
+    await edit.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=yc-edit]")?.textContent?.includes("저장했습니다"), null, { timeout: 8000 });
+    const card = page.locator(".yc-preview [data-testid=postcard]");
+    const text = await card.innerText();
+    expect(text.includes("권경락 님") && text.includes("시험 편지"), `엽서: ${text.slice(0, 160)}`);
+    const box = await card.boundingBox();
+    expect(box && Math.abs(box.width / box.height - 100 / 148) < 0.01, `엽서 비율 100 × 148: ${JSON.stringify(box)}`);
+    await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
+    await edit.getByRole("button", { name: "이 카드만 인쇄 · PDF" }).click();
+    await page.waitForFunction(() => window.__printed === true, null, { timeout: 5000 });
+    equal(await page.locator(".yc-print-root .yc-sheet .yc-slot").count(), 1, "엽서 한 칸");
+    expect(await page.evaluate(() => document.body.classList.contains("yc-printing")), "인쇄 중 표시");
+    await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+    await page.waitForFunction(() => !document.querySelector(".yc-print-root") && !document.body.classList.contains("yc-printing"), null, { timeout: 5000 });
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

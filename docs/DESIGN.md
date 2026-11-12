@@ -2297,3 +2297,11 @@ Nuvemshop *Nimbus* 디자인 시스템(MIT)의 **값만** 가져왔다 — 부�
 * **보기** — `listing().tools`(`tool_summary`): 과제 + 경험, 이름마다 과제 수 · 경험 수 · 마지막 해 · 사전에 있나. 경험 상세의 `tool_notes`(확정 전 · 막지 않음).
 * **이름** — 화면은 "보유 기술" · 역량 축 "기술" 은 "전문 기술"(`util.axisLabel`). 저장 값 · 응답 형식 · 업무 이력 파일의 이름은 원본 형식 그대로.
 
+
+## 5.58 연말 회고 카드 (TODO 285)
+
+* **자리 · 권한** — 팀원역량 → [연말 카드] 탭(팀장 · 관리자만). `/api/yearcards` 는 `share.BLOCKED_PREFIXES` — 팀원 PC 는 403. 팀원 화면 · 업무 이력 파일 · 내보내기에 나오지 않는다.
+* **저장** — `people/<slug>/yearcards/<해>.md`: 머리말 `person · year · headline · projects · updated_at · updated_by`, 본문 = 감사 편지(400자). 제목 40자, 과제 3개까지(그 해의 후보 안에서만).
+* **재료** — 숫자는 `person_history.year_review`(나의 한 해와 같은 셈), 과제 후보는 그 해에 맡은 과제(담당과 역할의 역할 · 결과 · 인정 한 줄). 안 고르면 마친 과제 → 인정 한 줄 → 결과 있는 순서로 위 셋.
+* **엽서** — `PostCard` 하나를 화면 미리보기(실제 크기, 넘치면 알림)와 인쇄가 같이 쓴다. 100 × 148mm, mm 단위.
+* **인쇄** — `body.yc-printing` + 포털 `.yc-print-root` → `@page A4 · margin 0`, `.yc-sheet` 2 × 2(엽서 테두리 점선 = 자를 선). 브라우저 인쇄 창의 "PDF 로 저장" — 서버에 PDF 라이브러리를 더하지 않는다.
