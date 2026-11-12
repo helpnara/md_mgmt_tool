@@ -5946,7 +5946,7 @@ async function main() {
         }
         await go("#/skills");
         const tabs = await page.locator(".skills-tabs [role=tab]").allInnerTexts();
-        equal(tabs.map((text) => text.trim()).join(" "), "사람별 기록 면담", "탭 셋");
+        equal(tabs.map((text) => text.trim()).join(" "), "사람별 기록 면담 연말 카드", "탭 넷(연말 카드 — 285)");
         equal(await page.locator(".activity-list").count(), 0, "[사람별] 에는 기록 목록이 없다");
         equal(await page.locator(".meeting-panel").count(), 0, "[사람별] 에는 면담이 없다");
         await go(`#/skills?tab=records&person=${encodeURIComponent(person)}&year=all`);
