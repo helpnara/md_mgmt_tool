@@ -813,7 +813,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       )}
 
       {/* ── 기록 목록 ──────────────────────────────────────────────── */}
-      {tab === "team" && !readonly && <TeamSkills />}
+      {tab === "team" && !readonly && <TeamSkills meta={meta} />}
       {tab === "yearcards" && !readonly && <YearCards />}
       {tab === "records" && (
       <div className="card wide skills-records">

@@ -7420,6 +7420,26 @@ async function main() {
     await page.waitForFunction(() => !document.querySelector(".ts-print-root"), null, { timeout: 5000 });
   });
 
+  await check("[팀 역량] 2단계 — 축별 모양 · 해마다 새로 생긴 것 · 과제 분류 × 역량 · 목표 고치기 (284)", async () => {
+    await go("#/skills");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "팀 역량" }).click();
+    const box = page.locator("[data-testid=team-skills]");
+    await box.locator("[data-testid=ts-shape]").waitFor({ timeout: 8000 });
+    equal(await box.locator("[data-testid=ts-shape] .ts-shape-row").count(), 4, "축 넷");
+    equal(await box.locator("[data-testid=ts-new-by-year] .ts-year-row").count(), 5, "다섯 해");
+    expect(await box.getByRole("group", { name: "과제 분류" }).getByRole("button").count() >= 1, "분류 칩");
+    const targets = box.locator("[data-testid=ts-targets]");
+    await targets.getByRole("button", { name: "목표 고치기" }).click();
+    await targets.getByRole("button", { name: "+ 목표" }).click();
+    await targets.locator('input[aria-label="목표 이름"]').last().fill("화면시험 목표 역량");
+    await targets.locator('input[aria-label="목표 사람 수"]').last().fill("2");
+    await targets.getByRole("button", { name: "저장", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=ts-targets]")?.textContent?.includes("화면시험 목표 역량"), null, { timeout: 8000 });
+    const row = targets.locator("tr", { hasText: "화면시험 목표 역량" });
+    expect((await row.innerText()).includes("2명"), `목표 줄: ${await row.innerText()}`);
+    await api.put("/api/team-skills/targets", { targets: [] });
+  });
+
   await check("설정 → 보유 기술(도구) 사전 — 층 칩으로 거르고, 고치는 칸에 층 (284)", async () => {
     await go("#/settings?tab=class");
     const card = page.locator("[data-testid=tool-dictionary]");

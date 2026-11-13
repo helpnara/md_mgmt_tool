@@ -1552,6 +1552,8 @@ export interface SkillEntry {
   axis: ExperienceSkill["axis"];
   name: string;
   aliases: string[];
+  /** 축 아래 중분류 (TODO 284 2단계) — 팀 역량 지도가 묶어 보인다 */
+  group?: string;
 }
 export interface SkillDictionary {
   dictionary: SkillEntry[];
@@ -1804,8 +1806,15 @@ export interface TeamSkills {
     people: { name: string; 초안: number; 구조화: number; 확정: number; unknown_tags: number; empty_tools: number }[];
     unknown_tags: number; unlisted_tools: string[]; no_layer_tools: string[]; empty_tool_projects: number;
   };
-  skills: { axis: string; name: string; known: boolean; holders: number; experiences: number; cells: Record<string, { count: number; last: string }> }[];
+  skills: { axis: string; name: string; known: boolean; group: string; holders: number; experiences: number; cells: Record<string, { count: number; last: string }> }[];
   stack: { layer: string; unlayered: boolean; tools: TeamSkillTool[] }[];
   only_one: { kind: "역량" | "보유 기술"; group: string; name: string; person: string }[];
+  /** 284 2단계 */
+  shape: { axis: string; experiences: number; held: number; total: number; people: number }[];
+  new_by_year: { year: string; items: { kind: "역량" | "보유 기술"; name: string; year: string; people: string[] }[] }[];
+  new_earlier: number;
+  by_class: Record<string, { values: string[]; rows: { axis: string; name: string; cells: Record<string, number>; total: number }[] }>;
+  targets: TeamSkillTarget[];
 }
+export interface TeamSkillTarget { kind: "역량" | "보유 기술"; name: string; want: number; matched?: string; have?: number; gap?: number }
 

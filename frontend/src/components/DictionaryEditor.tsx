@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { axisLabel } from "../util";
 
 /** 사전 한 줄 — 축(역량 사전만) · 대표 이름 · 다른 이름. origin = 저장된 자리(새 줄은 "") */
-export type DictRow = { axis?: string; name: string; aliases: string[]; origin: string };
+export type DictRow = { axis?: string; group?: string; name: string; aliases: string[]; origin: string };
 
 const norm = (text: string) => text.replace(/[\s·・‧•_\-,]+/g, "").toLowerCase();
 
@@ -14,7 +14,7 @@ const norm = (text: string) => text.replace(/[\s·・‧•_\-,]+/g, "").toLower
  * ④ 줄을 누르면 그 아래에 **고치는 칸**(이름 · 축 · 다른 이름을 칩으로 — 엔터로 더하고 ×로 뺀다) ⑤ 고친 줄은 ● 표시 — [저장]은 카드 아래 한 번.
  */
 export default function DictionaryEditor({
-  rows, saved: savedRows, setRows, axes, usage, itemLabel, extraActions, removable, axisName = "축", axisFree = false,
+  rows, saved: savedRows, setRows, axes, usage, itemLabel, extraActions, removable, axisName = "축", axisFree = false, groups,
 }: {
   rows: DictRow[];
   /** 저장된 줄 — 고친 줄(●)을 가리는 기준 */
@@ -33,6 +33,8 @@ export default function DictionaryEditor({
   axisName?: string;
   /** 축을 글로 적는다(목록에서 고르거나 새 이름) · 비어도 된다 — 보유 기술의 층 */
   axisFree?: boolean;
+  /** 중분류 칸을 둔다(역량 사전 — TODO 284 2단계). 값은 고를 목록 */
+  groups?: string[];
 }) {
   const NONE = "\u0000none";
   const label = (a: string) => (axisFree ? a || `${axisName} 없음` : axisLabel(a));
@@ -56,7 +58,7 @@ export default function DictionaryEditor({
   const changed = (row: DictRow) => {
     if (!row.origin) return true;
     const before = saved.get(row.origin);
-    return !before || before.name !== row.name || (before.axis ?? "") !== (row.axis ?? "") || before.aliases.join("|") !== row.aliases.join("|");
+    return !before || before.name !== row.name || (before.axis ?? "") !== (row.axis ?? "") || before.aliases.join("|") !== row.aliases.join("|") || (before.group ?? "") !== (row.group ?? "");
   };
   const addAlias = (index: number) => {
     const parts = alias.split(",").map((a) => a.trim()).filter(Boolean);
@@ -100,6 +102,7 @@ export default function DictionaryEditor({
                 {changed(row) && <span className="dict-dirty" title="고쳤습니다 — [저장]을 누르세요">●</span>}
                 <span className="dict-name">{row.name || <i className="muted">(이름 없음)</i>}</span>
                 {axes && !axis && <span className="dict-axis muted">{label(row.axis ?? "")}</span>}
+                {groups && row.group && <span className="dict-axis muted">· {row.group}</span>}
                 <span className="dict-aliases muted">{row.aliases.join(", ")}</span>
                 <span className={used ? "dict-used" : "dict-used zero"} title="쓰는 곳 수">{used || "-"}</span>
               </button>
@@ -116,6 +119,13 @@ export default function DictionaryEditor({
                         <input aria-label={axisName} className="dict-layer" value={row.axis ?? ""} maxLength={20} list="dict-free-axes"
                           placeholder={`${axisName} — 고르거나 새 이름`} onChange={(event) => set(index, { axis: event.target.value })} />
                         <datalist id="dict-free-axes">{axes.map((a) => <option key={a} value={a} />)}</datalist>
+                      </>
+                    )}
+                    {groups && (
+                      <>
+                        <input aria-label="중분류" className="dict-layer" value={row.group ?? ""} maxLength={20} list="dict-groups"
+                          placeholder="중분류 — 고르거나 새 이름" onChange={(event) => set(index, { group: event.target.value })} />
+                        <datalist id="dict-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
                       </>
                     )}
                     <input aria-label={`${itemLabel} 대표 이름`} value={row.name} maxLength={60} placeholder="대표 이름"

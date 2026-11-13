@@ -27,7 +27,7 @@ def test_default_dictionary_and_settings_roundtrip(team):  # noqa: F811
     mine = [{"axis": "기술", "name": "이미지 판정", "aliases": ["비전 검사", "이미지 판정"]}]
     assert owner.put("/api/settings", json={"skill_dictionary": mine}).status_code == 200
     data = owner.get("/api/experiences/skills").json()
-    assert data["custom"] is True and data["dictionary"] == [{"axis": "기술", "name": "이미지 판정", "aliases": ["비전 검사"]}]
+    assert data["custom"] is True and data["dictionary"] == [{"axis": "기술", "name": "이미지 판정", "aliases": ["비전 검사"], "group": ""}]
     for bad in ([{"axis": "기타", "name": "x"}], [{"axis": "기술", "name": ""}],
                 [{"axis": "기술", "name": "가"}, {"axis": "업무", "name": "가"}], "목록 아님"):
         assert owner.put("/api/settings", json={"skill_dictionary": bad}).status_code in (400, 422), bad

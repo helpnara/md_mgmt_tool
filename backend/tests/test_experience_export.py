@@ -74,7 +74,7 @@ def test_unknown_tags_and_cleanup_actions(team):  # noqa: F811
     assert second["skills"] == [] and second["tools"] == ["현장계측기"]
     dictionary = owner.get("/api/experiences/skills").json()["dictionary"]
     assert "현장 데이터 정제" in next(d for d in dictionary if d["name"] == "데이터 파이프라인")["aliases"]
-    assert {"axis": "리더십", "name": "설비 담당 협의", "aliases": []} in dictionary
+    assert {"axis": "리더십", "name": "설비 담당 협의", "aliases": [], "group": ""} in dictionary
     assert owner.get("/api/experiences/skills/unknown").json()["items"] == []
 
 

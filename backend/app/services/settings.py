@@ -70,6 +70,8 @@ DEFAULTS: dict[str, Any] = {
     "skill_dictionary": None,
     # 보유 기술 사전 (TODO 273). **null 이면 기본**(언어 · 소프트웨어 · 장비 서른 개쯤) — [{"name", "aliases"}]
     "tool_dictionary": None,
+    # 팀 목표 역량 · 보유 기술 (TODO 284 2단계) — [{kind: "역량" | "보유 기술", name, want: 사람 수}]
+    "team_skill_targets": [],
     # 업무 이력 파일의 익명화 치환표 (TODO 262). null 이면 비어 있음 — {"rules": [{kind, from, to}], "patterns": [{kind, regex, to}]}
     "anonymize_rules": None,
     # 백업에 첨부(assets)를 넣지 않는다 (TODO 202 · 197) — 첨부가 GB 단위면 백업이 조용히 실패했다.
@@ -211,6 +213,10 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             from ..experience import skills as skill_rules
 
             current[key] = skill_rules.validate(updates[key])
+        elif key == "team_skill_targets":
+            from . import team_skills
+
+            current[key] = team_skills.validate_targets(updates[key])
         elif key == "tool_dictionary":
             from ..experience import tools as tool_rules
 

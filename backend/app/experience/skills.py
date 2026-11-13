@@ -110,8 +110,26 @@ def similar(name: str, dictionary: Iterable[dict[str, Any]], limit: int = 3) -> 
     return [{"axis": axis, "name": name_} for _, axis, name_ in scored[:limit]]
 
 
+# 284 2단계 — 축 아래 중분류(역량 지도가 46줄을 묶어 읽히게). 글로 적는다 — 설정 → 역량 사전에서 고침
+GROUP_MAX = 20
+_GROUPS: dict[str, tuple[str, ...]] = {
+    "AI 모델": ("비전 AI 객체탐지", "시계열 분석·이상탐지", "자연어 처리", "예측 모델링", "생성형 AI 활용", "평가 지표 설계·검증"),
+    "최적화 · 분석": ("최적화·시뮬레이션", "프로세스 마이닝"),
+    "데이터 · 시스템": ("데이터 파이프라인", "AI 인프라·플랫폼", "실시간 시스템 개발", "CI/CD·배포", "ERP·MES 연계"),
+    "기획 · 거버넌스": ("투자 심의·거버넌스 설계", "경영층 커뮤니케이션", "전략 기획·로드맵", "과제 포트폴리오 관리", "투자·예산 확보"),
+    "현업 · 도메인": ("요구사항 관리", "제조 공정 이해", "품질 관리", "프로세스 표준화", "제품 기획"),
+    "교육 · 대외": ("교육 과정 설계", "그룹사·대외 협업", "행사·프로그램 운영"),
+    "조직 운영": ("조직 설계·인력 배분", "권한 위임", "조직 간 조율", "운영 체제 전환", "변화 관리", "팀 운영"),
+    "사람 · 학습": ("육성·온보딩", "학습 문화 운영", "조직 학습 설계", "면담·성장 설계"),
+    "문제 정의": ("문제 재정의", "목표 역산", "성과 지표 재정의", "지표의 함정 발견"),
+    "진단 · 분석": ("병목 진단", "실패 원인 분석"),
+    "실행 · 검증": ("제약 우회", "우선순위 기준 수립", "가설 검증·파일럿", "도구 자체 구축"),
+}
+DEFAULT_GROUP: dict[str, str] = {name: group for group, names in _GROUPS.items() for name in names}
+
+
 def default_dictionary() -> list[dict[str, Any]]:
-    return [{"axis": axis, "name": name, "aliases": list(aliases)} for axis, name, aliases in DEFAULT_SKILLS]
+    return [{"axis": axis, "name": name, "aliases": list(aliases), "group": DEFAULT_GROUP.get(name, "")} for axis, name, aliases in DEFAULT_SKILLS]
 
 
 def key(text: str) -> str:
@@ -174,5 +192,9 @@ def validate(value: Any) -> list[dict[str, Any]] | None:
         aliases = list(dict.fromkeys(a for a in (" ".join(str(x).split()) for x in aliases_raw) if a and key(a) != key(name)))
         if len(aliases) > ALIAS_MAX or any(len(a) > NAME_MAX for a in aliases):
             raise ValueError(f"동의어는 {ALIAS_MAX}개 · 각 {NAME_MAX}자까지입니다: {name}")
-        out.append({"axis": axis, "name": name, "aliases": aliases})
+        # 중분류(284 2단계) — 칸이 없던 옛 사전은 같은 이름이면 기본 중분류로
+        group = " ".join(str(raw.get("group") or "").split()) if "group" in raw else DEFAULT_GROUP.get(name, "")
+        if len(group) > GROUP_MAX:
+            raise ValueError(f"중분류 이름은 {GROUP_MAX}자까지입니다: {name}")
+        out.append({"axis": axis, "name": name, "aliases": aliases, "group": group})
     return out

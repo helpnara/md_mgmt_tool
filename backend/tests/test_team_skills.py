@@ -66,3 +66,34 @@ def test_tool_layer_saved_and_old_dictionary_filled(team):  # noqa: F811
     tools = owner.get("/api/experiences/tools").json()
     layer = {d["name"]: d["layer"] for d in tools["dictionary"]}
     assert layer == {"Python": "언어", "사내툴X": "사내 개발"} and "사내 개발" in tools["layers"]
+
+
+def test_stage2_shape_new_by_year_class_groups_targets(team):  # noqa: F811
+    """284 2단계 — 축별 모양 · 해마다 새로 생긴 것 · 과제 분류 × 역량 · 중분류 · 목표."""
+    owner, pid = team["owner"], team["shared"]
+    owner.patch(f"/api/projects/{pid}", json={"nature": "개선"})
+    eid = _exp(owner, "가팀원", "분류 경험", "확정", start="2026-02", skills=[("기술", "예측 모델링"), ("업무", "품질 관리")], tools=["Python"])
+    from app.config import get_settings
+    from app.vault import markdown as md
+    path = next(get_settings().people_dir.rglob(f"{eid}*.md"))
+    doc = md.load(path)
+    doc.meta["project"] = pid
+    md.save(path, doc)
+    owner.post("/api/reindex")
+    _exp(owner, "나팀원", "옛 경험", "확정", start="2024-03", end="2024-09", skills=[("업무", "품질 관리")])
+    data = owner.get("/api/team-skills").json()
+    tech = next(s for s in data["shape"] if s["axis"] == "기술")
+    assert tech["experiences"] == 1 and tech["held"] == 1 and tech["people"] == 1 and tech["total"] >= 13
+    assert next(r for r in data["skills"] if r["name"] == "예측 모델링")["group"] == "AI 모델"
+    years = {y["year"]: [i["name"] for i in y["items"]] for y in data["new_by_year"]}
+    assert "예측 모델링" in years["2026"] and "Python" in years["2026"] and "품질 관리" in years["2024"] and "품질 관리" not in years["2026"]
+    nature = data["by_class"]["nature"]
+    assert nature["values"] == ["개선"] and next(r for r in nature["rows"] if r["name"] == "예측 모델링")["cells"] == {"개선": 1}
+    saved = owner.put("/api/team-skills/targets", json={"targets": [{"kind": "역량", "name": "예측 모델링", "want": 3},
+                                                                     {"kind": "보유 기술", "name": "파이썬", "want": 1}]})
+    assert saved.status_code == 200, saved.text
+    targets = {t["name"]: t for t in owner.get("/api/team-skills").json()["targets"]}
+    assert targets["예측 모델링"]["have"] == 1 and targets["예측 모델링"]["gap"] == 2 and targets["파이썬"]["gap"] == 0
+    bad = owner.put("/api/team-skills/targets", json={"targets": [{"kind": "역량", "name": "A", "want": 0}]})
+    assert bad.status_code == 400
+    assert team["member"].put("/api/team-skills/targets", json={"targets": []}).status_code == 403

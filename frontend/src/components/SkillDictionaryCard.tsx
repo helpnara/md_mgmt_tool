@@ -16,7 +16,7 @@ type Row = DictRow;
 export const SKILL_DICTIONARY_CHANGED = "skill-dictionary-changed";
 
 const toRows = (entries: SkillEntry[]): Row[] =>
-  entries.map((e) => ({ axis: e.axis, name: e.name, aliases: [...e.aliases], origin: `${e.axis}|${e.name}` }));
+  entries.map((e) => ({ axis: e.axis, group: e.group ?? "", name: e.name, aliases: [...e.aliases], origin: `${e.axis}|${e.name}` }));
 
 /**
  * 역량 사전 (TODO 260 · 253 의 4단계 — 4단계.md 2절 · 정할 것 ①). 설정 → [분류 · 접수] 탭.
@@ -80,7 +80,7 @@ export default function SkillDictionaryCard() {
     const entries = rows.filter((row) => row.name.trim()).map((row) => {
       const oldName = row.origin ? row.origin.split("|")[1] : "";
       const aliases = renamed.includes(row) && oldName && oldName !== row.name.trim() && !row.aliases.includes(oldName) ? [...row.aliases, oldName] : row.aliases;
-      return { axis: row.axis as ExperienceSkill["axis"], name: row.name.trim(), aliases };
+      return { axis: row.axis as ExperienceSkill["axis"], name: row.name.trim(), aliases, group: (row.group ?? "").trim() };
     });
     setBusy(true);
     try {
@@ -126,6 +126,7 @@ export default function SkillDictionaryCard() {
         쓰는 역량은 지우지 않고 <b>다른 역량으로 합치기</b>로 정리합니다. [기본으로]는 처음 46개로 돌아갑니다.
       </CardIntro>
       <DictionaryEditor rows={rows} saved={savedRows} setRows={setRows} axes={AXES} usage={usage} itemLabel="역량"
+        groups={[...new Set(rows.map((r) => r.group ?? "").filter(Boolean))]}
         removable={(row) => !usage(row)}
         extraActions={(row) => usage(row) > 0 && row.origin ? (
           <select aria-label="다른 역량으로 합치기" value="" disabled={busy || dirty} title={dirty ? "고친 것을 먼저 저장하세요" : ""}

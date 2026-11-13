@@ -3164,6 +3164,27 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .ts-tool.on { box-shadow: 0 0 0 2px var(--accent); }
 .ts-uses { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius); background: var(--neutral-50); font-size: var(--fs-sm); }
 .ts-uses ul { margin: 6px 0 0; padding-left: 18px; }
+.ts-group-row th { text-align: left; font-weight: 600; color: var(--neutral-700); padding-left: 16px; position: sticky; left: 0; background: var(--neutral-50); }
+.ts-shape { display: flex; flex-direction: column; gap: 8px; }
+.ts-shape-row { display: grid; grid-template-columns: 90px minmax(120px, 1fr) minmax(220px, auto); gap: 12px; align-items: center; }
+.ts-shape-name { font-weight: 700; }
+.ts-bar { height: 14px; border-radius: 7px; background: var(--neutral-100); overflow: hidden; }
+.ts-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 7px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.ts-shape-num { font-size: var(--fs-sm); white-space: nowrap; }
+.ts-years { display: flex; flex-direction: column; }
+.ts-year-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; align-items: start; padding: 6px 0; border-top: 1px solid var(--border); }
+.ts-year-row:first-child { border-top: 0; }
+.ts-new { display: inline-flex; gap: 4px; align-items: baseline; padding: 2px 8px; border-radius: 10px; font-size: var(--fs-sm); border: 1px solid var(--border); }
+.ts-new.skill { border-color: var(--accent); color: var(--accent); }
+.ts-new.tool { background: var(--neutral-100); }
+.ts-new small { color: var(--neutral-700); font-size: var(--fs-xs); }
+.ts-gap td { background: var(--warning-50); }
+.ts-target-edit { display: flex; flex-direction: column; gap: 6px; }
+.ts-target-row { display: flex; gap: 8px; align-items: center; }
+.ts-target-row select { width: auto; flex: 0 0 120px; }
+.ts-target-row input[aria-label="목표 이름"] { flex: 1 1 220px; min-width: 0; }
+.ts-target-row input[type="number"] { width: 70px; }
+.ts-print-sub { font-weight: 700; margin: 3mm 0 1mm; }
 .ts-print-root { display: none; }
 @page ts-land { size: A4 landscape; margin: 10mm; }
 @media print {
