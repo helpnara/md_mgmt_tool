@@ -26,6 +26,18 @@ CLASS_KEYS = ("nature", "category", "delivery", "cost_kind")
 TARGET_KINDS = ("역량", "보유 기술")
 TARGETS_MAX = 100
 NEW_YEARS = 5
+TREND_YEARS = 5            # 290 — 축마다 다섯 해 추이
+CHANGE_LIST_MAX = 12       # 변동 네 칸마다 보이는 수
+INSIGHTS_MAX = 5
+
+
+def _years(span: tuple[str, str], low: str, this_year: str) -> list[str]:
+    """경험 · 담당이 걸친 해(low ~ 올해 안에서). 기간이 없으면 [] — 해마다 셈에서는 뺀다."""
+    first, last = span
+    if not first:
+        return []
+    start, end = max(int(first), int(low)), min(int(last or this_year), int(this_year))
+    return [str(y) for y in range(start, end + 1)]
 
 
 def validate_targets(value: Any) -> list[dict[str, Any]]:
@@ -144,6 +156,11 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
                      for row in conn.execute(f"SELECT id, {', '.join(CLASS_KEYS)} FROM project")}
     by_class: dict[str, dict[tuple[str, str], dict[str, int]]] = {k: {} for k in CLASS_KEYS}
 
+    # 290 — 해마다 셈(기간 선택과 상관없이): 역량 (축, 이름) → 해 → 경험 수, 보유 기술 이름 → 해 → 사람
+    trend_low = str(int(this_year) - TREND_YEARS + 1)
+    skill_years: dict[tuple[str, str], dict[str, int]] = {}
+    tool_years: dict[str, dict[str, set[str]]] = {}
+
     for name in names:
         folder = exp.person_dir(name)
         for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
@@ -162,6 +179,13 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
                 seen("역량", skill["name"], span[0], name)
             for raw in item["tools"]:
                 seen("보유 기술", tool_table.get(skill_rules.key(raw), " ".join(str(raw).split())), span[0], name)
+            for y in _years(span, trend_low, this_year):
+                for skill in matched:
+                    row_ = skill_years.setdefault((skill["axis"], skill["name"]), {})
+                    row_[y] = row_.get(y, 0) + 1
+                for raw in item["tools"]:
+                    label = tool_table.get(skill_rules.key(raw), " ".join(str(raw).split()))
+                    tool_years.setdefault(label, {}).setdefault(y, set()).add(name)
             if not _in_period(span, period, this_year):
                 continue
             year = min(span[1], this_year) if span[1] else ""
@@ -192,6 +216,8 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
         listed = rules.split_list(row["skills"])
         for raw in tool_rules.normalize(listed, tool_dict):
             seen("보유 기술", raw, span[0], row["name"])
+            for y in _years(span, trend_low, this_year):
+                tool_years.setdefault(raw, {}).setdefault(y, set()).add(row["name"])
         if not _in_period(span, period, this_year):
             continue
         if not listed:
@@ -280,4 +306,90 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
         },
         "skills": skill_rows, "stack": stack, "only_one": only_one,
         "shape": shape, "new_by_year": new_by_year, "new_earlier": earlier, "by_class": classes_out, "targets": targets,
+        **_change_and_insights(this_year, skill_dict, skill_years, tool_years, first_seen, skill_rows, stack, only_one, targets, completeness),
     }
+
+
+def _change_and_insights(this_year: str, skill_dict: list[dict[str, Any]], skill_years: dict, tool_years: dict, first_seen: dict,
+                         skill_rows: list, stack: list, only_one: list, targets: list, completeness: dict) -> dict[str, Any]:
+    """290 — 지난해와 비교(변동) · 축마다 다섯 해 추이 · 한눈에 숫자 · 인사이트 문장(규칙으로 만듦)."""
+    last_year = str(int(this_year) - 1)
+    years = [str(int(this_year) - TREND_YEARS + 1 + i) for i in range(TREND_YEARS)]
+    group_of = {(item["axis"], item["name"]): item.get("group") or "" for item in skill_dict}
+
+    # 중분류마다 지난해 → 올해 경험 수(사전 순서, 축마다 중분류 없음은 끝)
+    groups: dict[tuple[str, str], dict[str, int]] = {}
+    for item in skill_dict:
+        groups.setdefault((item["axis"], item.get("group") or ""), {"last": 0, "this": 0})
+    for key, by_year in skill_years.items():
+        g = groups.setdefault((key[0], group_of.get(key, "")), {"last": 0, "this": 0})
+        g["last"] += by_year.get(last_year, 0)
+        g["this"] += by_year.get(this_year, 0)
+    order = {axis: i for i, axis in enumerate(skill_rules.AXES)}
+    group_rows = [{"axis": a, "group": g or "(중분류 없음)", "last": v["last"], "this": v["this"], "delta": v["this"] - v["last"]}
+                  for (a, g), v in groups.items() if v["last"] or v["this"] or g]
+    group_rows.sort(key=lambda r: (order.get(r["axis"], 9), r["group"] == "(중분류 없음)"))
+
+    axes_trend = [{"axis": axis, "years": [{"year": y, "count": sum(v.get(y, 0) for k, v in skill_years.items() if k[0] == axis)} for y in years]}
+                  for axis in skill_rules.AXES]
+
+    def changes(rows: dict[str, tuple[int, int]], kind: str) -> dict[str, list[dict[str, Any]]]:
+        new = sorted(v["name"] for v in first_seen.values() if v["kind"] == kind and v["year"] == this_year)
+        up = sorted(({"name": n, "last": a, "this": b} for n, (a, b) in rows.items() if a and b > a), key=lambda r: (r["last"] - r["this"], r["name"]))
+        down = sorted(({"name": n, "last": a, "this": b} for n, (a, b) in rows.items() if b and a > b), key=lambda r: (r["this"] - r["last"], r["name"]))
+        stopped = sorted(({"name": n, "last": a, "this": 0} for n, (a, b) in rows.items() if a and not b), key=lambda r: (-r["last"], r["name"]))
+        return {"new": new[:CHANGE_LIST_MAX * 2], "up": up[:CHANGE_LIST_MAX], "down": down[:CHANGE_LIST_MAX], "stopped": stopped[:CHANGE_LIST_MAX],
+                "counts": {"new": len(new), "up": len(up), "down": len(down), "stopped": len(stopped)}}
+
+    skill_pairs = {k[1]: (v.get(last_year, 0), v.get(this_year, 0)) for k, v in skill_years.items()}
+    tool_pairs = {n: (len(v.get(last_year, set())), len(v.get(this_year, set()))) for n, v in tool_years.items()}
+    change = {"this": this_year, "last": last_year, "groups": group_rows, "axes_trend": axes_trend,
+              "skills": changes(skill_pairs, "역량"), "tools": changes(tool_pairs, "보유 기술")}
+
+    held = sum(1 for r in skill_rows if r["holders"])
+    total = sum(1 for r in skill_rows if r["known"])
+    tool_count = sum(len(layer["tools"]) for layer in stack)
+    gaps = [t for t in targets if t.get("gap")]
+    counted = sum(c["구조화"] + c["확정"] for c in completeness.values())
+    kpis = {"skills_held": held, "skills_total": total, "skills_new": change["skills"]["counts"]["new"],
+            "tools": tool_count, "tools_new": change["tools"]["counts"]["new"], "only_one": len(only_one),
+            "target_gaps": len(gaps), "experiences": counted}
+
+    # 인사이트 — 해당 없는 문장은 빼고 많아야 다섯 줄. target = 화면의 섹션
+    insights: list[dict[str, str]] = []
+    new_skills = change["skills"]["new"]
+    if new_skills:
+        top = {}
+        for n in new_skills:
+            g = next((group_of[k] for k in group_of if k[1] == n), "")
+            if g:
+                top[g] = top.get(g, 0) + 1
+        best = max(top.items(), key=lambda p: p[1]) if top else None
+        tail = f", 그중 {best[1]}개가 {best[0]}" if best and best[1] >= 2 else ""
+        insights.append({"text": f"올해 새로 생긴 역량 {len(new_skills)}개{tail} — {', '.join(new_skills[:4])}{' …' if len(new_skills) > 4 else ''}",
+                         "target": "ts-change"})
+    moved = [r for r in group_rows if abs(r["delta"]) >= 2 and r["group"] != "(중분류 없음)"]
+    if moved:
+        upg = max(moved, key=lambda r: r["delta"])
+        dng = min(moved, key=lambda r: r["delta"])
+        if upg["delta"] > 0:
+            insights.append({"text": f"가장 많이 늘어난 묶음은 {upg['group']} — 지난해 {upg['last']} → 올해 {upg['this']}건", "target": "ts-change"})
+        if dng["delta"] < 0:
+            insights.append({"text": f"가장 많이 줄어든 묶음은 {dng['group']} — 지난해 {dng['last']} → 올해 {dng['this']}건", "target": "ts-change"})
+    stopped = [r for r in change["skills"]["stopped"] if r["last"] >= 2]
+    if stopped:
+        insights.append({"text": f"지난해엔 있었는데 올해 끊긴 역량 {len(stopped)}개 — {', '.join(r['name'] for r in stopped[:3])}{' …' if len(stopped) > 3 else ''}",
+                         "target": "ts-change"})
+    if only_one:
+        per: dict[str, int] = {}
+        for o in only_one:
+            per[o["person"]] = per.get(o["person"], 0) + 1
+        who_, n = max(per.items(), key=lambda p: p[1])
+        if n >= 3:
+            insights.append({"text": f"한 사람에게만 있는 역량 · 보유 기술 {len(only_one)}개 중 {n}개가 {{{who_}}}에게 몰려 있습니다", "target": "ts-risk",
+                             "person": who_})
+    if gaps:
+        first = gaps[0]
+        insights.append({"text": f"목표에 모자란 것 {len(gaps)}개 — {first['name']} {first.get('have', 0)} / {first['want']}명"
+                                 + (f" 외 {len(gaps) - 1}개" if len(gaps) > 1 else ""), "target": "ts-risk"})
+    return {"change": change, "kpis": kpis, "insights": insights[:INSIGHTS_MAX]}

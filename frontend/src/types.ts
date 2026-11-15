@@ -1815,6 +1815,22 @@ export interface TeamSkills {
   new_earlier: number;
   by_class: Record<string, { values: string[]; rows: { axis: string; name: string; cells: Record<string, number>; total: number }[] }>;
   targets: TeamSkillTarget[];
+  /** 290 — 지난해와 비교 · 한눈에 · 인사이트 */
+  change: {
+    this: string; last: string;
+    groups: { axis: string; group: string; last: number; this: number; delta: number }[];
+    axes_trend: { axis: string; years: { year: string; count: number }[] }[];
+    skills: TeamChange; tools: TeamChange;
+  };
+  kpis: { skills_held: number; skills_total: number; skills_new: number; tools: number; tools_new: number; only_one: number; target_gaps: number; experiences: number };
+  insights: { text: string; target: string; person?: string }[];
+}
+export interface TeamChange {
+  new: string[];
+  up: { name: string; last: number; this: number }[];
+  down: { name: string; last: number; this: number }[];
+  stopped: { name: string; last: number; this: number }[];
+  counts: { new: number; up: number; down: number; stopped: number };
 }
 export interface TeamSkillTarget { kind: "역량" | "보유 기술"; name: string; want: number; matched?: string; have?: number; gap?: number }
 

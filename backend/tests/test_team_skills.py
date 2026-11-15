@@ -97,3 +97,29 @@ def test_stage2_shape_new_by_year_class_groups_targets(team):  # noqa: F811
     bad = owner.put("/api/team-skills/targets", json={"targets": [{"kind": "역량", "name": "A", "want": 0}]})
     assert bad.status_code == 400
     assert team["member"].put("/api/team-skills/targets", json={"targets": []}).status_code == 403
+
+
+def test_change_vs_last_year_kpis_and_insights(team):  # noqa: F811
+    """290 — 지난해 → 올해 변동(새로 생김 · 늘어남 · 줄어듦 · 끊김) · 축 추이 · 한눈에 숫자 · 인사이트."""
+    owner = team["owner"]
+    for i in range(3):    # 지난해: 품질 관리 3건(가팀원) — 올해 0 → 끊김
+        _exp(owner, "가팀원", f"지난해 품질 {i}", "확정", start="2025-02", end="2025-11", skills=[("업무", "품질 관리")])
+    _exp(owner, "가팀원", "지난해 예측", "확정", start="2025-03", end="2025-06", skills=[("기술", "예측 모델링")], tools=["Excel"])
+    for i in range(3):    # 올해: 예측 모델링 3건 → 늘어남, 비전 AI 새로 생김
+        _exp(owner, "나팀원", f"올해 예측 {i}", "확정", start="2026-02", end="2026-05", skills=[("기술", "예측 모델링")], tools=["Python"])
+    _exp(owner, "나팀원", "올해 비전", "구조화", start="2026-04", end="2026-06", skills=[("기술", "비전 AI 객체탐지")])
+    data = owner.get("/api/team-skills", params={"period": "year"}).json()
+    ch = data["change"]
+    assert ch["this"] == "2026" and ch["last"] == "2025"
+    assert "비전 AI 객체탐지" in ch["skills"]["new"] and "예측 모델링" not in ch["skills"]["new"]
+    assert {"name": "예측 모델링", "last": 1, "this": 3} in ch["skills"]["up"]
+    assert {"name": "품질 관리", "last": 3, "this": 0} in ch["skills"]["stopped"]
+    assert "Python" in ch["tools"]["new"] and any(r["name"] == "Excel" for r in ch["tools"]["stopped"])
+    ai = next(r for r in ch["groups"] if r["group"] == "AI 모델")
+    assert ai["last"] == 1 and ai["this"] == 4 and ai["delta"] == 3
+    tech = next(a for a in ch["axes_trend"] if a["axis"] == "기술")
+    assert [y["year"] for y in tech["years"]][-2:] == ["2025", "2026"] and tech["years"][-1]["count"] == 4
+    k = data["kpis"]
+    assert k["skills_new"] >= 1 and k["experiences"] == 8 and k["skills_total"] >= 46
+    texts = " / ".join(i["text"] for i in data["insights"])
+    assert "올해 새로 생긴 역량" in texts and "AI 모델" in texts and "끊긴 역량" in texts and len(data["insights"]) <= 5
