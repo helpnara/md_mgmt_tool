@@ -34,6 +34,7 @@ import { LIMITS, hasControlChars, lengthState } from "../inputRules";
 import { FolderOpen, Gauge, Server, UserPen } from "lucide-react";
 import IconTitle from "./IconTitle";
 import { ModeCard } from "./ModeLayer";
+import { UpdateCard } from "./Update";
 
 /** 설정 묶음 (TODO 249 ⑤) — "" = 기본. title 은 탭 아래 한 줄 설명이기도 하다 */
 type SettingsTab = "" | "class" | "report" | "forms" | "backup" | "check";
@@ -269,6 +270,8 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
         <div className="settings-grid">
           {/* 체험 자료 · 내 자료 (TODO 295) — 서버 PC 만 바꾼다 */}
           {isAdmin() && <ModeCard />}
+          {/* 업데이트 (TODO 298) */}
+          {isAdmin() && <UpdateCard />}
           {!isAdmin() && (
             // 팀장 PC (TODO 247) — 서버 운영 칸은 서버 PC 에만 선다
             <div className="card admin-only-note" data-admin-note>

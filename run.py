@@ -107,12 +107,54 @@ def already_running(host: str, port: int) -> tuple[str | None, dict | None]:
         return "other", None
 
 
+RESTART_CODE = 3   # 앱이 "다시 켜 주세요" 로 끝날 때(업데이트 · TODO 298)
+
+
+def supervise() -> None:
+    """업데이트를 맡는 바깥 고리 (TODO 298).
+
+    서버는 자식 프로세스로 띄운다. 서버가 "다시 켜 주세요"(코드 3)로 끝나면 — 관리자가 [이 판으로 업데이트]를 눌렀다 —
+    예약된 적용을 **앱을 읽기 전에** 하고 새 파일로 다시 띄운다. 돌고 있는 서버가 자기 파일을 바꾸지 않고,
+    run.bat 도 바꾸지 않는다(실행 중인 배치 파일을 바꾸면 cmd 가 엉뚱한 줄을 읽는다).
+    """
+    _safe_console()
+    sys.path.insert(0, str(ROOT / "backend"))
+    from app import updater
+
+    argv = [a for a in sys.argv[1:] if a != "--rollback"]
+    if "--rollback" in sys.argv[1:]:
+        try:
+            updater.request_rollback(ROOT, by="run.bat --rollback")
+            print("\n  이전 판으로 되돌립니다.")
+        except updater.UpdateError as exc:
+            print(f"\n  [오류] {exc}\n")
+    first = True
+    while True:
+        result = updater.apply_pending(ROOT)
+        if result and result.get("ok"):
+            print(f"  업데이트: {result.get('from', '')} → {result.get('to', '')}")
+        env = {**os.environ, "MD_MGMT_CHILD": "1"}
+        args = argv if first else [*argv, "--no-browser"]
+        try:
+            code = subprocess.call([sys.executable, str(ROOT / "run.py"), *args], env=env)
+        except KeyboardInterrupt:
+            return
+        if code != RESTART_CODE:
+            sys.exit(code)
+        first = False
+        print("\n  다시 켭니다 — 업데이트를 적용합니다...\n")
+
+
 def main() -> None:
+    if not os.environ.get("MD_MGMT_CHILD"):
+        supervise()
+        return
     _safe_console()
     parser = argparse.ArgumentParser(description="느린 나이테 — 과제 이력 관리 도구")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--vault", help="데이터 폴더 (기본: 이 폴더 아래 vault)")
+    parser.add_argument("--rollback", action="store_true", help="이전 판으로 되돌린다(업데이트 뒤 문제가 있을 때 — TODO 298)")
     parser.add_argument("--no-browser", action="store_true", help="브라우저를 열지 않는다")
     parser.add_argument("--share", action="store_true",
                         help="팀원이 읽기 전용으로 볼 수 있게 바깥에 연다 (이 PC 에서는 지금처럼 쓸 수 있다)")

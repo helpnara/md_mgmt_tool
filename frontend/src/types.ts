@@ -406,6 +406,8 @@ export interface AppSettings {
   report_weekday: number;
   /** 자동 백업 폴더. 비면 꺼진 것이다. */
   backup_dir: string;
+  /** 업데이트 폴더 (TODO 298) — 비우면 설치 폴더의 updates */
+  update_dir?: string;
   backup_keep: number;
   /** 주 단위로 남길 벌 수 (TODO 119) */
   backup_keep_weekly: number;
@@ -1860,5 +1862,13 @@ export interface TeamSkillTarget { kind: "역량" | "보유 기술"; name: strin
 export interface ModeStatus {
   mode: "demo" | "mine"; fixed: boolean; vault: string; mine_dir: string; demo_ready: boolean; choose: boolean;
   job: { running: boolean; target: string; stage: string; done: number; total: number; error: string; finished: string };
+}
+
+/** 업데이트 (TODO 298) */
+export interface UpdateResult { ok: boolean; action?: string; from?: string; to?: string; at: string; error?: string; by?: string; data_backup?: string }
+export interface UpdateStatus {
+  folder: string; reachable: boolean; current: string; newest: string; configured: string; supervised: boolean; rollback: boolean;
+  items: { name: string; file: string; size: number; newer: boolean; current: boolean; problem: string; has_sha: boolean }[];
+  last: UpdateResult | null; history: UpdateResult[];
 }
 

@@ -38,6 +38,8 @@ DEFAULTS: dict[str, Any] = {
     "report_weekday": 1,
     # 자동 백업 (바깥쪽 안전망). 폴더를 비워 두면 꺼진다.
     "backup_dir": "",
+    # 업데이트 폴더 (TODO 298) — 비우면 설치 폴더의 updates. 사내 공유 폴더를 적으면 여러 팀이 같은 곳에서 받는다
+    "update_dir": "",
     # 층을 나눠 남긴다 — GFS(Grandfather-Father-Son), TODO 119.
     # 하루 한 벌씩 열흘치만 남기면 **되돌릴 수 있는 범위가 열흘**이다. 2주 전에 잘못 지운
     # 것은 이미 없다. 같은 개수로 훨씬 긴 기간을 덮으려고 층을 나눈다.
@@ -83,7 +85,7 @@ DEFAULTS: dict[str, Any] = {
 }
 # 문자열로 다루는 항목. 나머지는 형태를 그대로 지킨다.
 # 팀 코드(project_code)는 여기서 빼 저장할 때도 검사한다 (TODO 214 D16).
-_TEXT_KEYS = ("author", "report_template",
+_TEXT_KEYS = ("author", "report_template", "update_dir",
               "ai_prompt_prefix", "ai_prompt_suffix", "intake_template")
 
 

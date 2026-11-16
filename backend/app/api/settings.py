@@ -25,6 +25,7 @@ class SettingsUpdate(BaseModel):
     report_weekday: int | None = None
     # 자동 백업 (바깥쪽 안전망). 폴더를 비우면 꺼진다.
     backup_dir: str | None = None
+    update_dir: str | None = None      # 업데이트 폴더 (TODO 298) — 서버 PC 만
     backup_keep: int | None = None
     # 층을 나눠 남긴다 — 일 · 주 · 월 (TODO 119)
     backup_keep_weekly: int | None = None

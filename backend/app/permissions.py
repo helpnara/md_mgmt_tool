@@ -151,7 +151,7 @@ ADMIN_ONLY_DETAIL = ("서버 PC(관리자)에서만 할 수 있습니다 — 데
                      "팀장 지정과 팀장 PC 주소는 서버를 맡은 쪽의 일입니다.")
 ADMIN_ONLY_PREFIXES = ("/api/backup/restore", "/api/folders")
 ADMIN_SETTINGS_KEYS = frozenset({"backup_dir", "backup_keep", "backup_keep_weekly", "backup_keep_monthly",
-                                 "backup_every_hours", "backup_skip_assets"})
+                                 "backup_every_hours", "backup_skip_assets", "update_dir"})
 
 
 def admin_only(path: str) -> bool:

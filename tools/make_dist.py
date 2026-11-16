@@ -160,14 +160,32 @@ def write_build_info(
             "  · vendor 폴더는 위에 적힌 파이썬 버전 전용입니다.",
             "    명령 프롬프트에서 python --version 이 다르면 setup.bat 이",
             "    인터넷 설치로 넘어갑니다.",
-            "  · 업데이트할 때는 기존 폴더 위에 덮어쓰면 됩니다.",
-            "    이 배포본에는 vault 폴더가 없으므로 작성한 데이터는 그대로 남습니다.",
+            "  · 업데이트: 이 zip 과 같은 이름의 .sha256 을 업데이트 폴더(기본: 설치 폴더의 updates)에 넣고",
+            "    서버 PC 의 설정 → [보관과 백업] → 업데이트 에서 [이 판으로 업데이트] 를 누릅니다.",
+            "    (업데이트 기능이 없는 옛 판이면 지금처럼 기존 폴더 위에 덮어쓰면 됩니다 — vault 폴더는 배포본에 없어 데이터는 그대로입니다.)",
             "",
             "자세한 설명은 README.md 를 보세요.",
             "",
         ]),
         encoding="utf-8",
     )
+
+
+MANIFEST = "배포본-파일목록.txt"
+
+
+def write_manifest(payload: Path) -> None:
+    """배포본에 든 파일의 목록(TODO 298 — 자동 업데이트가 옛 판에만 있던 파일을 지울 때 쓴다)."""
+    names = sorted(str(p.relative_to(payload)).replace("\\", "/") for p in payload.rglob("*") if p.is_file())
+    (payload / MANIFEST).write_text("\n".join([*names, MANIFEST]) + "\n", encoding="utf-8")
+
+
+def write_checksum(zip_path: Path) -> None:
+    """zip 옆에 SHA-256 — `이름.zip.sha256` (TODO 298)."""
+    import hashlib
+
+    digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    zip_path.with_name(zip_path.name + ".sha256").write_text(f"{digest}  {zip_path.name}\n", encoding="utf-8")
 
 
 def make_zip(source: Path, zip_path: Path, top: str) -> None:
@@ -230,7 +248,10 @@ def main() -> int:
     # 알 수 없고, 인터넷이 안 되는 PC 에서 설치가 막힌다.
     tail = "" if wheels else "-no-vendor"
     zip_path = OUT_DIR / f"{NAME}-{stamp}-v{version}{tail}.zip"
+    # 298 — 파일 목록(새 판에서 없어진 파일을 지우는 근거) · 검사값(.sha256 — 폴더에 둔 zip 이 깨지거나 바뀌지 않았나)
+    write_manifest(payload)
     make_zip(payload, zip_path, NAME)
+    write_checksum(zip_path)
     shutil.rmtree(stage)
 
     record_release(f"{NAME}-{stamp}-v{version}")
