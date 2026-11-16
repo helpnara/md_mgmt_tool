@@ -7536,7 +7536,9 @@ async function main() {
     await page.locator("a.back").first().click();
     await page.waitForFunction(() => location.hash.startsWith("#/person/"), null, { timeout: 8000 });
     equal(decodeURIComponent(await page.evaluate(() => location.hash)), `#/person/권경락?back=skills`, "이력 — 처음 주소 그대로");
-    expect((await page.locator("a.back").first().innerText()).includes("팀원 역량"), "이력의 돌아가기는 팀원 역량");
+    // 경험 화면의 [← 이력] 이 사라지고 이력 화면이 다 그려질 때까지
+    const ok = await page.waitForFunction(() => [...document.querySelectorAll("a.back")].some((el) => el.textContent.includes("팀원 역량")), null, { timeout: 8000 }).then(() => true).catch(() => false);
+    expect(ok, `이력의 돌아가기는 팀원 역량: ${await page.locator("a.back").allInnerTexts()}`);
     await api.delete(`/api/experiences/${made.id}`).catch(() => undefined);
   });
 
