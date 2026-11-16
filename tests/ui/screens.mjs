@@ -7527,7 +7527,10 @@ async function main() {
   await check("이력 → 경험 → [← 이력] → [← 팀원 역량] — 경험을 거쳐도 이력의 돌아갈 곳이 그대로 (293)", async () => {
     const made = await api.post("/api/experiences", { person: "권경락", title: "돌아가기 시험 경험", kind: "업무" });
     await go(`#/person/${encodeURIComponent("권경락")}?back=skills`);
-    await page.locator(`a[href^="#/experience/${made.id}"]`).first().click();
+    const link = page.locator(`a[href^="#/experience/${made.id}"]`).first();
+    await page.locator("[data-testid=experience-drafts-toggle], a[href^='#/experience/']").first().waitFor({ timeout: 8000 });
+    if (!(await link.isVisible()) && await page.locator("[data-testid=experience-drafts-toggle]").count()) await page.locator("[data-testid=experience-drafts-toggle]").click();   // 초안은 접혀 있다
+    await link.click();
     await page.waitForFunction((id) => location.hash.startsWith(`#/experience/${id}`), made.id, { timeout: 8000 });
     expect(decodeURIComponent(await page.evaluate(() => location.hash)).includes("back=person/"), "경험 주소에 온 곳");
     await page.locator("a.back").first().click();
