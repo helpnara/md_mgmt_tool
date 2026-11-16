@@ -7650,6 +7650,28 @@ async function main() {
     expect((await card.innerText()).includes("바꿀 수 없습니다"), `카드: ${(await card.innerText()).slice(0, 120)}`);
   });
 
+  await check("업데이트 폴더에 새 판이 있으면 위쪽 띠 · 설정 카드에 목록과 [이 판으로 업데이트] (298)", async () => {
+    const fake = { folder: "C:\\느린나이테\\updates", reachable: true, current: "느린나이테-20261110-v1", configured: "",
+      supervised: true, last: null, history: [], rollback: null,
+      items: [{ name: "느린나이테-20261117-v2", file: "느린나이테-20261117-v2.zip", size: 2800000, newer: true, current: false, problem: "", has_sha: true }],
+      newest: "느린나이테-20261117-v2" };
+    await page.route("**/api/update", (route) => route.request().method() === "GET"
+      ? route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fake) }) : route.continue());
+    try {
+      await go("#/");
+      await page.locator(".update-band").waitFor({ timeout: 8000 });
+      expect((await page.locator(".update-band").innerText()).includes("20261117-v2"), "띠에 새 판 이름");
+      await go("#/settings?tab=backup");
+      const card = page.locator("[data-testid=update-card]");
+      await card.waitFor({ timeout: 8000 });
+      const text = await card.innerText();
+      expect(text.includes("20261117-v2") && text.includes("이 판으로 업데이트"), `카드: ${text.slice(0, 160)}`);
+      expect(await card.locator("input").count() >= 1, "업데이트 폴더 입력칸");
+    } finally {
+      await page.unroute("**/api/update");
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
