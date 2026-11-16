@@ -167,3 +167,15 @@ def test_only_managers_confirm_ack_merge(team):  # noqa: F811
                                                               "target": {"axis": "기술", "name": "b"}}).status_code == 403
     assert member.get(f"/api/experiences/{item['id']}").json()["consistency"]                 # 보기는 된다(자기 것)
     assert viewer.post(f"/api/experiences/{item['id']}/confirm").status_code == 403
+
+
+def test_listing_skips_a_file_that_just_vanished(client):
+    """293 조사 중 발견 — 색인에는 있는데 파일이 막 사라진 경험 한 건 때문에 목록 전체가 409 가 되지 않는다."""
+    from app.config import get_settings
+
+    client.put("/api/people", json={"people": [{"name": "사라짐시험"}]})
+    keep = client.post("/api/experiences", json={"person": "사라짐시험", "title": "남는 경험", "kind": "업무"}).json()
+    gone = client.post("/api/experiences", json={"person": "사라짐시험", "title": "사라질 경험", "kind": "업무"}).json()
+    next(get_settings().people_dir.rglob(f"{gone['id']}*.md")).unlink()
+    listing = client.get("/api/experiences", params={"person": "사라짐시험"})
+    assert listing.status_code == 200 and [i["id"] for i in listing.json()["items"]] == [keep["id"]]

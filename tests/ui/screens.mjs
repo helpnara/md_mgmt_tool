@@ -7539,6 +7539,7 @@ async function main() {
     // 경험 화면의 [← 이력] 이 사라지고 이력 화면이 다 그려질 때까지
     const ok = await page.waitForFunction(() => [...document.querySelectorAll("a.back")].some((el) => el.textContent.includes("팀원 역량")), null, { timeout: 8000 }).then(() => true).catch(() => false);
     expect(ok, `이력의 돌아가기는 팀원 역량: ${await page.locator("a.back").allInnerTexts()}`);
+    await go("#/");   // 이력 화면을 떠난 뒤 지운다 — 보고 있는 목록이 막 사라진 파일을 읽지 않게
     await api.delete(`/api/experiences/${made.id}`).catch(() => undefined);
   });
 

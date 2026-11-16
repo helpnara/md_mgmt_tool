@@ -558,7 +558,15 @@ def _summary_row(row: sqlite3.Row, project_titles: dict[str, str]) -> dict[str, 
 def listing(conn: sqlite3.Connection, person: str) -> dict[str, Any]:
     titles = {r["id"]: r["title"] for r in conn.execute("SELECT id, title FROM project")}
     rows = conn.execute("SELECT * FROM experience WHERE person = ? ORDER BY COALESCE(start, '') DESC, id DESC", (person,)).fetchall()
-    full = {row["id"]: get_row(conn, row) for row in rows}
+    # 색인에는 있는데 파일이 막 사라진 경험(다른 화면에서 지우는 중 · 탐색기에서 옮김)은 건너뛴다 (TODO 293 조사 중 발견) —
+    # 한 건 때문에 그 사람의 경험 목록 전체가 409 로 안 열리면 안 된다. [다시 읽기] 하면 색인도 맞춰진다.
+    full = {}
+    for row in rows:
+        try:
+            full[row["id"]] = get_row(conn, row)
+        except FileNotFoundError:
+            continue
+    rows = [row for row in rows if row["id"] in full]
     found = consistency(conn, person, list(full.values()))
     items = []
     for row in rows:
