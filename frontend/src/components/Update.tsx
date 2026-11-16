@@ -55,7 +55,12 @@ export function useUpdate(): [UpdateStatus | null, () => void] {
 
 /** 서버 PC 화면 위의 띠 — 새 판이 있을 때만 */
 export function UpdateBand() {
-  const [data] = useUpdate();
+  const [data, load] = useUpdate();
+  // 켜 둔 채 폴더에 zip 을 넣어도 알아보게 — 10분마다 다시 찾는다
+  useEffect(() => {
+    const timer = window.setInterval(load, 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!data?.newest) return null;
   return (
     <div className="update-band" role="status" data-testid="update-band">

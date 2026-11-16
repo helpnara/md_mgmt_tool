@@ -7659,6 +7659,7 @@ async function main() {
       ? route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fake) }) : route.continue());
     try {
       await go("#/");
+      await page.reload();   // 띠는 화면을 열 때(그리고 10분마다) 찾는다
       await page.locator(".update-band").waitFor({ timeout: 8000 });
       expect((await page.locator(".update-band").innerText()).includes("20261117-v2"), "띠에 새 판 이름");
       await go("#/settings?tab=backup");
