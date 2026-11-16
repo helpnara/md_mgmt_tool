@@ -120,7 +120,10 @@ def build(progress: Callable[[int, int, str], None] | None = None) -> dict[str, 
 
     from ..main import app
 
-    client = TestClient(app, client=("127.0.0.1", 50295))   # 서버 PC(관리자)로 — 쓰기 권한
+    from .mode import SEED_HEADER, seed_token
+
+    # 서버 PC(관리자)로 — 쓰기 권한. 바꾸는 중(297)에도 이 손님만 지나간다
+    client = TestClient(app, client=("127.0.0.1", 50295), headers={SEED_HEADER: seed_token()})
     steps = 9
     say = progress or (lambda *_: None)
     today = clock.today()

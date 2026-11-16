@@ -88,3 +88,28 @@ def test_fixed_vault_cannot_switch(tmp_path, monkeypatch):
         assert st["fixed"] is True and st["choose"] is False
         assert owner.post("/api/mode", json={"mode": "demo"}).status_code == 400
     get_settings.cache_clear()
+
+
+def test_switch_has_no_gap_and_others_wait(home, monkeypatch):
+    """297 — 바꾸는 동안 색인 연결이 비지 않고(예전: "DB가 초기화되지 않았습니다"), 다른 요청은 "바꾸는 중"(503)."""
+    from app import deps
+    from app.services import mode as svc
+    from app.vault import indexer
+
+    owner = home["owner"]
+    seen: list[object] = []
+    seen_status: list[int] = []
+    real = indexer.reindex_all
+
+    def watching(conn, *a, **kw):
+        seen.append(deps._conn)
+        seen_status.append(owner.get("/api/meta").status_code)
+        return real(conn, *a, **kw)
+
+    monkeypatch.setattr("app.vault.indexer.reindex_all", watching)
+    owner.post("/api/mode", json={"mode": "demo"})
+    _wait(owner)
+    assert seen and all(conn is not None for conn in seen)
+    assert set(seen_status) == {503}
+    assert owner.get("/api/meta").status_code == 200 and len(owner.get("/api/projects").json()) == 20
+    assert svc.switching() is False

@@ -19,6 +19,13 @@ from typing import Any
 from ..config import DEMO_DIR, MODE_FILE, get_settings, program_home, read_mode
 
 MODES = ("demo", "mine")
+# 체험 자료를 만드는 앱 안 손님만 "바꾸는 중" 을 지나간다 — 이 실행에서만 쓰는 값(바깥에서 맞힐 수 없게)
+SEED_HEADER = "x-demo-seed"
+_SEED_TOKEN = __import__("secrets").token_hex(16)
+
+
+def seed_token() -> str:
+    return _SEED_TOKEN
 _lock = threading.Lock()
 _job: dict[str, Any] = {"running": False, "target": "", "stage": "", "done": 0, "total": 0, "error": "", "finished": ""}
 
@@ -56,6 +63,12 @@ def need_choice() -> bool:
     return not has_data(mine_dir())
 
 
+def switching() -> bool:
+    """바꾸는 중인가 — 그동안 다른 요청은 미들웨어가 "바꾸는 중" 으로 답한다(TODO 297)."""
+    with _lock:
+        return bool(_job["running"])
+
+
 def status() -> dict[str, Any]:
     settings = get_settings()
     with _lock:
@@ -84,8 +97,7 @@ def reopen() -> int:
     get_settings.cache_clear()
     settings = get_settings()
     settings.ensure_dirs()
-    deps.teardown()
-    conn, _ = deps.setup()
+    conn = deps.swap()          # 297 — 닫고 여는 사이의 빈틈 없이 바꿔 끼운다
     reset_index(conn)
     indexed, _problems = reindex_all(conn)
     conn.commit()

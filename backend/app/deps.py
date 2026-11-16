@@ -53,6 +53,22 @@ def setup() -> tuple[sqlite3.Connection, bool]:
     return _conn, rebuilt
 
 
+def swap() -> sqlite3.Connection:
+    """지금 설정의 색인을 **먼저 연 뒤** 바꿔 끼운다 (TODO 297 — 체험 · 내 자료 바꾸기).
+
+    예전에는 닫고(teardown) 다시 열어(setup) 그 사이에 들어온 요청이 "DB가 초기화되지 않았습니다" 로 넘어졌다.
+    """
+    global _conn
+    new, _ = open_index()
+    old, _conn = _conn, new
+    if old is not None:
+        try:
+            old.close()
+        except Exception:  # noqa: BLE001 — 옛 연결을 닫다 실패해도 새 연결은 이미 쓰인다
+            pass
+    return new
+
+
 def teardown() -> None:
     global _conn
     if _conn is not None:

@@ -11,15 +11,25 @@ import type { ModeStatus } from "../types";
  * * 바꾸는 중 — 화면 전체에 진행 표시(체험 자료 만들기는 수십 초), 끝나면 화면을 새로 읽는다.
  * * 체험 중 — 모든 화면 위 띠: [처음 자료로 되돌리기] · [내 자료로 시작하기]. 팀원 · 팀장 PC 에는 "체험 중" 안내만(서버가 자료를 막는다).
  */
+/** 바꾸기를 시작하면 알린다 — 머리 아래의 ModeLayer 가 진행 표시를 띄우고, 끝나면 화면을 새로 연다 (TODO 297) */
+const MODE_EVENT = "mode-switching";
+
 export function useMode(): [ModeStatus | null, (next: ModeStatus) => void] {
   const [mode, setMode] = useState<ModeStatus | null>(null);
-  useEffect(() => { api.mode().then(setMode).catch(() => setMode(null)); }, []);
+  useEffect(() => {
+    const load = () => api.mode().then(setMode).catch(() => setMode(null));
+    void load();
+    window.addEventListener(MODE_EVENT, load);
+    return () => window.removeEventListener(MODE_EVENT, load);
+  }, []);
   return [mode, setMode];
 }
 
 export async function switchMode(body: { mode: "demo" | "mine"; mine_dir?: string; reset?: boolean }, onStatus: (s: ModeStatus) => void) {
   try {
     onStatus(await api.switchMode(body));
+    // 297 — 화면을 바로 새로 읽지 않는다(바꾸는 중에 읽으면 오류). 진행 표시가 끝을 기다렸다가 새로 연다
+    window.dispatchEvent(new Event(MODE_EVENT));
   } catch (error) {
     notifyError((error as Error).message);
   }
@@ -115,7 +125,7 @@ export default function ModeLayer() {
 export function ModeCard() {
   const [mode, setMode] = useMode();
   if (!mode) return null;
-  const go = (body: { mode: "demo" | "mine"; reset?: boolean }) => void switchMode(body, (next) => { setMode(next); if (next.job.running) window.location.reload(); });
+  const go = (body: { mode: "demo" | "mine"; reset?: boolean }) => void switchMode(body, setMode);
   return (
     <div className="card" data-testid="mode-card">
       <div className="card-head"><h3>체험 · 내 자료</h3></div>

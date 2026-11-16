@@ -22,6 +22,7 @@ from .services import edits as edits_service
 from .services import errorlog
 from .services import settings as settings_service
 from .config import REPO_ROOT, get_settings
+from .services import mode as mode_service
 from .db import reset_index
 from .vault.markdown import ExternalChangeError
 from .vault.paths import FileInUseError, safe_join
@@ -98,6 +99,8 @@ def _startup_reindex(conn):
 
 
 DEMO_OPEN_PATHS = frozenset({"/api/me", "/api/mode", "/api/meta"})
+SWITCH_OPEN_PATHS = frozenset({"/api/me", "/api/mode"})
+SWITCHING_DETAIL = "체험 · 내 자료로 바꾸는 중입니다 — 끝나면 화면이 새로 열립니다."
 DEMO_DETAIL = "지금 서버 PC 가 체험 모드(연습용 가상 자료)입니다 — 체험이 끝나 '내 자료' 로 바꾼 뒤 다시 열어 주세요."
 
 # 백업할 때가 됐는지 들여다보는 주기. 주기 자체(기본 24시간)는 설정에서 정한다.
@@ -211,6 +214,10 @@ async def readonly_share(request: Request, call_next):
     writing = request.method not in share.SAFE_METHODS
     if writing and not share.origin_ok(request.headers.get("origin")):
         return JSONResponse({"detail": share.FOREIGN_ORIGIN}, status_code=403)
+    # 297 — 체험 · 내 자료로 바꾸는 동안에는 자료를 읽거나 쓰지 않는다(폴더 · 색인이 바뀌는 중) — 오류 대신 "바꾸는 중"
+    if (path.startswith("/api/") and path not in SWITCH_OPEN_PATHS and mode_service.switching()
+            and request.headers.get(mode_service.SEED_HEADER) != mode_service.seed_token()):
+        return JSONResponse({"detail": SWITCHING_DETAIL}, status_code=503)
     # 295 — 체험 중에는 서버 PC 만 쓴다. 팀원 · 팀장 PC 가 가상 자료를 실제로 알고 쓰지 않게(화면은 안내만 보인다)
     if user.role != who.OWNER and path.startswith("/api/") and path not in DEMO_OPEN_PATHS and get_settings().mode == "demo":
         return JSONResponse({"detail": DEMO_DETAIL}, status_code=403)
