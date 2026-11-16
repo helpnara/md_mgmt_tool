@@ -2324,3 +2324,10 @@ Nuvemshop *Nimbus* 디자인 시스템(MIT)의 **값만** 가져왔다 — 부�
 * **291 질문 카드** — `_questions()`: 강점(`strengths`) · 빈 곳(`weak`) · 위험(`risk`) · 성장(`growth` — 사람마다 처음 쓴 해 `person_first`, 본인 지난해와만, 명부 순) · 할 일(`actions`, 규칙 넷) · 한 줄 결론(`headline`).
   화면은 결론 · 숫자 → 카드 여섯(두 칸) → 근거 자료(접힘 — 290 의 표 · 지도) → 데이터 점검. 인쇄는 카드 한 장(`zoom`), 근거는 [근거도 인쇄] 때만.
 
+## 5.60 체험 자료 · 내 자료 (TODO 295)
+
+* **폴더 둘** — 체험 `demo-vault/` · 내 자료 `vault/`(또는 고른 폴더). 모드는 프로그램 폴더의 `data-mode.json`. 설정 · 명부 · 색인 · 기록이 모두 데이터 폴더 안이라 섞이지 않는다. `--vault` 로 켜면 고정.
+* **바꾸기** — `services/mode.py`: 모드 파일 → `get_settings.cache_clear()` → `deps.teardown/setup` · `reset_index` · `reindex_all` → `readcache.bump` · `who.forget`. 체험 폴더가 비면 `demo_seed.build()`(앱 안 시험 손님으로 API 를 불러 만든다, 날짜는 오늘 기준).
+* **체험 중** — 서버 PC 만(다른 PC 는 `/api/me · /api/mode · /api/meta` 만 열림), 자동 백업 안 함, 모든 화면 위 띠.
+* **296** — 확정한 경험은 `experiences.update` 가 누구에게나 거절(먼저 [확정 풀기]).
+
