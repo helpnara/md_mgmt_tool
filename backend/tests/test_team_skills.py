@@ -146,3 +146,27 @@ def test_question_cards_strengths_weak_risk_growth_actions(team):  # noqa: F811
     pair = next(a for a in data["actions"] if a["kind"] == "짝")["text"]
     assert "자연어 처리" in pair and "{가팀원}" in pair and "{나팀원}" in pair
     assert "AI 모델" in data["headline"] and "예측 모델링" in data["headline"]
+
+
+def test_leave_impact_and_evidence_strength(team):  # noqa: F811
+    """292 — 떠나면 무엇을 잃나(잃는 것 · 이어받을 후보 · 얇아지는 것 · 맡은 과제) · 근거의 단단함(확정 · 정량)."""
+    owner, pid = team["owner"], team["shared"]
+    eid = _exp(owner, "가팀원", "비전 경험", "확정", start="2026-02", skills=[("기술", "비전 AI 객체탐지"), ("기술", "예측 모델링")], tools=["PyTorch"])
+    from app.config import get_settings
+    from app.vault import markdown as md
+    path = next(get_settings().people_dir.rglob(f"{eid}*.md"))
+    doc = md.load(path)
+    doc.meta["quants"] = [{"metric": "정확도", "value": "92%", "baseline": "검증", "baseline_kind": "조건", "when": "2026"}]
+    md.save(path, doc)
+    owner.post("/api/reindex")
+    _exp(owner, "나팀원", "예측 경험", "구조화", start="2026-03", skills=[("기술", "예측 모델링")], tools=["Python"])
+    data = owner.get("/api/team-skills", params={"period": "year"}).json()
+    leave = data["leave"]["가팀원"]
+    lost = {x["name"]: x for x in leave["lost"]}
+    assert "비전 AI 객체탐지" in lost and lost["비전 AI 객체탐지"]["candidates"] == ["나팀원"]     # 같은 중분류(AI 모델)를 가진 사람
+    assert "PyTorch" in lost and lost["PyTorch"]["group"] == "분석/AI"
+    assert {"kind": "역량", "name": "예측 모델링", "remaining": "나팀원"} in leave["thin"]
+    assert [p["id"] for p in leave["projects"]] == [pid]                                             # 맡은 진행 중 과제
+    rows = {r["name"]: r for r in data["skills"]}
+    assert rows["비전 AI 객체탐지"]["evidence"] == {"confirmed": 1, "quant": 1, "level": 3}
+    assert rows["예측 모델링"]["evidence"]["level"] == 3 and rows["예측 모델링"]["cells"]["나팀원"]["confirmed"] == 0

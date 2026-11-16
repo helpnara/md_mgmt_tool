@@ -204,8 +204,14 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
                     cell = by_class[k].setdefault((skill["axis"], skill["name"]), {})
                     cell[value] = cell.get(value, 0) + 1
             for skill in matched:
-                cell = skill_cells.setdefault((skill["axis"], skill["name"]), {}).setdefault(name, {"count": 0, "last": ""})
+                cell = skill_cells.setdefault((skill["axis"], skill["name"]), {}).setdefault(
+                    name, {"count": 0, "last": "", "confirmed": 0, "quant": 0})
                 cell["count"] += 1
+                # 292 F — 근거의 단단함: 팀장 확정 · 확정에 정량 결과까지
+                if status == "확정":
+                    cell["confirmed"] += 1
+                    if any(str(q.get("value") or "").strip() for q in item["quants"] if isinstance(q, dict)):
+                        cell["quant"] += 1
                 if year > cell["last"]:
                     cell["last"] = year
                 if (skill["axis"], skill["name"]) not in known_skills:
@@ -239,8 +245,12 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
         keys = [k for k in order if k[0] == axis] + sorted(k for k in skill_cells if k[0] == axis and k not in order)
         for k in keys:
             cells = skill_cells.get(k, {})
+            confirmed = sum(c.get("confirmed", 0) for c in cells.values())
+            quant = sum(c.get("quant", 0) for c in cells.values())
             skill_rows.append({"axis": axis, "name": k[1], "known": k in order, "group": group_of.get(k, ""), "cells": cells,
-                               "holders": len(cells), "experiences": sum(c["count"] for c in cells.values())})
+                               "holders": len(cells), "experiences": sum(c["count"] for c in cells.values()),
+                               # 3 = 확정 + 정량 결과, 2 = 확정, 1 = 구조화만 (수준이 아니라 근거의 단단함)
+                               "evidence": {"confirmed": confirmed, "quant": quant, "level": 3 if quant else 2 if confirmed else 1 if cells else 0}})
 
     # ② 기술 스택 — 층마다(사전의 층 순서, 층 없음 · 사전에 없음은 끝)
     layers = list(dict.fromkeys([*tool_rules.DEFAULT_LAYERS, *(layer_of[n] for n in layer_of if layer_of[n])]))
@@ -314,7 +324,44 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
         "shape": shape, "new_by_year": new_by_year, "new_earlier": earlier, "by_class": classes_out, "targets": targets,
         **(found := _change_and_insights(this_year, skill_dict, skill_years, tool_years, first_seen, skill_rows, stack, only_one, targets, completeness)),
         **_questions(this_year, names, skill_dict, skill_rows, stack, only_one, targets, found["change"], person_first),
+        "leave": _leave_impact(conn, names, skill_rows, stack),
     }
+
+
+def _leave_impact(conn: sqlite3.Connection, names: list[str], skill_rows: list, stack: list) -> dict[str, Any]:
+    """292 A — 이 사람이 떠나면: 잃는 것(혼자 가진 역량 · 기술)과 이어받을 후보(같은 중분류 · 같은 층을 가진 사람),
+    얇아지는 것(가진 사람 둘 → 하나), 지금 맡은 진행 중 과제. 팀장이 득실을 판단하는 자료 — 평가에 쓰지 않는다."""
+    held = [r for r in skill_rows if r["holders"]]
+    tools = [(layer["layer"], t) for layer in stack for t in layer["tools"]]
+    out: dict[str, Any] = {}
+    for person in names:
+        lost, thin = [], []
+        for r in held:
+            if person not in r["cells"]:
+                continue
+            if r["holders"] == 1:
+                mates = sorted({p for o in held if o["group"] and o["group"] == r["group"] for p in o["cells"]} - {person},
+                               key=lambda p: names.index(p) if p in names else 99)
+                lost.append({"kind": "역량", "name": r["name"], "group": r["group"] or r["axis"], "candidates": mates[:3],
+                             "experiences": r["cells"][person]["count"]})
+            elif r["holders"] == 2:
+                thin.append({"kind": "역량", "name": r["name"], "remaining": next(p for p in r["cells"] if p != person)})
+        for layer, t in tools:
+            if person not in t["people"]:
+                continue
+            if t["person_count"] == 1:
+                mates = sorted({p for lay, o in tools if lay == layer and not o["name"] == t["name"] for p in o["people"]} - {person},
+                               key=lambda p: names.index(p) if p in names else 99)
+                lost.append({"kind": "보유 기술", "name": t["name"], "group": layer, "candidates": mates[:3],
+                             "experiences": t["project_count"] + t["experience_count"]})
+            elif t["person_count"] == 2:
+                thin.append({"kind": "보유 기술", "name": t["name"], "remaining": next(p for p in t["people"] if p != person)})
+        lost.sort(key=lambda x: (-x["experiences"], x["name"]))
+        projects = [{"id": row["id"], "title": row["title"]} for row in conn.execute(
+            "SELECT p.id, p.title FROM project_contribution c JOIN project p ON p.id = c.project_id"
+            " WHERE c.name = ? AND c.current = 1 AND p.status NOT IN ('done', 'dropped') ORDER BY p.id", (person,))]
+        out[person] = {"lost": lost, "thin": thin, "projects": projects}
+    return out
 
 
 def _questions(this_year: str, names: list[str], skill_dict: list[dict[str, Any]], skill_rows: list, stack: list, only_one: list,

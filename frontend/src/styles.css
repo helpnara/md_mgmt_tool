@@ -3291,6 +3291,16 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
   .ts-print-root .ts-q { padding: 3mm 4mm; }
   .ts-print-root .ts-print-title { font-size: 18pt; }
 }
+/* 292 — 떠나면 무엇을 잃나 · 근거의 단단함 · 쓰임 알림 */
+.ts-notice { margin: 6px 0 0; font-size: var(--fs-xs); color: var(--neutral-700); padding: 6px 10px; border-left: 3px solid var(--warning-500); background: var(--warning-50); border-radius: 0 var(--radius) var(--radius) 0; }
+.ts-print-foot { margin-top: 4mm; font-size: 8pt; color: var(--neutral-700); }
+.ts-leave-pick { font-size: var(--fs-xs); gap: 6px; align-self: flex-start; }
+.ts-leave-pick select { font-size: var(--fs-sm); padding: 2px 6px; min-height: 0; width: auto; }
+.ts-leave { display: flex; flex-direction: column; gap: 6px; }
+.ts-leave-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-xs); }
+.ts-leave-list li { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.ts-dots { font-size: 8px; letter-spacing: 1px; color: var(--accent); vertical-align: middle; }
+.ts-dots.l1 { color: var(--neutral-400, var(--neutral-700)); }
 .ts-print-root { display: none; }
 @page ts-land { size: A4 landscape; margin: 10mm; }
 @media print {

@@ -7486,6 +7486,20 @@ async function main() {
     await card.locator('.dict-item[data-entry="Python"] .dict-line').click();
   });
 
+  await check("[팀 역량] 떠나면 무엇을 잃나 · 쓰임 알림 · 근거의 단단함 점 (292)", async () => {
+    const box = await openTeam();
+    expect((await box.locator("[data-testid=ts-notice]").innerText()).includes("평가 · 다른 사람과의 비교에 쓰지 않습니다"), "쓰임 알림");
+    const pick = box.getByLabel("떠나면 무엇을 잃나");
+    const options = await pick.locator("option").allInnerTexts();
+    expect(options.length >= 2, `사람 목록: ${options}`);
+    await pick.selectOption({ index: 1 });
+    const leave = box.locator("[data-testid=ts-leave]");
+    await leave.waitFor({ timeout: 5000 });
+    expect((await leave.innerText()).includes("님이 떠나면"), "떠나면 — 요약 줄");
+    await pick.selectOption("");
+    equal(await box.locator("[data-testid=ts-leave]").count(), 0, "팀 전체 보기로 돌아옴");
+  });
+
   console.log("\n[82] 자동 백업 띠는 관리자(서버 PC)만 (TODO 289)");
 
   await check("홈의 자동 백업 노란 띠 — 서버 PC 에는 뜨고, 팀장 PC 에는 뜨지 않는다 (289)", async () => {

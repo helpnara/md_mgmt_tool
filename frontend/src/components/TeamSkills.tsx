@@ -79,12 +79,14 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
           팀장의 질문 여섯 — <b>강점 · 빈 곳 · 위험 · 변화 · 성장 · 할 일</b> — 에 답합니다. 카드마다 답이 먼저, [근거 보기]를 누르면 아래 근거 자료로 갑니다.
           세는 것은 <b>구조화 · 확정 경험</b>, 숫자는 <b>경험 수</b>(수준 · 평가 아님). 변화 · 성장은 늘 올해 · 지난해, 나머지는 <b>범위</b>({periodLabel}). 팀에 나눌 때는 <b>이름 가리기</b>를 켜고 인쇄하세요.
         </p>
+        <p className="ts-notice" data-testid="ts-notice">팀장이 팀의 득과 실을 판단하는 자료입니다 — 평가 · 다른 사람과의 비교에 쓰지 않습니다. 숫자는 경험 수이고, 점(●)은 수준이 아니라 <b>근거가 얼마나 단단한가</b>입니다(●●● 확정 + 정량 결과 · ●● 확정 · ● 구조화만).</p>
       </div>
       {data && <Body data={data} show={show} interactive meta={meta} onTargets={load} />}
       {printing && data && createPortal(
         <div className="ts-print-root" aria-hidden>
           <h1 className="ts-print-title">팀 역량 · 기술 스택 — {data.change.last} → {data.change.this} · 범위 {periodLabel}</h1>
           <Body data={data} show={show} interactive={false} meta={meta} withEvidence={printEvidence} />
+          <p className="ts-print-foot">팀장 판단용 — 평가 · 다른 사람과의 비교에 쓰지 않습니다. ● 근거의 단단함(수준 아님): ●●● 확정 + 정량 · ●● 확정 · ● 구조화만</p>
         </div>,
         document.body,
       )}
@@ -96,6 +98,9 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
   data: Data; show: (name: string) => string; interactive: boolean; meta: Meta; onTargets?: () => void; withEvidence?: boolean;
 }) {
   const [evidence, setEvidence] = useState(false);
+  // 292 A — 떠나면 무엇을 잃나(위험 카드에서 사람을 고른다)
+  const [leaving, setLeaving] = useState("");
+  const leave = leaving ? data.leave[leaving] : undefined;
   const k = data.kpis;
   const ch = data.change;
   const text = (t: string) => t.replace(/\{([^}]+)\}/g, (_, n: string) => show(n));
@@ -135,7 +140,7 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
           <p className="ts-answer">{s.skills[0] ? <>가장 두터운 역량은 <b>{s.skills[0].name}</b> — {s.skills[0].holders}명 · 경험 {s.skills[0].experiences}건</> : "아직 셀 역량이 없습니다."}</p>
           <ul className="ts-bars">
             {s.skills.map((x) => (
-              <li key={x.name}><span className="ts-bar-label">{x.name}</span>
+              <li key={x.name}><span className="ts-bar-label">{x.name} <Dots level={data.skills.find((r) => r.name === x.name)?.evidence} /></span>
                 <span className="ts-bar"><span className="ts-bar-fill" style={{ width: `${(x.holders / people) * 100}%` }} /></span>
                 <span className="ts-bar-num">{x.holders}명 · {x.experiences}건</span></li>
             ))}
@@ -166,6 +171,32 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
 
         <section className="card ts-q" data-testid="ts-q-risk">
           <div className="ts-q-head"><span className="ts-tag warn">위험</span><h3>누가 빠지면 끊기나</h3></div>
+          {interactive && (
+            <label className="check-label ts-leave-pick">이 사람이 떠나면
+              <select aria-label="떠나면 무엇을 잃나" value={leaving} onChange={(e) => setLeaving(e.target.value)}>
+                <option value="">— 팀 전체 보기 —</option>
+                {data.people.map((p) => <option key={p.name} value={p.name}>{show(p.name)}</option>)}
+              </select>
+            </label>
+          )}
+          {leave ? (
+            <div className="ts-leave" data-testid="ts-leave">
+              <p className="ts-answer"><b>{show(leaving)}</b> 님이 떠나면 — 잃는 것 <b>{leave.lost.length}</b> · 얇아지는 것 <b>{leave.thin.length}</b> · 맡은 진행 중 과제 <b>{leave.projects.length}</b></p>
+              {leave.lost.length === 0 ? <p className="muted">혼자만 가진 역량 · 기술이 없습니다.</p> : (
+                <ul className="ts-leave-list">
+                  {leave.lost.slice(0, 6).map((x) => (
+                    <li key={`${x.kind}-${x.name}`}>
+                      {chip(x.name, x.kind === "역량" ? "skill" : "tool")}
+                      <span className="muted">{x.candidates.length ? `이어받을 후보(같은 ${x.kind === "역량" ? "묶음" : "층"}): ${x.candidates.map(show).join(", ")}` : "이어받을 후보 없음 — 배울 사람을 정해야 합니다"}</span>
+                    </li>
+                  ))}
+                  {leave.lost.length > 6 && <li className="muted">외 {leave.lost.length - 6}개 — 근거 자료의 혼자만 가진 것</li>}
+                </ul>
+              )}
+              {leave.thin.length > 0 && <p className="ts-line">얇아짐(한 명만 남음) {leave.thin.slice(0, 6).map((x) => chip(x.name, x.kind === "역량" ? "skill" : "tool", `→ ${show(x.remaining)}`))}</p>}
+              {leave.projects.length > 0 && <p className="ts-line">맡은 과제 {leave.projects.map((p) => <a key={p.id} href={`#/projects/${encodeURIComponent(p.id)}`} className="ts-new tool">{p.title}</a>)}</p>}
+            </div>
+          ) : <>
           <p className="ts-answer">{r.people[0] ? <>혼자만 가진 것 <b>{k.only_one}개</b> — 그중 {r.people[0].count}개가 <b>{show(r.people[0].person)}</b> 님에게</> : "혼자만 가진 역량 · 기술이 없습니다."}</p>
           <ul className="ts-bars">
             {r.people.slice(0, 4).map((p) => (
@@ -174,6 +205,7 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
             ))}
           </ul>
           {r.tools.length > 0 && <p className="ts-line">많이 쓰는데 1명뿐 {r.tools.map((t) => chip(t.name, "tool", `${show(t.person)} · ${t.uses}곳`))}</p>}
+          </>}
           {more("ts-only-one")}
         </section>
 
@@ -223,6 +255,16 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
 
       {(interactive || withEvidence) && <Completeness data={data} show={show} interactive={interactive} />}
     </>
+  );
+}
+
+/** 근거의 단단함(292 F) — 수준이 아니다. ●●● 확정 + 정량 결과 · ●● 확정 · ● 구조화만 */
+function Dots({ level }: { level?: { confirmed: number; quant: number; level: number } }) {
+  if (!level || !level.level) return null;
+  return (
+    <span className={`ts-dots l${level.level}`} title={`근거 — 확정 ${level.confirmed}건 · 정량 결과 ${level.quant}건`} aria-label={`근거 ${level.level}단계`}>
+      {"●".repeat(level.level)}
+    </span>
   );
 }
 
@@ -416,10 +458,10 @@ function Evidence({ data, show, interactive, meta, onTargets }: {
                     </tr>,
                     ...(isOpen ? rows.map((r) => (
                       <tr key={`${key}-${r.name}`} className="ts-skill-line" data-skill={r.name}>
-                        <th scope="row" className="ts-map-name ts-indent">{r.name}{!r.known && <span className="tag warn-tag" title="역량 사전에 없는 태그">사전에 없음</span>}</th>
+                        <th scope="row" className="ts-map-name ts-indent">{r.name} <Dots level={r.evidence} />{!r.known && <span className="tag warn-tag" title="역량 사전에 없는 태그">사전에 없음</span>}</th>
                         {names.map((n) => {
                           const cell = r.cells[n];
-                          return <td key={n} className={`ts-cell lv${level(cell?.count ?? 0)}`} title={cell ? `${show(n)} · 경험 ${cell.count}건${cell.last ? ` · 마지막 ${cell.last}` : ""}` : ""}>{cell?.count ?? ""}</td>;
+                          return <td key={n} className={`ts-cell lv${level(cell?.count ?? 0)}`} title={cell ? `${show(n)} · 경험 ${cell.count}건(확정 ${cell.confirmed ?? 0} · 정량 ${cell.quant ?? 0})${cell.last ? ` · 마지막 ${cell.last}` : ""}` : ""}>{cell?.count ?? ""}</td>;
                         })}
                         <td className={r.holders === 1 ? "ts-holders one" : "ts-holders"}>{r.holders}</td>
                       </tr>

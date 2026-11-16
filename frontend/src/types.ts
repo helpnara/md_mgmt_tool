@@ -1806,7 +1806,12 @@ export interface TeamSkills {
     people: { name: string; 초안: number; 구조화: number; 확정: number; unknown_tags: number; empty_tools: number }[];
     unknown_tags: number; unlisted_tools: string[]; no_layer_tools: string[]; empty_tool_projects: number;
   };
-  skills: { axis: string; name: string; known: boolean; group: string; holders: number; experiences: number; cells: Record<string, { count: number; last: string }> }[];
+  skills: {
+    axis: string; name: string; known: boolean; group: string; holders: number; experiences: number;
+    cells: Record<string, { count: number; last: string; confirmed?: number; quant?: number }>;
+    /** 292 F — 근거의 단단함(수준 아님): 3 확정 + 정량 · 2 확정 · 1 구조화만 */
+    evidence?: { confirmed: number; quant: number; level: number };
+  }[];
   stack: { layer: string; unlayered: boolean; tools: TeamSkillTool[] }[];
   only_one: { kind: "역량" | "보유 기술"; group: string; name: string; person: string }[];
   /** 284 2단계 */
@@ -1835,6 +1840,12 @@ export interface TeamSkills {
   risk: { people: { person: string; count: number; items: { kind: string; name: string }[] }[]; tools: { name: string; person: string; uses: number }[] };
   growth: { person: string; skills: string[]; tools: string[]; count: number; last: number }[];
   actions: { kind: string; text: string }[];
+  /** 292 A — 떠나면 무엇을 잃나 */
+  leave: Record<string, {
+    lost: { kind: "역량" | "보유 기술"; name: string; group: string; candidates: string[]; experiences: number }[];
+    thin: { kind: "역량" | "보유 기술"; name: string; remaining: string }[];
+    projects: { id: string; title: string }[];
+  }>;
 }
 export interface TeamChange {
   new: string[];
