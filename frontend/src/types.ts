@@ -1856,3 +1856,9 @@ export interface TeamChange {
 }
 export interface TeamSkillTarget { kind: "역량" | "보유 기술"; name: string; want: number; matched?: string; have?: number; gap?: number }
 
+/** 체험 자료 · 내 자료 (TODO 295) */
+export interface ModeStatus {
+  mode: "demo" | "mine"; fixed: boolean; vault: string; mine_dir: string; demo_ready: boolean; choose: boolean;
+  job: { running: boolean; target: string; stage: string; done: number; total: number; error: string; finished: string };
+}
+

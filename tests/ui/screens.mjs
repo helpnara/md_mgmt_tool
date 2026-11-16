@@ -7599,6 +7599,46 @@ async function main() {
     expect(odd.length === 0, `높이가 다른 것: ${odd.slice(0, 8).join(" | ")}`);
   });
 
+  console.log("\n[85] 체험 자료 · 내 자료 (TODO 295) · 확정한 경험 잠금 (TODO 296)");
+
+  await check("처음 켤 때 고르기 · 체험 띠 · 다른 PC 안내 — 모드 답을 바꿔 끼워 본다 (295)", async () => {
+    const base = { mode: "mine", fixed: false, vault: "/v", mine_dir: "/v", demo_ready: false, choose: true,
+      job: { running: false, target: "", stage: "", done: 0, total: 0, error: "", finished: "" } };
+    const fake = async (body) => page.route("**/api/mode", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) }));
+    try {
+      await fake(base);
+      await page.reload({ waitUntil: "networkidle" });
+      await page.locator("[data-testid=mode-choose]").waitFor({ timeout: 8000 });
+      for (const name of ["체험 자료로 둘러보기", "내 자료로 시작하기"]) equal(await page.locator("[data-testid=mode-choose]").getByRole("button", { name }).count(), 1, name);
+      await page.unroute("**/api/mode");
+      await fake({ ...base, mode: "demo", choose: false, demo_ready: true });
+      await page.reload({ waitUntil: "networkidle" });
+      const band = page.locator("[data-testid=mode-band]");
+      await band.waitFor({ timeout: 8000 });
+      expect((await band.innerText()).includes("체험 모드"), "체험 띠");
+      for (const name of ["처음 자료로 되돌리기", "내 자료로 시작하기"]) equal(await band.getByRole("button", { name }).count(), 1, name);
+      equal(await page.locator("[data-testid=mode-choose]").count(), 0, "고르기 화면은 없음");
+      // 다른 PC(팀장)에서는 안내만
+      const me = await api.get("/api/me");
+      await page.route("**/api/me", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...me, role: "leader", name: "시험팀장" }) }));
+      await page.reload({ waitUntil: "networkidle" });
+      await page.locator("[data-testid=mode-blocked]").waitFor({ timeout: 8000 });
+      equal(await page.locator("[data-testid=mode-band]").count(), 0, "다른 PC 에는 띠 대신 안내");
+    } finally {
+      await page.unroute("**/api/me");
+      await page.unroute("**/api/mode");
+      await page.reload({ waitUntil: "networkidle" });
+    }
+    equal(await page.locator("[data-testid=mode-choose], [data-testid=mode-band], [data-testid=mode-blocked]").count(), 0, "고정 서버(시험)에는 아무것도 없음");
+  });
+
+  await check("설정 → [보관과 백업]에 체험 · 내 자료 카드 — 고정 서버는 바꿀 수 없다고 알림 (295)", async () => {
+    await go("#/settings?tab=backup");
+    const card = page.locator("[data-testid=mode-card]");
+    await card.waitFor({ timeout: 8000 });
+    expect((await card.innerText()).includes("바꿀 수 없습니다"), `카드: ${(await card.innerText()).slice(0, 120)}`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

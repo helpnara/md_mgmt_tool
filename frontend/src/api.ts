@@ -1,4 +1,4 @@
-import type { TeamSkills, TeamSkillTarget, YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
+import type { ModeStatus, TeamSkills, TeamSkillTarget, YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -246,6 +246,10 @@ export const api = {
   // 보유 기술 사전 (TODO 273)
   experienceTools: () => request<ToolDictionary>("/api/experiences/tools"),
   // 팀 역량 · 기술 스택 (TODO 284) — 팀장 · 관리자만
+  // 체험 자료 · 내 자료 (TODO 295)
+  mode: () => request<ModeStatus>("/api/mode"),
+  switchMode: (body: { mode: "demo" | "mine"; mine_dir?: string; reset?: boolean }) =>
+    request<ModeStatus>("/api/mode", { method: "POST", body: JSON.stringify(body) }),
   teamSkills: (period: string, left: boolean) => request<TeamSkills>(`/api/team-skills?period=${period}${left ? "&left=1" : ""}`),
   saveTeamTargets: (targets: { kind: string; name: string; want: number }[]) =>
     request<{ targets: TeamSkillTarget[] }>("/api/team-skills/targets", { method: "PUT", body: JSON.stringify({ targets }) }),

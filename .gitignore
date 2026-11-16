@@ -1,6 +1,9 @@
 # 데이터 (저장소 최상위의 vault 폴더만 — 앞의 / 가 없으면 backend/app/vault 같은
 # 소스 폴더까지 무시해 버린다)
 /vault/
+# 체험 자료 폴더 · 모드 파일 (TODO 295) — 각 PC 에서 만들어진다, 배포본에 넣지 않는다
+/demo-vault/
+/data-mode.json
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm

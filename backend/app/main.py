@@ -13,7 +13,7 @@ import anyio
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (team_skills, yearcards, activities, attachments, dashboard, drafts, edits, entries, errors, experiences, export, folders, home, intakes,
+from .api import (mode, team_skills, yearcards, activities, attachments, dashboard, drafts, edits, entries, errors, experiences, export, folders, home, intakes,
                   linkfix, meetings, meta, people, person_history, projects, reports, restore, roadmap, search,
                   settings, trash, versions)
 from . import mimefix, permissions, readcache, share, who
@@ -96,6 +96,9 @@ def _startup_reindex(conn):
             print("  위 메시지에 적힌 파일을 고치거나 옮긴 뒤 다시 켜 주세요. (vault 의 .index 폴더를 지워도 됩니다)")
             raise
 
+
+DEMO_OPEN_PATHS = frozenset({"/api/me", "/api/mode", "/api/meta"})
+DEMO_DETAIL = "지금 서버 PC 가 체험 모드(연습용 가상 자료)입니다 — 체험이 끝나 '내 자료' 로 바꾼 뒤 다시 열어 주세요."
 
 # 백업할 때가 됐는지 들여다보는 주기. 주기 자체(기본 24시간)는 설정에서 정한다.
 BACKUP_CHECK_SECONDS = 30 * 60
@@ -208,6 +211,9 @@ async def readonly_share(request: Request, call_next):
     writing = request.method not in share.SAFE_METHODS
     if writing and not share.origin_ok(request.headers.get("origin")):
         return JSONResponse({"detail": share.FOREIGN_ORIGIN}, status_code=403)
+    # 295 — 체험 중에는 서버 PC 만 쓴다. 팀원 · 팀장 PC 가 가상 자료를 실제로 알고 쓰지 않게(화면은 안내만 보인다)
+    if user.role != who.OWNER and path.startswith("/api/") and path not in DEMO_OPEN_PATHS and get_settings().mode == "demo":
+        return JSONResponse({"detail": DEMO_DETAIL}, status_code=403)
     if user.role == who.OWNER:
         response = await call_next(request)
         if writing and response.status_code < 400:
@@ -462,6 +468,7 @@ app.include_router(restore.router)  # 전체 백업에서 되살리기 (TODO 246
 app.include_router(experiences.router)  # 팀원별 경험 (TODO 257)
 app.include_router(yearcards.router)  # 연말 회고 카드 (TODO 285)
 app.include_router(team_skills.router)  # 팀 역량 · 기술 스택 (TODO 284)
+app.include_router(mode.router)  # 체험 · 내 자료 (TODO 295)
 
 if FRONTEND_DIST.exists():
     @app.get("/assets/{name}")

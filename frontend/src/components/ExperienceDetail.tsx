@@ -45,7 +45,8 @@ export default function ExperienceDetail({ id, back }: { id: string; back?: stri
   const [dictionary, setDictionary] = useState<SkillDictionary | null>(null);
   const manager = isManager();
   // 팀원 보완 (TODO 262 · 5단계.md ⑦) — 팀원 PC 는 자기 경험의 초안 · 구조화만 고친다(확정 · 확인함 · 지우기는 팀장)
-  const editable = manager || Boolean(item && isMember() && getMe().name === item.person && item.status !== "확정");
+  // 296 — 확정한 경험은 누구도 바로 고치지 않는다(팀장도 [확정 풀기] 뒤에)
+  const editable = Boolean(item && item.status !== "확정") && (manager || Boolean(item && isMember() && getMe().name === item.person));
 
   // 역량 사전 (TODO 260) — "사전에 없음" 의 [기존 역량으로 ▾] · 태그 입력 자동 완성이 쓴다
   useEffect(() => {
@@ -215,7 +216,7 @@ export default function ExperienceDetail({ id, back }: { id: string; back?: stri
         </p>
         <p className="hint experience-stage">
           {item.status === "확정"
-            ? <>팀장이 검토해 사실로 인정한 <b>확정</b> 경험입니다 — 고쳐도 상태는 그대로, 업무 이력 파일(다음 단계)에 들어갑니다.</>
+            ? <>팀장이 검토해 사실로 인정한 <b>확정</b> 경험입니다 — 업무 이력 파일에 들어갑니다. <b>고치려면 [확정 풀기]</b>로 구조화로 되돌린 뒤 고치고 다시 확정하세요.</>
             : item.status === "초안"
               ? <>지금은 <b>초안</b>입니다 — [AI 로 정리]로 다듬거나 손으로 채운 뒤, 조건 다섯이 맞으면 확정합니다.</>
               : <>AI 응답을 읽어 채운 <b>구조화</b> 경험입니다 — 검토하고 조건 다섯이 맞으면 확정합니다.</>}

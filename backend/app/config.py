@@ -129,6 +129,9 @@ def normalize_status(value: str | None) -> tuple[str, str | None]:
 @dataclass(frozen=True)
 class Settings:
     vault_dir: Path
+    # 295 — 체험 자료(demo) · 내 자료(mine). `--vault` 로 켜면 내 자료로 고정(fixed)
+    mode: str = "mine"
+    mode_fixed: bool = True
     report_cycle_days: int = 7  # 보고 후보 점수의 기준 주기
     version_keep_days: int = 365  # 이전 버전 보관 기간 (2026-09-02 사용자 확정)
 
@@ -193,8 +196,37 @@ class Settings:
                 ) from exc
 
 
+# ── 체험 · 내 자료 (TODO 295) ─────────────────────────────────────────────────────────────
+# 모드는 데이터 폴더 **밖**(프로그램 폴더)의 파일에 적는다 — 폴더를 바꿔 끼우는 일이라 폴더 안에 둘 수 없다.
+MODE_FILE = "data-mode.json"
+DEMO_DIR = "demo-vault"
+
+
+def program_home() -> Path:
+    """모드 파일 · 체험 폴더 · 기본 내 자료 폴더가 있는 곳(시험은 MD_MGMT_HOME 으로 바꾼다)."""
+    home = os.environ.get("MD_MGMT_HOME")
+    return Path(home).expanduser().resolve() if home else REPO_ROOT
+
+
+def read_mode() -> dict:
+    import json
+
+    try:
+        data = json.loads((program_home() / MODE_FILE).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     vault = os.environ.get("MD_MGMT_VAULT")
-    vault_dir = Path(vault).expanduser().resolve() if vault else REPO_ROOT / "vault"
-    return Settings(vault_dir=vault_dir)
+    if vault:
+        # 폴더를 정해 켰다(run.bat --vault · 시험) — 내 자료로 고정, 모드 바꾸기 없음
+        return Settings(vault_dir=Path(vault).expanduser().resolve())
+    home = program_home()
+    mode = read_mode()
+    if mode.get("mode") == "demo":
+        return Settings(vault_dir=home / DEMO_DIR, mode="demo", mode_fixed=False)
+    mine = str(mode.get("mine_dir") or "").strip()
+    return Settings(vault_dir=Path(mine).expanduser().resolve() if mine else home / "vault", mode="mine", mode_fixed=False)

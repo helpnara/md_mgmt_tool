@@ -247,3 +247,12 @@ def test_problem_field_is_gone(team):
     assert "problem" not in saved and saved["did"] == "한 일"
     text = owner.get(f"/api/projects/{pid}/export?format=md").text
     assert "손으로 적은 배경" not in text and "새 배경" not in text
+
+
+def test_removing_owner_keeps_an_earlier_end_date(team):
+    """295 — 담당에서 뺄 때 이미 적어 둔 끝 날짜(떠난 날)가 오늘 이전이면 오늘로 덮지 않는다."""
+    owner, pid = team["owner"], team["shared"]
+    owner.put(f"/api/projects/{pid}/contributions/나팀원", json={"from": "2026-03-02", "to": "2026-07-01"})
+    owner.patch(f"/api/projects/{pid}", json={"owners": ["가팀원"]})
+    rows = {r["name"]: r for r in owner.get(f"/api/projects/{pid}").json()["contributions"]}
+    assert rows["나팀원"]["to"] == "2026-07-01"

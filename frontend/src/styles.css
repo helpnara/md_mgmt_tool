@@ -3351,3 +3351,20 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .ts-leave-projects ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .ts-leave-projects li { text-align: left; font-size: var(--fs-sm); }
 
+/* 295 — 체험 자료 · 내 자료 */
+.mode-band { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 24px; background: var(--warning-100); border-bottom: 1px solid var(--warning-300); font-size: var(--fs-sm); color: var(--warning-800); }
+.mode-band-actions { display: inline-flex; gap: 8px; align-items: center; margin-left: auto; }
+.mode-cover { position: fixed; inset: 0; z-index: 200; background: color-mix(in srgb, var(--neutral-900) 45%, transparent); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.mode-box { background: var(--neutral-0); border-radius: var(--radius); box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.2)); padding: 24px 28px; max-width: 520px; width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.mode-box.wide { max-width: 860px; }
+.mode-box h2 { margin: 0; }
+.mode-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.mode-choices section { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.mode-choices section h3 { margin: 0; }
+.mode-choices section p { margin: 0; font-size: var(--fs-sm); }
+.mode-choices section button { align-self: flex-start; margin-top: auto; }
+.mode-choices label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
+.mode-bar { height: 10px; border-radius: 5px; background: var(--neutral-100); overflow: hidden; }
+.mode-bar span { display: block; height: 100%; background: var(--accent); transition: width 0.3s ease; }
+@media (max-width: 720px) { .mode-choices { grid-template-columns: 1fr; } }
+

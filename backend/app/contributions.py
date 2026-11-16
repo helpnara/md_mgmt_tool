@@ -178,6 +178,10 @@ def follow_owners(meta: dict[str, Any], new_owners: list[str], today: str) -> li
         if not begun and not row["role"] and not row["part"] and not row.get("skills") and not has_retro(row):
             rows.pop(name)
             continue
+        # 이미 적어 둔 끝 날짜(실제로 떠난 날 · 그만 맡은 날)가 오늘 이전이면 그대로 둔다 (TODO 295 — 체험 자료 만들다 발견).
+        # 예전에는 늘 오늘로 덮어, 담당에서 늦게 뺀 퇴사자의 담당 기간이 오늘까지로 늘었다.
+        if row.get("to") and row["to"] <= today and (not row["from"] or row["to"] >= row["from"]):
+            continue
         row["to"] = today if begun else row["from"]
     return list(rows.values())
 

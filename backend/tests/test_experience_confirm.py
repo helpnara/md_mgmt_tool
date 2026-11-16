@@ -129,11 +129,13 @@ def test_confirm_needs_five_conditions_then_unconfirm(team):  # noqa: F811
     done = owner.post(f"/api/experiences/{full['id']}/confirm").json()               # ⑥ 초안에서도 조건만 맞으면
     assert done["status"] == "확정" and done["confirmed_at"]
     assert owner.post(f"/api/experiences/{full['id']}/confirm").status_code == 400   # 이미 확정
-    kept = owner.patch(f"/api/experiences/{full['id']}", json={"lesson": "고친 교훈"}).json()
-    assert kept["status"] == "확정"                                                 # ⑧ 고쳐도 상태 유지
-    assert owner.patch(f"/api/experiences/{full['id']}", json={"confirmed_at": "1999"}).json()["confirmed_at"] == done["confirmed_at"]
+    # 296 — 확정한 경험은 팀장도 바로 못 고친다(예전 ⑧ "고쳐도 상태 유지" 를 사용자가 바꿈 — 2026-11-17)
+    locked = owner.patch(f"/api/experiences/{full['id']}", json={"lesson": "고친 교훈"})
+    assert locked.status_code == 400 and "확정 풀기" in locked.json()["detail"]
     back = owner.post(f"/api/experiences/{full['id']}/unconfirm").json()
     assert back["status"] == "구조화" and back["confirmed_at"] == ""
+    edited = owner.patch(f"/api/experiences/{full['id']}", json={"lesson": "고친 교훈", "confirmed_at": "1999"}).json()
+    assert edited["lesson"] == "고친 교훈" and edited["status"] == "구조화" and edited["confirmed_at"] == ""
     assert owner.post(f"/api/experiences/{full['id']}/unconfirm").status_code == 400
     assert owner.get("/api/experiences", params={"person": "가팀원"}).json()["counts"]["구조화"] == 1
 

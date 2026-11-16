@@ -345,7 +345,8 @@ def _hours(count: int):
 def maybe_run(conn: sqlite3.Connection) -> dict[str, Any] | None:
     """때가 됐으면 백업한다. **실패해도 프로그램을 멈추지 않는다.**"""
     try:
-        if not due():
+        # 295 — 체험 모드에서는 자동 백업을 하지 않는다(가상 자료가 백업 폴더에 섞이지 않게)
+        if get_settings().mode == "demo" or not due():
             return None
         return run(conn, reason="auto")
     except BackupError:

@@ -379,9 +379,11 @@ def update(conn: sqlite3.Connection, experience_id: str, updates: dict[str, Any]
     """고치기. 팀원 보완(member — 5단계.md ⑦)은 상태를 바꾸지 못하고, 고친 때를 `edited_by_member_at` 에 남긴다."""
     path = file_path(conn, experience_id)
     stored = read_file(path)
+    # 296 — 확정한 경험은 누구도 바로 고치지 않는다: [확정 풀기](구조화로)를 한 뒤 고치고 다시 확정한다.
+    # 예전에는 팀장 · 관리자는 확정인 채로 고쳐 저장돼, "팀장이 검토해 사실로 인정한" 내용이 검토 없이 바뀌었다.
+    if stored["status"] == "확정":
+        raise ExperienceError("확정한 경험입니다 — 고치려면 먼저 [확정 풀기](구조화로 되돌리기)를 해 주세요.")
     if member:
-        if stored["status"] == "확정":
-            raise ExperienceError("확정한 경험은 팀장만 고칩니다.")
         updates = {k: v for k, v in updates.items() if k != "status"}
     base = updates.pop("base_updated_at", None)
     if base and base != stored["updated_at"]:
