@@ -38,7 +38,39 @@ const LABELS: Record<string, string> = {
   help: "도움말",
   // 과제 접수 풀 (TODO 136)
   intakes: "접수",
+  // 293 — 이름표가 없어 모두 "과제 목록" 으로 가던 화면
+  settings: "설정",
 };
+
+/**
+ * 이 도구 안의 화면 주소 앞부분 (TODO 293). 이름표가 없는 화면에서 왔어도 이 안이면 **그 주소 그대로** 돌아간다 —
+ * 예전에는 모르는 화면이면 모두 과제 목록으로 보내, "들어갔다 돌아오면 다른 곳" 이 됐다.
+ */
+const KNOWN_SCREENS = ["projects", "intakes", "roadmap", "reports", "history", "skills", "settings", "help", "search",
+  "person/", "experience/", "experience-export/", "experience-import/"];
+
+/**
+ * 지금 화면을 **통째로**(탭 · 거르기 · 그 화면의 back 까지) 돌아갈 곳으로 (TODO 293).
+ * 사람 이력 · 경험처럼 상세의 곁가지로 여는 화면에 쓴다 — 돌아오면 보던 탭 그대로, 거기서 또 돌아가면 그 화면이 온 곳으로.
+ * 같은 종류의 화면 안에서 옮길 때(경험 → 경험)는 지금 화면이 물려받은 back 을 그대로 넘긴다(제자리 맴돌기 막기).
+ */
+function originHere(samePrefix: string): string {
+  const here = currentLocation();
+  const path = here.split("?")[0];
+  if (path.startsWith(samePrefix)) return queryOf(here).get(BACK_PARAM) ?? "";
+  if (path.replace(/\/$/, "") === "") {
+    const query = here.split("?")[1] ?? "";
+    return query ? `${HOME_BACK}?${query}` : HOME_BACK;
+  }
+  return here;
+}
+
+/** 경험 상세로 가는 주소 — 온 곳을 싣는다 (TODO 293). 예전에는 싣지 않아 경험의 [← 이력] 뒤에 길을 잃었다. */
+export function experienceLink(id: string): string {
+  const back = originHere("experience/");
+  const query = back ? `?${new URLSearchParams({ [BACK_PARAM]: back }).toString()}` : "";
+  return `#/experience/${encodeURIComponent(id)}${query}`;
+}
 
 /** 지금 주소에서 `#/` 를 뗀 부분. 되돌아갈 곳으로 그대로 쓴다. */
 export function currentLocation(): string {
@@ -150,9 +182,15 @@ export function backTarget(back: string | null | undefined): { href: string; lab
   if (path.startsWith("person/")) return { href: `#/${back}`, label: "이력" };
   // 접수 상세에서 온 경우 (TODO 136) — 승격된 과제나 병합 대상 과제를 열었다가 돌아간다.
   if (path.startsWith("intakes/")) return { href: `#/${back}`, label: "접수" };
+  // 경험 상세 · 경험 정리에서 온 경우 (TODO 293)
+  if (path.startsWith("experience/")) return { href: `#/${back}`, label: "경험" };
+  if (path.startsWith("experience-export/") || path.startsWith("experience-import/")) return { href: `#/${back}`, label: "경험 정리" };
   const label = LABELS[path];
-  // 아는 화면이 아니면(주소를 손으로 고쳤다든가) 안전하게 과제 목록으로 보낸다.
-  if (label === undefined) return { href: "#/projects", label: "과제 목록" };
+  if (label === undefined) {
+    // 이 도구 안의 주소면 그대로 돌아간다 (TODO 293). 정말 모르는 주소(손으로 고친 것)만 과제 목록으로.
+    if (KNOWN_SCREENS.some((prefix) => path === prefix.replace(/\/$/, "") || path.startsWith(prefix))) return { href: `#/${back}`, label: "이전 화면" };
+    return { href: "#/projects", label: "과제 목록" };
+  }
   return { href: `#/${back}`, label };
 }
 
@@ -254,7 +292,15 @@ export function setPageTitle(text: string): void {
  */
 export function personLink(name: string): string {
   const path = `person/${encodeURIComponent(name)}`;
-  const here = currentLocation().split("?")[0];
-  if (here.startsWith("projects/")) return `#/${path}?${new URLSearchParams({ [BACK_PARAM]: here }).toString()}`;
+  const here = currentLocation();
+  // 경험 정리(내보내기 · 가져오기)는 이력에서 들어온다 — 실려 온 그 이력 주소(이력의 back 포함)로 곧장 (TODO 293).
+  // 새 이력 주소를 만들면 이력 ↔ 정리를 맴돈다.
+  if (here.startsWith("experience-export/") || here.startsWith("experience-import/")) {
+    const came = queryOf(here).get(BACK_PARAM) ?? "";
+    if (came.startsWith(path)) return `#/${came}`;
+  }
+  // 과제 · 경험 상세에서 열면 **그 화면 주소 전체**(탭 · 그 화면이 물려받은 back 까지)를 싣는다 (TODO 293) —
+  // 예전에는 과제 번호만 실어, 돌아오면 보던 탭이 풀리고 과제의 [← 과제 목록]이 거르기 없는 목록으로 갔다.
+  if (here.startsWith("projects/") || here.startsWith("experience/")) return `#/${path}?${new URLSearchParams({ [BACK_PARAM]: here }).toString()}`;
   return screenLink(path);
 }

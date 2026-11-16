@@ -10,19 +10,18 @@ import CardIntro from "./CardIntro";
 
 const AXES = ["기술", "업무", "리더십", "문제해결"] as const;
 
-/** 경험 상세 주소 (TODO 257 · 2단계.md ①) — 사람별 이력에서 왔으면 돌아갈 곳을 함께 */
-export function experienceLink(id: string): string {
-  return `#/experience/${encodeURIComponent(id)}`;
-}
+/** 경험 상세 주소 (TODO 257 · 293) — 온 곳을 함께 싣는다. 만드는 곳은 nav 하나(다른 링크와 같은 규칙) */
+import { currentLocation, experienceLink } from "../nav";
+export { experienceLink };
 
 /** 업무 이력 파일 주소 (TODO 262 · 5단계.md 5절) */
 export function experienceExportLink(name: string): string {
-  return `#/experience-export/${encodeURIComponent(name)}`;
+  return `#/experience-export/${encodeURIComponent(name)}?${new URLSearchParams({ back: currentLocation() }).toString()}`;
 }
 
 /** AI 로 정리(응답 되받기) 주소 (TODO 258 · 3단계.md 6절) */
 export function experienceImportLink(name: string): string {
-  return `#/experience-import/${encodeURIComponent(name)}`;
+  return `#/experience-import/${encodeURIComponent(name)}?${new URLSearchParams({ back: currentLocation() }).toString()}`;
 }
 
 /**

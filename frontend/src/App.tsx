@@ -40,7 +40,7 @@ type Route =
   | { name: "skills"; query: string }
   // 사람별 이력 (TODO 238)
   | { name: "person"; person: string; back: string | null }
-  | { name: "experience"; id: string }
+  | { name: "experience"; id: string; back: string | null }
   // AI 로 정리 — 응답 되받기 (TODO 258)
   | { name: "experienceImport"; person: string }
   // 업무 이력 파일 (TODO 262)
@@ -92,7 +92,7 @@ function readRoute(): Route {
     return { name: "experienceExport", person: safeDecode(path.slice("experience-export/".length)) };
   if (path.startsWith("experience-import/"))
     return { name: "experienceImport", person: safeDecode(path.slice("experience-import/".length)) };
-  if (path.startsWith("experience/")) return { name: "experience", id: safeDecode(path.slice("experience/".length)) };
+  if (path.startsWith("experience/")) return { name: "experience", id: safeDecode(path.slice("experience/".length)), back: params.get(BACK_PARAM) };
   if (path.startsWith("person/"))
     return { name: "person", person: safeDecode(path.slice("person/".length)), back: params.get(BACK_PARAM) };
   if (path.startsWith("settings")) return { name: "settings", back: params.get(BACK_PARAM), query: queryString ?? "" };
@@ -457,7 +457,7 @@ export default function App() {
         {route.name === "home" && <Home meta={meta} onMetaChange={loadMeta} query={route.query} />}
         {route.name === "skills" && <Skills meta={meta} query={route.query} />}
         {route.name === "person" && <PersonHistory key={route.person} meta={meta} name={route.person} back={route.back} />}
-        {route.name === "experience" && <ExperienceDetail key={route.id} id={route.id} />}
+        {route.name === "experience" && <ExperienceDetail key={route.id} id={route.id} back={route.back} />}
         {route.name === "experienceImport" && <ExperienceImport key={route.person} name={route.person} />}
         {route.name === "experienceExport" && <ExperienceExport key={route.person} name={route.person} />}
         {route.name === "help" && <Help />}

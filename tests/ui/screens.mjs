@@ -7522,6 +7522,42 @@ async function main() {
     }
   });
 
+  console.log("\n[83] 들어갔다 돌아오기 — [← 돌아가기]가 온 곳으로 (TODO 293)");
+
+  await check("이력 → 경험 → [← 이력] → [← 팀원 역량] — 경험을 거쳐도 이력의 돌아갈 곳이 그대로 (293)", async () => {
+    const made = await api.post("/api/experiences", { person: "권경락", title: "돌아가기 시험 경험", kind: "업무" });
+    await go(`#/person/${encodeURIComponent("권경락")}?back=skills`);
+    await page.locator(`a[href^="#/experience/${made.id}"]`).first().click();
+    await page.waitForFunction((id) => location.hash.startsWith(`#/experience/${id}`), made.id, { timeout: 8000 });
+    expect(decodeURIComponent(await page.evaluate(() => location.hash)).includes("back=person/"), "경험 주소에 온 곳");
+    await page.locator("a.back").first().click();
+    await page.waitForFunction(() => location.hash.startsWith("#/person/"), null, { timeout: 8000 });
+    equal(decodeURIComponent(await page.evaluate(() => location.hash)), `#/person/권경락?back=skills`, "이력 — 처음 주소 그대로");
+    expect((await page.locator("a.back").first().innerText()).includes("팀원 역량"), "이력의 돌아가기는 팀원 역량");
+    await api.delete(`/api/experiences/${made.id}`).catch(() => undefined);
+  });
+
+  await check("거른 목록 → 과제(일지 탭) → 담당자 이력 → [← 과제] → [← 과제 목록] — 탭 · 거르기 그대로 (293)", async () => {
+    const made = await api.post("/api/projects", { title: "돌아가기 시험 과제", owners: ["권경락"], status: "in_progress" });
+    await go(`#/projects/${made.id}?tab=entries&back=${encodeURIComponent("projects?status=in_progress")}`);
+    await page.locator('a[href^="#/person/"]').first().click();
+    await page.waitForFunction(() => location.hash.startsWith("#/person/"), null, { timeout: 8000 });
+    await page.locator("a.back").first().click();
+    await page.waitForFunction(() => location.hash.startsWith("#/projects/"), null, { timeout: 8000 });
+    expect((await page.evaluate(() => location.hash)).includes("tab=entries"), "보던 탭 그대로");
+    await page.locator("a.back").first().click();
+    await page.waitForFunction(() => location.hash.startsWith("#/projects?") || location.hash === "#/projects", null, { timeout: 8000 });
+    equal(decodeURIComponent(await page.evaluate(() => location.hash)), "#/projects?status=in_progress", "거르던 목록으로");
+  });
+
+  await check("이름표가 없던 화면(설정 · 경험)에서 왔어도 그리로 — 과제 목록으로 새지 않는다 (293)", async () => {
+    await go(`#/person/${encodeURIComponent("권경락")}?back=settings`);
+    const back = page.locator("a.back").first();
+    expect((await back.innerText()).includes("설정") && (await back.getAttribute("href")) === "#/settings", `설정: ${await back.innerText()}`);
+    await go(`#/person/${encodeURIComponent("권경락")}?back=${encodeURIComponent("settings?tab=class")}`);
+    equal(await page.locator("a.back").first().getAttribute("href"), "#/settings?tab=class", "설정 탭까지");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

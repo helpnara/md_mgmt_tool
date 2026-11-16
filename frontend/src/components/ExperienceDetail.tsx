@@ -3,7 +3,7 @@ import { CircleHelp, FileText, Tags, TriangleAlert } from "lucide-react";
 import { api } from "../api";
 import { getMe, isManager, isMember } from "../me";
 import { notifyError } from "../notify";
-import { personLink, projectLink, setPageTitle } from "../nav";
+import { backTarget, personLink, projectLink, setPageTitle } from "../nav";
 import type { ConsistencyWarning, Experience, ExperienceQuant, ExperienceResponseFile, ExperienceSkill, SkillDictionary } from "../types";
 import { ConfirmBar, ConsistencyCard, QuestionAnswers, guessKind, type AnswerTarget } from "./ExperienceConfirm";
 import IconTitle from "./IconTitle";
@@ -35,7 +35,7 @@ const lines = (text: string) => text.split("\n").map((line) => line.trim()).filt
  * 응답 되받기(TODO 258)로 만든 경험은 재료에 **AI 응답 원문**이 걸린다 — 눌러서 읽기 전용으로 본다.
  * 확인 필요는 본문 위(원본 원칙 4) — 남아 있으면 확정할 수 없다는 것을 늘 보이게.
  */
-export default function ExperienceDetail({ id }: { id: string }) {
+export default function ExperienceDetail({ id, back }: { id: string; back?: string | null }) {
   const [item, setItem] = useState<Experience | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [error, setError] = useState("");
@@ -172,7 +172,7 @@ export default function ExperienceDetail({ id }: { id: string }) {
     if (!item || !window.confirm(`${item.id} ${item.title} — 삭제 보관함으로 옮길까요? 번호는 다시 쓰지 않습니다.`)) return;
     try {
       await api.deleteExperience(item.id);
-      window.location.hash = personLink(item.person);
+      window.location.hash = back ? backTarget(back).href : personLink(item.person);
     } catch (err) {
       notifyError((err as Error).message);
     }
@@ -182,7 +182,12 @@ export default function ExperienceDetail({ id }: { id: string }) {
   const questions = lines(form.open_questions);
   return (
     <section className="experience-detail">
-      <a className="back" href={personLink(item.person)}>← {item.person}의 이력</a>
+      {/* 293 — 실려 온 곳으로(팀 역량 · 정리함 · 이력…). 없을 때만 그 사람 이력 */}
+      {back && !back.startsWith("person/") ? (
+        <a className="back" href={backTarget(back).href}>← {backTarget(back).label}</a>
+      ) : (
+        <a className="back" href={back ? backTarget(back).href : personLink(item.person)}>← {item.person}의 이력</a>
+      )}
       <div className="card experience-head">
         <div className="card-head">
           <h1>

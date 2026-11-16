@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { api } from "../api";
 import { notifyError } from "../notify";
 import type { Meta, TeamSkillTarget, TeamSkillTool, TeamSkills as Data } from "../types";
+import { experienceLink, personLink, projectLink } from "../nav";
 import { axisLabel } from "../util";
 import CopyTableButton from "./CopyTableButton";
 
@@ -194,7 +195,7 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
                 </ul>
               )}
               {leave.thin.length > 0 && <p className="ts-line">얇아짐(한 명만 남음) {leave.thin.slice(0, 6).map((x) => chip(x.name, x.kind === "역량" ? "skill" : "tool", `→ ${show(x.remaining)}`))}</p>}
-              {leave.projects.length > 0 && <p className="ts-line">맡은 과제 {leave.projects.map((p) => <a key={p.id} href={`#/projects/${encodeURIComponent(p.id)}`} className="ts-new tool">{p.title}</a>)}</p>}
+              {leave.projects.length > 0 && <p className="ts-line">맡은 과제 {leave.projects.map((p) => <a key={p.id} href={projectLink(p.id)} className="ts-new tool">{p.title}</a>)}</p>}
             </div>
           ) : <>
           <p className="ts-answer">{r.people[0] ? <>혼자만 가진 것 <b>{k.only_one}개</b> — 그중 {r.people[0].count}개가 <b>{show(r.people[0].person)}</b> 님에게</> : "혼자만 가진 역량 · 기술이 없습니다."}</p>
@@ -392,7 +393,7 @@ function Evidence({ data, show, interactive, meta, onTargets }: {
                 {picked.uses.map((u, i) => (
                   <li key={i}>
                     {show(u.person)} · {u.kind === "project" ? "과제" : "경험"}{" "}
-                    <a href={u.kind === "project" ? `#/projects/${encodeURIComponent(u.id)}` : `#/experience/${encodeURIComponent(u.id)}`}>{u.title}</a>
+                    <a href={u.kind === "project" ? projectLink(u.id) : experienceLink(u.id)}>{u.title}</a>
                   </li>
                 ))}
               </ul>
@@ -550,7 +551,7 @@ function Completeness({ data, show, interactive }: { data: Data; show: (name: st
             <tbody>
               {c.people.map((p) => (
                 <tr key={p.name} className={p.확정 + p.구조화 === 0 ? "ts-weak" : undefined}>
-                  <th scope="row">{interactive ? <a href={`#/person/${encodeURIComponent(p.name)}`}>{show(p.name)}</a> : show(p.name)}</th>
+                  <th scope="row">{interactive ? <a href={personLink(p.name)}>{show(p.name)}</a> : show(p.name)}</th>
                   <td>{p.확정}</td><td>{p.구조화}</td><td>{p.초안}</td><td>{p.unknown_tags || ""}</td><td>{p.empty_tools || ""}</td>
                 </tr>
               ))}
