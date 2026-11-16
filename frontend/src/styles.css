@@ -3346,3 +3346,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 }
 /* 보기 바꾸기(표 · 묶음) — 테두리 1px 를 두른 묶음이 바깥 36px 이 되게 안쪽 단추는 34px */
 .view-switch button { box-sizing: border-box; height: 34px; min-height: 34px; padding-top: 0; padding-bottom: 0; display: inline-flex; align-items: center; }
+/* 294 — 떠나면: 맡은 과제는 한 줄에 하나씩 왼쪽 맞춤 */
+.ts-leave-projects { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-xs); }
+.ts-leave-projects ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ts-leave-projects li { text-align: left; font-size: var(--fs-sm); }
+

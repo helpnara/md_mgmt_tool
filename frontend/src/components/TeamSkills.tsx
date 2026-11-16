@@ -195,7 +195,17 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
                 </ul>
               )}
               {leave.thin.length > 0 && <p className="ts-line">얇아짐(한 명만 남음) {leave.thin.slice(0, 6).map((x) => chip(x.name, x.kind === "역량" ? "skill" : "tool", `→ ${show(x.remaining)}`))}</p>}
-              {leave.projects.length > 0 && <p className="ts-line">맡은 과제 {leave.projects.map((p) => <a key={p.id} href={projectLink(p.id)} className="ts-new tool">{p.title}</a>)}</p>}
+              {leave.projects.length > 0 && (
+                <div className="ts-leave-projects" data-testid="ts-leave-projects">
+                  <span className="muted">맡은 진행 중 과제 {leave.projects.length}</span>
+                  {/* 294 — 칩으로 이어 붙이지 않고 한 줄에 과제 하나씩, 왼쪽 맞춤 */}
+                  <ul>
+                    {leave.projects.map((p) => (
+                      <li key={p.id}><a href={projectLink(p.id)}>{p.title}</a> <span className="muted">{p.id}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ) : <>
           <p className="ts-answer">{r.people[0] ? <>혼자만 가진 것 <b>{k.only_one}개</b> — 그중 {r.people[0].count}개가 <b>{show(r.people[0].person)}</b> 님에게</> : "혼자만 가진 역량 · 기술이 없습니다."}</p>
