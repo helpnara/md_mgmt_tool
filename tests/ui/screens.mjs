@@ -6974,7 +6974,11 @@ async function main() {
   });
 
   await check("경험 상세의 역량 태그 — 축 · 태그명 · [빼기] 가 한 줄 (263)", async () => {
+    // 296 — 확정한 경험은 [확정 풀기] 뒤에 고친다. 끝나면 태그를 되돌리고 다시 확정해 뒤 시험(업무 이력 파일)이 그대로 쓰게
+    const before = await api.get(`/api/experiences/${seeded.exportExp}`);
+    if (before.status === "확정") await api.post(`/api/experiences/${seeded.exportExp}/unconfirm`, {});
     await api.patch(`/api/experiences/${seeded.exportExp}`, { skills: [{ axis: "기술", name: "데이터 파이프라인" }, { axis: "업무", name: "아주 긴 사전에 없는 역량 태그 이름" }] });
+    try {
     for (const width of [1440, 1100, 900]) {
       await page.setViewportSize({ width, height: 900 });
       await go(`#/experience/${seeded.exportExp}`);
@@ -6985,6 +6989,11 @@ async function main() {
           .map((c) => Math.round(c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2)));
         expect(Math.max(...tops) - Math.min(...tops) <= 4, `${width}px ${i}번째 줄이 한 줄이 아니다: ${tops}`);
       }
+    }
+    } finally {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await api.patch(`/api/experiences/${seeded.exportExp}`, { skills: before.skills });
+      if (before.status === "확정") await api.post(`/api/experiences/${seeded.exportExp}/confirm`, {}).catch(() => undefined);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
   });
@@ -7573,6 +7582,8 @@ async function main() {
     await page.locator(".skills-tabs").getByRole("tab", { name: "사람별" }).click();
     const link = page.locator('a.person-link[href^="#/person/"]').first();
     await link.waitFor({ timeout: 8000 });
+    // 주소를 고친 뒤 한 번 더 그린다 — 그 다시 그림까지 기다린다(사람이 누를 때는 이미 끝나 있다)
+    await page.waitForFunction(() => decodeURIComponent(document.querySelector('a.person-link[href^="#/person/"]')?.getAttribute("href") ?? "").endsWith("back=skills"), null, { timeout: 3000 }).catch(() => undefined);
     const href = decodeURIComponent(await link.getAttribute("href"));
     expect(href.endsWith("back=skills"), `이력 링크: ${href}`);
   });
