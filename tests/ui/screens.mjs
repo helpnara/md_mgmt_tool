@@ -7396,14 +7396,49 @@ async function main() {
 
   console.log("\n[81] 팀 역량 · 기술 스택 (TODO 284)");
 
-  await check("팀원역량 → [팀 역량] — 완성도 · 역량 지도 · 기술 스택(층) · 한 사람에게만, 이름 가리기 · 인쇄 (284)", async () => {
+  const openTeam = async () => {
     await go("#/skills");
     await page.locator(".skills-tabs").getByRole("tab", { name: "팀 역량" }).click();
     const box = page.locator("[data-testid=team-skills]");
-    await box.locator("[data-testid=ts-completeness]").waitFor({ timeout: 8000 });
-    for (const id of ["ts-skill-map", "ts-stack", "ts-only-one"]) equal(await box.locator(`[data-testid=${id}]`).count(), 1, id);
-    expect((await box.locator("[data-testid=ts-completeness]").innerText()).includes("세는 경험"), "완성도 줄");
-    await box.locator("[data-testid=ts-completeness] > summary").click();   // 290 — 데이터 점검은 접혀 있다
+    await box.locator("[data-testid=ts-summary]").waitFor({ timeout: 8000 });
+    return box;
+  };
+  const openEvidence = async (box) => {
+    if ((await box.locator("[data-testid=ts-evidence]").getAttribute("open")) === null) await box.locator("[data-testid=ts-evidence] > summary").click();
+    await box.locator("[data-testid=ts-skill-map]").waitFor({ timeout: 5000 });
+  };
+
+  await check("[팀 역량] 질문 카드 여섯 — 순서 · 두 칸 · 번호 없음 · 근거 자료 · 데이터 점검은 접힘 (291)", async () => {
+    const box = await openTeam();
+    equal(await box.locator("[data-testid=ts-summary] .ts-kpi").count(), 5, "숫자 다섯");
+    expect((await box.locator("[data-testid=ts-headline]").count()) === 1, "한 줄 결론");
+    const order = await box.locator("[data-testid=ts-summary], [data-testid^=ts-q-], [data-testid=ts-evidence], [data-testid=ts-completeness]")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+    equal(order.join(","), "ts-summary,ts-q-strength,ts-q-weak,ts-q-risk,ts-q-change,ts-q-growth,ts-q-actions,ts-evidence,ts-completeness", "카드 순서");
+    const [a, b] = await Promise.all([box.locator("[data-testid=ts-q-strength]").boundingBox(), box.locator("[data-testid=ts-q-weak]").boundingBox()]);
+    expect(a && b && Math.abs(a.y - b.y) < 4 && a.x < b.x, `두 칸: ${JSON.stringify([a, b])}`);
+    const titles = await box.locator(".ts-q h3").allInnerTexts();
+    expect(titles.length === 6 && titles.every((t) => !/^\d/.test(t.trim())), `번호 없음: ${titles}`);
+    for (const id of ["ts-evidence", "ts-completeness"]) equal(await box.locator(`[data-testid=${id}]`).getAttribute("open"), null, `${id} 접힘`);
+    // [근거 보기] — 근거 자료를 펼쳐 그 자리로
+    await box.locator("[data-testid=ts-q-change] .ts-more").click();
+    await box.locator("[data-testid=ts-change]").waitFor({ timeout: 5000 });
+    equal(await box.locator("[data-testid=ts-change] .ts-change-box").count(), 4, "근거 — 네 칸");
+    equal(await box.locator("[data-testid=ts-trend] .ts-trend-axis").count(), 4, "근거 — 축마다 다섯 해");
+    const toggle = box.locator(".ts-group-toggle").first();
+    if (await toggle.count()) {
+      const before = await box.locator(".ts-skill-line").count();
+      await toggle.click();
+      expect((await box.locator(".ts-skill-line").count()) > before, "중분류 줄을 누르면 역량이 펼쳐진다");
+    }
+  });
+
+  await check("[팀 역량] 근거 자료 — 역량 지도 · 기술 스택(층) · 혼자만 가진 것, 이름 가리기 · 인쇄는 카드 한 장 (284 · 291)", async () => {
+    const box = await openTeam();
+    await openEvidence(box);
+    for (const id of ["ts-skill-map", "ts-stack", "ts-only-one", "ts-shape"]) equal(await box.locator(`[data-testid=${id}]`).count(), 1, id);
+    expect((await box.locator("[data-testid=ts-completeness]").innerText()).includes("세는 경험"), "데이터 점검 줄");
+    await box.locator("[data-testid=ts-completeness] > summary").click();
     const firstPerson = await box.locator(".ts-complete-table tbody th").first().innerText();
     await box.getByLabel("이름 가리기").check();
     const masked = await box.locator(".ts-complete-table tbody th").first().innerText();
@@ -7416,19 +7451,17 @@ async function main() {
     await page.evaluate(() => { window.print = () => { window.__tsPrinted = true; }; });
     await box.getByRole("button", { name: "인쇄 · PDF" }).click();
     await page.waitForFunction(() => window.__tsPrinted === true, null, { timeout: 5000 });
-    equal(await page.locator(".ts-print-root [data-testid=ts-skill-map]").count(), 1, "인쇄 판");
+    equal(await page.locator(".ts-print-root [data-testid=ts-q-strength]").count(), 1, "인쇄 — 질문 카드");
+    equal(await page.locator(".ts-print-root [data-testid=ts-evidence]").count(), 0, "인쇄 — 근거는 고를 때만");
     await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
     await page.waitForFunction(() => !document.querySelector(".ts-print-root"), null, { timeout: 5000 });
   });
 
-  await check("[팀 역량] 2단계 — 축별 모양 · 해마다 새로 생긴 것 · 과제 분류 × 역량 · 목표 고치기 (284)", async () => {
-    await go("#/skills");
-    await page.locator(".skills-tabs").getByRole("tab", { name: "팀 역량" }).click();
-    const box = page.locator("[data-testid=team-skills]");
-    await box.locator("[data-testid=ts-shape]").waitFor({ timeout: 8000 });
+  await check("[팀 역량] 근거 자료 — 축별 모양 · 처음 나온 해 · 과제 분류 × 역량 · 목표 고치기 (284)", async () => {
+    const box = await openTeam();
+    await openEvidence(box);
     equal(await box.locator("[data-testid=ts-shape] .ts-shape-row").count(), 4, "축 넷");
     equal(await box.locator("[data-testid=ts-new-by-year] .ts-year-row").count(), 5, "다섯 해");
-    await box.locator("[data-testid=ts-details] > summary").click();   // 290 — 자세히 보기는 접혀 있다
     expect(await box.getByRole("group", { name: "과제 분류" }).getByRole("button").count() >= 1, "분류 칩");
     const targets = box.locator("[data-testid=ts-targets]");
     await targets.getByRole("button", { name: "목표 고치기" }).click();
@@ -7436,33 +7469,8 @@ async function main() {
     await targets.locator('input[aria-label="목표 이름"]').last().fill("화면시험 목표 역량");
     await targets.locator('input[aria-label="목표 사람 수"]').last().fill("2");
     await targets.getByRole("button", { name: "저장", exact: true }).click();
-    await page.waitForFunction(() => document.querySelector("[data-testid=ts-targets]")?.textContent?.includes("화면시험 목표 역량"), null, { timeout: 8000 });
-    const row = targets.locator("tr", { hasText: "화면시험 목표 역량" });
-    expect((await row.innerText()).includes("2명"), `목표 줄: ${await row.innerText()}`);
+    await page.waitForFunction(() => document.querySelector("[data-testid=ts-q-weak]")?.textContent?.includes("화면시험 목표 역량"), null, { timeout: 8000 });
     await api.put("/api/team-skills/targets", { targets: [] });
-  });
-
-  await check("[팀 역량] 다시 짜기 — 한눈에 · 지난해와 비교 · 반반 · 중분류 지도 펼치기 · 접힌 자세히 (290)", async () => {
-    // 지난해 · 올해 경험(구조화 이상은 화면 시험 자료에 없을 수 있다 — 숫자는 백엔드 시험이 본다, 여기서는 모양)
-    await go("#/skills");
-    await page.locator(".skills-tabs").getByRole("tab", { name: "팀 역량" }).click();
-    const box = page.locator("[data-testid=team-skills]");
-    await box.locator("[data-testid=ts-summary]").waitFor({ timeout: 8000 });
-    equal(await box.locator("[data-testid=ts-summary] .ts-kpi").count(), 5, "숫자 다섯");
-    const order = await box.locator("[data-testid=ts-summary], [data-testid=ts-change], [data-testid=ts-shape], [data-testid=ts-only-one], [data-testid=ts-skill-map], [data-testid=ts-details], [data-testid=ts-completeness]")
-      .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
-    equal(order.join(","), "ts-summary,ts-change,ts-shape,ts-only-one,ts-skill-map,ts-details,ts-completeness", "요약 → 변동 → 모양 → 위험 → 지도 → 자세히 → 점검");
-    equal(await box.locator("[data-testid=ts-change] .ts-change-box").count(), 4, "새로 생김 · 늘어남 · 줄어듦 · 끊김");
-    equal(await box.locator("[data-testid=ts-trend] .ts-trend-axis").count(), 4, "축마다 다섯 해");
-    const [shape, stack] = await Promise.all([box.locator("[data-testid=ts-shape]").boundingBox(), box.locator("[data-testid=ts-stack]").boundingBox()]);
-    expect(shape && stack && Math.abs(shape.y - stack.y) < 4 && shape.width < 800, `팀 모양 반반: ${JSON.stringify([shape, stack])}`);
-    for (const id of ["ts-details", "ts-completeness"]) expect(!(await box.locator(`[data-testid=${id}]`).getAttribute("open") !== null), `${id} 는 접혀 있다`);
-    const toggle = box.locator(".ts-group-toggle").first();
-    if (await toggle.count()) {
-      const before = await box.locator(".ts-skill-line").count();
-      await toggle.click();
-      expect((await box.locator(".ts-skill-line").count()) > before, "중분류 줄을 누르면 역량이 펼쳐진다");
-    }
   });
 
   await check("설정 → 보유 기술(도구) 사전 — 층 칩으로 거르고, 고치는 칸에 층 (284)", async () => {

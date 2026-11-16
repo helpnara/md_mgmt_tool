@@ -1824,6 +1824,17 @@ export interface TeamSkills {
   };
   kpis: { skills_held: number; skills_total: number; skills_new: number; tools: number; tools_new: number; only_one: number; target_gaps: number; experiences: number };
   insights: { text: string; target: string; person?: string }[];
+  /** 291 — 질문 카드 */
+  headline: string;
+  strengths: { skills: { name: string; axis: string; group: string; holders: number; experiences: number }[]; tools: { name: string; people: number; uses: number }[] };
+  weak: {
+    low: { axis: string; group: string; experiences: number; held: number; total: number }[];
+    empty: { axis: string; group: string; experiences: number; held: number; total: number }[];
+    gaps: TeamSkillTarget[];
+  };
+  risk: { people: { person: string; count: number; items: { kind: string; name: string }[] }[]; tools: { name: string; person: string; uses: number }[] };
+  growth: { person: string; skills: string[]; tools: string[]; count: number; last: number }[];
+  actions: { kind: string; text: string }[];
 }
 export interface TeamChange {
   new: string[];

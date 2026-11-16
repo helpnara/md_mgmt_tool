@@ -142,9 +142,15 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
     # ⑤ 팀에 처음 나온 해 — 기간과 상관없이(세는 경험 · 담당 전체)
     first_seen: dict[tuple[str, str], dict[str, Any]] = {}
 
+    # 291 — 사람마다 처음 쓴 해(성장 — 본인 지난해와만)
+    person_first: dict[tuple[str, str, str], str] = {}
+
     def seen(kind: str, label: str, year: str, person: str) -> None:
         if not year:
             return
+        pk = (person, kind, label)
+        if pk not in person_first or year < person_first[pk]:
+            person_first[pk] = year
         row = first_seen.get((kind, label))
         if row is None or year < row["year"]:
             first_seen[(kind, label)] = {"kind": kind, "name": label, "year": year, "people": [person]}
@@ -306,8 +312,101 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
         },
         "skills": skill_rows, "stack": stack, "only_one": only_one,
         "shape": shape, "new_by_year": new_by_year, "new_earlier": earlier, "by_class": classes_out, "targets": targets,
-        **_change_and_insights(this_year, skill_dict, skill_years, tool_years, first_seen, skill_rows, stack, only_one, targets, completeness),
+        **(found := _change_and_insights(this_year, skill_dict, skill_years, tool_years, first_seen, skill_rows, stack, only_one, targets, completeness)),
+        **_questions(this_year, names, skill_dict, skill_rows, stack, only_one, targets, found["change"], person_first),
     }
+
+
+def _questions(this_year: str, names: list[str], skill_dict: list[dict[str, Any]], skill_rows: list, stack: list, only_one: list,
+               targets: list, change: dict, person_first: dict) -> dict[str, Any]:
+    """291 — 팀장의 질문에 답하는 카드: 강점 · 빈 곳 · 위험 · 성장 · 할 일 + 한 줄 결론(규칙, AI 아님)."""
+    last_year = str(int(this_year) - 1)
+    group_of = {(item["axis"], item["name"]): item.get("group") or "" for item in skill_dict}
+
+    # 강점 — 가진 사람이 많고 경험이 많은 역량 다섯 · 쓴 사람이 많은 보유 기술 셋
+    held = [r for r in skill_rows if r["holders"]]
+    strengths = {
+        "skills": [{"name": r["name"], "axis": r["axis"], "group": r["group"], "holders": r["holders"], "experiences": r["experiences"]}
+                   for r in sorted(held, key=lambda r: (-r["holders"], -r["experiences"], r["name"]))[:5]],
+        "tools": [{"name": t["name"], "people": t["person_count"], "uses": t["project_count"] + t["experience_count"]}
+                  for t in sorted((t for layer in stack for t in layer["tools"]), key=lambda t: (-t["person_count"], -(t["project_count"] + t["experience_count"]), t["name"]))[:3]],
+    }
+
+    # 빈 곳 — 중분류마다 경험 수(사전에 있는 묶음), 적은 셋 · 아무도 없는 묶음 · 목표 모자람
+    totals: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in skill_dict:
+        g = item.get("group") or ""
+        if not g:
+            continue
+        row = totals.setdefault((item["axis"], g), {"axis": item["axis"], "group": g, "experiences": 0, "held": 0, "total": 0})
+        row["total"] += 1
+    for r in held:
+        row = totals.get((r["axis"], group_of.get((r["axis"], r["name"]), "")))
+        if row:
+            row["experiences"] += r["experiences"]
+            row["held"] += 1
+    groups = list(totals.values())
+    weak = {
+        "low": sorted((g for g in groups if g["experiences"]), key=lambda g: (g["experiences"], g["group"]))[:3],
+        "empty": [g for g in groups if not g["experiences"]],
+        "gaps": [t for t in targets if t.get("gap")],
+    }
+
+    # 위험 — 사람마다 혼자 가진 것, 많이 쓰는데 한 사람뿐인 보유 기술
+    per: dict[str, list[dict[str, str]]] = {}
+    for o in only_one:
+        per.setdefault(o["person"], []).append({"kind": o["kind"], "name": o["name"]})
+    risky_tools = sorted((t for layer in stack for t in layer["tools"] if t["person_count"] == 1),
+                         key=lambda t: (-(t["project_count"] + t["experience_count"]), t["name"]))[:3]
+    risk = {
+        "people": [{"person": p, "count": len(items), "items": items[:6]} for p, items in sorted(per.items(), key=lambda kv: (-len(kv[1]), names.index(kv[0]) if kv[0] in names else 99))],
+        "tools": [{"name": t["name"], "person": t["people"][0], "uses": t["project_count"] + t["experience_count"]} for t in risky_tools],
+    }
+
+    # 성장 — 사람마다 올해 처음 쓴 역량 · 보유 기술(본인 기준), 지난해 처음 쓴 수와만 견줌. 명부 순
+    growth = []
+    for name in names:
+        this_new = sorted(label for (p, kind, label), y in person_first.items() if p == name and y == this_year and kind == "역량")
+        this_tools = sorted(label for (p, kind, label), y in person_first.items() if p == name and y == this_year and kind == "보유 기술")
+        last_count = sum(1 for (p, _, _), y in person_first.items() if p == name and y == last_year)
+        growth.append({"person": name, "skills": this_new, "tools": this_tools, "count": len(this_new) + len(this_tools), "last": last_count})
+
+    # 할 일 — 규칙 넷, 많아야 다섯
+    actions: list[dict[str, str]] = []
+    holders_of = {r["name"]: set(r["cells"]) for r in held}
+    for o in only_one:
+        if o["kind"] != "역량" or len(actions) >= 2:
+            continue
+        g = next((group_of[k] for k in group_of if k[1] == o["name"]), "")
+        mates = sorted({p for r in held if r["group"] == g and g for p in holders_of.get(r["name"], set())} - {o["person"]})
+        if mates:
+            actions.append({"kind": "짝", "text": f"{o['name']} — {{{o['person']}}} 님만 가졌습니다. 같은 묶음({g}) 경험이 있는 {{{mates[0]}}} 님과 짝 과제 · 공유 세션"})
+    for t in weak["gaps"][:2]:
+        actions.append({"kind": "교육", "text": f"목표 {t['name']} {t['gap']}명 모자람 — 교육 · 배치"})
+    for r in [r for r in change["skills"]["stopped"] if r["last"] >= 2][:1]:
+        actions.append({"kind": "유지", "text": f"{r['name']}: 지난해 {r['last']}건 → 올해 0 — 계속 가져갈지 정하기"})
+    target_names = {t["name"] for t in targets}
+    for g in weak["low"][:1]:
+        if g["group"] not in target_names:
+            actions.append({"kind": "목표", "text": f"{g['group']}: 경험이 적습니다({g['experiences']}건) — 목표를 둘지 정하기"})
+
+    # 한 줄 결론 — 변화 · 강점 · 위험에서 가장 큰 것 하나씩
+    parts = []
+    moved = [r for r in change["groups"] if r["group"] != "(중분류 없음)" and r["delta"]]
+    if moved:
+        up = max(moved, key=lambda r: r["delta"])
+        dn = min(moved, key=lambda r: r["delta"])
+        if up["delta"] > 0:
+            parts.append(f"올해 팀은 {up['group']} 쪽으로 넓어졌고(+{up['delta']})")
+        if dn["delta"] < 0:
+            parts.append(f"{dn['group']} 쪽은 줄었습니다({dn['last']}→{dn['this']})")
+    if strengths["skills"]:
+        parts.append(f"가장 두터운 역량은 {strengths['skills'][0]['name']}({strengths['skills'][0]['holders']}명)")
+    if risk["people"]:
+        top = risk["people"][0]
+        parts.append(f"혼자만 가진 것 {len(only_one)}개 중 {top['count']}개가 {{{top['person']}}} 님에게 있습니다")
+    headline = " · ".join(parts)
+    return {"strengths": strengths, "weak": weak, "risk": risk, "growth": growth, "actions": actions[:5], "headline": headline}
 
 
 def _change_and_insights(this_year: str, skill_dict: list[dict[str, Any]], skill_years: dict, tool_years: dict, first_seen: dict,
@@ -386,7 +485,7 @@ def _change_and_insights(this_year: str, skill_dict: list[dict[str, Any]], skill
             per[o["person"]] = per.get(o["person"], 0) + 1
         who_, n = max(per.items(), key=lambda p: p[1])
         if n >= 3:
-            insights.append({"text": f"한 사람에게만 있는 역량 · 보유 기술 {len(only_one)}개 중 {n}개가 {{{who_}}}에게 몰려 있습니다", "target": "ts-risk",
+            insights.append({"text": f"한 사람에게만 있는 역량 · 보유 기술 {len(only_one)}개 중 {n}개가 {{{who_}}} 님에게 몰려 있습니다", "target": "ts-risk",
                              "person": who_})
     if gaps:
         first = gaps[0]

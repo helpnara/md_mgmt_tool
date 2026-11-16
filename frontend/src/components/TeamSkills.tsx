@@ -9,10 +9,12 @@ import CopyTableButton from "./CopyTableButton";
 /**
  * 팀 역량 · 기술 스택 (TODO 284 · 290) — 팀원역량 → [팀 역량] 탭(팀장 · 관리자만).
  *
- * 290 — 팀장이 한눈에: **요약 → 변동 → 모양 → 위험 → 자세히** 순서(번호 = 화면 순서).
+ * 291 — 팀장의 질문 여섯에 답하는 카드(강점 · 빈 곳 · 위험 · 변화 · 성장 · 할 일, 번호 없음) + 한 줄 결론 · 숫자 다섯.
+ * 290 의 표 · 막대 · 지도는 "근거 자료"(접힘)로 — 카드의 [근거 보기]가 펼쳐 그 자리로 간다.
+ * (290 — 팀장이 한눈에: **요약 → 변동 → 모양 → 위험 → 자세히** 순서(번호 = 화면 순서).
  * 1 한눈에(숫자 다섯 · 인사이트 문장) 2 지난해와 비교(중분류 지난해 → 올해 · 새로 생김 · 늘어남 · 줄어듦 · 끊김 · 축마다 다섯 해)
  * 3 팀 모양(축별 막대 | 기술 스택, 반반) 4 위험 · 빈 곳(한 사람에게만 | 목표, 반반) 5 역량 지도(중분류 줄 — 눌러 펼침)
- * ▸ 자세히 보기(과제 분류 × 역량 · 처음 나온 해) ▸ 데이터 점검(완성도). 세는 경험은 구조화 · 확정, 칸 = 경험 수(수준 · Lv 아님).
+ * ▸ 자세히 보기(과제 분류 × 역량 · 처음 나온 해) ▸ 데이터 점검(완성도). 세는 경험은 구조화 · 확정, 칸 = 경험 수(수준 · Lv 아님).)
  */
 const PERIODS: { key: Data["period"]; label: string }[] = [
   { key: "year", label: "올해" },
@@ -30,6 +32,8 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
   const [mask, setMask] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [printing, setPrinting] = useState(false);
+  // 291 — 인쇄는 질문 카드 여섯 한 장, 근거 자료는 고를 때만
+  const [printEvidence, setPrintEvidence] = useState(false);
 
   const load = () => api.teamSkills(period, left).then(setData).catch((error: Error) => notifyError(error.message));
   useEffect(() => { void load(); }, [period, left]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -67,19 +71,20 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
               rows={() => (data?.change.groups ?? []).map((g) => [axisLabel(g.axis), g.group, g.last, g.this, g.delta])} />
             <CopyTableButton label="표 복사 · 기술" headers={["층", "보유 기술", "쓴 사람 수", "과제 수", "경험 수", "쓴 사람"]}
               rows={() => (data?.stack ?? []).flatMap((l) => l.tools.map((t) => [l.layer, t.name, t.person_count, t.project_count, t.experience_count, t.people.map(show).join(", ")]))} />
+            <label className="check-label"><input type="checkbox" checked={printEvidence} onChange={(e) => setPrintEvidence(e.target.checked)} /> 근거도 인쇄</label>
             <button className="ghost" disabled={!data} onClick={() => setPrinting(true)}>인쇄 · PDF</button>
           </div>
         </div>
         <p className="hint">
-          세는 것은 <b>구조화 · 확정 경험</b>(초안은 뺌) — 숫자는 <b>경험 수</b>이고 수준 · 평가가 아닙니다. <b>범위</b>({periodLabel})는 3 ~ 5 와 자세히 보기에, <b>2 지난해와 비교</b>는 늘 올해 · 지난해로 셉니다.
-          팀에 나눌 때는 <b>이름 가리기</b>를 켜고 인쇄하세요.
+          팀장의 질문 여섯 — <b>강점 · 빈 곳 · 위험 · 변화 · 성장 · 할 일</b> — 에 답합니다. 카드마다 답이 먼저, [근거 보기]를 누르면 아래 근거 자료로 갑니다.
+          세는 것은 <b>구조화 · 확정 경험</b>, 숫자는 <b>경험 수</b>(수준 · 평가 아님). 변화 · 성장은 늘 올해 · 지난해, 나머지는 <b>범위</b>({periodLabel}). 팀에 나눌 때는 <b>이름 가리기</b>를 켜고 인쇄하세요.
         </p>
       </div>
       {data && <Body data={data} show={show} interactive meta={meta} onTargets={load} />}
       {printing && data && createPortal(
         <div className="ts-print-root" aria-hidden>
           <h1 className="ts-print-title">팀 역량 · 기술 스택 — {data.change.last} → {data.change.this} · 범위 {periodLabel}</h1>
-          <Body data={data} show={show} interactive={false} meta={meta} />
+          <Body data={data} show={show} interactive={false} meta={meta} withEvidence={printEvidence} />
         </div>,
         document.body,
       )}
@@ -87,7 +92,142 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
   );
 }
 
-function Body({ data, show, interactive, meta, onTargets }: {
+function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
+  data: Data; show: (name: string) => string; interactive: boolean; meta: Meta; onTargets?: () => void; withEvidence?: boolean;
+}) {
+  const [evidence, setEvidence] = useState(false);
+  const k = data.kpis;
+  const ch = data.change;
+  const text = (t: string) => t.replace(/\{([^}]+)\}/g, (_, n: string) => show(n));
+  const people = data.people.length || 1;
+  const openEvidence = (id: string) => {
+    setEvidence(true);
+    window.setTimeout(() => document.querySelector(`[data-testid=${id}]`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
+  const more = (id: string, label = "근거 보기") => interactive && (
+    <button type="button" className="link-button ts-more" onClick={() => openEvidence(id)}>{label} →</button>
+  );
+  const chip = (name: string, kind: "skill" | "tool", note?: string) => (
+    <span key={`${kind}-${name}`} className={`ts-new ${kind}`}>{name}{note && <small>{note}</small>}</span>
+  );
+  const s = data.strengths;
+  const w = data.weak;
+  const r = data.risk;
+  const grown = data.growth.filter((g) => g.count > 0);
+  const changeTotal = (key: "new" | "up" | "down" | "stopped") => ch.skills.counts[key] + ch.tools.counts[key];
+
+  return (
+    <>
+      <section className="card ts-section ts-summary" data-testid="ts-summary">
+        <p className="ts-headline" data-testid="ts-headline">{data.headline ? text(data.headline) : "아직 짚을 만한 내용이 없습니다 — 경험이 구조화 · 확정되면 결론이 생깁니다."}</p>
+        <div className="ts-kpis">
+          <div className="ts-kpi"><b>{k.skills_held}<small>/{k.skills_total}</small></b><span>가진 역량</span>{k.skills_new > 0 && <em className="ts-up">올해 +{k.skills_new}</em>}</div>
+          <div className="ts-kpi"><b>{k.tools}</b><span>보유 기술</span>{k.tools_new > 0 && <em className="ts-up">올해 +{k.tools_new}</em>}</div>
+          <div className="ts-kpi"><b className={k.only_one ? "warn-text" : ""}>{k.only_one}</b><span>혼자만 가진 것</span></div>
+          <div className="ts-kpi"><b className={k.target_gaps ? "warn-text" : ""}>{k.target_gaps}</b><span>목표 모자람</span></div>
+          <div className="ts-kpi"><b>{k.experiences}</b><span>세는 경험</span></div>
+        </div>
+      </section>
+
+      <div className="ts-qgrid">
+        <section className="card ts-q" data-testid="ts-q-strength">
+          <div className="ts-q-head"><span className="ts-tag good">강점</span><h3>우리 팀이 잘하는 것</h3></div>
+          <p className="ts-answer">{s.skills[0] ? <>가장 두터운 역량은 <b>{s.skills[0].name}</b> — {s.skills[0].holders}명 · 경험 {s.skills[0].experiences}건</> : "아직 셀 역량이 없습니다."}</p>
+          <ul className="ts-bars">
+            {s.skills.map((x) => (
+              <li key={x.name}><span className="ts-bar-label">{x.name}</span>
+                <span className="ts-bar"><span className="ts-bar-fill" style={{ width: `${(x.holders / people) * 100}%` }} /></span>
+                <span className="ts-bar-num">{x.holders}명 · {x.experiences}건</span></li>
+            ))}
+          </ul>
+          {s.tools.length > 0 && <p className="ts-line">보유 기술 {s.tools.map((t) => chip(t.name, "tool", `${t.people}명`))}</p>}
+          {more("ts-skill-map", "역량 지도")}
+        </section>
+
+        <section className="card ts-q" data-testid="ts-q-weak">
+          <div className="ts-q-head"><span className="ts-tag warn">빈 곳</span><h3>약하거나 비어 있는 것</h3></div>
+          <p className="ts-answer">
+            {w.empty.length > 0 ? <>아무도 경험이 없는 묶음 <b>{w.empty.length}개</b></> : w.low[0] ? <>가장 얇은 묶음은 <b>{w.low[0].group}</b> — {w.low[0].experiences}건</> : "고르게 채워져 있습니다."}
+            {w.gaps.length > 0 && <> · 목표 모자람 <b>{w.gaps.length}</b></>}
+          </p>
+          {w.low.length > 0 && (
+            <ul className="ts-bars">
+              {w.low.map((g) => (
+                <li key={g.group}><span className="ts-bar-label">{g.group}</span>
+                  <span className="ts-bar"><span className="ts-bar-fill warn" style={{ width: `${(g.held / Math.max(1, g.total)) * 100}%` }} /></span>
+                  <span className="ts-bar-num">{g.experiences}건 · 역량 {g.held}/{g.total}</span></li>
+              ))}
+            </ul>
+          )}
+          {w.empty.length > 0 && <p className="ts-line">비어 있음 {w.empty.map((g) => chip(g.group, "tool"))}</p>}
+          {w.gaps.length > 0 && <p className="ts-line">목표 {w.gaps.map((t) => chip(t.name, t.kind === "역량" ? "skill" : "tool", `${t.have ?? 0}/${t.want}명`))}</p>}
+          {more("ts-targets", "목표 보기 · 고치기")}
+        </section>
+
+        <section className="card ts-q" data-testid="ts-q-risk">
+          <div className="ts-q-head"><span className="ts-tag warn">위험</span><h3>누가 빠지면 끊기나</h3></div>
+          <p className="ts-answer">{r.people[0] ? <>혼자만 가진 것 <b>{k.only_one}개</b> — 그중 {r.people[0].count}개가 <b>{show(r.people[0].person)}</b> 님에게</> : "혼자만 가진 역량 · 기술이 없습니다."}</p>
+          <ul className="ts-bars">
+            {r.people.slice(0, 4).map((p) => (
+              <li key={p.person}><span className="ts-bar-label">{show(p.person)}</span>
+                <span className="ts-chip-wrap">{p.items.slice(0, 3).map((it) => chip(it.name, it.kind === "역량" ? "skill" : "tool"))}{p.count > 3 && <span className="muted">외 {p.count - 3}</span>}</span></li>
+            ))}
+          </ul>
+          {r.tools.length > 0 && <p className="ts-line">많이 쓰는데 1명뿐 {r.tools.map((t) => chip(t.name, "tool", `${show(t.person)} · ${t.uses}곳`))}</p>}
+          {more("ts-only-one")}
+        </section>
+
+        <section className="card ts-q" data-testid="ts-q-change">
+          <div className="ts-q-head"><span className="ts-tag">변화</span><h3>{ch.last} → {ch.this} 무엇이 달라졌나</h3></div>
+          <p className="ts-answer">새로 생김 <b>{changeTotal("new")}</b> · 늘어남 <b>{changeTotal("up")}</b> · 줄어듦 <b>{changeTotal("down")}</b> · 끊김 <b>{changeTotal("stopped")}</b></p>
+          <dl className="ts-change-mini">
+            <dt>새로 생김</dt><dd>{[...ch.skills.new.slice(0, 3).map((x) => chip(x, "skill")), ...ch.tools.new.slice(0, 2).map((x) => chip(x, "tool"))]}{changeTotal("new") === 0 && <span className="muted">없음</span>}</dd>
+            <dt>늘어남</dt><dd>{ch.skills.up.slice(0, 3).map((x) => chip(x.name, "skill", `${x.last}→${x.this}`))}{ch.skills.up.length === 0 && <span className="muted">없음</span>}</dd>
+            <dt>줄어듦</dt><dd>{ch.skills.down.slice(0, 3).map((x) => chip(x.name, "skill", `${x.last}→${x.this}`))}{ch.skills.down.length === 0 && <span className="muted">없음</span>}</dd>
+            <dt>끊김</dt><dd>{ch.skills.stopped.slice(0, 3).map((x) => chip(x.name, "skill", `${x.last}→0`))}{ch.skills.stopped.length === 0 && <span className="muted">없음</span>}</dd>
+          </dl>
+          {more("ts-change")}
+        </section>
+
+        <section className="card ts-q" data-testid="ts-q-growth">
+          <div className="ts-q-head"><span className="ts-tag good">성장</span><h3>누가 넓어졌나 <span className="muted">본인 지난해와만</span></h3></div>
+          <p className="ts-answer">올해 새 역량 · 기술을 쓴 사람 <b>{grown.length}</b> / {data.growth.length}명</p>
+          <table className="grid ts-compact ts-growth">
+            <tbody>
+              {data.growth.map((g) => (
+                <tr key={g.person}>
+                  <th scope="row">{show(g.person)}</th>
+                  <td className="ts-num">{g.count ? <b>+{g.count}</b> : <span className="muted">0</span>}<small className="muted"> (지난해 +{g.last})</small></td>
+                  <td>{[...g.skills, ...g.tools].slice(0, 3).join(", ")}{g.count > 3 ? " …" : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="card ts-q" data-testid="ts-q-actions">
+          <div className="ts-q-head"><span className="ts-tag">할 일</span><h3>그래서 무엇을 하나 <span className="muted">제안 — 규칙으로 만듦</span></h3></div>
+          {data.actions.length === 0 ? <p className="muted">지금 제안할 일이 없습니다.</p> : (
+            <ul className="ts-actions">
+              {data.actions.map((a, i) => <li key={i}><span className="ts-tag small">{a.kind}</span> {text(a.text)}</li>)}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      {(interactive || withEvidence) && <details className="card ts-section ts-fold" data-testid="ts-evidence" open={!interactive ? (withEvidence || undefined) : (evidence || undefined)}
+        onToggle={(e) => interactive && setEvidence((e.target as HTMLDetailsElement).open)}>
+        <summary><b>근거 자료</b> <span className="muted">— 지난해와 비교 · 팀 모양 · 기술 스택 · 혼자만 가진 것 · 목표 · 역량 지도 · 과제 분류 · 처음 나온 해</span></summary>
+        {(evidence || !interactive) && <Evidence data={data} show={show} interactive={interactive} meta={meta} onTargets={onTargets} />}
+      </details>}
+
+      {(interactive || withEvidence) && <Completeness data={data} show={show} interactive={interactive} />}
+    </>
+  );
+}
+
+/** 근거 자료 — 290 의 표 · 막대 · 지도(접어 둔 곳). 질문 카드의 [근거 보기]가 여기로 */
+function Evidence({ data, show, interactive, meta, onTargets }: {
   data: Data; show: (name: string) => string; interactive: boolean; meta: Meta; onTargets?: () => void;
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -95,14 +235,9 @@ function Body({ data, show, interactive, meta, onTargets }: {
   const classes = meta.classifications.filter((c) => data.by_class[c.key]);
   const [classKey, setClassKey] = useState(classes[0]?.key ?? "nature");
   const names = data.people.map((p) => p.name);
-  const k = data.kpis;
   const ch = data.change;
-  const c = data.completeness;
-  const issues = c.unknown_tags + c.unlisted_tools.length + c.no_layer_tools.length;
   const maxShape = Math.max(1, ...data.shape.map((s) => s.experiences));
   const maxTrend = Math.max(1, ...ch.axes_trend.flatMap((a) => a.years.map((y) => y.count)));
-  const go = (id: string) => document.querySelector(`[data-testid=${id}]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  const text = (t: string) => t.replace(/\{([^}]+)\}/g, (_, n: string) => show(n));
 
   // 역량 지도 — 축 · 중분류마다 사람별 합. 줄을 누르면 그 안의 역량
   const held = data.skills.filter((r) => r.holders > 0);
@@ -133,27 +268,9 @@ function Body({ data, show, interactive, meta, onTargets }: {
   };
 
   return (
-    <>
-      <section className="card ts-section" data-testid="ts-summary">
-        <h3>1. 한눈에</h3>
-        <div className="ts-kpis">
-          <div className="ts-kpi"><b>{k.skills_held}<small>/{k.skills_total}</small></b><span>가진 역량</span>{k.skills_new > 0 && <em className="ts-up">올해 +{k.skills_new}</em>}</div>
-          <div className="ts-kpi"><b>{k.tools}</b><span>보유 기술</span>{k.tools_new > 0 && <em className="ts-up">올해 +{k.tools_new}</em>}</div>
-          <button type="button" className="ts-kpi link" onClick={() => go("ts-risk")} disabled={!interactive}><b className={k.only_one ? "warn-text" : ""}>{k.only_one}</b><span>한 사람에게만</span></button>
-          <button type="button" className="ts-kpi link" onClick={() => go("ts-risk")} disabled={!interactive}><b className={k.target_gaps ? "warn-text" : ""}>{k.target_gaps}</b><span>목표 모자람</span></button>
-          <div className="ts-kpi"><b>{k.experiences}</b><span>세는 경험</span></div>
-        </div>
-        {data.insights.length > 0 ? (
-          <ul className="ts-insights" data-testid="ts-insights">
-            {data.insights.map((ins, i) => (
-              <li key={i}>{interactive ? <button type="button" className="link-button" onClick={() => go(ins.target)}>{text(ins.text)}</button> : text(ins.text)}</li>
-            ))}
-          </ul>
-        ) : <p className="muted">아직 짚을 만한 변동이 없습니다 — 경험이 구조화 · 확정되면 문장이 생깁니다.</p>}
-      </section>
-
-      <section className="card ts-section" data-testid="ts-change">
-        <h3>2. 지난해와 비교 <span className="muted">— {ch.last} → {ch.this}, 그 해에 걸친 경험 수(보유 기술은 쓴 사람 수)</span></h3>
+    <div className="ts-evidence">
+      <section className="ts-sub" data-testid="ts-change">
+        <h3>지난해와 비교 <span className="muted">— {ch.last} → {ch.this}, 그 해에 걸친 경험 수(보유 기술은 쓴 사람 수)</span></h3>
         <div className="ts-two">
           <div className="table-scroll">
             <table className="grid ts-compact ts-change-table">
@@ -179,8 +296,8 @@ function Body({ data, show, interactive, meta, onTargets }: {
       </section>
 
       <div className="ts-half">
-        <section className="card ts-section" data-testid="ts-shape">
-          <h3>3. 팀 모양 — 축별</h3>
+        <section className="ts-sub" data-testid="ts-shape">
+          <h3>축별 팀 모양</h3>
           <div className="ts-shape">
             {data.shape.map((s) => (
               <div key={s.axis} className="ts-shape-row" data-axis={s.axis}>
@@ -207,8 +324,8 @@ function Body({ data, show, interactive, meta, onTargets }: {
           ))}
         </div>
         </section>
-        <section className="card ts-section" data-testid="ts-stack">
-          <h3>3. 팀 모양 — 기술 스택 <span className="muted">칩 = 쓴 사람 수</span></h3>
+        <section className="ts-sub" data-testid="ts-stack">
+          <h3>기술 스택 <span className="muted">칩 = 쓴 사람 수</span></h3>
           {data.stack.length === 0 && <p className="muted">보유 기술이 아직 없습니다.</p>}
           <div className="ts-stack">
             {data.stack.map((layer) => (
@@ -243,8 +360,8 @@ function Body({ data, show, interactive, meta, onTargets }: {
       </div>
 
       <div className="ts-half" data-testid="ts-risk">
-        <section className="card ts-section" data-testid="ts-only-one">
-          <h3>4. 위험 — 한 사람에게만 있는 것 <span className="muted">대신할 사람이 없음</span></h3>
+        <section className="ts-sub" data-testid="ts-only-one">
+          <h3>혼자만 가진 것 <span className="muted">대신할 사람이 없음</span></h3>
           {personRows.length === 0 ? <p className="muted">없습니다.</p> : (
             <ul className="ts-person-risk">
               {personRows.map(([person, items]) => (
@@ -256,14 +373,14 @@ function Body({ data, show, interactive, meta, onTargets }: {
             </ul>
           )}
         </section>
-        <section className="card ts-section">
+        <section className="ts-sub">
           <Targets data={data} interactive={interactive} onSaved={onTargets} />
         </section>
       </div>
 
-      <section className="card ts-section" data-testid="ts-skill-map">
+      <section className="ts-sub" data-testid="ts-skill-map">
         <div className="card-head">
-          <h3>5. 역량 지도 <span className="muted">— 중분류 × 사람, 칸 = 경험 수. 줄을 누르면 그 안의 역량</span></h3>
+          <h3>역량 지도 <span className="muted">— 중분류 × 사람, 칸 = 경험 수. 줄을 누르면 그 안의 역량</span></h3>
           {interactive && groupKeys.length > 0 && (
             <button type="button" className="ghost small" onClick={() => {
               const all = groupKeys.every((g) => open[`${g.axis}|${g.group}`]);
@@ -315,8 +432,8 @@ function Body({ data, show, interactive, meta, onTargets }: {
         )}
       </section>
 
-      <details className="card ts-section ts-fold" data-testid="ts-details" open={!interactive || undefined}>
-        <summary><b>자세히 보기</b> <span className="muted">— 과제 분류 × 역량 · 처음 나온 해</span></summary>
+      <div className="ts-sub" data-testid="ts-details">
+        
         <div data-testid="ts-by-class" className="ts-sub">
           <h4>과제 분류 × 역량 <span className="muted">과제에 이은 경험 수</span></h4>
           {interactive && (
@@ -363,8 +480,18 @@ function Body({ data, show, interactive, meta, onTargets }: {
             ))}
           </div>
         </div>
-      </details>
+      </div>
 
+    </div>
+  );
+}
+
+/** 데이터 점검 — 맨 아래 접힘 */
+function Completeness({ data, show, interactive }: { data: Data; show: (name: string) => string; interactive: boolean }) {
+  const k = data.kpis;
+  const c = data.completeness;
+  const issues = c.unknown_tags + c.unlisted_tools.length + c.no_layer_tools.length;
+  return (
       <details className="card ts-section ts-fold" data-testid="ts-completeness" open={!interactive || undefined}>
         <summary>
           <b>데이터 점검</b>{issues > 0 && <span className="warn-text" title="사전에 없음 · 층 없음이 있습니다"> ●</span>}
@@ -389,7 +516,6 @@ function Body({ data, show, interactive, meta, onTargets }: {
           </table>
         </div>
       </details>
-    </>
   );
 }
 
@@ -419,7 +545,7 @@ function Targets({ data, interactive, onSaved }: { data: Data; interactive: bool
   return (
     <section className="ts-sub" data-testid="ts-targets">
       <div className="card-head">
-        <h3>4. 빈 곳 — 목표 vs 지금</h3>
+        <h3>목표 vs 지금</h3>
         {interactive && !editing && <button type="button" className="ghost small" onClick={() => setEditing(rows.map(({ kind, name, want }) => ({ kind, name, want })))}>목표 고치기</button>}
       </div>
       {!editing && rows.length === 0 && <p className="muted">적어 둔 목표가 없습니다{interactive ? " — [목표 고치기]로 팀이 갖출 역량 · 보유 기술과 사람 수를 적으세요" : ""}.</p>}

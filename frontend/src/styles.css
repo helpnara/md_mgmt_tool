@@ -3248,6 +3248,49 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .ts-fold > summary { cursor: pointer; font-size: var(--fs-sm); }
 .ts-fold[open] > summary { margin-bottom: 10px; }
 @media (max-width: 1100px) { .ts-two, .ts-half { grid-template-columns: 1fr; } .ts-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ts-trend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 291 — 질문 카드: 한 줄 결론 · 숫자 다섯 · 카드 여섯(두 칸), 근거는 접힘 */
+.ts-headline { margin: 0 0 10px; font-size: var(--fs-md); font-weight: 600; line-height: 1.5; }
+:is(.team-skills, .ts-print-root) .ts-summary .ts-kpi { padding: 6px 10px; }
+:is(.team-skills, .ts-print-root) .ts-summary .ts-kpi b { font-size: 20px; }
+.ts-qgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ts-qgrid > .card { margin: 0; min-width: 0; }
+.ts-q { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; padding-bottom: 12px; }
+.ts-q-head { display: flex; align-items: center; gap: 8px; }
+.ts-q-head h3 { margin: 0; font-size: var(--fs-md); }
+.ts-q-head h3 .muted { font-weight: 400; font-size: var(--fs-xs); }
+.ts-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: var(--fs-xs); font-weight: 700; background: var(--neutral-100); color: var(--neutral-700); white-space: nowrap; }
+.ts-tag.good { background: var(--primary-50); color: var(--accent); }
+.ts-tag.warn { background: var(--warning-100); color: var(--warning-700); }
+.ts-tag.small { font-weight: 600; }
+.ts-answer { margin: 0; font-size: var(--fs-sm); }
+.ts-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ts-bars li { display: grid; grid-template-columns: minmax(90px, 150px) minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: var(--fs-sm); }
+.ts-bars li:has(> .ts-chip-wrap) { grid-template-columns: minmax(70px, 110px) minmax(0, 1fr); }
+.ts-bar-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-bar-num { font-size: var(--fs-xs); color: var(--neutral-700); white-space: nowrap; }
+.ts-bars .ts-bar { height: 10px; }
+.ts-bar-fill.warn { background: var(--warning-500); }
+.ts-line { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: var(--fs-xs); color: var(--neutral-700); }
+.ts-more { align-self: flex-start; margin-top: auto; font-size: var(--fs-xs); }
+.ts-change-mini { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 4px 8px; margin: 0; font-size: var(--fs-xs); }
+.ts-change-mini dt { color: var(--neutral-700); padding-top: 2px; }
+.ts-change-mini dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.ts-growth { width: 100%; }
+.ts-growth th { white-space: nowrap; width: 1%; }
+.ts-growth .ts-num { white-space: nowrap; width: 1%; }
+.ts-actions { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sm); }
+.ts-evidence { display: flex; flex-direction: column; gap: 18px; }
+.ts-evidence > .ts-sub > h3, .ts-evidence .ts-half h3 { font-size: var(--fs-sm); margin: 0 0 6px; }
+.ts-evidence .ts-half { gap: 18px; }
+@media (max-width: 1100px) { .ts-qgrid { grid-template-columns: 1fr; } }
+@media print {
+  .ts-print-root .ts-qgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ts-print-root .ts-q { break-inside: avoid; }
+  /* 카드 여섯을 A4 가로 한 장에 — 화면 크기(px) 그대로 두고 통째로 줄인다 */
+  body.ts-printing .ts-print-root { zoom: 0.68; }
+  .ts-print-root .ts-q { padding: 3mm 4mm; }
+  .ts-print-root .ts-print-title { font-size: 18pt; }
+}
 .ts-print-root { display: none; }
 @page ts-land { size: A4 landscape; margin: 10mm; }
 @media print {

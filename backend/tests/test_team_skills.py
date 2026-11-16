@@ -123,3 +123,26 @@ def test_change_vs_last_year_kpis_and_insights(team):  # noqa: F811
     assert k["skills_new"] >= 1 and k["experiences"] == 8 and k["skills_total"] >= 46
     texts = " / ".join(i["text"] for i in data["insights"])
     assert "올해 새로 생긴 역량" in texts and "AI 모델" in texts and "끊긴 역량" in texts and len(data["insights"]) <= 5
+
+
+def test_question_cards_strengths_weak_risk_growth_actions(team):  # noqa: F811
+    """291 — 강점 · 빈 곳 · 위험 · 성장(본인 지난해와만, 명부 순) · 할 일 · 한 줄 결론."""
+    owner = team["owner"]
+    _exp(owner, "가팀원", "지난해 예측", "확정", start="2025-03", end="2025-06", skills=[("기술", "예측 모델링")])
+    for i in range(2):
+        _exp(owner, "가팀원", f"올해 예측 {i}", "확정", start="2026-02", end="2026-05", skills=[("기술", "예측 모델링"), ("기술", "자연어 처리")], tools=["Python"])
+    _exp(owner, "나팀원", "올해 예측 나", "확정", start="2026-03", end="2026-05", skills=[("기술", "예측 모델링")], tools=["Python"])
+    owner.put("/api/team-skills/targets", json={"targets": [{"kind": "역량", "name": "품질 관리", "want": 2}]})
+    data = owner.get("/api/team-skills", params={"period": "year"}).json()
+    assert data["strengths"]["skills"][0] == {"name": "예측 모델링", "axis": "기술", "group": "AI 모델", "holders": 2, "experiences": 3}
+    assert data["strengths"]["tools"][0]["name"] == "Python" and data["strengths"]["tools"][0]["people"] == 2
+    assert any(g["group"] == "현업 · 도메인" for g in data["weak"]["empty"]) and data["weak"]["gaps"][0]["name"] == "품질 관리"
+    assert data["risk"]["people"][0]["person"] == "가팀원" and {"kind": "역량", "name": "자연어 처리"} in data["risk"]["people"][0]["items"]
+    growth = {g["person"]: g for g in data["growth"]}
+    assert [g["person"] for g in data["growth"]] == ["팀장", "가팀원", "나팀원"]                # 명부 순
+    assert growth["가팀원"]["skills"] == ["자연어 처리"] and growth["가팀원"]["tools"] == ["Python"] and growth["가팀원"]["last"] == 1
+    kinds = [a["kind"] for a in data["actions"]]
+    assert "짝" in kinds and "교육" in kinds and len(data["actions"]) <= 5
+    pair = next(a for a in data["actions"] if a["kind"] == "짝")["text"]
+    assert "자연어 처리" in pair and "{가팀원}" in pair and "{나팀원}" in pair
+    assert "AI 모델" in data["headline"] and "예측 모델링" in data["headline"]
