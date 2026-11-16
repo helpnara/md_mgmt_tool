@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * 화면 이동 — 어디서 왔는지와 무엇을 걸러 놨는지를 **주소가 기억한다.**
@@ -209,13 +209,15 @@ function buildQuery(values: Record<string, string>): string {
  * 브라우저 뒤로가기를 열 번 눌러야 이전 화면으로 나가게 된다. 조건 바꾸기는
  * "이동"이 아니라 "지금 화면을 다듬는 일"이므로 기록을 남기지 않는다.
  */
-export function syncQuery(screen: string, values: Record<string, string>): void {
+export function syncQuery(screen: string, values: Record<string, string>): boolean {
   const query = buildQuery(values);
   const next = `#/${screen}${query ? `?${query}` : ""}`;
   if (window.location.hash !== next) {
     // 기록 칸의 차례 번호(App 의 history.state.idx)는 그대로 둔다 — 지우면 "머물기" 가 방향을 잃는다 (TODO 210 ⑥)
     window.history.replaceState(window.history.state, "", next);
+    return true;
   }
+  return false;
 }
 
 /**
@@ -232,13 +234,17 @@ export function useAddressBar(
   onAddressChanged: (params: URLSearchParams) => void,
 ): void {
   const written = useRef<string | null>(null);
+  // 주소를 고친 뒤 한 번 더 그린다 (TODO 294). 화면 안의 링크(이력 · 과제 …)는 **그릴 때의 주소**를 back 에 싣는데,
+  // 주소는 그린 **뒤에** 고쳐진다 — 탭 · 거르기를 바꾼 직후의 링크가 옛 주소(예: 팀 역량 탭)를 물고 있었다.
+  // 홈에만 있던 같은 고침(232)을 여기로 모아 주소를 쓰는 모든 화면이 따라오게 한다.
+  const [, redraw] = useState(0);
   const handler = useRef(onAddressChanged);
   handler.current = onAddressChanged;
   const signature = JSON.stringify(values);
 
   useEffect(() => {
     written.current = buildQuery(values);
-    syncQuery(screen, values);
+    if (syncQuery(screen, values)) redraw((n) => n + 1);
     // values 는 매번 새 객체라 내용(signature)으로 비교한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, signature]);

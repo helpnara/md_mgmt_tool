@@ -7564,6 +7564,41 @@ async function main() {
     equal(await page.locator("a.back").first().getAttribute("href"), "#/settings?tab=class", "설정 탭까지");
   });
 
+  console.log("\n[84] 탭을 바꾼 직후의 링크 · 높이 통일 (TODO 294)");
+
+  await check("[팀 역량] 탭에서 [사람별]로 바꾼 뒤 이력 링크 — 돌아갈 곳이 팀원 역량(사람별)이지 팀 역량 탭이 아니다 (294)", async () => {
+    await go("#/skills");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "팀 역량" }).click();
+    await page.locator("[data-testid=team-skills]").waitFor({ timeout: 8000 });
+    await page.locator(".skills-tabs").getByRole("tab", { name: "사람별" }).click();
+    const link = page.locator('a.person-link[href^="#/person/"]').first();
+    await link.waitFor({ timeout: 8000 });
+    const href = decodeURIComponent(await link.getAttribute("href"));
+    expect(href.endsWith("back=skills"), `이력 링크: ${href}`);
+  });
+
+  await check("단추 · 글 칸 · 고르기 상자 높이는 36px, 작은 단추 · 칩은 28px (294)", async () => {
+    const odd = [];
+    for (const screen of ["#/", "#/projects", "#/intakes", "#/skills", "#/settings", "#/settings?tab=class"]) {
+      await go(screen);
+      await page.waitForTimeout(500);
+      odd.push(...await page.evaluate((where) => {
+        const out = [];
+        const big = "button:not([class]), button.ghost:not(.small), button.report:not(.small), button.attach-button, input[type=text], input[type=search], input[type=number], input[type=date], select";
+        const small = "button.small, .copy-table, .button-link, .chip, .stat-chip, .dash-chip, .search-chip, .people-pill, .gap-chip";
+        for (const [sel, want] of [[big, 36], [small, 28]]) {
+          for (const el of document.querySelectorAll(sel)) {
+            const r = el.getBoundingClientRect();
+            if (!r.height || el.closest(".sortable, .view-tab, th, .ts-print-root, .yc-print-root")) continue;
+            if (Math.round(r.height) !== want) out.push(`${where} ${el.tagName}.${el.className} ${Math.round(r.height)}≠${want} "${(el.innerText || el.value || "").slice(0, 12)}"`);
+          }
+        }
+        return out;
+      }, screen));
+    }
+    expect(odd.length === 0, `높이가 다른 것: ${odd.slice(0, 8).join(" | ")}`);
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
