@@ -230,3 +230,26 @@ def test_the_keep_count_must_make_sense(client):
     for bad in (0, -1, "많이", 1000):
         assert client.put("/api/settings", json={"backup_keep": bad}).status_code in (400, 422), bad
     assert client.put("/api/settings", json={"backup_keep": 5}).status_code == 200
+
+
+def test_last_backup_is_the_later_of_record_and_newest_zip(client, tmp_path):
+    """289 — 홈 띠의 "마지막 백업" 은 기록과 백업 폴더의 마지막 zip 중 늦은 쪽(자동 백업이 때를 보는 기준과 같게)."""
+    import os
+    from app.config import get_settings
+
+    make(client, "기록 대조 과제")
+    target = tmp_path / "백업"
+    target.mkdir()
+    assert use_folder(client, target).status_code == 200
+    client.post("/api/settings/backup/run")
+    newest = next(target.glob("*.zip"))
+    logs = get_settings().logs_dir
+    # 기록이 옛것(되살리기 등으로)이면 zip 시각을 성공으로
+    (logs / "backup-state.json").write_text('{"at": "2026-01-01T09:00:00", "ok": true, "reason": "auto"}', encoding="utf-8")
+    last = client.get("/api/settings/backup/status").json()["last"]
+    assert last["ok"] is True and last["reason"] == "file" and last["file"] == newest.name
+    # zip 보다 늦은 실패 기록은 그대로 — 고쳐야 할 일이다
+    os.utime(newest, (1_700_000_000, 1_700_000_000))
+    (logs / "backup-state.json").write_text('{"at": "2026-11-15T09:00:00", "ok": false, "reason": "auto", "error": "x"}', encoding="utf-8")
+    last = client.get("/api/settings/backup/status").json()["last"]
+    assert last["ok"] is False and last["at"].startswith("2026-11-15")

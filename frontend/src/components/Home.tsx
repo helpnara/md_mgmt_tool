@@ -17,7 +17,7 @@ import { isLeader } from "../people";
 import ViewTabs from "./ViewTabs";
 import Explain from "./Explain";
 import MyWorkCard from "./MyWorkCard";
-import { isMember } from "../me";
+import { getMe, isMember } from "../me";
 
 /** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
 const PERIODS: [string, string][] = [
@@ -366,11 +366,19 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
     api.retroDue().then((data) => setRetroDue(data.items)).catch(() => setRetroDue([]));
   }, []);
   useEffect(() => {
-    // 읽기 전용 공유(191)에는 설정이 닫혀 있다 — 백업 상태는 주인만 본다
+    // 읽기 전용 공유(191)에는 설정이 닫혀 있다
     if (document.body.classList.contains("readonly")) return;
-    api.backupStatus().then(setBackup).catch(() => setBackup(null));
+    // 자동 백업 띠는 관리자(서버 PC)만 (TODO 289) — 서버를 돌보는 일은 서버 PC 몫(247), 팀장은 띠를 봐도 고칠 것이 없다
+    if (getMe().role === "owner") api.backupStatus().then(setBackup).catch(() => setBackup(null));
     api.recentEdits().then((data) => setTeamEdits(data.items)).catch(() => setTeamEdits([]));
   }, []);
+  // 띠가 떠 있으면 1분 뒤 한 번 더 — 서버를 켜자마자 연 홈은 첫 자동 백업(켠 뒤 20초)이 끝나기 전 상태를 보고 있을 수 있다 (TODO 289)
+  const backupWarn = backupWarning(backup);
+  useEffect(() => {
+    if (!backupWarn) return;
+    const timer = window.setTimeout(() => { api.backupStatus().then(setBackup).catch(() => undefined); }, 60_000);
+    return () => window.clearTimeout(timer);
+  }, [backupWarn]);
 
   // 연도를 빨리 두 번 바꾸면 앞 요청이 늦게 와 다른 해 숫자가 남을 수 있다 — 마지막 것만 받는다 (TODO 210 ①).
   // 새 값이 올 때까지는 옛 숫자를 흐리게 둔다(aria-busy) — 바뀐 줄 알고 읽지 않게 (TODO 210 ②)

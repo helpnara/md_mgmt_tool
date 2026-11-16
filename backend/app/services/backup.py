@@ -108,6 +108,44 @@ def _write_state(data: dict[str, Any]) -> None:
             pass
 
 
+def read_state_text() -> str | None:
+    """되살리기가 맞바꾸기 전에 지금 기록을 그대로 들고 있게 (TODO 289)."""
+    try:
+        return _state_path().read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def write_state_text(text: str | None) -> None:
+    if text is None:
+        return
+    try:
+        get_settings().logs_dir.mkdir(parents=True, exist_ok=True)
+        _state_path().write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _last(state: dict[str, Any], files: list[Path]) -> dict[str, Any] | None:
+    """마지막 백업 — 기록과 백업 폴더의 마지막 zip 중 늦은 쪽 (TODO 289). 자동 백업이 때를 보는 기준(`due`)과 같게.
+
+    기록이 실패이고 마지막 zip 보다 늦으면 실패를 그대로 보인다(고쳐야 할 일). 기록이 없거나 zip 보다 이르면 zip 시각을 성공으로.
+    """
+    newest = None
+    if files:
+        try:
+            newest = datetime.fromtimestamp(files[-1].stat().st_mtime)
+        except OSError:
+            newest = None
+    try:
+        at = datetime.fromisoformat(str(state.get("at"))) if state.get("at") else None
+    except ValueError:
+        at = None
+    if newest and (at is None or newest > at):
+        return {"at": newest.isoformat(timespec="seconds"), "ok": True, "reason": "file", "file": files[-1].name}
+    return state or None
+
+
 def _fail(reason: str, message: str) -> None:
     _write_state({"at": datetime.now().isoformat(timespec="seconds"), "ok": False,
                   "reason": reason, "error": message})
@@ -365,6 +403,6 @@ def status() -> dict[str, Any]:
         # 되돌릴 수 있는 범위 — 개수보다 이 날짜가 백업의 뜻이다.
         "oldest": oldest,
         "recent": items,
-        "last": state or None,
+        "last": _last(state, files),
         "reachable": bool(directory) and Path(directory).is_dir(),
     }

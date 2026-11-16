@@ -378,7 +378,11 @@ def apply(conn: sqlite3.Connection, token: str, stage=None) -> dict[str, Any]:
             shutil.rmtree(work, ignore_errors=True)
             raise RestoreError(f"백업을 풀지 못했습니다 — 지금 데이터는 그대로입니다. ({exc})") from exc
         enter("swap")
+        # 289 — 자동 백업 기록(.logs/backup-state.json)은 지금 것을 지킨다. 백업 안의 옛 기록으로 돌아가면
+        # 홈의 "마지막 백업이 n일 전" 이 거짓으로 뜬다(백업 폴더에는 최근 zip 이 있는데)
+        kept_state = backup_service.read_state_text()
         _swap(vault, new, old)
+        backup_service.write_state_text(kept_state)
         shutil.rmtree(work, ignore_errors=True)
     discard_upload(token)
 

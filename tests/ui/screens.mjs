@@ -7486,6 +7486,28 @@ async function main() {
     await card.locator('.dict-item[data-entry="Python"] .dict-line').click();
   });
 
+  console.log("\n[82] 자동 백업 띠는 관리자(서버 PC)만 (TODO 289)");
+
+  await check("홈의 자동 백업 노란 띠 — 서버 PC 에는 뜨고, 팀장 PC 에는 뜨지 않는다 (289)", async () => {
+    const failing = { enabled: true, reachable: true, every_hours: 24, last: { at: "2026-10-10T09:00:00", ok: false, reason: "auto", error: "시험" } };
+    await page.route("**/api/settings/backup/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(failing) }));
+    try {
+      await go("#/");
+      await page.locator(".home-backup-warn").waitFor({ timeout: 8000 });
+      expect((await page.locator(".home-backup-warn").innerText()).includes("실패"), "서버 PC — 띠");
+      const me = await api.get("/api/me");
+      await page.route("**/api/me", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...me, role: "leader", name: "시험팀장" }) }));
+      await page.reload({ waitUntil: "networkidle" });
+      await go("#/");
+      await page.waitForTimeout(800);
+      equal(await page.locator(".home-backup-warn").count(), 0, "팀장 PC — 띠 없음");
+    } finally {
+      await page.unroute("**/api/me");
+      await page.unroute("**/api/settings/backup/status");
+      await page.reload({ waitUntil: "networkidle" });
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

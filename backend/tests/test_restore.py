@@ -152,3 +152,16 @@ def test_remote_cannot_restore(tmp_path, monkeypatch):
         assert _upload(viewer, _zip({"settings.json": "{}"})).status_code == 403
         assert viewer.post("/api/backup/restore", json={"token": "0" * 32}).status_code == 403
     get_settings.cache_clear()
+
+
+def test_restore_keeps_current_backup_record(client, vault_dir):
+    """289 — 되살리기는 자동 백업 기록(.logs/backup-state.json)을 지금 것 그대로 둔다(백업 안의 옛 기록으로 돌아가지 않게)."""
+    client.post("/api/projects", json={"title": "기록 시험 과제", "status": "in_progress"})
+    logs = get_settings().logs_dir
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / "backup-state.json").write_text('{"at": "2026-11-01T09:00:00", "ok": true, "reason": "auto"}', encoding="utf-8")
+    backup = client.get("/api/backup").content            # 이 백업 안의 기록은 11-01
+    (logs / "backup-state.json").write_text('{"at": "2026-11-15T09:00:00", "ok": true, "reason": "auto"}', encoding="utf-8")
+    report = _upload(client, backup).json()
+    assert client.post("/api/backup/restore", json={"token": report["token"]}).status_code == 200
+    assert "2026-11-15" in (get_settings().logs_dir / "backup-state.json").read_text(encoding="utf-8")
