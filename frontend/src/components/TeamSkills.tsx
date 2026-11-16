@@ -178,7 +178,7 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
         </section>
 
         <section className="card ts-q" data-testid="ts-q-change">
-          <div className="ts-q-head"><span className="ts-tag">변화</span><h3>{ch.last} → {ch.this} 무엇이 달라졌나</h3></div>
+          <div className="ts-q-head"><span className="ts-tag">변화</span><h3>올해 무엇이 달라졌나 <span className="muted">{ch.last} → {ch.this}</span></h3></div>
           <p className="ts-answer">새로 생김 <b>{changeTotal("new")}</b> · 늘어남 <b>{changeTotal("up")}</b> · 줄어듦 <b>{changeTotal("down")}</b> · 끊김 <b>{changeTotal("stopped")}</b></p>
           <dl className="ts-change-mini">
             <dt>새로 생김</dt><dd>{[...ch.skills.new.slice(0, 3).map((x) => chip(x, "skill")), ...ch.tools.new.slice(0, 2).map((x) => chip(x, "tool"))]}{changeTotal("new") === 0 && <span className="muted">없음</span>}</dd>
