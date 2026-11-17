@@ -57,7 +57,7 @@ export function UpdateCover() {
   useEffect(() => {
     const on = (event: Event) => {
       const detail = (event as CustomEvent<Phase>).detail;
-      if (detail.stage === "cancel") { setJob(null); return; }
+      if (detail.stage === "cancel") { ownUpdate = false; setJob(null); return; }
       setJob(detail);
       setStage(detail.stage);
     };
@@ -81,6 +81,7 @@ export function UpdateCover() {
         if (state.state === "restarting") setJob({ ...job, stage: "stop" });
         else if (state.state === "scheduled") restartNow(false, job.action, job.to);
         else if (state.state === "error") {
+          ownUpdate = false;          // 실패로 덮개를 걷으면 "누른 쪽" 표시도 푼다 — 안 그러면 뒤에 "바뀌는 중" 덮개가 안 뜬다
           setJob(null);
           notifyError(state.error || "업데이트를 준비하지 못했습니다.");
         }
