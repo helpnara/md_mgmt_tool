@@ -5,7 +5,7 @@ import { ChartColumn, Compass, FolderTree, Layers, ListChecks, Tags, TrendingUp,
 import IconTitle from "./IconTitle";
 import { api } from "../api";
 import { attempt } from "../notify";
-import type { ActivityBrief, BackupStatus, EditItem, Home as HomeData, RetroDue, HomeSlice, Meta, StatusInfo } from "../types";
+import type { ActivityBrief, BackupStatus, EditDiff, EditItem, Home as HomeData, RetroDue, HomeSlice, Meta, StatusInfo } from "../types";
 import { listLink, personLink, projectLink, screenLink, useAddressBar } from "../nav";
 import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
@@ -17,6 +17,7 @@ import { isLeader } from "../people";
 import ViewTabs from "./ViewTabs";
 import Explain from "./Explain";
 import MyWorkCard from "./MyWorkCard";
+import { changeLinkParams, DiffLines, diffCounts, itemDiffQuery, loadSeen, saveSeen } from "./EditChanges";
 import { getMe, isMember } from "../me";
 
 /** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
@@ -354,6 +355,26 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const drafts = useDrafts();
   // 팀원이 고친 것 — 최근 7일 (TODO 233 ⑥). 팀장만 본다(바깥에는 막혀 있다)
   const [teamEdits, setTeamEdits] = useState<EditItem[]>([]);
+  // 305 — 줄을 펼쳐 바뀐 곳 미리보기(B) · 본 것 표시(C, 이 브라우저에 기억)
+  const [editOpen, setEditOpen] = useState<Record<string, EditDiff | "loading" | "error">>({});
+  const [editSeen, setEditSeen] = useState<Set<string>>(() => loadSeen());
+  const markSeen = (keys: string[]) => setEditSeen((now) => {
+    const next = new Set(now);
+    keys.forEach((key) => next.add(key));
+    saveSeen(next);
+    return next;
+  });
+  const toggleEditPreview = (item: EditItem) => {
+    const key = item.key ?? `${item.name}|${item.at}`;
+    if (editOpen[key]) {
+      setEditOpen((now) => { const next = { ...now }; delete next[key]; return next; });
+      return;
+    }
+    setEditOpen((now) => ({ ...now, [key]: "loading" }));
+    api.editDiff(itemDiffQuery(item))
+      .then((diff) => setEditOpen((now) => ({ ...now, [key]: diff })))
+      .catch(() => setEditOpen((now) => ({ ...now, [key]: "error" })));
+  };
   // 회고를 적을 과제 — 내 것, 끝난 지 1년 안 (TODO 237 A3). 팀원 PC 에서도 본다(그 사람 것)
   const [retroDue, setRetroDue] = useState<RetroDue["items"]>([]);
   // [할 일] 목록 펼침 (TODO 249 ④) — 목록마다 따로
@@ -608,25 +629,67 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       {teamEdits.length > 0 && (
         <>
           <p className="hint">
-            <b>팀원이 고친 것</b> — 최근 7일, 명부에 IP 를 적은 PC 에서 담당 과제의 진행일지 · 첨부 · 개요를 고친 기록입니다.
+            <b>팀원이 고친 것</b> — 최근 7일, 명부에 IP 를 적은 PC 에서 담당 과제의 진행일지 · 첨부 · 개요 · 역할을 고친 기록입니다.
+            과제를 누르면 <b>바뀐 곳이 표시된 채</b> 열리고, [바뀐 곳 ▾] 로 여기서 미리 볼 수 있습니다. 본 줄은 흐려집니다.
+            {teamEdits.some((item) => item.key && !editSeen.has(item.key)) && (
+              <> <button type="button" className="link-button" data-testid="edits-seen-all"
+                onClick={() => markSeen(teamEdits.map((item) => item.key ?? "").filter(Boolean))}>모두 확인</button></>
+            )}
           </p>
           <ul className="home-stale home-edits">
-            {lines("edits", teamEdits).map((item, index) => (
-              <li key={`${item.at}-${index}`}>
-                <span className="due">{item.at.slice(5, 16).replace("T", " ")}</span>
-                <b>{item.name}</b>
-                {item.leader && <span className="tag leader-tag" title="명부의 팀장 — 서버 PC 가 아닌 곳(팀장 줄에 적은 IP)에서 고친 것">팀장</span>}
-                {item.project_id ? (
-                  <a href={projectLink(item.project_id, item.entry_id && item.action !== "진행일지 삭제" ? { entry: item.entry_id } : {})}>
-                    {item.project_title ?? item.project_id}
-                  </a>
-                ) : null}
-                <span className="edit-action">
-                  {item.action}
-                  {item.count > 1 ? ` ${item.count}번` : ""}
-                </span>
-              </li>
-            ))}
+            {lines("edits", teamEdits).map((item, index) => {
+              const key = item.key ?? `${item.name}|${item.at}`;
+              const seen = Boolean(item.key && editSeen.has(item.key));
+              const open = editOpen[key];
+              const canDiff = Boolean(item.project_id) && item.action !== "진행일지 삭제" && item.action !== "업무 이력 파일 내보내기";
+              return (
+                <li key={`${item.at}-${index}`} className={seen ? "edit-seen" : undefined} data-testid="edit-line">
+                  <span className="due">{item.at.slice(5, 16).replace("T", " ")}</span>
+                  <b>{item.name}</b>
+                  {item.leader && <span className="tag leader-tag" title="명부의 팀장 — 서버 PC 가 아닌 곳(팀장 줄에 적은 IP)에서 고친 것">팀장</span>}
+                  {item.project_id ? (
+                    <a href={projectLink(item.project_id, changeLinkParams(item))} onClick={() => item.key && markSeen([item.key])}>
+                      {item.project_title ?? item.project_id}
+                    </a>
+                  ) : null}
+                  <span className="edit-action">
+                    {item.action}
+                    {item.count > 1 ? ` ${item.count}번` : ""}
+                  </span>
+                  {canDiff && (
+                    <button type="button" className="ghost small" aria-expanded={Boolean(open)} onClick={() => toggleEditPreview(item)}>
+                      바뀐 곳 {open ? "▴" : "▾"}
+                    </button>
+                  )}
+                  {item.key && !seen && (
+                    <button type="button" className="ghost small" onClick={() => markSeen([item.key!])} title="본 것으로 표시 — 줄이 흐려집니다">확인</button>
+                  )}
+                  {seen && <span className="muted edit-seen-tag">확인함</span>}
+                  {open && (
+                    <div className="edit-preview" data-testid="edit-preview">
+                      {open === "loading" ? <span className="muted">불러오는 중…</span>
+                        : open === "error" ? <span className="muted">바뀐 곳을 불러오지 못했습니다.</span>
+                        : open.kind === "new" ? (
+                          open.new_entries.length ? (
+                            <ul className="edit-new-list">
+                              {open.new_entries.map((entry) => (
+                                <li key={entry.id}><b>{entry.date} {entry.title}</b>{entry.lines.length > 0 && <span className="muted"> — {entry.lines.join(" / ")}</span>}</li>
+                              ))}
+                            </ul>
+                          ) : <span className="muted">새로 쓴 일지를 찾지 못했습니다(그 뒤 지워졌을 수 있습니다).</span>
+                        ) : open.kind === "diff" ? (
+                          <>
+                            <span className="muted">{diffCounts(open)}{open.others.length ? ` · 그 뒤 ${open.others.join(", ")} 도 고침` : ""}</span>
+                            <DiffLines lines={open.lines} limit={6} />
+                          </>
+                        ) : open.kind === "files" ? <span className="muted">첨부 파일 속은 비교하지 않습니다 — 과제를 열면 첨부 줄이 표시됩니다.</span>
+                        : open.kind === "gone" ? <span className="muted">그 글은 지금 없습니다(지워졌거나 옮겨짐).</span>
+                        : <span className="muted">고치기 전 보관본이 없어(보관 기간이 지났거나 바뀐 글이 없음) 비교할 수 없습니다.</span>}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
           {more("edits", teamEdits.length, "줄")}
         </>

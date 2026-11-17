@@ -6,7 +6,7 @@ import { attempt, notifyError } from "../notify";
 import { isReadonly } from "../readonly";
 import { canEditEntry, canEditProject, isMember } from "../me";
 import { discardQuestion, dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
-import type { DemotePlan, Entry, Meta, Project, Report, YearFix } from "../types";
+import type { DemotePlan, EditDiff, Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
 import PasteOfferBar from "./PasteOffer";
@@ -18,6 +18,8 @@ import EntryEditor from "./EntryEditor";
 import VersionPanel from "./VersionPanel";
 import ExportMenu from "./ExportMenu";
 import ContributionsCard, { myName } from "./ContributionsCard";
+import { DiffLines, diffCounts, diffQuery } from "./EditChanges";
+import type { ChangeMark } from "./EditChanges";
 import LoadError from "./LoadError";
 import ReportEditor from "./ReportEditor";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
@@ -42,6 +44,8 @@ interface Props {
   edit?: boolean;
   /** 홈의 "작성 중이던 글" 에서 왔다 — 그 편집기를 열어 둔다 (TODO 170): entry-new · entry-<번호> · overview */
   openDraft?: string | null;
+  /** 홈 "팀원이 고친 것" 에서 왔다 — 바뀐 곳을 표시한다 (TODO 305) */
+  changed?: ChangeMark;
 }
 
 /** 그 조건으로 걸러진 과제 목록. 홈의 것과 같은 규칙이다. */
@@ -121,8 +125,19 @@ export default function ProjectDetail({
   back,
   edit,
   openDraft,
+  changed,
 }: Props) {
   const [project, setProject] = useState<Project | null>(null);
+  // 305 — 팀원이 고친 곳. [표시 끄기] 까지 남긴다(바뀐 줄을 읽을 시간). 도착하면 그 자리로 내려가 잠깐 반짝
+  const [change, setChange] = useState<EditDiff | null>(null);
+  const [changeOn, setChangeOn] = useState(Boolean(changed));
+  const [showBefore, setShowBefore] = useState(false);
+  useEffect(() => {
+    if (!changed) return;
+    let live = true;
+    api.editDiff(diffQuery(projectId, changed)).then((diff) => live && setChange(diff)).catch(() => live && setChange(null));
+    return () => { live = false; };
+  }, [projectId, changed]);
   // 팀원 PC 에서 연 **담당 과제** (TODO 233) — 이 화면에서만 읽기 전용을 풀고, 팀장만 하는 단추([data-owner-only])와
   // 보고 · 첨부 칸(.readonly-zone)은 그대로 숨긴다. 숨기는 것은 편의 — 막는 것은 서버다(permissions.py)
   const memberEdit = isMember() && project !== null && canEditProject(project.id);
@@ -325,6 +340,26 @@ export default function ProjectDetail({
       .then((data) => setDraftDate(data.default_report_date))
       .catch(() => setDraftDate(todayIso()));
   }, [draftDate]);
+
+  // 305 — 바뀐 곳으로: 개요면 개요 카드, 새 일지면 첫 새 일지(펼치고 반짝). 일지 수정은 아래 openEntryId 가 맡는다
+  useEffect(() => {
+    if (!changed || !change || !project) return;
+    let target: HTMLElement | null = null;
+    if (change.kind === "new" && change.new_entries.length) {
+      setExpandedIds((prev) => { const next = new Set(prev); change.new_entries.forEach((item) => next.add(item.id)); return next; });
+      target = document.getElementById(`entry-${change.new_entries[0].id}`);
+    } else if (changed.what === "개요 수정") {
+      target = overviewRef.current;
+    }
+    if (!target) return;
+    const el = target;
+    const timer = window.setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.classList.add("edit-flash");
+    }, 150);
+    const clear = window.setTimeout(() => el.classList.remove("edit-flash"), 2300);
+    return () => { window.clearTimeout(timer); window.clearTimeout(clear); };
+  }, [change, changed, project, entries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 검색 결과에서 넘어왔다면 그 기록을 펼치고 화면에 보이게 한다.
   useEffect(() => {
@@ -1001,6 +1036,35 @@ export default function ProjectDetail({
         )}
       </div>
 
+      {/* 305 — 홈 "팀원이 고친 것" 에서 왔다: 누가 · 언제 · 무엇, 바뀐 줄 수, [고치기 전 전체 보기] · [표시 끄기] */}
+      {changed && changeOn && (
+        <div className="card edit-band" role="status" data-testid="edit-band">
+          <div className="edit-band-head">
+            <span>
+              <b>{changed.by}</b> · {(changed.to || changed.from).slice(5, 16).replace("T", " ")} 고침 — {changed.what}{changed.count > 1 ? ` ${changed.count}번` : ""}
+              {change && <> · <b>{diffCounts(change)}</b></>}
+              {change?.others.length ? <span className="muted"> · 그 뒤 {change.others.join(", ")} 도 고침</span> : null}
+            </span>
+            <span className="edit-band-actions">
+              {change?.kind === "diff" && change.before !== undefined && (
+                <button type="button" className="ghost small" aria-expanded={showBefore} onClick={() => setShowBefore((on) => !on)}>고치기 전 전체 보기</button>
+              )}
+              <button type="button" className="ghost small" onClick={() => setChangeOn(false)}>표시 끄기</button>
+            </span>
+          </div>
+          {change === null ? <p className="muted">바뀐 곳을 찾는 중…</p>
+            : change.kind === "none" ? <p className="muted">고치기 전 보관본이 없어(보관 기간이 지났거나 바뀐 글이 없음) 바뀐 줄은 표시하지 못합니다 — 그 자리만 강조합니다.</p>
+            : change.kind === "gone" ? <p className="muted">그 글은 지금 없습니다(지워졌거나 옮겨짐).</p>
+            : change.kind === "files" ? <p className="muted">첨부 파일 속은 비교하지 않습니다 — 아래 첨부 목록을 확인하세요.</p>
+            : change.kind === "new" ? <p className="muted">새로 들어온 일지는 아래 진행일지에서 <b>새로 들어옴</b> 표시로 보입니다.</p>
+            : changed.what.startsWith("역할") ? <DiffLines lines={change.lines} />   /* 역할 · 회고는 여기서 바로 */
+            : <p className="muted">바뀐 줄은 아래 {changed.entry ? "그 진행일지" : "과제 개요"}에 색으로 표시했습니다 — <span className="edit-diff-add">더한 줄</span> · <span className="edit-diff-new">고친 줄</span> · <span className="edit-diff-del">지운 줄</span>.</p>}
+          {showBefore && change?.kind === "diff" && (
+            <pre className="edit-before" data-testid="edit-before">{change.before || "(비어 있었음)"}</pre>
+          )}
+        </div>
+      )}
+
       <div className={`detail-columns${editingSide ? ` editing editing-${editingSide}` : ""}`}>
       <div className="detail-left">
 
@@ -1167,7 +1231,13 @@ export default function ProjectDetail({
             </div>
           </>
         ) : (
-          <MarkdownBody text={project.body ?? ""} base={base} />
+          <>
+            {/* 305 — 팀원이 고친 개요의 바뀐 줄 */}
+            {changeOn && change?.kind === "diff" && changed?.what === "개요 수정" && (
+              <div className="edit-inline" data-testid="edit-inline-overview"><span className="edit-inline-title">바뀐 곳</span><DiffLines lines={change.lines} /></div>
+            )}
+            <MarkdownBody text={project.body ?? ""} base={base} />
+          </>
         )}
       </div>
 
@@ -1502,7 +1572,8 @@ export default function ProjectDetail({
               id={`entry-${entry.id}`}
               className={`card entry${isOpen(entry, index) ? "" : " collapsed"}${
                 highlightEntryId === entry.id ? " highlight" : ""
-              }${entry.tags.includes("상태변경") ? " status-change" : ""}`}
+              }${entry.tags.includes("상태변경") ? " status-change" : ""}${
+                changeOn && change?.new_entries.some((item) => item.id === entry.id) ? " edit-new" : ""}`}
             >
               <div className="entry-head" onClick={() => toggleEntry(entry.id)}>
                 <div>
@@ -1528,6 +1599,9 @@ export default function ProjectDetail({
                   {/* 보고 여부는 기록 자체에 붙인다 (TODO 35).
                       선만으로는 "8/25 보고 뒤에 8/20 자로 쓴 기록"을 표현할 수 없다 —
                       날짜순으로는 선 아래에 놓이는데 실제로는 미보고이기 때문이다. */}
+                  {changeOn && change?.new_entries.some((item) => item.id === entry.id) && (
+                    <span className="tag edit-new-tag" data-testid="edit-new-tag">새로 들어옴</span>
+                  )}
                   {!entry.reported_on && (
                     <span className="tag unreported" title="아직 확정된 보고에 담기지 않았습니다.">
                       미보고
@@ -1574,6 +1648,9 @@ export default function ProjectDetail({
                   </button>
                 </div>
               </div>
+              {changeOn && change?.kind === "diff" && changed?.entry === entry.id && (
+                <div className="edit-inline" data-testid="edit-inline-entry"><span className="edit-inline-title">바뀐 곳</span><DiffLines lines={change.lines} /></div>
+              )}
               {isOpen(entry, index) && (
                 <div id={`entry-body-${entry.id}`}>
                   <MarkdownBody text={entry.body ?? ""} base={entryBase} />

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import Home from "./components/Home";
 import ProjectDetail from "./components/ProjectDetail";
+import { changeFromParams } from "./components/EditChanges";
+import type { ChangeMark } from "./components/EditChanges";
 import ProjectList from "./components/ProjectList";
 import ReportCandidates from "./components/ReportCandidates";
 import ReportHistory from "./components/ReportHistory";
@@ -33,7 +35,7 @@ type Route =
   | { name: "home"; query: string }
   // 목록 화면은 거른 조건을 주소에 두고 그대로 돌려받는다 (nav.ts).
   | { name: "list"; query: string }
-  | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null; edit?: boolean; draft?: string | null }
+  | { name: "project"; id: string; reportId?: number; entryId?: number; back: string | null; edit?: boolean; draft?: string | null; changed?: ChangeMark }
   | { name: "search"; query: string; back: string | null }
   | { name: "reports"; query: string }
   | { name: "history"; query: string }
@@ -82,6 +84,8 @@ function readRoute(): Route {
       edit: params.get("edit") === "1",
       // 홈의 "작성 중이던 글" 에서 — 그 편집기를 연다 (TODO 170)
       draft: params.get("draft"),
+      // 홈 "팀원이 고친 것" 에서 — 바뀐 곳을 표시한다 (TODO 305)
+      changed: changeFromParams(params),
     };
   }
   if (path.startsWith("search"))
@@ -450,6 +454,7 @@ export default function App() {
             back={route.back}
             edit={route.edit}
             openDraft={route.draft}
+            changed={route.changed}
           />
         )}
         {route.name === "reports" && <ReportCandidates meta={meta} query={route.query} />}

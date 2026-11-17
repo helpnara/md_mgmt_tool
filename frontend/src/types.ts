@@ -385,6 +385,25 @@ export interface EditItem {
   count: number;
   /** 팀장이 노트북 IP 로 고친 것 (TODO 235 ②) */
   leader?: boolean;
+  /** 305 — 이 줄의 첫 수정(시각 · 실제 시각 · 그 직전 보관본) · 본 것 표시의 열쇠 */
+  first_at?: string;
+  first_real?: string;
+  first_base?: string;
+  key?: string;
+}
+
+/** 팀원이 고친 곳 (TODO 305) — 고치기 전 보관본 ↔ 지금 */
+export interface EditDiffLine { op: "same" | "add" | "del" | "old" | "new" | "gap"; text: string }
+export interface EditDiff {
+  kind: "diff" | "new" | "none" | "gone" | "files";
+  lines: EditDiffLine[];
+  added: number;
+  changed: number;
+  removed: number;
+  base_at: string;
+  before: string;
+  others: string[];
+  new_entries: { id: number; title: string; date: string; lines: string[] }[];
 }
 
 export interface AppSettings {

@@ -3409,3 +3409,34 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 /* 303 — 면담 탭의 팀장 · 연말카드의 팀장은 고를 수 없다 */
 .people-pill:disabled, .yc-person:disabled { opacity: 0.5; cursor: not-allowed; }
 .people-pill:disabled:hover { border-color: var(--border); color: inherit; }
+
+/* 305 — 팀원이 고친 곳: 더한 줄 초록 · 고친 줄 노랑(고치기 전은 취소선) · 지운 줄 취소선 */
+.edit-diff { list-style: none; margin: 6px 0 0; padding: 0; font-size: var(--fs-sm); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.edit-diff li { display: flex; gap: 8px; padding: 2px 10px; line-height: 1.55; }
+.edit-diff-mark { flex: none; width: 1em; color: var(--muted); font-family: var(--font-mono, monospace); }
+.edit-diff-text { white-space: pre-wrap; word-break: break-word; min-width: 0; }
+.edit-diff-same { color: var(--muted); }
+.edit-diff-add, .edit-diff li.edit-diff-add { background: var(--success-50); }
+.edit-diff li.edit-diff-add .edit-diff-mark { color: var(--success-700); }
+.edit-diff-new, .edit-diff li.edit-diff-new { background: var(--warning-50); }
+.edit-diff li.edit-diff-new .edit-diff-mark { color: var(--warning-700); }
+.edit-diff li.edit-diff-old .edit-diff-text, .edit-diff li.edit-diff-del .edit-diff-text { text-decoration: line-through; color: var(--muted); }
+.edit-diff-del, .edit-diff li.edit-diff-del { background: var(--danger-50); }
+.edit-diff li.edit-diff-gap { color: var(--muted); font-size: var(--fs-xs); background: var(--neutral-50, transparent); }
+.edit-band { border-left: 4px solid var(--warning-500); display: flex; flex-direction: column; gap: 6px; }
+.edit-band-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.edit-band-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.edit-band span.edit-diff-add, .edit-band span.edit-diff-new, .edit-band span.edit-diff-del { padding: 0 4px; border-radius: 3px; }
+.edit-before { white-space: pre-wrap; font-size: var(--fs-sm); background: var(--neutral-50, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; max-height: 320px; overflow: auto; margin: 0; }
+.edit-inline { margin: 6px 0 10px; }
+.edit-inline-title { font-size: var(--fs-xs); font-weight: 600; color: var(--warning-700); }
+.entry.edit-new { box-shadow: inset 4px 0 0 var(--success-700); }
+.edit-new-tag { background: var(--success-100); color: var(--success-800); }
+.edit-flash { animation: edit-flash 1s ease-in-out 2; }
+@keyframes edit-flash { 50% { box-shadow: 0 0 0 4px var(--warning-300); } }
+@media (prefers-reduced-motion: reduce) { .edit-flash { animation: none; } }
+.home-edits li.edit-seen { opacity: 0.55; }
+.home-edits li { flex-wrap: wrap; }
+.edit-preview { flex-basis: 100%; margin: 4px 0 6px; }
+.edit-new-list { margin: 4px 0 0; padding-left: 18px; font-size: var(--fs-sm); }
+.edit-seen-tag { font-size: var(--fs-xs); }
