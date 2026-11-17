@@ -612,7 +612,7 @@ async function main() {
       title: "열처리 공정 심화 과정", hours: 16, cost: 350000,
       takeaway: "소입 조건 설계 기준을 정리해 옴",
     });
-    await go("#/skills");
+    await go("#/skills?tab=people");
     const text = await page.locator(".skills-top .card").first().innerText();
     // 앞서 넣은 세 건은 시간·비용이 비어 있다. 그것이 0 으로 굳으면 합계가 흔들린다.
     expect(text.includes("16h"), `교육 시간 합계가 16h 가 아닙니다: ${text}`);
@@ -621,7 +621,7 @@ async function main() {
 
   await check("기록이 없는 사람이 면담 대상으로 먼저 뜬다", async () => {
     await api.post("/api/people", { name: "박지훈" });
-    await go("#/skills");
+    await go("#/skills?tab=people");
     const quiet = await page.locator(".skills-quiet").innerText();
     expect(quiet.includes("박지훈"), `기록 없는 사람이 안 뜹니다: ${quiet}`);
   });
@@ -631,7 +631,7 @@ async function main() {
     // 행사 줄은 접히므로 사람 칩 수(= 참여 기록 수)로 본다.
     const before = await page.locator(".activity-list .activity-person").count();
     // 사람별 표의 이름을 누르면 [기록] 탭으로 그 사람의 기록이 선다 (TODO 232 ②)
-    await go("#/skills");
+    await go("#/skills?tab=people");
     await page.locator(".skills-table tbody .linkish").first().click();
     await page.waitForTimeout(800);
     expect(page.url().includes("tab=records"), `기록 탭으로 가지 않았습니다: ${page.url()}`);
@@ -674,7 +674,7 @@ async function main() {
     equal(await rows.count(), 1, "화면에 선 행사 줄 수");
     equal(await rows.locator(".activity-person").count(), 2, "그 줄에 붙은 사람 수");
     // 사람별 표에 "권경락, 김현우" 같은 없는 사람이 생기면 안 된다.
-    await go("#/skills");
+    await go("#/skills?tab=people");
     const table = await page.locator(".skills-table").innerText();
     expect(!table.includes("권경락,"), `붙은 이름이 표에 남았습니다: ${table}`);
   });
@@ -1483,15 +1483,15 @@ async function main() {
 
   await check("팀원 역량 화면의 글자가 읽힌다", async () => {
     for (const [label, selector, floor, hash] of [
-      ["면담 대상 칩", ".skills-quiet-chip", AA, "#/skills"],
-      ["사람 이름", ".skills-table .linkish", AA, "#/skills"],
-      ["0 인 칸", ".skills-table td.zero", AA_LARGE, "#/skills"],
+      ["면담 대상 칩", ".skills-quiet-chip", AA, "#/skills?tab=people"],
+      ["사람 이름", ".skills-table .linkish", AA, "#/skills?tab=people"],
+      ["0 인 칸", ".skills-table td.zero", AA_LARGE, "#/skills?tab=people"],
       ["얻은 것", ".activity-takeaway", AA, "#/skills?tab=records"],
-      ["탭", ".view-tab", AA, "#/skills"],
-      ["설명 펼치기", ".explain-toggle", AA, "#/skills"],
+      ["탭", ".view-tab", AA, "#/skills?tab=people"],
+      ["설명 펼치기", ".explain-toggle", AA, "#/skills?tab=people"],
       ["한 줄 기록의 주관", ".activity-meta-inline", AA, "#/skills?tab=records"],
       // 사람 줄 (TODO 248) — 보통 · 고른 알약
-      ["사람 줄", ".people-pill:not(.on)", AA, "#/skills"],
+      ["사람 줄", ".people-pill:not(.on)", AA, "#/skills?tab=people"],
       ["고른 사람", ".people-pill.on", AA, `#/skills?tab=records&person=${encodeURIComponent("권경락")}`],
     ]) {
       await go(hash);
@@ -1592,7 +1592,7 @@ async function main() {
     equal(await row.locator(".activity-person-row").count(), 3, "사람마다 붙는 수정·삭제");
     // 제목은 행사 수와 참여 기록 수를 **따로** 적는다. 둘이 같으면 잘못 센 것이다.
     const heading = await page.locator(".card-head h2").last().innerText();
-    const events = Number(heading.match(/행사 (\d+)건/)[1]);
+    const events = Number(heading.match(/활동 (\d+)건/)[1]);
     const records = Number(heading.match(/참여 기록 (\d+)건/)[1]);
     expect(records > events, `참여 기록이 행사보다 많아야 한다: ${heading}`);
   });
@@ -4423,7 +4423,7 @@ async function main() {
     expect((await page.locator(".meeting-panel h2").innerText()).includes("팀 전체"), "면담 칸이 팀 전체로");
     equal(await page.locator(".skills-meet-side").count(), 0, "옆 칸의 기록도 접힌다");
     // 표에서 고르면 [기록] 탭으로 가고 사람 줄에 켜진다. [사람별] 로 돌아와 이름을 한 번 더 누르면 풀린다
-    await go("#/skills");
+    await go("#/skills?tab=people");
     await page.locator(".skills-table button", { hasText: "권경락" }).click();
     await page.waitForTimeout(700);
     expect(page.url().includes("tab=records"), `기록 탭으로: ${page.url()}`);
@@ -4536,7 +4536,7 @@ async function main() {
     const roster = (await api.get("/api/people")).people;
     const gone = roster.find((p) => p.name !== "권경락") || roster[0];
     await api.put("/api/people", { people: roster.map((p) => (p.name === gone.name ? { ...p, left_on: "2026-09-30", left_reason: "전배" } : p)) });
-    await go("#/skills");
+    await go("#/skills?tab=people");
     await page.reload(); await page.waitForTimeout(900);
     const rows = page.locator(".skills-table tbody tr");
     const last = rows.last();
@@ -5592,7 +5592,7 @@ async function main() {
         const summary = await api.get(`/api/activities/summary?year=${dayFromToday(5).slice(0, 4)}`);
         const person = summary.people.find((item) => item.name === "권경락");
         expect((person?.planned ?? 0) >= 1, `예정 수: ${person?.planned}`);
-        await go("#/skills");
+        await go("#/skills?tab=people");
         const cell = page.locator(".skills-table tr", { hasText: "권경락" }).first();
         expect((await cell.innerText()).includes("+예정"), `표의 줄: ${await cell.innerText()}`);
       });
@@ -5944,9 +5944,9 @@ async function main() {
           const created = await api.post("/api/activities", { person, kind: "education", title, date: dayFromToday(offset), host: "시험 주관" });
           made.push(...(created.ids ?? [created.id]));
         }
-        await go("#/skills");
+        await go("#/skills?tab=people");
         const tabs = await page.locator(".skills-tabs [role=tab]").allInnerTexts();
-        equal(tabs.map((text) => text.trim()).join(" "), "사람별 기록 면담 팀 역량 연말 카드", "탭 다섯(팀 역량 284 · 연말 카드 285)");
+        equal(tabs.map((text) => text.trim()).join(" "), "팀역량 사람별 면담 기록 연말카드", "탭 다섯 — 큰 것부터 디테일, 마무리 (303)");
         equal(await page.locator(".activity-list").count(), 0, "[사람별] 에는 기록 목록이 없다");
         equal(await page.locator(".meeting-panel").count(), 0, "[사람별] 에는 면담이 없다");
         await go(`#/skills?tab=records&person=${encodeURIComponent(person)}&year=all`);
@@ -6180,7 +6180,7 @@ async function main() {
         expect((await page.locator(".author-card").innerText()).includes(`팀장 ${pick.name}`), `작성자 칸: ${await page.locator(".author-card").innerText()}`);
         equal((await api.get("/api/meta")).leader, pick.name, "meta 의 팀장");
         // 팀원역량 — 사람별 표에 딱지, 면담 상대 목록에서 빠짐
-        await go("#/skills");
+        await go("#/skills?tab=people");
         await page.reload(); await page.waitForTimeout(900);
         equal(await page.locator(".skills-table tr", { hasText: pick.name }).locator(".leader-tag").count(), 1, "사람별 표의 팀장 딱지");
         await go("#/skills?tab=meetings");
@@ -7346,8 +7346,8 @@ async function main() {
     if (!roster.people.some((p) => p.name === "권경락")) await api.put("/api/people", { people: [...roster.people, { name: "권경락" }] });
     const made = await api.post("/api/projects", { title: "연말카드 시험 과제", owners: ["권경락"], status: "in_progress", start_date: "2026-02-02" });
     await api.put(`/api/projects/${made.id}/contributions/${encodeURIComponent("권경락")}`, { did: "- 카드 시험 수행 하나\n- 카드 시험 수행 둘\n- 카드 시험 수행 셋", result: "- 카드 시험 결과 하나" });
-    await go("#/skills");
-    await page.locator(".skills-tabs").getByRole("tab", { name: "연말 카드" }).click();
+    await go("#/skills?tab=people");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "연말카드" }).click();
     const edit = page.locator("[data-testid=yc-edit]");
     await edit.waitFor({ timeout: 8000 });
     await page.locator(".yc-people").getByRole("button", { name: /권경락/ }).click();
@@ -7383,8 +7383,8 @@ async function main() {
   await check("연말 카드 대상자 — TBD 같은 자리 이름은 없고, 떠난 사람은 접혀 있다 (288) · 칩은 줄을 넘어도 첫 칩에 맞춘다 (287)", async () => {
     const roster = await api.get("/api/people");
     await api.put("/api/people", { people: [...roster.people, { name: "TBD" }, { name: "미정(신규)" }, { name: "연말퇴사", left_on: "2026-06-30", left_reason: "퇴사" }] });
-    await go("#/skills");
-    await page.locator(".skills-tabs").getByRole("tab", { name: "연말 카드" }).click();
+    await go("#/skills?tab=people");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "연말카드" }).click();
     const list = page.locator(".yc-people");
     await list.locator("[data-testid=yc-left-toggle]").waitFor({ timeout: 8000 });
     let text = await list.innerText();
@@ -7406,8 +7406,8 @@ async function main() {
   console.log("\n[81] 팀 역량 · 기술 스택 (TODO 284)");
 
   const openTeam = async () => {
-    await go("#/skills");
-    await page.locator(".skills-tabs").getByRole("tab", { name: "팀 역량" }).click();
+    await go("#/skills?tab=people");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "팀역량" }).click();
     const box = page.locator("[data-testid=team-skills]");
     await box.locator("[data-testid=ts-summary]").waitFor({ timeout: 8000 });
     return box;
@@ -7576,8 +7576,8 @@ async function main() {
   console.log("\n[84] 탭을 바꾼 직후의 링크 · 높이 통일 (TODO 294)");
 
   await check("[팀 역량] 탭에서 [사람별]로 바꾼 뒤 이력 링크 — 돌아갈 곳이 팀원 역량(사람별)이지 팀 역량 탭이 아니다 (294)", async () => {
-    await go("#/skills");
-    await page.locator(".skills-tabs").getByRole("tab", { name: "팀 역량" }).click();
+    await go("#/skills?tab=people");
+    await page.locator(".skills-tabs").getByRole("tab", { name: "팀역량" }).click();
     await page.locator("[data-testid=team-skills]").waitFor({ timeout: 8000 });
     await page.locator(".skills-tabs").getByRole("tab", { name: "사람별" }).click();
     const link = page.locator('a.person-link[href^="#/person/"]').first();
@@ -7748,6 +7748,53 @@ async function main() {
       await page.unroute("**/api/projects**");
     }
     await page.locator("header").first().waitFor({ timeout: 8000 });
+  });
+
+  await check("팀원역량 (303) — 처음은 팀역량 탭 · TBD 는 어느 탭에도 없음 · 팀장은 면담 · 연말카드에서만 못 고름 · 면담 내용은 기본 펼침", async () => {
+    const roster = await api.get("/api/people");
+    const lead = roster.people.find((p) => !p.left_on && p.name !== "권경락")?.name ?? roster.people[0].name;
+    const member = roster.people.find((p) => !p.left_on && p.name !== lead)?.name ?? "권경락";
+    await api.put("/api/people", { people: [...roster.people.map((p) => ({ ...p, leader: p.name === lead })), { name: "TBD" }, { name: "미정(신규)" }] });
+    const made = await api.post("/api/meetings", { person: member, date: "2026-03-02", summary: `펼침 시험 ${Date.now() % 10000}`, body: "면담 본문 — 기본으로 보여야 한다" });
+    try {
+      await go("#/skills");
+      await page.reload();
+      await page.locator(".skills-tabs [role=tab][aria-selected=true]").waitFor({ timeout: 8000 });
+      equal((await page.locator(".skills-tabs [role=tab][aria-selected=true]").innerText()).trim(), "팀역량", "처음 여는 탭");
+      // 사람별 · 기록 — TBD 없음, 팀장은 고를 수 있음
+      for (const tab of ["사람별", "기록"]) {
+        await page.locator(".skills-tabs").getByRole("tab", { name: tab }).click();
+        const strip = page.locator(".skills-people-strip");
+        await strip.waitFor({ timeout: 8000 });
+        const text = await strip.innerText();
+        expect(!text.includes("TBD") && !text.includes("미정(신규)"), `${tab} 사람 줄: ${text.slice(0, 160)}`);
+        expect(await strip.locator(".people-pill", { hasText: lead }).isEnabled(), `${tab} 에서 팀장은 고를 수 있다`);
+      }
+      expect(!(await page.locator(".skills-table").innerText().catch(() => "")).includes("TBD"), "사람별 표에 TBD 없음");
+      // 기록 탭에서 팀장을 고른 채 면담 탭으로 → 팀 전체로, 팀장 칩은 꺼짐
+      await page.locator(".skills-people-strip .people-pill", { hasText: lead }).click();
+      await page.locator(".skills-tabs").getByRole("tab", { name: "면담" }).click();
+      const strip = page.locator(".skills-people-strip");
+      await page.waitForFunction(() => document.querySelector(".skills-people-strip .people-pill.on")?.textContent?.includes("팀 전체"), null, { timeout: 8000 });
+      expect(await strip.locator(".people-pill", { hasText: lead }).isDisabled(), "면담 탭의 팀장 칩은 꺼져 있다");
+      expect(!(await strip.innerText()).includes("TBD"), "면담 탭에 TBD 없음");
+      // 면담 내용은 기본 펼침 · [내용] 으로 접기
+      await strip.locator(".people-pill", { hasText: member }).click();
+      const item = page.locator(".meeting-item", { hasText: "펼침 시험" });
+      await item.locator(".meeting-body").waitFor({ timeout: 8000 });
+      await item.getByRole("button", { name: "내용" }).click();
+      equal(await item.locator(".meeting-body").count(), 0, "[내용] 을 누르면 접힘");
+      // 연말카드 — 팀장은 흐리게, 고를 수 없음 · TBD 없음
+      await page.locator(".skills-tabs").getByRole("tab", { name: "연말카드" }).click();
+      const yc = page.locator(".yc-people");
+      await yc.waitFor({ timeout: 8000 });
+      const leadButton = yc.locator(".yc-person", { hasText: lead });
+      expect(await leadButton.isDisabled() && (await leadButton.innerText()).includes("카드 대상 아님"), "연말카드의 팀장");
+      expect(!(await yc.innerText()).includes("TBD"), "연말카드에 TBD 없음");
+    } finally {
+      await api.delete(`/api/meetings/${made.id}`).catch(() => undefined);
+      await api.put("/api/people", { people: roster.people });
+    }
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

@@ -98,7 +98,7 @@ def _refs_for(
 FIELD_NAMES = {"담당": "owner", "담당자": "owner", "사람": "owner", "태그": "tag", "상태": "status",
                "연도": "year", "해": "year", "종류": "kind"}
 KIND_WORDS = {"과제": "projects", "일지": "entries", "진행일지": "entries", "보고": "reports", "첨부": "attachments",
-              "접수": "intakes", "역량": "activities", "교육": "activities", "행사": "activities", "팀원역량": "activities",
+              "접수": "intakes", "역량": "activities", "교육": "activities", "행사": "activities", "활동": "activities", "역량강화": "activities", "팀원역량": "activities",
               "회고": "contributions", "역할": "contributions", "담당과역할": "contributions"}
 GROUPS = ("projects", "intakes", "entries", "reports", "attachments", "contributions", "activities")
 _TOKEN = re.compile(r'(-?)(?:([^\s"]+?)[:：])?"([^"]*)"|(\S+)')
@@ -374,7 +374,7 @@ def search(conn: sqlite3.Connection, query: str, limit: int | None = None, sort:
     if "contributions" in wanted and (words or fields.get("owner")):
         contributions, truncated["contributions"] = _contributions(conn, words, excludes, fields, facts, limit or CONTRIBUTION_LIMIT, groups)
 
-    # 팀원역량 기록 — 교육 · 행사 (254 A)
+    # 팀원역량 기록 — 개인 역량 강화 활동 (254 A · 303)
     activities: list[dict] = []
     if "activities" in wanted and (words or fields.get("owner")):
         activities, truncated["activities"] = _activities(conn, words, excludes, fields, limit or ACTIVITY_LIMIT, groups)

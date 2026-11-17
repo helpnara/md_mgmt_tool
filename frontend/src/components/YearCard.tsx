@@ -18,7 +18,7 @@ const STATS: { key: keyof YearNumbers; label: string; unit: string }[] = [
   { key: "entries", label: "내가 쓴 일지", unit: "건" },
   { key: "reports", label: "보고에 올라감", unit: "번" },
   { key: "milestones", label: "중간 성과", unit: "건" },
-  { key: "activities", label: "교육 · 행사", unit: "건" },
+  { key: "activities", label: "개인 역량 강화 활동", unit: "건" },
 ];
 
 export function yearText(review: YearReview): string {
@@ -94,7 +94,7 @@ export default function YearCard({ name, years }: { name: string; years: string[
               </div>
             ))}
           </div>
-          {review.hours > 0 && <p className="hint">교육 · 행사 {review.hours}시간 (지난해 {review.last.hours}시간)</p>}
+          {review.hours > 0 && <p className="hint">개인 역량 강화 활동 {review.hours}시간 (지난해 {review.last.hours}시간)</p>}
           {review.done_projects.length > 0 && (
             <p className="year-line">
               <span className="muted">마친 과제</span>

@@ -41,8 +41,9 @@ export default function YearCards() {
     try {
       const next = await api.yearCards(year);
       setListing(next);
-      const first = next.people.find((p) => !p.leader && !p.left)?.name ?? next.people.find((p) => !p.left)?.name ?? "";
-      setName(keep && next.people.some((p) => p.name === keep) ? keep : first);
+      // 303 — 팀장은 카드 대상이 아니다(목록에 흐리게만). 처음엔 첫 팀원
+      const first = next.people.find((p) => !p.leader && !p.left)?.name ?? next.people.find((p) => !p.left && !p.leader)?.name ?? "";
+      setName(keep && next.people.some((p) => p.name === keep && !p.leader) ? keep : first);
     } catch (error) {
       notifyError((error as Error).message);
     }
@@ -134,7 +135,7 @@ export default function YearCards() {
       return { ...c!, did_lines_card: lines.did, result_lines_card: lines.result };
     }),
   } : null;
-  // 팀장 본인 카드는 [모두 인쇄] · 준비 수에서 뺀다 — 고르면 따로 인쇄할 수는 있다
+  // 팀장 본인 카드는 [모두 인쇄] · 준비 수에서 빼고, 목록에서도 고를 수 없다(303)
   const members = listing?.people.filter((p) => !p.leader && !p.left) ?? [];
   const leftPeople = listing?.people.filter((p) => p.left) ?? [];
   const shownPeople = listing?.people.filter((p) => !p.left || showLeft || p.name === name) ?? [];
@@ -158,7 +159,7 @@ export default function YearCards() {
         </div>
         <p className="hint">
           사람마다 <b>엽서 한 장</b>(100 × 148mm)입니다 — 그 해의 숫자 · 대표 과제(과제마다 수행 2줄 · 결과 2줄) · 역량 · 보유 기술 · <b>감사 편지</b> — 개수는 미리보기를 보며 정하세요.
-          인쇄는 <b>A4 한 장에 네 장</b>이 자를 선과 함께 나옵니다. 인쇄 창에서 <b>배율 100%(실제 크기) · 여백 없음</b>으로 출력하거나 "PDF 로 저장" 하세요. [모두 인쇄]에는 팀장 표시가 된 사람은 빠집니다.
+          인쇄는 <b>A4 한 장에 네 장</b>이 자를 선과 함께 나옵니다. 인쇄 창에서 <b>배율 100%(실제 크기) · 여백 없음</b>으로 출력하거나 "PDF 로 저장" 하세요. 팀장 표시가 된 사람은 카드 대상이 아니라 고를 수 없습니다.
           이 화면과 편지는 팀장 · 관리자만 봅니다(팀원 화면 · 업무 이력 파일에 나오지 않습니다). 면담 기록 · 효과 금액 · 다른 사람과의 비교는 넣지 않습니다.
         </p>
       </div>
@@ -166,10 +167,13 @@ export default function YearCards() {
         <ul className="yc-people card" aria-label="사람">
           {shownPeople.map((p) => (
             <li key={p.name}>
-              <button type="button" className={p.name === name ? "yc-person on" : "yc-person"} onClick={() => setName(p.name)}>
+              <button type="button" className={p.name === name ? "yc-person on" : "yc-person"} onClick={() => setName(p.name)}
+                disabled={p.leader} title={p.leader ? "팀장은 연말카드 대상이 아닙니다" : undefined}>
                 <b>{p.name}</b>{p.leader && <span className="tag leader-tag">팀장</span>}
                 {p.left && <span className="tag">{p.left_reason || "떠남"} {p.left_on}</span>}
-                <span className={p.missing.length ? "muted yc-state" : "yc-state ok"}>{p.missing.length ? `남음: ${p.missing.join(" · ")}` : "준비 끝 ✓"}</span>
+                {p.leader
+                  ? <span className="muted yc-state">카드 대상 아님</span>
+                  : <span className={p.missing.length ? "muted yc-state" : "yc-state ok"}>{p.missing.length ? `남음: ${p.missing.join(" · ")}` : "준비 끝 ✓"}</span>}
               </button>
             </li>
           ))}
@@ -312,7 +316,7 @@ export function PostCard({ card, onOverflow }: { card: YearCard; onOverflow?: (o
     n.projects ? ["함께한 과제", `${n.projects}`] : null,
     n.done ? ["마친 과제", `${n.done}`] : null,
     n.milestones ? ["중간 성과", `${n.milestones}`] : null,
-    n.hours ? ["교육", `${n.hours}시간`] : n.activities ? ["교육 · 행사", `${n.activities}`] : null,
+    n.hours ? ["역량 강화", `${n.hours}시간`] : n.activities ? ["역량 강화 활동", `${n.activities}`] : null,   // 303 — 엽서 칸이 좁아 "개인" 은 뺌
   ].filter(Boolean) as string[][];
   return (
     <div className="postcard" ref={ref} data-testid="postcard">

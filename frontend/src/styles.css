@@ -3405,3 +3405,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .update-step-line { display: flex; align-items: center; gap: 10px; }
 .update-step-detail { margin: 6px 0 2px 28px; display: grid; gap: 4px; }
 .update-steps li.skipped .mark { background: var(--neutral-100); color: var(--muted); }
+
+/* 303 — 면담 탭의 팀장 · 연말카드의 팀장은 고를 수 없다 */
+.people-pill:disabled, .yc-person:disabled { opacity: 0.5; cursor: not-allowed; }
+.people-pill:disabled:hover { border-color: var(--border); color: inherit; }

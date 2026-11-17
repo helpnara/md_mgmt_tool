@@ -287,7 +287,7 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
           <span><b>{data.summary.current}</b> 진행 중</span>
           <span><b>{data.summary.lead}</b> 주관</span>
           <span title="끝난 과제 가운데 회고를 적은 것">회고 <b>{data.summary.retro_written}</b> / {data.summary.done}</span>
-          <span><b>{data.summary.activities}</b> 교육 · 행사</span>
+          <span><b>{data.summary.activities}</b> 개인 역량 강화 활동</span>
           {/* 보고에 올라간 내 과제 (TODO 242 A1) — 비교는 나의 지난해와만 */}
           <span title="확정한 보고에 내 과제가 올라간 횟수">
             올해 보고 <b>{data.summary.reports_this_year ?? 0}</b>번
@@ -504,7 +504,7 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
 
 
       <div className="card person-activities">
-        <h2>교육 · 행사 {data.activities.length}건</h2>
+        <h2>개인 역량 강화 활동 {data.activities.length}건</h2>
         {data.activities.length === 0 ? (
           <p className="muted">팀원역량에 적은 기록이 없습니다.</p>
         ) : (

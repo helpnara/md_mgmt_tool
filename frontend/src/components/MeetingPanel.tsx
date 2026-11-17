@@ -42,7 +42,8 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
   const [data, setData] = useState<MeetingListing | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
-  const [opened, setOpened] = useState<Set<number>>(new Set());
+  // 303 — 면담 내용은 **기본 펼침**(팀원 단위로 보는 화면이라). 접은 것만 기억한다
+  const [folded, setFolded] = useState<Set<number>>(new Set());
   // 저장은 됐지만 알릴 것 — 미래 날짜 면담 같은 서버의 warnings (TODO 214 D5)
   const [notice, setNotice] = useState<string[]>([]);
   // 열린 면담 폼이 고쳐졌는가 — [면담 추가] · [수정] 을 다시 눌러 닫을 때도 묻는다 (TODO 211 ①)
@@ -173,9 +174,11 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
                 <span className="grow" />
                 {meeting.body && (
                   <button
-                    className={opened.has(meeting.id) ? "ghost small on" : "ghost small"}
+                    className={folded.has(meeting.id) ? "ghost small" : "ghost small on"}
+                    aria-expanded={!folded.has(meeting.id)}
+                    title={folded.has(meeting.id) ? "내용 펼치기" : "내용 접기"}
                     onClick={() =>
-                      setOpened((prev) => {
+                      setFolded((prev) => {
                         const next = new Set(prev);
                         if (next.has(meeting.id)) next.delete(meeting.id);
                         else next.add(meeting.id);
@@ -213,7 +216,7 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
                   ))}
                 </ul>
               )}
-              {opened.has(meeting.id) && meeting.body && <div className="meeting-body">{meeting.body}</div>}
+              {!folded.has(meeting.id) && meeting.body && <div className="meeting-body">{meeting.body}</div>}
               {editing === meeting.id && (
                 <MeetingForm
                   meta={meta}

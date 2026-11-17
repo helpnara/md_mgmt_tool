@@ -359,6 +359,10 @@ def summary(conn: sqlite3.Connection, year: str | None = None) -> dict:
         if row["person"] and row["person"] not in names:
             names.append(row["person"])
 
+    # 303 — 사람이 아닌 자리 이름(TBD · 미정 · 공석 …)은 팀원역량 어느 탭에도 세우지 않는다(연말카드 · 팀역량과 같은 목록 — 288)
+    from .yearcards import is_placeholder
+
+    names = [name for name in names if not is_placeholder(name)]
     # 떠난 사람 (TODO 122 · 194) — 줄은 남기되(이력은 사실) 면담 대상에는 세우지 않는다
     left_by = {person["name"]: person for person in settings_service.left_people()}
     people = []

@@ -35,24 +35,32 @@ function won(value: number): string {
   return value ? `${Math.round(value).toLocaleString("ko-KR")}원` : "—";
 }
 
-/** 기록 목록에 처음 세우는 행사 수 — 더 보기로 이만큼씩 늘린다 (TODO 227) */
+/** 기록 목록에 처음 세우는 활동 수 — 더 보기로 이만큼씩 늘린다 (TODO 227) */
 const EVENT_PAGE = 20;
-/** 예정 묶음에 처음 세우는 행사 수 (TODO 232 ⑥) — 가까운 것부터 */
+/** 예정 묶음에 처음 세우는 활동 수 (TODO 232 ⑥) — 가까운 것부터 */
 const PLANNED_PAGE = 10;
 /** 면담 탭 옆 칸에 세우는 지난 기록 수 (TODO 248 ②) — 모두는 기록 탭에서 */
 const SIDE_PAST = 5;
 
 /** 화면 안 탭 (TODO 232 ②) — "" = 사람별 · records = 기록 · meetings = 면담(팀장 PC 만) */
-type SkillsTab = "" | "records" | "meetings" | "team" | "yearcards";
-function tabFrom(params: URLSearchParams, readonly: boolean): SkillsTab {
+type SkillsTab = "people" | "records" | "meetings" | "team" | "yearcards";
+/**
+ * 주소의 탭 (303) — 탭 순서가 팀역량 · 사람별 · 면담 · 기록 · 연말카드("큰 것부터 디테일, 마무리")로 바뀌며 **처음 열면 팀역량**.
+ * 그래서 사람별에도 `tab=people` 이 붙는다. 옛 주소 — 탭 없이 사람이 실려 오면 예전처럼 사람별, 조건만 실려 오면 기록.
+ * `noMeetings` — 면담을 볼 수 없는 PC(읽기 전용 공유), `readonly` — 팀원 PC 까지(팀역량 · 연말카드 없음).
+ */
+function tabFrom(params: URLSearchParams, noMeetings: boolean, readonly: boolean): SkillsTab {
   const value = params.get("tab");
+  const home: SkillsTab = readonly ? "people" : "team";
+  if (value === "people") return "people";
   if (value === "records") return "records";
-  if (value === "meetings") return readonly ? "" : "meetings";
-  if (value === "yearcards") return readonly ? "" : "yearcards";
-  if (value === "team") return readonly ? "" : "team";
+  if (value === "meetings") return noMeetings ? "people" : "meetings";
+  if (value === "yearcards") return readonly ? "people" : "yearcards";
+  if (value === "team") return readonly ? "people" : "team";
   // 탭 없이 조건(예정만 · 구분 · 찾기)만 실려 온 옛 주소는 기록 목록을 보려던 것이다
   if (params.get("when") || params.get("kind") || params.get("q")) return "records";
-  return "";
+  if (params.get("person")) return "people";
+  return home;
 }
 
 /** 오늘에서 그 날까지 남은 날 — 이 PC 의 오늘 기준 (홈의 D-띠지와 같은 규칙, TODO 226) */
@@ -60,7 +68,7 @@ function daysFromToday(date: string): number {
   return Math.round((Date.parse(`${date}T00:00:00`) - Date.parse(`${todayIso()}T00:00:00`)) / 864e5);
 }
 
-/** 같은 행사끼리 묶는다 (TODO 85). 들어온 순서를 지킨다. */
+/** 같은 활동끼리 묶는다 (TODO 85 · 303 — "행사" → "활동"). 들어온 순서를 지킨다. */
 function groupEvents(rows: Activity[]): Activity[][] {
   const events: Activity[][] = [];
   const seen = new Map<string, Activity[]>();
@@ -89,7 +97,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
   const [find, setFind] = useState(initial.get("q") ?? "");
   // 예정만 · 지난 것만 (TODO 221). 비우면 모두
   const [when, setWhen] = useState(initial.get("when") ?? "");
-  const [tab, setTab] = useState<SkillsTab>(() => tabFrom(initial, !meetingsOpen));
+  const [tab, setTab] = useState<SkillsTab>(() => tabFrom(initial, !meetingsOpen, readonly));
   const [plannedAll, setPlannedAll] = useState(false);
   // 기록 목록은 처음에 최근 행사 몇 건만 (TODO 227) — 행사가 쌓이자 화면이 한없이 길어졌다. 조건을 바꾸면 다시 처음부터
   const [shown, setShown] = useState(EVENT_PAGE);
@@ -153,6 +161,11 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       .catch(() => mine() && setSideRows([]));
   }, [sidePerson, rows, sideLatest]);
   useEffect(() => setShown(EVENT_PAGE), [yearParam, person, kind, findQuery, when]);
+  // 303 — 팀장을 고른 채 면담 탭으로 오면 팀 전체로(팀장은 면담 대상이 아님). 다른 탭에서는 팀장도 고를 수 있다
+  useEffect(() => {
+    if (tab !== "meetings" || !person || !summary) return;
+    if (summary.people.some((item) => item.name === person && item.leader)) setPerson(ALL);
+  }, [tab, person, summary]);
 
   useAddressBar(
     "skills",
@@ -161,7 +174,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         .filter(([, value]) => value),
     ) as Record<string, string>,
     (params) => {
-      setTab(tabFrom(params, !meetingsOpen));
+      setTab(tabFrom(params, !meetingsOpen, readonly));
       setYear(params.get("year") ?? THIS_YEAR);
       setPerson(params.get("person") ?? ALL);
       setKind(params.get("kind") ?? ALL);
@@ -236,7 +249,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
     setTab(to);
   };
 
-  /** 한 행사 한 줄 (TODO 232 E) — 주관 · 장소 · 시간 · 비용을 제목 줄 끝에 작게 붙여 한 줄로 */
+  /** 한 활동 한 줄 (TODO 232 E) — 주관 · 장소 · 시간 · 비용을 제목 줄 끝에 작게 붙여 한 줄로 */
   const eventRow = (group: Activity[], planned: boolean) => {
     const first = group[0];
     const shared = group.length > 1;
@@ -353,15 +366,18 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       setPerson(ALL);
       return;
     }
-    if (tab === "") {
+    if (tab === "people") {
       const item = summary.people.find((row) => row.name === name);
       pick(name, item?.meeting_due && !readonly ? "meetings" : "records");
       return;
     }
     setPerson(name);
   };
+  // 303 — 면담 탭에서 팀장은 고를 수 없다(면담 대상이 아님 — 235 ③). 다른 탭에서 팀장을 고른 채 오면 팀 전체로
+  const leaderOff = (item: { leader?: boolean }) => tab === "meetings" && Boolean(item.leader);
   const pill = (item: (typeof strip)[number]) => {
-    const on = person === item.name;
+    const on = person === item.name && !leaderOff(item);
+    const off = leaderOff(item);
     const due = showDue(item);
     const empty = showEmpty(item);
     const why = [due ? "면담할 때가 지났습니다" : "", empty ? "기록이 없습니다" : "", item.left ? leftLabel(meta, item.name) || "떠난 사람" : ""].filter(Boolean).join(" · ");
@@ -371,8 +387,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         type="button"
         className={["people-pill", on ? "on" : "", item.left ? "left" : ""].filter(Boolean).join(" ")}
         aria-pressed={on}
+        disabled={off}
         onClick={() => choose(item.name)}
-        title={on ? "다시 누르면 팀 전체로 돌아갑니다" : why || undefined}
+        title={off ? "팀장은 면담 대상이 아닙니다" : on ? "다시 누르면 팀 전체로 돌아갑니다" : why || undefined}
       >
         {item.name}
         {item.leader && <span className="pill-tag">팀장</span>}
@@ -402,15 +419,17 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
     );
   };
 
+  // 303 — 큰 것부터 디테일, 마무리: 팀역량 · 사람별 · 면담 · 기록 · 연말카드. 팀원 PC 는 사람별 · 면담 · 기록
   const tabs = [
-    { key: "", label: "사람별", title: "합계 · 면담에서 먼저 볼 사람 · 사람별 표" },
-    { key: "records", label: "기록", title: "교육 · 행사 기록 — 예정과 지난 기록" },
-    ...(!meetingsOpen ? [] : [{ key: "meetings", label: "면담", title: readonly ? "내 면담 기록 — 보기만" : "면담 기록 · 하기로 한 것 (팀장만)" }]),
     // 284 — 팀 역량 · 기술 스택(팀장 · 관리자만)
-    ...(readonly ? [] : [{ key: "team", label: "팀 역량", title: "팀 역량 지도 · 기술 스택 · 한 사람에게만 있는 것 (팀장만)" }]),
+    ...(readonly ? [] : [{ key: "team", label: "팀역량", title: "팀 역량 지도 · 기술 스택 · 한 사람에게만 있는 것 (팀장만)" }]),
+    { key: "people", label: "사람별", title: "합계 · 면담에서 먼저 볼 사람 · 사람별 표" },
+    ...(!meetingsOpen ? [] : [{ key: "meetings", label: "면담", title: readonly ? "내 면담 기록 — 보기만" : "면담 기록 · 하기로 한 것 (팀장만)" }]),
+    { key: "records", label: "기록", title: "개인 역량 강화 활동 기록 — 예정과 지난 기록" },
     // 285 — 연말 회고 카드(팀장 · 관리자만)
-    ...(readonly ? [] : [{ key: "yearcards", label: "연말 카드", title: "팀원마다 엽서 한 장 — 한 해의 한 일 · 감사 편지, A4 네 장씩 인쇄 (팀장만)" }]),
+    ...(readonly ? [] : [{ key: "yearcards", label: "연말카드", title: "팀원마다 엽서 한 장 — 한 해의 한 일 · 감사 편지, A4 네 장씩 인쇄 (팀장만)" }]),
   ];
+
 
   return (
     <section className="skills">
@@ -429,7 +448,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             className="page-desc skills-intro"
             lead={<>팀원 역량 이력 — 교육·세미나·박람회·학회 참여 이력을 <b>사람 기준</b>으로 쌓습니다. 숫자는 <b>지나간 것만</b> 셉니다.</>}
           >
-            한 행사에 여러 명이 가면 사람 수만큼 기록합니다. 앞으로 갈 교육 · 행사도 <b>예정</b>으로 적어 둘 수 있습니다(홈에 다가오는 일정으로 보입니다).
+            한 활동에 여러 명이 가면 사람 수만큼 기록합니다. 앞으로 할 개인 역량 강화 활동도 <b>예정</b>으로 적어 둘 수 있습니다(홈에 다가오는 일정으로 보입니다).
             이 화면의 쓸모는 쌓인 이력을 놓고 <b>내년에 무엇을 하면 좋을지 면담에서 이야기하는 것</b>입니다.
           </Explain>
         </div>
@@ -500,7 +519,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       )}
 
       <div role="tabpanel" className={`skills-panel skills-panel-${tab || "people"}`}>
-      {tab === "" && (
+      {tab === "people" && (
         <>
       {/* 합계와 먼저 볼 사람을 넓으면 나란히 (232 뒤 사용자: "가득 차 보이게") */}
       <div className={quiet.length > 0 ? "skills-top two" : "skills-top"}>
@@ -510,9 +529,9 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
         <div className="home-stats">
           {/* "기록 11건" 은 **참여 연인원**이다. 한 교육에 세 명이 가면 기록도 세 건이라
               (TODO 74), 그대로 두면 "올해 교육을 열한 번 보냈다"로 읽힌다.
-              팀장이 실제로 묻는 수는 행사 수이므로 그쪽을 크게 세운다 (TODO 85). */}
+              팀장이 실제로 묻는 수는 활동 수이므로 그쪽을 크게 세운다 (TODO 85). */}
           <div className="home-stat">
-            <span className="home-stat-label">행사</span>
+            <span className="home-stat-label">활동</span>
             <strong>{summary.team.events}건</strong>
             <span className="home-stat-note">참여 기록 {summary.team.count}건</span>
           </div>
@@ -540,7 +559,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             <strong>{won(summary.team.cost)}</strong>
           </div>
         </div>
-        <Explain id="skills-total" lead={<><b>행사</b>는 날짜·구분·제목이 같으면 한 건, <b>참여 기록</b>은 사람 수만큼 셉니다.</>}>
+        <Explain id="skills-total" lead={<><b>활동</b>은 날짜·구분·제목이 같으면 한 건, <b>참여 기록</b>은 사람 수만큼 셉니다.</>}>
           그래서 두 수는 다릅니다 — 사람별 집계에서 아무도 빠지지 않게 하려는 것입니다.
           {" "}시간·비용은 <b>옵션</b>입니다. 채워 넣은 기록만 합계에 들어가므로, 이 수는
           &ldquo;쓴 돈 전부&rdquo;가 아니라 <b>적어 둔 만큼</b>입니다.
@@ -745,7 +764,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             {hiddenCols.length > 0 && (
               <p className="hint hidden-cols">숨긴 열: {hiddenCols.join(" · ")} — 이 표에서 모두 비어 있습니다.</p>
             )}
-            <Explain id="skills-people" lead={<><b>기록</b>은 참여 건수이고, 한 행사에 여럿이 가면 사람마다 한 건씩 잡힙니다. 이름을 누르면 그 사람의 기록으로 갑니다.</>}>
+            <Explain id="skills-people" lead={<><b>기록</b>은 참여 건수이고, 한 활동에 여럿이 가면 사람마다 한 건씩 잡힙니다. 이름을 누르면 그 사람의 기록으로 갑니다.</>}>
               추이 막대는 {summary.trend_years.join(" · ") || "—"}년이며 <b>연도 조건을 따르지 않습니다</b> —
               과거를 봐야 다음을 이야기할 수 있기 때문입니다. 시간·비용에 마우스를 올리면 그 합계가
               몇 건에서 나온 값인지 보입니다.
@@ -819,7 +838,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       <div className="card wide skills-records">
         <div className="card-head">
           <h2>
-            행사 {allEvents}건
+            활동 {allEvents}건
             <span className="hint"> · 참여 기록 {rows.length}건</span>
             {person && <span className="hint"> · {person}</span>}
           </h2>
@@ -885,7 +904,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
               <div className="activity-section activity-past-section">
                 {plannedEvents.length > 0 && (
                   <h3>
-                    지난 기록 — 행사 {events.length}건 <span className="hint">· 참여 기록 {pastRows.length}건 · 최근 것부터</span>
+                    지난 기록 — 활동 {events.length}건 <span className="hint">· 참여 기록 {pastRows.length}건 · 최근 것부터</span>
                   </h3>
                 )}
                 <ul className="activity-list">
@@ -899,7 +918,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                         {monthHead && (
                           <li className="activity-month" aria-hidden="true">
                             {month.slice(0, 4)}년 {Number(month.slice(5, 7))}월
-                            <span className="muted"> · 행사 {events.filter((item) => item[0].date.slice(0, 7) === month).length}건</span>
+                            <span className="muted"> · 활동 {events.filter((item) => item[0].date.slice(0, 7) === month).length}건</span>
                           </li>
                         )}
                         {eventRow(group, false)}
@@ -910,7 +929,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 {events.length > shown && (
                   <div className="activity-more">
                     <button className="ghost" onClick={() => setShown((value) => value + EVENT_PAGE)}>
-                      더 보기 — 남은 행사 {events.length - shown}건
+                      더 보기 — 남은 활동 {events.length - shown}건
                     </button>
                     <button className="ghost small" onClick={() => setShown(events.length)}>
                       모두 보기

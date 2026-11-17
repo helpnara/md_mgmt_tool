@@ -537,11 +537,11 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       {/* 넓으면 두 단 — 왼쪽은 팀원 일정, 오른쪽은 보고 · 과제 (232 뒤 사용자: "가득 차 보이게"). 한쪽이 비면 한 단 */}
       <div className={scheduleSide && reportSide ? "home-week-cols two" : "home-week-cols"}>
       {scheduleSide && <div className="home-week-col">
-      {/* 다가오는 팀원 일정 · 지난 예정 확인 (TODO 221) — 팀원 역량에 예정으로 적은 교육 · 행사. 30일 안 모두(232 ⑦ 그대로) */}
+      {/* 다가오는 팀원 일정 · 지난 예정 확인 (TODO 221) — 팀원 역량에 예정으로 적은 개인 역량 강화 활동. 30일 안 모두(232 ⑦ 그대로) */}
       {(week.team_upcoming?.items.length ?? 0) > 0 && (
         <>
           <p className="hint">
-            <b>다가오는 팀원 일정</b> — 앞으로 {week.team_upcoming!.days}일 안에 예정한 교육 · 행사, 그리고 지금 진행 중인 것입니다.
+            <b>다가오는 팀원 일정</b> — 앞으로 {week.team_upcoming!.days}일 안에 예정한 개인 역량 강화 활동, 그리고 지금 진행 중인 것입니다.
           </p>
           <ul className="home-stale home-upcoming">
             {lines("upcoming", week.team_upcoming!.items).map((item) => (
