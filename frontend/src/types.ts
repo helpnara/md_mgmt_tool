@@ -1873,5 +1873,8 @@ export interface UpdateStatus {
   folder: string; reachable: boolean; current: string; newest: string; configured: string; supervised: boolean; rollback: boolean;
   items: { name: string; file: string; size: number; newer: boolean; current: boolean; problem: string; has_sha: boolean }[];
   last: UpdateResult | null; history: UpdateResult[];
+  /** 302 — 설치 폴더의 updates 인가(아니면 공유 폴더 — zip 을 옮기지 않음) · 쓰는 공간 */
+  local?: boolean;
+  usage?: { applied: number; applied_bytes: number; rollback: number; rollback_bytes: number; keep_applied: number; keep_rollback: number };
 }
 

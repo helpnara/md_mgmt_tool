@@ -12,7 +12,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import os
 import shutil
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -29,6 +31,8 @@ WORK_DIR = ".work"
 # 업데이트가 건드리지 않는 것(설치 폴더 맨 위 이름) — 데이터 · 모드 · 파이썬 환경 · 업데이트 폴더
 PROTECTED = {"vault", "demo-vault", "data-mode.json", ".venv", "venv", "updates", ".git", "node_modules"}
 NAME_RE = re.compile(r"^느린나이테-(\d{8})-v(\d+)")
+KEEP_APPLIED = 3      # 302 — `적용됨` 에 남길 판 수(zip + .sha256 한 쌍씩)
+KEEP_ROLLBACK = 2     # 302 — `되돌리기` 에 남길 개수([이전 판으로]는 가장 최근 것을 쓴다)
 
 
 class UpdateError(RuntimeError):
@@ -114,6 +118,7 @@ def candidates(root: Path, configured: str = "") -> dict[str, Any]:
     for item in out[:5]:                  # 위 다섯만 검사(큰 zip 을 매번 다 읽지 않게)
         item["problem"] = verify(folder / item["file"])
     return {"folder": str(folder), "reachable": reachable, "current": current, "items": out,
+            "local": is_local(root, folder), "usage": usage(root),
             "newest": next((c["name"] for c in out if c["newer"] and not c["problem"]), "")}
 
 
@@ -181,10 +186,106 @@ def _program_files(root: Path) -> list[str]:
                   and "__pycache__" not in p.parts)
 
 
-def latest_rollback(root: Path) -> Path | None:
+def _rollback_dirs(root: Path) -> list[Path]:
+    """되돌리기 보관본 — 오래된 것부터. 이름 끝의 시각(YYYYMMDDHHMMSS)으로 줄 세운다(폴더 시각은 윈도우에서 흔들린다)."""
     folder = root / "updates" / ROLLBACK_DIR
-    found = [p for p in folder.iterdir() if p.is_dir()] if folder.is_dir() else []
-    return max(found, key=lambda p: p.stat().st_mtime) if found else None
+    found = [p for p in folder.iterdir() if p.is_dir() and (p / "_files.json").is_file()] if folder.is_dir() else []
+    return sorted(found, key=lambda p: (p.name[-14:], p.stat().st_mtime))
+
+
+def latest_rollback(root: Path) -> Path | None:
+    found = _rollback_dirs(root)
+    return found[-1] if found else None
+
+
+# ── 쌓이는 파일 정리 (TODO 302) ─────────────────────────────────────────────────────────────────────
+
+def is_local(root: Path, folder: Path) -> bool:
+    """설치 폴더의 `updates` 인가 — 아니면(설정에서 정한 사내 공유 폴더) 그 안의 zip 은 옮기지도 지우지도 않는다.
+    여러 팀장 서버가 같은 공유 폴더를 볼 때 먼저 적용한 서버가 zip 을 옮겨 다른 서버에 새 판이 안 보이던 일을 막는다."""
+    try:
+        return folder.resolve() == (root / "updates").resolve()
+    except OSError:
+        return False
+
+
+def _move(src: Path, dst: Path) -> str:
+    """옮긴다(같은 이름이 있으면 바꿔 넣는다). 잠깐 잡혀 있으면(탐색기 미리보기 · 백신 검사) 몇 번 다시. 실패면 까닭."""
+    error = ""
+    for _ in range(4):
+        try:
+            os.replace(src, dst)
+            return ""
+        except OSError as exc:
+            error = str(exc)
+            try:                          # 다른 드라이브 등 — 복사한 뒤 지운다
+                shutil.copy2(src, dst)
+                src.unlink()
+                return ""
+            except OSError as exc2:
+                error = str(exc2)
+                time.sleep(0.5)
+    return error
+
+
+def _remove(path: Path) -> None:
+    try:
+        shutil.rmtree(path) if path.is_dir() else path.unlink()
+    except OSError:
+        pass
+
+
+def tidy(root: Path) -> list[str]:
+    """설치 폴더 `updates` 정리 — 짝 잃은 .sha256 · 오래된 `적용됨` 쌍 · 오래된 `되돌리기`. 지운 이름을 돌려준다."""
+    updates = root / "updates"
+    removed: list[str] = []
+    if not updates.is_dir():
+        return removed
+    # ① zip 없이 남은 .sha256 (updates · 적용됨)
+    for folder in (updates, updates / APPLIED_DIR):
+        if folder.is_dir():
+            for sha in folder.glob("*.zip.sha256"):
+                if not sha.with_name(sha.name[: -len(".sha256")]).is_file():
+                    _remove(sha)
+                    removed.append(str(sha.relative_to(updates)))
+    # ② 적용됨 — 최근 KEEP_APPLIED 판만
+    applied = updates / APPLIED_DIR
+    if applied.is_dir():
+        zips = sorted((z for z in applied.glob("느린나이테-*.zip") if version_key(z.stem)), key=lambda z: version_key(z.stem))
+        for old in zips[:-KEEP_APPLIED] if len(zips) > KEEP_APPLIED else []:
+            for item in (old, _sha_file(old)):
+                if item.exists():
+                    _remove(item)
+                    removed.append(str(item.relative_to(updates)))
+    # ③ 되돌리기 — 최근 KEEP_ROLLBACK 개만
+    dirs = _rollback_dirs(root)
+    for old in dirs[:-KEEP_ROLLBACK] if len(dirs) > KEEP_ROLLBACK else []:
+        _remove(old)
+        removed.append(str(old.relative_to(updates)))
+    return removed
+
+
+def _size(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    total = 0
+    for item in path.rglob("*"):
+        try:
+            if item.is_file():
+                total += item.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def usage(root: Path) -> dict[str, Any]:
+    """업데이트 폴더가 쓰는 공간 — 카드의 한 줄."""
+    updates = root / "updates"
+    applied = sorted((updates / APPLIED_DIR).glob("느린나이테-*.zip")) if (updates / APPLIED_DIR).is_dir() else []
+    dirs = _rollback_dirs(root)
+    return {"applied": len(applied), "applied_bytes": sum(_size(z) + (_size(_sha_file(z)) if _sha_file(z).is_file() else 0) for z in applied),
+            "rollback": len(dirs), "rollback_bytes": sum(_size(d) for d in dirs),
+            "keep_applied": KEEP_APPLIED, "keep_rollback": KEEP_ROLLBACK}
 
 
 def _noop(stage: str, done: int = 0, total: int = 0) -> None:
@@ -256,17 +357,26 @@ def apply(root: Path, zip_path: Path, log=print, progress=_noop) -> dict[str, An
             pass
     requirements_changed = _differs(keep / "backend/requirements.txt", root / "backend/requirements.txt")
     shutil.rmtree(work, ignore_errors=True)
-    # ④ 적용한 zip 은 "적용됨" 으로
-    done_dir = zip_path.parent / APPLIED_DIR
-    try:
-        done_dir.mkdir(parents=True, exist_ok=True)
+    # ④ 적용한 zip · .sha256 은 "적용됨" 으로 — 설치 폴더의 updates 일 때만(공유 폴더는 그대로, TODO 302)
+    leftover: list[str] = []
+    if is_local(root, zip_path.parent):
+        done_dir = zip_path.parent / APPLIED_DIR
+        try:
+            done_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            leftover.append(f"{done_dir.name}: {exc}")
         for item in (zip_path, _sha_file(zip_path)):
-            if item.is_file():
-                shutil.move(str(item), str(done_dir / item.name))
-    except OSError:
-        pass     # 공유 폴더에 쓸 수 없어도 적용은 끝났다 — 다음에 "지금 판" 으로 보인다
+            if item.is_file() and done_dir.is_dir():
+                problem = _move(item, done_dir / item.name)
+                if problem:
+                    leftover.append(f"{item.name}: {problem}")
+                    log(f"  [알림] {item.name} 를 '{APPLIED_DIR}' 로 옮기지 못했습니다 — {problem} (다음에 켤 때 다시 정리합니다)")
+    else:
+        log(f"  업데이트 폴더가 공유 폴더라 {zip_path.name} 는 그대로 둡니다(다른 서버도 쓸 수 있게).")
+    cleaned = tidy(root)
     result = {"ok": True, "from": old, "to": zip_path.stem, "at": datetime.now().isoformat(timespec="seconds"),
-              "files": len(new_files), "removed": len(removed), "backup": str(keep), "requirements_changed": requirements_changed}
+              "files": len(new_files), "removed": len(removed), "backup": str(keep), "requirements_changed": requirements_changed,
+              "leftover": leftover, "cleaned": cleaned}
     log(f"  {zip_path.stem} 를 적용했습니다 — 파일 {len(new_files)}개, 지운 파일 {len(removed)}개")
     return result
 
@@ -305,6 +415,10 @@ def apply_pending(root: Path, log=print, progress=_noop) -> dict[str, Any] | Non
     """run.py 가 켤 때 — 예약된 적용 · 되돌리기가 있으면 한다. 결과는 상태 파일에. 없으면 None."""
     path = root / "updates" / PENDING
     if not path.is_file():
+        try:
+            tidy(root)        # 302 — 켤 때마다 지난번에 옮기지 못한 짝 잃은 .sha256 등을 정리
+        except OSError:
+            pass
         return None
     try:
         pending = json.loads(path.read_text(encoding="utf-8"))

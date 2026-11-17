@@ -220,3 +220,44 @@ def test_backup_before_update_check_skip_and_space(tmp_path, monkeypatch):
         assert skipped["state"] == "scheduled" and skipped["data_backup"] == "" and len(list(backups.glob("*.zip"))) == count
     update_api._job.clear()
     get_settings.cache_clear()
+
+
+def test_tidy_keeps_recent_and_moves_sha(install):
+    """TODO 302 — .sha256 도 적용됨으로 · 짝 잃은 .sha256 정리 · 적용됨 3판 · 되돌리기 2개 · 같은 이름은 바꿔 넣기."""
+    updates = install / "updates"
+    names = [f"느린나이테-2026111{d}-v1" for d in range(1, 6)]   # 11 ~ 15일, 다섯 판
+    for name in names:
+        zip_path = _release(updates, name, {**NEW, "run.py": f"run {name}"})
+        updater.request(install, zip_path, by="관리자")
+        result = updater.apply_pending(install, log=lambda *_: None)
+        assert result["ok"] and result["leftover"] == []
+        assert not zip_path.exists() and not (updates / (zip_path.name + ".sha256")).exists()   # zip · .sha256 둘 다 옮김
+    applied = sorted(p.name for p in (updates / updater.APPLIED_DIR).iterdir())
+    assert applied == sorted([f"{n}.zip" for n in names[-3:]] + [f"{n}.zip.sha256" for n in names[-3:]])
+    assert len(updater._rollback_dirs(install)) == 2
+    assert updater.latest_rollback(install).name.startswith(names[-2])          # 되돌리기는 바로 앞 판으로
+    use = updater.usage(install)
+    assert use["applied"] == 3 and use["rollback"] == 2 and use["applied_bytes"] > 0
+    # 짝 잃은 .sha256 — 켤 때 정리
+    (updates / "느린나이테-20261101-v9.zip.sha256").write_text("x", encoding="utf-8")
+    assert updater.apply_pending(install) is None
+    assert not (updates / "느린나이테-20261101-v9.zip.sha256").exists()
+    # 같은 이름이 적용됨에 있으면 바꿔 넣는다(다시 올리기)
+    again = _release(updates, names[-1], {**NEW, "run.py": "again"})
+    updater.request(install, again, by="관리자")
+    assert updater.apply_pending(install, log=lambda *_: None)["leftover"] == []
+    assert not again.exists() and (updates / updater.APPLIED_DIR / again.name).exists()
+
+
+def test_shared_folder_is_left_alone(install, tmp_path):
+    """TODO 302 — 공유 폴더의 zip · .sha256 은 옮기지 않는다(다른 팀장 서버도 같은 폴더를 본다)."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    zip_path = _release(shared, "느린나이테-20261116-v6", NEW)
+    assert updater.is_local(install, shared) is False and updater.is_local(install, install / "updates") is True
+    updater.request(install, zip_path, by="관리자")
+    result = updater.apply_pending(install, log=lambda *_: None)
+    assert result["ok"] and zip_path.exists() and (shared / (zip_path.name + ".sha256")).exists()
+    assert not (shared / updater.APPLIED_DIR).exists()
+    found = updater.candidates(install, str(shared))
+    assert found["local"] is False and found["newest"] == ""                    # 지금 판이라 띠는 안 뜬다

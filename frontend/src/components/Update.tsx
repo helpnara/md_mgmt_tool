@@ -303,6 +303,13 @@ export function UpdateCard() {
           {last.ok ? " · 성공" : ` · 실패: ${last.error ?? ""}`}{last.data_backup ? ` · 데이터 백업 ${last.data_backup}` : ""}
         </p>
       )}
+      {data.usage && (
+        <p className="muted" data-testid="update-usage">
+          업데이트 폴더가 쓰는 공간 — 적용됨 {data.usage.applied}판 {formatBytes(data.usage.applied_bytes)} · 되돌리기 {data.usage.rollback}개 {formatBytes(data.usage.rollback_bytes)}
+          {` (적용됨은 최근 ${data.usage.keep_applied}판, 되돌리기는 최근 ${data.usage.keep_rollback}개만 남기고 저절로 정리)`}
+          {data.local === false && " · 공유 폴더의 zip 은 다른 서버도 쓰도록 옮기지 않습니다."}
+        </p>
+      )}
       {!data.supervised && <p className="muted">이 서버는 run.bat 으로 켜지지 않아 스스로 다시 켤 수 없습니다 — 업데이트를 누른 뒤 창을 닫고 run.bat 으로 다시 켜면 적용됩니다.</p>}
       <div className="form-actions">
         <button type="button" className="ghost" disabled={!data.rollback} onClick={() => void rollback()} title={data.rollback ? "" : "되돌릴 이전 판이 없습니다"}>이전 판으로</button>
