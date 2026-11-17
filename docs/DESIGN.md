@@ -2339,3 +2339,4 @@ Nuvemshop *Nimbus* 디자인 시스템(MIT)의 **값만** 가져왔다 — 부�
 * **안전** — 검사값 · 필수 파일 · 경로 검사 → (백업 폴더가 있으면) 데이터 전체 백업 → 옛 프로그램 파일을 `updates/되돌리기/` 에 → 덮어쓰기(데이터 · 모드 파일 · `.venv` · `updates` 는 보호) → 새 판의 `배포본-파일목록.txt` 에 없는 파일 정리. 되돌리기 = 설정 카드 [이전 판으로] 또는 `run.bat --rollback`.
 * **권한** — 관리자(서버 PC)만. 팀원 공유 주소에서는 `/api/update` 를 막는다.
 * **진행 표시 (TODO 300)** — 적용하는 동안 `run.py` 의 `ProgressWindow` 가 같은 주소에 `GET /api/update/progress`(단계 · n/N · 실패 까닭)만 답한다. 화면(`UpdateCover`)은 0.7초마다 묻고: 창구가 답하면 그 단계, 연결이 끊기면 "켜는 중", 창구가 아닌 서버가 답하고 `/api/meta` 가 되면 끝 → 새로 열고 `sessionStorage` 로 한 번 "업데이트했습니다" 띠.
+* **업데이트 전 백업 (TODO 301)** — [이 판으로 업데이트] → `GET /api/update/check`(백업 폴더 · 오늘 만든 백업 · 예상 크기 · 남은 공간) → 확인 창에서 새로 백업 / 건너뛰기 → `POST /api/update {name, backup}` 는 곧바로 답하고 뒤에서 백업(`running.track(key="update")`) → 예약 → 스스로 끝남. 화면은 `GET /api/update/job` 으로 백업 진행과 상태(backup · restarting · error)를 본다.
