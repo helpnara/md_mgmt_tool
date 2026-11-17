@@ -7731,6 +7731,25 @@ async function main() {
     }
   });
 
+  await check("열려 있던 화면에서 업데이트 중 요청이 '적용하는 중'(503) 이면 덮개 → 서버가 답하면 저절로 다시 연다 (302)", async () => {
+    await go("#/");
+    let applying = true;
+    await page.route("**/api/projects**", (route) => applying
+      ? route.fulfill({ status: 503, contentType: "application/json", headers: { "X-Update": "applying" }, body: JSON.stringify({ detail: "업데이트를 적용하는 중입니다 — 잠시 뒤 다시 해 주세요." }) })
+      : route.continue());
+    try {
+      await expectingFailures(["503", "업데이트를 적용하는 중"], async () => {
+        await page.evaluate(() => { window.location.hash = "#/projects"; });
+        await page.locator("[data-testid=server-updating]").waitFor({ timeout: 8000 });
+        applying = false;
+        await page.locator("[data-testid=server-updating]").waitFor({ state: "detached", timeout: 15000 });   // 다시 열림
+      });
+    } finally {
+      await page.unroute("**/api/projects**");
+    }
+    await page.locator("header").first().waitFor({ timeout: 8000 });
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
