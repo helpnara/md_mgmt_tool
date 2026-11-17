@@ -121,3 +121,51 @@ def test_api_admin_only_and_request(tmp_path, monkeypatch):
         assert owner.put("/api/settings", json={"update_dir": str(tmp_path / "share")}).status_code == 200
         assert owner.get("/api/update").json()["folder"] == str(tmp_path / "share")
     get_settings.cache_clear()
+
+
+def test_progress_stages_in_order(install):
+    """TODO 300 — 적용 · 되돌리기가 단계를 차례로 알린다(화면의 진행 표시)."""
+    zip_path = _release(install / "updates", "느린나이테-20261116-v6", NEW)
+    updater.request(install, zip_path, by="관리자")
+    assert updater.peek_pending(install)["name"] == "느린나이테-20261116-v6"
+    seen: list[tuple[str, int, int]] = []
+    updater.apply_pending(install, log=lambda *_: None, progress=lambda stage, done=0, total=0: seen.append((stage, done, total)))
+    order = [stage for stage, _, _ in seen]
+    firsts = sorted(set(order), key=order.index)
+    assert firsts == ["verify", "extract", "keep", "copy", "clean"]
+    assert ("copy", len(NEW), len(NEW)) in seen or any(s == "copy" and d == t and t > 0 for s, d, t in seen)
+    seen.clear()
+    updater.request_rollback(install, by="관리자")
+    updater.apply_pending(install, log=lambda *_: None, progress=lambda stage, done=0, total=0: seen.append((stage, done, total)))
+    order = [stage for stage, _, _ in seen]
+    assert sorted(set(order), key=order.index) == ["restore", "clean"]
+
+
+def test_progress_window_answers_while_applying():
+    """TODO 300 — run.py 의 진행 창구: 진행은 JSON, 다른 /api 는 503, 화면은 기다림 쪽."""
+    import importlib.util
+    import socket
+    import urllib.error
+    import urllib.request
+
+    spec = importlib.util.spec_from_file_location("run_main", Path(__file__).resolve().parents[2] / "run.py")
+    run_main = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_main)
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with run_main.ProgressWindow(["--port", str(port)], {"action": "apply", "name": "느린나이테-20261116-v6"}) as window:
+        window.update("copy", 3, 10)
+        with opener.open(f"http://127.0.0.1:{port}/api/update/progress", timeout=3) as response:
+            body = json.load(response)
+        assert body["phase"] == "applying" and body["stage"] == "copy" and body["done"] == 3 and body["to"] == "느린나이테-20261116-v6"
+        for path, kind in (("/api/meta", "json"), ("/", "html")):
+            with pytest.raises(urllib.error.HTTPError) as caught:
+                opener.open(f"http://127.0.0.1:{port}{path}", timeout=3)
+            assert caught.value.code == 503 and kind in caught.value.headers["Content-Type"]
+    # 끝나면 자리를 비운다 — 새 판 서버가 같은 자리를 잡을 수 있게
+    with socket.socket() as again:
+        again.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)   # uvicorn 과 같이
+        again.bind(("127.0.0.1", port))
+        again.listen()

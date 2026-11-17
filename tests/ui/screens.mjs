@@ -7673,6 +7673,26 @@ async function main() {
     }
   });
 
+  await check("업데이트 중에는 덮개에 단계(✓ · 진행 중 n/N) — 새 서버가 답하면 새로 열고 '업데이트했습니다' 띠 (300)", async () => {
+    const progress = { phase: "applying", action: "apply", to: "느린나이테-20261117-v9", stage: "copy", done: 5, total: 10 };
+    await page.route("**/api/update/progress", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(progress) }));
+    try {
+      await go("#/");
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("update-restarting", { detail: { action: "apply", to: "느린나이테-20261117-v9", stage: "stop" } })));
+      const now = page.locator("[data-testid=update-steps] li.now");
+      await page.waitForFunction(() => document.querySelector("[data-testid=update-steps] li.now")?.textContent?.includes("5/10"), null, { timeout: 8000 });
+      expect((await now.textContent()).includes("새 파일 덮어쓰기"), `지금 단계: ${await now.textContent()}`);
+      equal(await page.locator("[data-testid=update-steps] li.done").count(), 5, "앞 다섯 단계(백업 · 끄기 · 검사 · 압축 풀기 · 보관)는 ✓");
+    } finally {
+      await page.unroute("**/api/update/progress");
+    }
+    // 진행 창구가 사라지고 서버가 답한다 → 새로 열고 띠
+    await page.locator("[data-testid=update-finished]").waitFor({ timeout: 15000 });
+    expect((await page.locator("[data-testid=update-finished]").innerText()).includes("업데이트했습니다"), "끝난 띠");
+    await page.locator("[data-testid=update-finished] button").click();
+    equal(await page.locator("[data-testid=update-finished]").count(), 0, "[닫기]");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
