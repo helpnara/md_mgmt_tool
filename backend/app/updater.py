@@ -14,7 +14,9 @@ import json
 import re
 import os
 import shutil
+import stat
 import time
+import unicodedata
 import zipfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -65,8 +67,36 @@ def update_dir(root: Path, configured: str = "") -> Path:
 
 # ── 찾기 · 검사 ─────────────────────────────────────────────────────────────────────────────────────
 
+def _nfc(text: str) -> str:
+    """한글 이름을 한 가지 꼴로 — 내려받은 곳(맥 · 메신저 등)에 따라 자모가 풀린 꼴(NFD)로 올 수 있다 (TODO 302)."""
+    return unicodedata.normalize("NFC", text)
+
+
+def _sha_stem(name: str) -> str | None:
+    """검사값 파일이면 그 판 이름. `X.zip.sha256` 말고도 내려받으며 바뀐 이름(`X.zip.sha256.txt` · `X.zip (1).sha256` ·
+    NFD 한글)도 알아본다 — 이름이 정확히 맞지 않아 zip 만 옮겨지고 .sha256 이 남던 일 (TODO 302)."""
+    text = _nfc(name)
+    if ".sha256" not in text.lower():
+        return None
+    found = re.match(r"^(느린나이테-\d{8}-v\d+(?:-no-vendor)?)\.zip", text)
+    return found.group(1) if found else None
+
+
+def _shas_for(zip_path: Path) -> list[Path]:
+    """그 zip 의 검사값 파일들(같은 폴더)."""
+    stem = _nfc(zip_path.stem)
+    try:
+        return sorted(p for p in zip_path.parent.iterdir() if p.is_file() and _sha_stem(p.name) == stem)
+    except OSError:
+        return []
+
+
 def _sha_file(zip_path: Path) -> Path:
-    return zip_path.with_name(zip_path.name + ".sha256")
+    exact = zip_path.with_name(zip_path.name + ".sha256")
+    if exact.is_file():
+        return exact
+    found = _shas_for(zip_path)
+    return found[0] if found else exact
 
 
 def verify(zip_path: Path) -> str:
@@ -75,7 +105,8 @@ def verify(zip_path: Path) -> str:
         return "파일이 없습니다."
     sha = _sha_file(zip_path)
     if sha.is_file():
-        want = sha.read_text(encoding="utf-8").split()[0].strip().lower() if sha.read_text(encoding="utf-8").strip() else ""
+        text = sha.read_text(encoding="utf-8-sig", errors="replace").strip()
+        want = text.split()[0].strip().lower() if text else ""
         digest = hashlib.sha256()
         with zip_path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1 << 20), b""):
@@ -113,7 +144,7 @@ def candidates(root: Path, configured: str = "") -> dict[str, Any]:
             continue
         out.append({"name": path.stem, "file": path.name, "size": path.stat().st_size,
                     "newer": now is None or key > now, "current": path.stem.split("-no-vendor")[0] == current,
-                    "problem": "", "has_sha": _sha_file(path).is_file()})
+                    "problem": "", "has_sha": bool(_shas_for(path))})
     out.sort(key=lambda c: version_key(c["name"]) or (0, 0), reverse=True)
     for item in out[:5]:                  # 위 다섯만 검사(큰 zip 을 매번 다 읽지 않게)
         item["problem"] = verify(folder / item["file"])
@@ -228,41 +259,83 @@ def _move(src: Path, dst: Path) -> str:
     return error
 
 
-def _remove(path: Path) -> None:
-    try:
-        shutil.rmtree(path) if path.is_dir() else path.unlink()
-    except OSError:
-        pass
+def _writable(func, path, _exc=None) -> None:
+    """읽기 전용 표시가 있으면 윈도우에서 지울 수 없다 — 표시를 떼고 다시."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
-def tidy(root: Path) -> list[str]:
-    """설치 폴더 `updates` 정리 — 짝 잃은 .sha256 · 오래된 `적용됨` 쌍 · 오래된 `되돌리기`. 지운 이름을 돌려준다."""
+def _remove(path: Path) -> str:
+    """지운다. 잠깐 잡혀 있으면 몇 번 다시. 실패면 까닭(조용히 넘기지 않는다 — TODO 302)."""
+    error = ""
+    for _ in range(4):
+        try:
+            if path.is_dir():
+                shutil.rmtree(path, onerror=_writable)
+            elif path.exists():
+                try:
+                    path.unlink()
+                except PermissionError:
+                    _writable(os.unlink, path)
+            return ""
+        except OSError as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            time.sleep(0.3)
+    return error
+
+
+def tidy(root: Path, log=None) -> dict[str, list[str]]:
+    """설치 폴더 `updates` 정리 — 짝 잃은 검사값 · 오래된 `적용됨` 판 · 오래된 `되돌리기`.
+
+    run.bat 이 켤 때(바깥 고리) · 적용할 때 · 업데이트 카드를 열 때(앱) 부른다. 지운 것과 **지우지 못한 것(까닭)** 을 돌려주고,
+    무엇이든 있으면 상태 파일의 `tidy` 에 남겨 카드가 보인다."""
     updates = root / "updates"
     removed: list[str] = []
+    errors: list[str] = []
+
+    def drop(path: Path) -> None:
+        problem = _remove(path)
+        name = str(path.relative_to(updates))
+        if problem:
+            errors.append(f"{name} — {problem}")
+        else:
+            removed.append(name)
+
     if not updates.is_dir():
-        return removed
-    # ① zip 없이 남은 .sha256 (updates · 적용됨)
-    for folder in (updates, updates / APPLIED_DIR):
-        if folder.is_dir():
-            for sha in folder.glob("*.zip.sha256"):
-                if not sha.with_name(sha.name[: -len(".sha256")]).is_file():
-                    _remove(sha)
-                    removed.append(str(sha.relative_to(updates)))
-    # ② 적용됨 — 최근 KEEP_APPLIED 판만
+        return {"removed": removed, "errors": errors}
     applied = updates / APPLIED_DIR
+    # ① 오래된 적용됨 — 최근 KEEP_APPLIED 판만(zip 과 그 검사값)
     if applied.is_dir():
-        zips = sorted((z for z in applied.glob("느린나이테-*.zip") if version_key(z.stem)), key=lambda z: version_key(z.stem))
+        zips = sorted((z for z in applied.glob("*.zip") if version_key(_nfc(z.stem))), key=lambda z: version_key(_nfc(z.stem)))
         for old in zips[:-KEEP_APPLIED] if len(zips) > KEEP_APPLIED else []:
-            for item in (old, _sha_file(old)):
-                if item.exists():
-                    _remove(item)
-                    removed.append(str(item.relative_to(updates)))
+            for item in [old, *_shas_for(old)]:
+                drop(item)
+    # ② 짝 잃은 검사값 — 같은 폴더에 그 판의 zip 이 없으면(updates · 적용됨)
+    for folder in (updates, applied):
+        if not folder.is_dir():
+            continue
+        stems = {_nfc(z.stem) for z in folder.glob("*.zip")}
+        for item in sorted(folder.iterdir()):
+            stem = _sha_stem(item.name) if item.is_file() else None
+            if stem and stem not in stems:
+                drop(item)
     # ③ 되돌리기 — 최근 KEEP_ROLLBACK 개만
     dirs = _rollback_dirs(root)
     for old in dirs[:-KEEP_ROLLBACK] if len(dirs) > KEEP_ROLLBACK else []:
-        _remove(old)
-        removed.append(str(old.relative_to(updates)))
-    return removed
+        drop(old)
+    if removed or errors:
+        if log:
+            if removed:
+                log(f"  업데이트 폴더 정리: {len(removed)}개 지움")
+            for line in errors:
+                log(f"  [알림] 업데이트 폴더에서 지우지 못했습니다 — {line}")
+        try:
+            state = read_state(root)
+            state["tidy"] = {"at": datetime.now().isoformat(timespec="seconds"), "removed": removed[:50], "errors": errors[:20]}
+            _write_state(root, state)
+        except OSError:
+            pass
+    return {"removed": removed, "errors": errors}
 
 
 def _size(path: Path) -> int:
@@ -283,7 +356,7 @@ def usage(root: Path) -> dict[str, Any]:
     updates = root / "updates"
     applied = sorted((updates / APPLIED_DIR).glob("느린나이테-*.zip")) if (updates / APPLIED_DIR).is_dir() else []
     dirs = _rollback_dirs(root)
-    return {"applied": len(applied), "applied_bytes": sum(_size(z) + (_size(_sha_file(z)) if _sha_file(z).is_file() else 0) for z in applied),
+    return {"applied": len(applied), "applied_bytes": sum(_size(z) + sum(_size(x) for x in _shas_for(z)) for z in applied),
             "rollback": len(dirs), "rollback_bytes": sum(_size(d) for d in dirs),
             "keep_applied": KEEP_APPLIED, "keep_rollback": KEEP_ROLLBACK}
 
@@ -365,7 +438,7 @@ def apply(root: Path, zip_path: Path, log=print, progress=_noop) -> dict[str, An
             done_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             leftover.append(f"{done_dir.name}: {exc}")
-        for item in (zip_path, _sha_file(zip_path)):
+        for item in [zip_path, *_shas_for(zip_path)]:
             if item.is_file() and done_dir.is_dir():
                 problem = _move(item, done_dir / item.name)
                 if problem:
@@ -373,10 +446,10 @@ def apply(root: Path, zip_path: Path, log=print, progress=_noop) -> dict[str, An
                     log(f"  [알림] {item.name} 를 '{APPLIED_DIR}' 로 옮기지 못했습니다 — {problem} (다음에 켤 때 다시 정리합니다)")
     else:
         log(f"  업데이트 폴더가 공유 폴더라 {zip_path.name} 는 그대로 둡니다(다른 서버도 쓸 수 있게).")
-    cleaned = tidy(root)
+    cleaned = tidy(root, log)
     result = {"ok": True, "from": old, "to": zip_path.stem, "at": datetime.now().isoformat(timespec="seconds"),
               "files": len(new_files), "removed": len(removed), "backup": str(keep), "requirements_changed": requirements_changed,
-              "leftover": leftover, "cleaned": cleaned}
+              "leftover": leftover + cleaned["errors"], "cleaned": cleaned["removed"]}
     log(f"  {zip_path.stem} 를 적용했습니다 — 파일 {len(new_files)}개, 지운 파일 {len(removed)}개")
     return result
 
@@ -415,10 +488,6 @@ def apply_pending(root: Path, log=print, progress=_noop) -> dict[str, Any] | Non
     """run.py 가 켤 때 — 예약된 적용 · 되돌리기가 있으면 한다. 결과는 상태 파일에. 없으면 None."""
     path = root / "updates" / PENDING
     if not path.is_file():
-        try:
-            tidy(root)        # 302 — 켤 때마다 지난번에 옮기지 못한 짝 잃은 .sha256 등을 정리
-        except OSError:
-            pass
         return None
     try:
         pending = json.loads(path.read_text(encoding="utf-8"))

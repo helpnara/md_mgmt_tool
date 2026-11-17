@@ -38,7 +38,11 @@ const STEPS: Record<Action, { key: string; label: string }[]> = {
   ],
 };
 
+/** 이 화면이 업데이트를 누른 쪽인가 — 그러면 단계 덮개가 이미 있으니 "바뀌는 중" 덮개는 띄우지 않는다 */
+let ownUpdate = false;
+
 function announce(detail: Phase) {
+  ownUpdate = detail.stage !== "cancel";
   window.dispatchEvent(new CustomEvent<Phase>(RESTART_EVENT, { detail }));
 }
 
@@ -161,6 +165,35 @@ export function UpdateCover() {
           {finished ? "끝났습니다 — 화면을 새로 엽니다." : `걸린 시간 ${minutes} · 창(run.bat)을 닫지 마세요.`}
           {!finished && seconds > 120 && " 오래 걸리면 run.bat 창의 글을 확인하세요."}
         </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 열려 있던 화면(다른 창 · 팀원 PC)에서 업데이트 중에 요청하면 — 서버 PC 가 새 판을 적용하는 중이라는 덮개.
+ * 서버가 다시 답하면 저절로 새로 연다 (TODO 302 — v82 "업데이트가 끝나도 원래 화면이 열리지 않아").
+ */
+export function ServerUpdatingCover() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const start = () => { if (!ownUpdate) setOn(true); };
+    window.addEventListener("server-updating", start);
+    return () => window.removeEventListener("server-updating", start);
+  }, []);
+  useEffect(() => {
+    if (!on) return;
+    const timer = window.setInterval(() => {
+      fetch("/api/meta", { cache: "no-store" }).then((r) => { if (r.ok) window.location.reload(); }).catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [on]);
+  if (!on) return null;
+  return (
+    <div className="mode-cover" role="status" data-testid="server-updating">
+      <div className="mode-box">
+        <h2>서버 PC 가 새 판으로 바뀌는 중입니다</h2>
+        <p>보통 1분 안에 끝나고, 끝나면 화면이 저절로 다시 열립니다.</p>
       </div>
     </div>
   );
@@ -309,6 +342,12 @@ export function UpdateCard() {
           {` (적용됨은 최근 ${data.usage.keep_applied}판, 되돌리기는 최근 ${data.usage.keep_rollback}개만 남기고 저절로 정리)`}
           {data.local === false && " · 공유 폴더의 zip 은 다른 서버도 쓰도록 옮기지 않습니다."}
         </p>
+      )}
+      {data.tidy && data.tidy.errors.length > 0 && (
+        <div className="form-error" data-testid="update-tidy-errors">
+          업데이트 폴더에서 지우지 못한 파일 {data.tidy.errors.length}개 — 손으로 지워도 됩니다.
+          <ul>{data.tidy.errors.slice(0, 5).map((line) => <li key={line}>{line}</li>)}</ul>
+        </div>
       )}
       {!data.supervised && <p className="muted">이 서버는 run.bat 으로 켜지지 않아 스스로 다시 켤 수 없습니다 — 업데이트를 누른 뒤 창을 닫고 run.bat 으로 다시 켜면 적용됩니다.</p>}
       <div className="form-actions">

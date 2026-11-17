@@ -1875,6 +1875,8 @@ export interface UpdateStatus {
   last: UpdateResult | null; history: UpdateResult[];
   /** 302 — 설치 폴더의 updates 인가(아니면 공유 폴더 — zip 을 옮기지 않음) · 쓰는 공간 */
   local?: boolean;
+  /** 302 — 이번에 정리한 것 · 지우지 못한 것(까닭) */
+  tidy?: { removed: string[]; errors: string[] };
   usage?: { applied: number; applied_bytes: number; rollback: number; rollback_bytes: number; keep_applied: number; keep_rollback: number };
 }
 

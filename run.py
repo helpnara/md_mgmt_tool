@@ -109,9 +109,29 @@ def already_running(host: str, port: int) -> tuple[str | None, dict | None]:
 
 RESTART_CODE = 3   # 앱이 "다시 켜 주세요" 로 끝날 때(업데이트 · TODO 298)
 
-_WAIT_PAGE = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="refresh" content="3">
+# 기다림 쪽 (TODO 300 · 302) — `<meta refresh>` 는 쓰지 않는다: 이 도구의 주소는 늘 `#/…` 가 붙어 있어 브라우저가
+# "같은 쪽 안 이동" 으로 보고 다시 읽지 않았다(v82 — "업데이트가 끝나도 원래 화면이 열리지 않아"). 스크립트가 2초마다
+# 서버에 묻고, 진짜 서버가 답하면 `location.reload()` — 새 판이 켜지는 사이(연결 안 됨)도 쪽은 그대로 두고 계속 묻는다.
+_WAIT_PAGE = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <title>느린 나이테 — 업데이트 중</title></head><body style="font-family:sans-serif;padding:40px;color:#333">
-<h2>업데이트를 적용하고 있습니다</h2><p>잠시 뒤 저절로 다시 열립니다.</p></body></html>"""
+<h2>업데이트를 적용하고 있습니다</h2><p id="m">잠시 뒤 저절로 다시 열립니다.</p>
+<noscript><p>끝나면 F5 를 눌러 다시 여세요.</p></noscript>
+<script>
+(function () {
+  var started = Date.now();
+  function tick() {
+    fetch("/api/meta", { cache: "no-store" }).then(function (r) {
+      if (r.ok) { location.reload(); return; }
+      setTimeout(tick, 2000);
+    }).catch(function () {
+      document.getElementById("m").textContent = "새 판을 켜는 중입니다 — 잠시 뒤 저절로 다시 열립니다.";
+      setTimeout(tick, 2000);
+    });
+    if (Date.now() - started > 180000) document.getElementById("m").textContent = "오래 걸립니다 — 서버 PC 의 run.bat 창을 확인하세요.";
+  }
+  setTimeout(tick, 2000);
+})();
+</script></body></html>"""
 
 
 class ProgressWindow:
@@ -162,6 +182,7 @@ class ProgressWindow:
                 self.send_response(code)
                 self.send_header("Content-Type", f"{kind}; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Update", "applying")       # 열려 있던 화면이 알아보고 덮개를 띄운다(TODO 302)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -210,6 +231,11 @@ def supervise() -> None:
             print(f"\n  [오류] {exc}\n")
     first = True
     while True:
+        # 302 — 켤 때마다(그리고 업데이트 뒤 다시 켤 때마다) 업데이트 폴더 정리. 예전에는 예약이 있을 때만 불려 켤 때 정리가 돌지 않았다
+        try:
+            updater.tidy(ROOT, log=print)
+        except Exception as exc:  # noqa: BLE001 — 정리 실패로 켜지지 않으면 안 된다
+            print(f"  [알림] 업데이트 폴더를 정리하지 못했습니다 — {exc}")
         pending = updater.peek_pending(ROOT)
         result = None
         if pending:

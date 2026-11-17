@@ -238,9 +238,10 @@ def test_tidy_keeps_recent_and_moves_sha(install):
     assert updater.latest_rollback(install).name.startswith(names[-2])          # 되돌리기는 바로 앞 판으로
     use = updater.usage(install)
     assert use["applied"] == 3 and use["rollback"] == 2 and use["applied_bytes"] > 0
-    # 짝 잃은 .sha256 — 켤 때 정리
+    # 짝 잃은 .sha256 — 켤 때 정리(run.py 가 켤 때마다 tidy — test_run_py_tidies_on_every_start)
     (updates / "느린나이테-20261101-v9.zip.sha256").write_text("x", encoding="utf-8")
     assert updater.apply_pending(install) is None
+    updater.tidy(install)
     assert not (updates / "느린나이테-20261101-v9.zip.sha256").exists()
     # 같은 이름이 적용됨에 있으면 바꿔 넣는다(다시 올리기)
     again = _release(updates, names[-1], {**NEW, "run.py": "again"})
@@ -261,3 +262,75 @@ def test_shared_folder_is_left_alone(install, tmp_path):
     assert not (shared / updater.APPLIED_DIR).exists()
     found = updater.candidates(install, str(shared))
     assert found["local"] is False and found["newest"] == ""                    # 지금 판이라 띠는 안 뜬다
+
+
+def test_tidy_odd_sha_names_readonly_and_errors(install):
+    """TODO 302(v82) — 내려받으며 바뀐 검사값 이름(.txt · (1) · NFD 한글) · 읽기 전용도 정리, 못 지우면 까닭을 남긴다."""
+    import os
+    import stat
+    import unicodedata
+
+    updates = install / "updates"
+    updates.mkdir(exist_ok=True)
+    odd = [
+        "느린나이테-20261101-v1.zip.sha256",
+        "느린나이테-20261101-v2.zip.sha256.txt",
+        "느린나이테-20261101-v3.zip (1).sha256",
+        unicodedata.normalize("NFD", "느린나이테-20261101-v4.zip.sha256"),
+    ]
+    for name in odd:
+        (updates / name).write_text("x", encoding="utf-8")
+    os.chmod(updates / odd[0], stat.S_IREAD)                                     # 읽기 전용
+    (updates / "메모.txt").write_text("남겨 둘 것", encoding="utf-8")              # 이 도구의 것이 아니면 건드리지 않는다
+    keep = _release(updates, "느린나이테-20261116-v6", NEW)                       # 짝이 있는 검사값은 남긴다
+    done = updater.tidy(install)
+    assert sorted(done["removed"]) == sorted(odd) and done["errors"] == []
+    assert (updates / "메모.txt").exists() and keep.exists() and (updates / (keep.name + ".sha256")).exists()
+    assert updater.read_state(install)["tidy"]["removed"]
+    # 바뀐 이름의 검사값도 zip 과 함께 옮긴다
+    (updates / (keep.name + ".sha256")).rename(updates / (keep.name + ".sha256.txt"))
+    assert updater.verify(keep) == "" and updater.candidates(install)["items"][0]["has_sha"] is True
+    updater.request(install, keep, by="관리자")
+    result = updater.apply_pending(install, log=lambda *_: None)
+    assert result["ok"] and not list(updates.glob("*.sha256*"))
+    assert (updates / updater.APPLIED_DIR / (keep.name + ".sha256.txt")).exists()
+
+
+def test_tidy_reports_what_it_could_not_remove(install, monkeypatch):
+    (install / "updates").mkdir(exist_ok=True)
+    (install / "updates" / "느린나이테-20261101-v1.zip.sha256").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(updater, "_remove", lambda path: "PermissionError: 다른 프로그램이 쓰는 중")
+    done = updater.tidy(install)
+    assert done["removed"] == [] and "PermissionError" in done["errors"][0]
+    assert updater.read_state(install)["tidy"]["errors"]
+
+
+def test_run_py_tidies_on_every_start(install, monkeypatch):
+    """TODO 302(v82) — run.bat 을 켤 때(예약이 없어도) 정리한다. 예전에는 예약이 있을 때만 불려 켤 때 정리가 돌지 않았다."""
+    import importlib.util
+    import subprocess
+    import sys
+
+    spec = importlib.util.spec_from_file_location("run_start", Path(__file__).resolve().parents[2] / "run.py")
+    run_main = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_main)
+    (install / "updates").mkdir(exist_ok=True)
+    orphan = install / "updates" / "느린나이테-20261101-v1.zip.sha256"
+    orphan.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(run_main, "ROOT", install)
+    monkeypatch.setattr(sys, "argv", ["run.py", "--port", "8999"])
+    monkeypatch.setattr(subprocess, "call", lambda *a, **k: 0)                  # 서버는 띄우지 않는다
+    with pytest.raises(SystemExit):
+        run_main.supervise()
+    assert not orphan.exists()
+
+
+def test_wait_page_reloads_with_script_not_meta_refresh():
+    """TODO 302(v82) — 주소에 #/ 가 있으면 meta refresh 는 다시 읽지 않는다 → 스크립트가 묻고 location.reload()."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("run_wait", Path(__file__).resolve().parents[2] / "run.py")
+    run_main = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_main)
+    page = run_main._WAIT_PAGE
+    assert "http-equiv=\"refresh\"" not in page and "location.reload()" in page and "/api/meta" in page

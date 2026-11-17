@@ -10,7 +10,7 @@ import ScrollTop from "./components/ScrollTop";
 import Settings from "./components/Settings";
 import Skills from "./components/Skills";
 import ModeLayer from "./components/ModeLayer";
-import { UpdateBand, UpdateCover } from "./components/Update";
+import { ServerUpdatingCover, UpdateBand, UpdateCover } from "./components/Update";
 import Help from "./components/Help";
 import IntakeDetail from "./components/IntakeDetail";
 import IntakePool from "./components/IntakePool";
@@ -409,6 +409,7 @@ export default function App() {
       {/* 업데이트 (TODO 298) — 서버 PC 에 새 판 알림 · 다시 켜는 동안 덮개 */}
       <UpdateBand />
       <UpdateCover />
+      <ServerUpdatingCover />
       {meta.readonly && meInfo.role === "member" ? (
         // 팀원 PC (TODO 233) — 누구로 알아봤는지 · 무엇을 고칠 수 있는지
         <div className="readonly-band member-band" role="status">

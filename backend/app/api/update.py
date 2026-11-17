@@ -49,10 +49,15 @@ def _restart() -> None:
 def status(request: Request) -> dict:
     _admin(request)
     root = program_home()
+    # 302 — 카드를 열 때도 정리(새 판의 앱 코드가 곧바로 — run.bat 을 다시 켜기 전에도). 지우지 못한 까닭은 카드에
+    try:
+        tidy = updater.tidy(root)
+    except OSError as exc:
+        tidy = {"removed": [], "errors": [str(exc)]}
     state = updater.read_state(root)
     return {**updater.candidates(root, _configured()), "configured": _configured(), "supervised": supervised(),
             "last": state.get("last"), "history": state.get("history", [])[:5],
-            "rollback": bool(updater.latest_rollback(root))}
+            "rollback": bool(updater.latest_rollback(root)), "tidy": tidy}
 
 
 def backup_check() -> dict:

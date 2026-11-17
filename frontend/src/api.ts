@@ -68,6 +68,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null);
+    // 302 — 서버 PC 가 새 판을 적용하는 중(run.py 의 진행 창구가 답함) — 화면에 덮개를 띄우고 끝나면 저절로 새로 연다
+    if (response.status === 503 && (response.headers.get("x-update") === "applying" || String(body?.detail ?? "").includes("업데이트를 적용하는 중"))) {
+      window.dispatchEvent(new Event("server-updating"));
+    }
     throw new Error(errorText(response.status, body));
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
