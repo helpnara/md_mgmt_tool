@@ -2340,3 +2340,4 @@ Nuvemshop *Nimbus* 디자인 시스템(MIT)의 **값만** 가져왔다 — 부�
 * **권한** — 관리자(서버 PC)만. 팀원 공유 주소에서는 `/api/update` 를 막는다.
 * **진행 표시 (TODO 300)** — 적용하는 동안 `run.py` 의 `ProgressWindow` 가 같은 주소에 `GET /api/update/progress`(단계 · n/N · 실패 까닭)만 답한다. 화면(`UpdateCover`)은 0.7초마다 묻고: 창구가 답하면 그 단계, 연결이 끊기면 "켜는 중", 창구가 아닌 서버가 답하고 `/api/meta` 가 되면 끝 → 새로 열고 `sessionStorage` 로 한 번 "업데이트했습니다" 띠.
 * **업데이트 전 백업 (TODO 301)** — [이 판으로 업데이트] → `GET /api/update/check`(백업 폴더 · 오늘 만든 백업 · 예상 크기 · 남은 공간) → 확인 창에서 새로 백업 / 건너뛰기 → `POST /api/update {name, backup}` 는 곧바로 답하고 뒤에서 백업(`running.track(key="update")`) → 예약 → 스스로 끝남. 화면은 `GET /api/update/job` 으로 백업 진행과 상태(backup · restarting · error)를 본다.
+* **업데이트 폴더 정리 (TODO 302)** — 설치 폴더의 `updates` 만 손댄다(공유 폴더의 zip 은 그대로 — 여러 서버가 본다). 적용한 zip · `.sha256` 은 `적용됨` 으로(다시 시도 · 실패 기록), 적용할 때와 켤 때마다 `tidy`: 짝 잃은 `.sha256`, `적용됨` 최근 3판, `되돌리기` 최근 2개.
