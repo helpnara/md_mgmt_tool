@@ -109,27 +109,40 @@ def already_running(host: str, port: int) -> tuple[str | None, dict | None]:
 
 RESTART_CODE = 3   # 앱이 "다시 켜 주세요" 로 끝날 때(업데이트 · TODO 298)
 
-# 기다림 쪽 (TODO 300 · 302) — `<meta refresh>` 는 쓰지 않는다: 이 도구의 주소는 늘 `#/…` 가 붙어 있어 브라우저가
-# "같은 쪽 안 이동" 으로 보고 다시 읽지 않았다(v82 — "업데이트가 끝나도 원래 화면이 열리지 않아"). 스크립트가 2초마다
-# 서버에 묻고, 진짜 서버가 답하면 `location.reload()` — 새 판이 켜지는 사이(연결 안 됨)도 쪽은 그대로 두고 계속 묻는다.
+# 기다림 쪽 (TODO 300 · 302) — 업데이트 중에 새로 고친 창이 받는 쪽.
+# * `<meta refresh>` 는 쓰지 않는다 — 이 도구의 주소는 늘 `#/…` 라 브라우저가 "같은 쪽 안 이동" 으로 보고 다시 읽지 않았다(v82).
+# * 묻기는 **2초마다 무조건(setInterval)** — 앞 질문의 답을 기다렸다 다음을 묻는 사슬(setTimeout)은 질문 하나가 매달리면
+#   (서버가 바뀌는 순간 브라우저가 미리 열어 둔 연결로 보낸 질문) 영영 멈췄다(v83). 질문마다 3초 제한도 둔다.
+# * 진짜 서버가 답하면(진행 창구의 표시 `X-Update` 가 없는 답) `location.reload()`. 몇 번째 묻는지 · 마지막 답을 보이고,
+#   [지금 다시 열기] 단추도 둔다 — 무엇이 어긋나도 갇히지 않게.
 _WAIT_PAGE = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
-<title>느린 나이테 — 업데이트 중</title></head><body style="font-family:sans-serif;padding:40px;color:#333">
+<title>느린 나이테 — 업데이트 중</title></head><body style="font-family:sans-serif;padding:40px;color:#333;line-height:1.6">
 <h2>업데이트를 적용하고 있습니다</h2><p id="m">잠시 뒤 저절로 다시 열립니다.</p>
+<p style="color:#888;font-size:13px" id="s">서버에 묻는 중…</p>
+<p><button type="button" onclick="location.reload()" style="padding:6px 14px">지금 다시 열기</button></p>
 <noscript><p>끝나면 F5 를 눌러 다시 여세요.</p></noscript>
 <script>
 (function () {
-  var started = Date.now();
-  function tick() {
-    fetch("/api/meta", { cache: "no-store" }).then(function (r) {
-      if (r.ok) { location.reload(); return; }
-      setTimeout(tick, 2000);
+  var started = Date.now(), tries = 0, busy = 0, done = false;
+  var m = document.getElementById("m"), s = document.getElementById("s");
+  function ask() {
+    if (done || (busy && Date.now() - busy < 4000)) return;   // 매달린 질문은 4초 뒤 버리고 새로 묻는다
+    busy = Date.now(); tries += 1;
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 3000);
+    fetch("/api/meta?wait=" + Date.now(), { cache: "no-store", signal: ctrl ? ctrl.signal : undefined }).then(function (r) {
+      clearTimeout(timer); busy = 0;
+      if (r.ok || !r.headers.get("x-update")) { done = true; m.textContent = "끝났습니다 — 다시 엽니다."; location.reload(); return; }
+      s.textContent = "확인 " + tries + "번째 · 아직 적용하는 중";
     }).catch(function () {
-      document.getElementById("m").textContent = "새 판을 켜는 중입니다 — 잠시 뒤 저절로 다시 열립니다.";
-      setTimeout(tick, 2000);
+      clearTimeout(timer); busy = 0;
+      m.textContent = "새 판을 켜는 중입니다 — 잠시 뒤 저절로 다시 열립니다.";
+      s.textContent = "확인 " + tries + "번째 · 서버가 켜지기를 기다리는 중";
     });
-    if (Date.now() - started > 180000) document.getElementById("m").textContent = "오래 걸립니다 — 서버 PC 의 run.bat 창을 확인하세요.";
+    if (Date.now() - started > 180000) m.textContent = "오래 걸립니다 — 서버 PC 의 run.bat 창을 확인하거나 [지금 다시 열기]를 누르세요.";
   }
-  setTimeout(tick, 2000);
+  setInterval(ask, 2000);
+  setTimeout(ask, 800);
 })();
 </script></body></html>"""
 
@@ -171,6 +184,8 @@ class ProgressWindow:
         window = self
 
         class Handler(BaseHTTPRequestHandler):
+            timeout = 5                      # 묻기만 하고 말이 없는 연결을 오래 붙잡지 않는다(302 v83)
+
             def do_GET(self) -> None:  # noqa: N802
                 if self.path.split("?")[0] == "/api/update/progress":
                     body, kind, code = json.dumps(window.state, ensure_ascii=False).encode("utf-8"), "application/json", 200
@@ -184,8 +199,10 @@ class ProgressWindow:
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("X-Update", "applying")       # 열려 있던 화면이 알아보고 덮개를 띄운다(TODO 302)
                 self.send_header("Content-Length", str(len(body)))
+                self.send_header("Connection", "close")     # 응답마다 연결을 닫는다 — 새 서버로 넘어갈 때 매달린 연결이 없게
                 self.end_headers()
                 self.wfile.write(body)
+                self.close_connection = True
 
             def log_message(self, *args) -> None:  # 콘솔을 어지럽히지 않는다
                 return
@@ -245,6 +262,17 @@ def supervise() -> None:
                     window.state["error"] = result.get("error", "")   # 화면에 "지금 판으로 켭니다" 와 까닭을
         if result and result.get("ok"):
             print(f"  업데이트: {result.get('from', '')} → {result.get('to', '')}")
+            # 302(v83) — 바깥 고리도 **새 판의 run.py** 로 이어받는다. 예전에는 run.bat 을 다시 켤 때까지 옛 고리가 남아
+            # 다음 업데이트의 기다림 쪽 · 정리 · 진행 창구가 옛 코드였다("한 번 닫고 다시 켜야" 가 헷갈림).
+            # 새 고리를 자식으로 띄우고 이 고리는 그 끝을 기다렸다 같은 코드로 끝난다(Ctrl+C 는 함께 받는다).
+            print("  새 판으로 이어서 켭니다...\n")
+            env = {key: value for key, value in os.environ.items() if key != "MD_MGMT_CHILD"}
+            nxt = [*argv] if first or "--no-browser" in argv else [*argv, "--no-browser"]   # 처음 켤 때 적용이면 브라우저는 연다
+            try:
+                code = subprocess.call([sys.executable, str(ROOT / "run.py"), *nxt], env=env)
+            except KeyboardInterrupt:
+                return
+            sys.exit(code)
         env = {**os.environ, "MD_MGMT_CHILD": "1"}
         args = argv if first else [*argv, "--no-browser"]
         try:

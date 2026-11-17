@@ -334,3 +334,29 @@ def test_wait_page_reloads_with_script_not_meta_refresh():
     spec.loader.exec_module(run_main)
     page = run_main._WAIT_PAGE
     assert "http-equiv=\"refresh\"" not in page and "location.reload()" in page and "/api/meta" in page
+    # v83 — 2초마다 무조건 묻는다(사슬이 아님) · 질문마다 제한 시간 · 갇히지 않게 단추
+    assert "setInterval(ask, 2000)" in page and "AbortController" in page and "지금 다시 열기" in page
+
+
+def test_after_update_the_new_run_py_takes_over(install, monkeypatch):
+    """302(v83) — 적용한 뒤 바깥 고리도 새 판의 run.py 로 이어받는다(run.bat 을 다시 켜지 않아도 새 기다림 쪽 · 정리)."""
+    import importlib.util
+    import subprocess
+    import sys
+
+    spec = importlib.util.spec_from_file_location("run_takeover", Path(__file__).resolve().parents[2] / "run.py")
+    run_main = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_main)
+    zip_path = _release(install / "updates", "느린나이테-20261116-v6", NEW)
+    updater.request(install, zip_path, by="관리자")
+    calls = []
+    monkeypatch.setattr(run_main, "ROOT", install)
+    monkeypatch.setattr(run_main, "ProgressWindow", lambda argv, pending: __import__("contextlib").nullcontext(type("W", (), {"update": staticmethod(lambda *a, **k: None), "state": {}})()))
+    monkeypatch.setattr(sys, "argv", ["run.py", "--share", "--port", "8999"])
+    monkeypatch.setenv("MD_MGMT_CHILD", "")
+    monkeypatch.setattr(subprocess, "call", lambda cmd, env=None: calls.append((cmd, dict(env or {}))) or 0)
+    with pytest.raises(SystemExit):
+        run_main.supervise()
+    assert updater.current_version(install) == "느린나이테-20261116-v6"
+    (cmd, env), = calls                                                          # 한 번 — 새 고리(서버 아님)
+    assert cmd[1] == str(install / "run.py") and "MD_MGMT_CHILD" not in env and "--share" in cmd
