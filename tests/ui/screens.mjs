@@ -2387,9 +2387,9 @@ async function main() {
   });
 
   console.log("\n[16] 전수 검토의 새 기능 여섯 (TODO 107~112)");
-  await check("메뉴 끝에 [도움말]이 있고 네 묶음이 선다 (TODO 111 · 136)", async () => {
+  await check("메뉴 끝에 [도움말]이 있고 다섯 묶음이 선다 (TODO 111 · 136 · 304 검색 사용법)", async () => {
     await go("#/help");
-    equal(await page.locator(".help .settings-group").count(), 4, "묶음 수");
+    equal(await page.locator(".help .settings-group").count(), 5, "묶음 수");
     expect(await page.locator(".help-steps li").count() >= 4, "주간 흐름 단계");
     expect(await page.locator(".help-faq dt").count() >= 5, "자주 묻는 것");
     equal(await page.locator(".nav a.active").innerText(), "도움말", "활성 메뉴");
@@ -7823,6 +7823,7 @@ async function main() {
       await line.getByRole("button", { name: /바뀐 곳/ }).click();
       const preview = page.locator("[data-testid=edit-preview]");
       await preview.waitFor({ timeout: 8000 });
+      await page.waitForFunction(() => !document.querySelector("[data-testid=edit-preview]")?.textContent?.includes("불러오는 중"), null, { timeout: 8000 });
       expect((await preview.innerText()).includes("더함 1줄 · 고침 1줄") && (await preview.innerText()).includes("고친 뒤 첫 줄"), `미리보기: ${await preview.innerText()}`);
       equal(await preview.locator(".edit-diff-old").count(), 1, "고치기 전 줄(취소선)");
       await line.locator("a").first().click();
