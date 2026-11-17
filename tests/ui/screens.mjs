@@ -3721,7 +3721,7 @@ async function main() {
       ["#/?tab=status", ".home-member-table"],
       ["#/?tab=status", ".home-slice-type table"],
       ["#/reports", "table.grid"],
-      ["#/skills", ".skills-table"],
+      ["#/skills?tab=people", ".skills-table"],
       ["#/intakes?status=all", ".intake-table"],
     ]) {
       await go(hash);
@@ -5783,8 +5783,8 @@ async function main() {
         const events = () => page.locator(".activity-list > li:not(.activity-month)");
         equal(await events().count(), 20, "처음 세우는 행사");
         expect(await page.locator(".activity-list > li.activity-month").count() >= 2, "달 머리줄이 둘 이상");
-        const more = page.getByRole("button", { name: /더 보기 — 남은 행사 5건/ });
-        equal(await more.count(), 1, "[더 보기 — 남은 행사 5건]");
+        const more = page.getByRole("button", { name: /더 보기 — 남은 활동 5건/ });
+        equal(await more.count(), 1, "[더 보기 — 남은 활동 5건]");
         await more.click();
         await page.waitForTimeout(300);
         equal(await events().count(), 25, "더 보기 뒤 전부");
@@ -7583,9 +7583,9 @@ async function main() {
     const link = page.locator('a.person-link[href^="#/person/"]').first();
     await link.waitFor({ timeout: 8000 });
     // 주소를 고친 뒤 한 번 더 그린다 — 그 다시 그림까지 기다린다(사람이 누를 때는 이미 끝나 있다)
-    await page.waitForFunction(() => decodeURIComponent(document.querySelector('a.person-link[href^="#/person/"]')?.getAttribute("href") ?? "").endsWith("back=skills"), null, { timeout: 3000 }).catch(() => undefined);
+    await page.waitForFunction(() => decodeURIComponent(document.querySelector('a.person-link[href^="#/person/"]')?.getAttribute("href") ?? "").endsWith("back=skills?tab=people"), null, { timeout: 3000 }).catch(() => undefined);
     const href = decodeURIComponent(await link.getAttribute("href"));
-    expect(href.endsWith("back=skills"), `이력 링크: ${href}`);
+    expect(href.endsWith("back=skills?tab=people"), `이력 링크: ${href}`);   // 303 — 사람별에도 탭 표시(처음 탭이 팀역량이라)
   });
 
   await check("단추 · 글 칸 · 고르기 상자 높이는 36px, 작은 단추 · 칩은 28px (294)", async () => {
