@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getMe } from "../me";
 import { notifyError } from "../notify";
-import type { UpdateStatus } from "../types";
+import type { RunningTask, UpdateCheck, UpdateStatus } from "../types";
+import { formatBytes } from "../upload";
+import { ProgressBar, progressText } from "./RunningLine";
 
 /**
  * 업데이트 (TODO 298) — zip 을 업데이트 폴더(기본: 설치 폴더의 updates, 설정에서 사내 공유 폴더)에 두면
@@ -12,7 +14,8 @@ const RESTART_EVENT = "update-restarting";
 const FINISHED_KEY = "update-finished";
 
 type Action = "apply" | "rollback";
-type Phase = { action: Action; to: string; stage: "backup" | "stop" | "cancel" };
+/** skip — 백업을 건너뛴 까닭(있으면 백업 단계 옆에 적는다, TODO 301) */
+type Phase = { action: Action; to: string; stage: "backup" | "stop" | "cancel"; skip?: string };
 type Remote = { phase: string; action: Action; to: string; stage: string; done: number; total: number; error?: string };
 
 /** 단계 (TODO 300) — 앞 둘은 화면이 아는 것, 가운데는 run.py 의 진행 창구가 알려 주는 것, 끝은 새 서버가 답할 때 */
@@ -46,6 +49,7 @@ export function UpdateCover() {
   const [stage, setStage] = useState("");
   const [finished, setFinished] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [backupTask, setBackupTask] = useState<RunningTask | null>(null);
   useEffect(() => {
     const on = (event: Event) => {
       const detail = (event as CustomEvent<Phase>).detail;
@@ -63,6 +67,23 @@ export function UpdateCover() {
     const timer = window.setInterval(() => setSeconds((n) => n + 1), 1000);
     return () => window.clearInterval(timer);
   }, [job?.action, job?.to]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 301 — 백업(또는 건너뛰기) 동안: 뒤에서 도는 준비를 1초마다 본다. 끝나면 서버 끄기로
+  useEffect(() => {
+    if (!job || job.stage !== "backup") return;
+    const timer = window.setInterval(() => {
+      api.updateJob().then((state) => {
+        if (state.name && state.name !== job.to) return;   // 앞서 한 다른 판의 기록
+        setBackupTask(state.progress ?? null);
+        if (state.state === "restarting") setJob({ ...job, stage: "stop" });
+        else if (state.state === "scheduled") restartNow(false, job.action, job.to);
+        else if (state.state === "error") {
+          setJob(null);
+          notifyError(state.error || "업데이트를 준비하지 못했습니다.");
+        }
+      }).catch(() => undefined);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [job]);
   // 진행 묻기 — 서버 끄기부터
   useEffect(() => {
     if (!job || job.stage === "backup") return;
@@ -117,10 +138,20 @@ export function UpdateCover() {
           {steps.map((step, index) => {
             const state = index < at ? "done" : index === at ? "now" : "wait";
             const count = state === "now" && remote && remote.stage === step.key && remote.total > 0 ? ` ${remote.done}/${remote.total}` : "";
+            const skipped = step.key === "backup" && job.skip;
+            const showBackup = step.key === "backup" && state === "now" && !job.skip;
             return (
-              <li key={step.key} className={state} data-step={step.key}>
-                <span className="mark" aria-hidden>{state === "done" ? "✓" : state === "now" ? "" : "·"}</span>
-                {step.label}<span className="muted">{count}</span>
+              <li key={step.key} className={`${state}${skipped ? " skipped" : ""}`} data-step={step.key}>
+                <div className="update-step-line">
+                  <span className="mark" aria-hidden>{state === "done" ? (skipped ? "–" : "✓") : state === "now" ? "" : "·"}</span>
+                  {step.label}<span className="muted">{skipped ? ` — 건너뜀 (${job.skip})` : count}</span>
+                </div>
+                {showBackup && (
+                  <div className="update-step-detail" data-testid="update-backup-progress">
+                    <ProgressBar ratio={backupTask?.bytes_total ? backupTask.bytes_done / backupTask.bytes_total : null} label="데이터 백업" />
+                    <span className="muted">{backupTask ? progressText({ ...backupTask, phase: "" }, "개 파일") : "백업할 파일을 세는 중…"}</span>
+                  </div>
+                )}
               </li>
             );
           })}
@@ -196,6 +227,7 @@ export function UpdateCard() {
   const [data, load] = useUpdate();
   const [busy, setBusy] = useState(false);
   const [folder, setFolder] = useState<string | null>(null);
+  const [asking, setAsking] = useState<{ name: string; check: UpdateCheck } | null>(null);
   if (!data) return null;
   async function saveFolder() {
     try {
@@ -207,17 +239,23 @@ export function UpdateCard() {
     }
   }
   async function apply(name: string) {
-    if (!window.confirm(`${name} 으로 업데이트할까요?\n\n· 데이터 백업을 한 벌 만든 뒤(자동 백업 폴더가 있을 때)\n· 서버가 잠깐 꺼졌다 새 판으로 켜집니다 — 그동안 팀원 화면도 잠깐 멈춥니다.\n· 문제가 있으면 [이전 판으로] 또는 run.bat --rollback 으로 되돌릴 수 있습니다.`)) return;
     setBusy(true);
-    announce({ action: "apply", to: name, stage: "backup" });   // 백업은 몇 초 ~ 수십 초 — 누르자마자 단계를 보인다
     try {
-      const done = await api.applyUpdate(name);
-      restartNow(done.restarting, "apply", name);
+      setAsking({ name, check: await api.updateCheck() });   // 301 — 백업할지 · 예상 크기 · 남은 공간을 먼저 보인다
     } catch (error) {
-      announce({ action: "apply", to: name, stage: "cancel" });
       notifyError((error as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+  async function go(name: string, backup: boolean, skip: string) {
+    setAsking(null);
+    announce({ action: "apply", to: name, stage: "backup", skip: backup ? undefined : skip });
+    try {
+      await api.applyUpdate(name, backup);
+    } catch (error) {
+      announce({ action: "apply", to: name, stage: "cancel" });
+      notifyError((error as Error).message);
       load();
     }
   }
@@ -233,6 +271,7 @@ export function UpdateCard() {
   const last = data.last;
   return (
     <div className="card" data-testid="update-card">
+      {asking && <UpdateConfirm name={asking.name} check={asking.check} onCancel={() => setAsking(null)} onGo={(backup, skip) => void go(asking.name, backup, skip)} />}
       <div className="card-head"><h3>업데이트</h3></div>
       <p className="hint">
         지금 판 <b>{data.current || "개발판(배포본 정보 없음)"}</b> · 업데이트 폴더 <code>{data.folder}</code>
@@ -268,6 +307,50 @@ export function UpdateCard() {
       <div className="form-actions">
         <button type="button" className="ghost" disabled={!data.rollback} onClick={() => void rollback()} title={data.rollback ? "" : "되돌릴 이전 판이 없습니다"}>이전 판으로</button>
         <button type="button" className="ghost" onClick={load}>다시 찾기</button>
+      </div>
+    </div>
+  );
+}
+
+/** 업데이트 전 확인 (TODO 301) — 데이터 백업을 새로 할지 · 건너뛸지, 예상 크기 · 남은 공간 */
+function UpdateConfirm({ name, check, onCancel, onGo }: { name: string; check: UpdateCheck; onCancel: () => void; onGo: (backup: boolean, skip: string) => void }) {
+  const todayAt = check.today ? check.today.at.slice(11, 16) : "";
+  const canBackup = check.enabled && check.reachable && check.enough !== false;
+  const [choice, setChoice] = useState<"backup" | "skip">(check.today || !canBackup ? "skip" : "backup");
+  const skipWhy = check.today ? `오늘 ${todayAt} 백업 있음` : !check.enabled ? "백업 폴더가 정해져 있지 않음" : "백업 없이";
+  const minutes = Math.max(1, Math.round(check.expected_bytes / (15 * 1024 * 1024) / 60));   // 대략 15MB/s
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="업데이트 확인" data-testid="update-confirm">
+      <div className="modal update-confirm">
+        <h3><b>{name}</b> (으)로 업데이트할까요?</h3>
+        <p className="hint">서버가 잠깐 꺼졌다가 새 판으로 켜집니다. 그동안 팀원 화면도 잠깐 멈춥니다. 문제가 있으면 [이전 판으로] 또는 <code>run.bat --rollback</code> 으로 되돌릴 수 있습니다.</p>
+        <fieldset className="update-choice">
+          <legend>업데이트 전 데이터 백업</legend>
+          <label className={canBackup ? undefined : "disabled"}>
+            <input type="radio" name="update-backup" checked={choice === "backup"} disabled={!canBackup} onChange={() => setChoice("backup")} />
+            <span>
+              <b>새로 백업하고 업데이트</b>
+              {check.enabled
+                ? <span className="muted"> — 예상 약 {formatBytes(check.expected_bytes)} · 약 {minutes}분{check.free_bytes !== null ? ` · 백업 폴더 남은 공간 ${formatBytes(check.free_bytes)}` : ""}</span>
+                : <span className="muted"> — 백업 폴더가 정해져 있지 않습니다(설정 → [보관과 백업])</span>}
+              {check.enabled && !check.reachable && <span className="warn-text"> 백업 폴더에 닿지 않습니다: {check.directory}</span>}
+              {check.enough === false && <span className="warn-text"> 남은 공간이 모자랍니다 — 오래된 백업을 정리하거나 백업 폴더를 바꿔 주세요.</span>}
+            </span>
+          </label>
+          <label>
+            <input type="radio" name="update-backup" checked={choice === "skip"} onChange={() => setChoice("skip")} />
+            <span>
+              <b>백업 건너뛰고 업데이트</b>
+              {check.today
+                ? <span className="muted"> — 오늘 {todayAt} 에 만든 백업이 있습니다({check.today.file}) <b>권함</b></span>
+                : <span className="muted"> — 오늘 만든 백업이 없습니다. 프로그램 파일만 바뀌고 데이터는 손대지 않지만, 만일을 위해 백업을 권합니다.</span>}
+            </span>
+          </label>
+        </fieldset>
+        <div className="form-actions">
+          <button type="button" className="ghost" onClick={onCancel}>취소</button>
+          <button type="button" data-testid="update-go" onClick={() => onGo(choice === "backup", skipWhy)}>{choice === "backup" ? "백업하고 업데이트" : "업데이트"}</button>
+        </div>
       </div>
     </div>
   );

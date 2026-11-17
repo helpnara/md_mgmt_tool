@@ -3390,3 +3390,17 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .update-steps li .muted { margin-left: 4px; font-weight: 400; }
 @keyframes update-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .update-steps li.now .mark { animation: none; } }
+
+/* 301 — 업데이트 전 확인 · 백업 진행 */
+.update-confirm { max-width: 560px; display: flex; flex-direction: column; gap: 12px; }
+.update-confirm h3 { margin: 0; }
+.update-choice { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 10px; margin: 0; }
+.update-choice legend { font-size: var(--fs-sm); font-weight: 600; padding: 0 4px; }
+.update-choice label { display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-sm); line-height: 1.5; }
+.update-choice label input { margin-top: 3px; }
+.update-choice label.disabled { color: var(--muted); }
+.update-choice .warn-text { display: block; }
+.update-steps li { flex-direction: column; align-items: stretch; }
+.update-step-line { display: flex; align-items: center; gap: 10px; }
+.update-step-detail { margin: 6px 0 2px 28px; display: grid; gap: 4px; }
+.update-steps li.skipped .mark { background: var(--neutral-100); color: var(--muted); }

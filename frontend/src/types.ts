@@ -1865,6 +1865,9 @@ export interface ModeStatus {
 }
 
 /** 업데이트 (TODO 298) */
+/** 업데이트 전 백업 (TODO 301) */
+export interface UpdateCheck { enabled: boolean; reachable: boolean; directory: string; today: { at: string; file: string } | null; expected_bytes: number; free_bytes: number | null; enough: boolean | null }
+export interface UpdateJob { state: "idle" | "backup" | "starting" | "restarting" | "scheduled" | "error"; name?: string; backup?: boolean; error?: string; data_backup?: string; restarting?: boolean; progress?: RunningTask | null }
 export interface UpdateResult { ok: boolean; action?: string; from?: string; to?: string; at: string; error?: string; by?: string; data_backup?: string }
 export interface UpdateStatus {
   folder: string; reachable: boolean; current: string; newest: string; configured: string; supervised: boolean; rollback: boolean;

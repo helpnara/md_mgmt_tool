@@ -115,7 +115,7 @@ def test_api_admin_only_and_request(tmp_path, monkeypatch):
         assert st["current"] == "느린나이테-20261110-v1" and st["newest"] == "느린나이테-20261116-v6" and st["supervised"] is False
         assert other.get("/api/update").status_code == 403
         assert owner.post("/api/update", json={"name": "없는판"}).status_code == 404
-        done = owner.post("/api/update", json={"name": "느린나이테-20261116-v6"}).json()
+        done = owner.post("/api/update?wait=1", json={"name": "느린나이테-20261116-v6"}).json()
         assert done["restarting"] is False and json.loads((home / "updates" / updater.PENDING).read_text(encoding="utf-8"))["action"] == "apply"
         assert owner.post("/api/update/rollback").status_code == 400                # 아직 되돌릴 판 없음
         assert owner.put("/api/settings", json={"update_dir": str(tmp_path / "share")}).status_code == 200
@@ -169,3 +169,54 @@ def test_progress_window_answers_while_applying():
         again.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)   # uvicorn 과 같이
         again.bind(("127.0.0.1", port))
         again.listen()
+
+
+def test_backup_before_update_check_skip_and_space(tmp_path, monkeypatch):
+    """TODO 301 — 업데이트 전 백업: 예상 크기 · 남은 공간 · 오늘 백업이면 건너뛰기, 진행은 /api/update/job."""
+    home = tmp_path / "home"
+    _install(home, "느린나이테-20261110-v1", OLD)
+    _release(home / "updates", "느린나이테-20261116-v6", NEW)
+    vault = tmp_path / "vault"
+    (vault / "projects").mkdir(parents=True)
+    (vault / "projects" / "a.md").write_text("내 자료" * 100, encoding="utf-8")
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    monkeypatch.setenv("MD_MGMT_VAULT", str(vault))
+    monkeypatch.setenv("MD_MGMT_HOME", str(home))
+    monkeypatch.delenv("MD_MGMT_SHARE", raising=False)
+    monkeypatch.delenv("MD_MGMT_CHILD", raising=False)
+    get_settings.cache_clear()
+    from app.api import update as update_api
+    from app.main import app
+    from app.services import workspace
+
+    with TestClient(app, client=("127.0.0.1", 51303)) as owner:
+        first = owner.get("/api/update/check").json()
+        assert first["enabled"] is False and first["today"] is None             # 백업 폴더 없음
+        assert owner.post("/api/update?wait=1", json={"name": "느린나이테-20261116-v6", "backup": True}).status_code == 400
+        assert owner.put("/api/settings", json={"backup_dir": str(backups)}).status_code == 200
+        check = owner.get("/api/update/check").json()
+        assert check["enabled"] and check["today"] is None and check["expected_bytes"] > 0 and check["enough"] is True
+        # 남은 공간이 모자라면 백업하며 업데이트는 막는다
+        monkeypatch.setattr(workspace, "free_bytes", lambda folder: 1)
+        assert owner.get("/api/update/check").json()["enough"] is False
+        refused = owner.post("/api/update?wait=1", json={"name": "느린나이테-20261116-v6", "backup": True})
+        assert refused.status_code == 400 and "남은 공간" in refused.json()["detail"]
+        monkeypatch.undo()
+        monkeypatch.setenv("MD_MGMT_VAULT", str(vault))
+        monkeypatch.setenv("MD_MGMT_HOME", str(home))
+        update_api._job.clear()
+        # 백업하고 업데이트 — 백업 파일이 생기고 예약에 적힌다
+        done = owner.post("/api/update?wait=1", json={"name": "느린나이테-20261116-v6", "backup": True}).json()
+        assert done["state"] == "scheduled" and done["data_backup"]
+        assert (backups / done["data_backup"]).is_file()
+        assert json.loads((home / "updates" / updater.PENDING).read_text(encoding="utf-8"))["data_backup"] == done["data_backup"]
+        job = owner.get("/api/update/job").json()
+        assert job["state"] == "scheduled" and job["progress"] is None
+        # 이제 오늘 백업이 있다 → 건너뛰기를 고르면 새로 만들지 않는다
+        assert owner.get("/api/update/check").json()["today"]["file"] == done["data_backup"]
+        count = len(list(backups.glob("*.zip")))
+        skipped = owner.post("/api/update?wait=1", json={"name": "느린나이테-20261116-v6", "backup": False}).json()
+        assert skipped["state"] == "scheduled" and skipped["data_backup"] == "" and len(list(backups.glob("*.zip"))) == count
+    update_api._job.clear()
+    get_settings.cache_clear()
