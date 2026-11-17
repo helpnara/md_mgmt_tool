@@ -187,8 +187,35 @@ def latest_rollback(root: Path) -> Path | None:
     return max(found, key=lambda p: p.stat().st_mtime) if found else None
 
 
-def apply(root: Path, zip_path: Path, log=print) -> dict[str, Any]:
-    """zip 을 설치 폴더에 적용한다. 바뀌는 파일은 되돌리기 폴더에 먼저 보관한다."""
+def _noop(stage: str, done: int = 0, total: int = 0) -> None:
+    return None
+
+
+def _each(items: list[str], stage: str, progress) -> Any:
+    """하나씩 내주며 진행을 알린다 — 너무 잦지 않게(많으면 2% 마다)."""
+    total = len(items)
+    step = max(1, total // 50)
+    for index, item in enumerate(items):
+        if index % step == 0:
+            progress(stage, index, total)
+        yield item
+    progress(stage, total, total)
+
+
+def peek_pending(root: Path) -> dict[str, Any] | None:
+    """예약된 일이 있나 — run.py 가 적용 전에 진행 창구를 열지 정할 때(TODO 300)."""
+    path = root / "updates" / PENDING
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+    except (OSError, ValueError):
+        return None
+
+
+def apply(root: Path, zip_path: Path, log=print, progress=_noop) -> dict[str, Any]:
+    """zip 을 설치 폴더에 적용한다. 바뀌는 파일은 되돌리기 폴더에 먼저 보관한다.
+
+    progress(단계, 한 것, 전체) — verify · extract · keep · copy · clean (TODO 300, 화면의 진행 표시)."""
+    progress("verify")
     problem = verify(zip_path)
     if problem:
         raise UpdateError(problem)
@@ -197,6 +224,7 @@ def apply(root: Path, zip_path: Path, log=print) -> dict[str, Any]:
     work = updates / WORK_DIR
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
+    progress("extract")
     with zipfile.ZipFile(zip_path) as archive:
         archive.extractall(work)
     new_root = work / TOP
@@ -205,7 +233,7 @@ def apply(root: Path, zip_path: Path, log=print) -> dict[str, Any]:
     old_files = _program_files(root)
     # ① 보관 — 지금 판의 프로그램 파일 전부(되돌리기는 이것으로 그대로 돌아간다)
     keep = updates / ROLLBACK_DIR / f"{old}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    for rel in old_files:
+    for rel in _each(old_files, "keep", progress):
         target = keep / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / rel, target)
@@ -213,12 +241,13 @@ def apply(root: Path, zip_path: Path, log=print) -> dict[str, Any]:
                                                  ensure_ascii=False), encoding="utf-8")
     log(f"  지금 판({old}) 의 프로그램 파일 {len(old_files)}개를 보관했습니다: {keep}")
     # ② 덮어쓰기 · ③ 새 판에 없는 파일 지우기
-    for rel in new_files:
+    for rel in _each(new_files, "copy", progress):
         source = new_root / rel
         if source.is_file():
             target = root / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
+    progress("clean")
     removed = [rel for rel in old_files if rel not in set(new_files)]
     for rel in removed:
         try:
@@ -249,17 +278,18 @@ def _differs(a: Path, b: Path) -> bool:
         return a.exists() != b.exists()
 
 
-def rollback(root: Path, log=print) -> dict[str, Any]:
+def rollback(root: Path, log=print, progress=_noop) -> dict[str, Any]:
     keep = latest_rollback(root)
     if keep is None:
         raise UpdateError("되돌릴 이전 판이 없습니다.")
     meta = json.loads((keep / "_files.json").read_text(encoding="utf-8"))
-    for rel in meta["old"]:
+    for rel in _each(meta["old"], "restore", progress):
         source = keep / rel
         if source.is_file():
             target = root / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
+    progress("clean")
     added = [rel for rel in meta["new"] if rel not in set(meta["old"])]
     for rel in added:
         try:
@@ -271,7 +301,7 @@ def rollback(root: Path, log=print) -> dict[str, Any]:
     return {"ok": True, "action": "rollback", "from": meta["to"], "to": meta["from"], "at": datetime.now().isoformat(timespec="seconds")}
 
 
-def apply_pending(root: Path, log=print) -> dict[str, Any] | None:
+def apply_pending(root: Path, log=print, progress=_noop) -> dict[str, Any] | None:
     """run.py 가 켤 때 — 예약된 적용 · 되돌리기가 있으면 한다. 결과는 상태 파일에. 없으면 None."""
     path = root / "updates" / PENDING
     if not path.is_file():
@@ -284,9 +314,9 @@ def apply_pending(root: Path, log=print) -> dict[str, Any] | None:
     path.unlink(missing_ok=True)       # 실패해도 다시 켤 때마다 같은 일을 되풀이하지 않게 먼저 지운다
     try:
         if pending.get("action") == "rollback":
-            result = rollback(root, log)
+            result = rollback(root, log, progress)
         else:
-            result = apply(root, Path(pending["zip"]), log)
+            result = apply(root, Path(pending["zip"]), log, progress)
         result.update({"by": pending.get("by", ""), "data_backup": pending.get("data_backup", "")})
     except Exception as exc:  # noqa: BLE001 — 어떤 실패든 화면에 남기고, 지금 판으로 그대로 켠다
         result = {"ok": False, "action": pending.get("action", "apply"), "to": pending.get("name", ""),

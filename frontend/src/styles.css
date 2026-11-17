@@ -3375,3 +3375,18 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .update-list li.newer { border-color: var(--accent); background: var(--primary-50); }
 .update-folder { display: flex; gap: 8px; margin: 0 0 10px; }
 .update-folder input { flex: 1 1 auto; min-width: 0; }
+
+/* 300 — 업데이트 진행 단계 · 끝난 뒤 띠 */
+.update-band.finished { background: var(--success-50, #eefaf1); }
+.update-band.failed { background: var(--danger-50); }
+.update-band .ghost.small { margin-left: auto; }
+.update-steps { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+.update-steps li { display: flex; align-items: center; gap: 10px; font-size: var(--fs-sm); color: var(--muted); }
+.update-steps li.done { color: var(--text); }
+.update-steps li.now { color: var(--text); font-weight: 600; }
+.update-steps .mark { width: 18px; height: 18px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 12px; }
+.update-steps li.done .mark { background: var(--success-100, #d6f3de); color: var(--success-700, #1f7a3a); }
+.update-steps li.now .mark { border: 2px solid var(--primary-200); border-top-color: var(--primary-600); animation: update-spin 0.8s linear infinite; }
+.update-steps li .muted { margin-left: 4px; font-weight: 400; }
+@keyframes update-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .update-steps li.now .mark { animation: none; } }

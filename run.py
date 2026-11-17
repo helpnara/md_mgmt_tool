@@ -109,6 +109,86 @@ def already_running(host: str, port: int) -> tuple[str | None, dict | None]:
 
 RESTART_CODE = 3   # 앱이 "다시 켜 주세요" 로 끝날 때(업데이트 · TODO 298)
 
+_WAIT_PAGE = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="refresh" content="3">
+<title>느린 나이테 — 업데이트 중</title></head><body style="font-family:sans-serif;padding:40px;color:#333">
+<h2>업데이트를 적용하고 있습니다</h2><p>잠시 뒤 저절로 다시 열립니다.</p></body></html>"""
+
+
+class ProgressWindow:
+    """적용하는 동안 같은 주소에서 진행만 알려 주는 작은 창구 (TODO 300).
+
+    서버가 꺼진 사이라 화면이 물어볼 곳이 없었다 — 콘솔만 보며 기다렸다. 앱을 읽지 않고(표준 라이브러리만)
+    `GET /api/update/progress` 에 지금 단계를 답한다. 다른 주소는 "업데이트 중" 쪽(3초마다 새로 고침).
+    자리를 못 잡으면(다른 프로그램 등) 조용히 건너뛴다 — 적용은 그대로 한다.
+    """
+
+    def __init__(self, argv: list[str], pending: dict) -> None:
+        import time
+
+        self.state = {"phase": "applying", "action": pending.get("action", "apply"), "to": pending.get("name", ""),
+                      "stage": "start", "done": 0, "total": 0, "started": time.time()}
+        self.server = None
+        host, port = "127.0.0.1", 8000
+        for index, arg in enumerate(argv):
+            nxt = argv[index + 1] if index + 1 < len(argv) else ""
+            if arg == "--port" and nxt.isdigit():
+                port = int(nxt)
+            elif arg.startswith("--port="):
+                port = int(arg.split("=", 1)[1])
+            elif arg == "--host" and nxt:
+                host = nxt
+            elif arg == "--share":
+                host = "0.0.0.0"
+        self.address = (host, port)
+
+    def update(self, stage: str, done: int = 0, total: int = 0) -> None:
+        self.state.update({"stage": stage, "done": done, "total": total})
+
+    def __enter__(self) -> "ProgressWindow":
+        import json
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        window = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                if self.path.split("?")[0] == "/api/update/progress":
+                    body, kind, code = json.dumps(window.state, ensure_ascii=False).encode("utf-8"), "application/json", 200
+                elif self.path.startswith("/api/"):
+                    body, kind, code = json.dumps({"detail": "업데이트를 적용하는 중입니다 — 잠시 뒤 다시 해 주세요."},
+                                                  ensure_ascii=False).encode("utf-8"), "application/json", 503
+                else:
+                    body, kind, code = _WAIT_PAGE.encode("utf-8"), "text/html", 503
+                self.send_response(code)
+                self.send_header("Content-Type", f"{kind}; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args) -> None:  # 콘솔을 어지럽히지 않는다
+                return
+
+        try:
+            ThreadingHTTPServer.allow_reuse_address = os.name != "nt"   # 윈도우에서는 같은 자리 겹쳐 잡기를 막는다
+            self.server = ThreadingHTTPServer(self.address, Handler)
+            self.server.daemon_threads = True
+            threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.2}, daemon=True).start()
+        except OSError:
+            self.server = None
+        return self
+
+    def __exit__(self, *exc) -> None:
+        import time
+
+        if self.server is None:
+            return
+        # 화면이 "끝" 을 한 번은 보게 잠깐 더 열어 둔 뒤 자리를 비운다(새 판 서버가 같은 자리를 잡는다)
+        self.update("start")
+        time.sleep(1.2)
+        self.server.shutdown()
+        self.server.server_close()
+
 
 def supervise() -> None:
     """업데이트를 맡는 바깥 고리 (TODO 298).
@@ -130,7 +210,13 @@ def supervise() -> None:
             print(f"\n  [오류] {exc}\n")
     first = True
     while True:
-        result = updater.apply_pending(ROOT)
+        pending = updater.peek_pending(ROOT)
+        result = None
+        if pending:
+            with ProgressWindow(argv, pending) as window:
+                result = updater.apply_pending(ROOT, progress=window.update)
+                if result and not result.get("ok"):
+                    window.state["error"] = result.get("error", "")   # 화면에 "지금 판으로 켭니다" 와 까닭을
         if result and result.get("ok"):
             print(f"  업데이트: {result.get('from', '')} → {result.get('to', '')}")
         env = {**os.environ, "MD_MGMT_CHILD": "1"}
