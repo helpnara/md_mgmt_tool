@@ -304,3 +304,59 @@ def test_roster_shows_the_migrated_leader(team):
     owner.put("/api/people", json={"people": list(rows.values())})
     owner.put("/api/settings", json={"author": "가팀원"})
     assert owner.get("/api/meta").json()["leader"] == "나팀원"
+
+
+def test_leader_sees_where_members_changed(team):
+    """305 — 홈의 줄마다 고치기 전 보관본 ↔ 지금: 더한 · 고친 · 지운 줄, 새 일지, 역할 · 회고."""
+    member, owner = team["member"], team["owner"]
+    pid = team["mine"]
+    # 개요 — 팀장이 먼저 써 두고 팀원이 고친다(두 번)
+    owner.patch(f"/api/projects/{pid}", json={"body": "## 배경\n\n첫째 줄\n둘째 줄\n셋째 줄\n"})
+    assert member.patch(f"/api/projects/{pid}", json={"body": "## 배경\n\n첫째 줄\n둘째 줄 고침\n셋째 줄\n넷째 줄\n"}).status_code == 200
+    assert member.patch(f"/api/projects/{pid}", json={"body": "## 배경\n\n첫째 줄\n둘째 줄 고침\n넷째 줄\n"}).status_code == 200
+    # 일지 — 새로 둘, 하나는 고침
+    a = member.post(f"/api/projects/{pid}/entries", json={"title": "새 일지 하나", "body": "본문 A\n둘째"}).json()
+    member.post(f"/api/projects/{pid}/entries", json={"title": "새 일지 둘", "body": "본문 B"})
+    assert member.patch(f"/api/entries/{a['id']}", json={"body": "본문 A 고침\n둘째\n셋째 더함"}).status_code == 200
+    items = owner.get("/api/edits/recent").json()["items"]
+    by = {(item["action"], item.get("entry_id")): item for item in items}
+    overview = by[("개요 수정", None)]
+    assert overview["count"] == 2 and overview["first_real"] and overview["key"]
+
+    def diff(item):
+        params = {"project": item["project_id"], "action": item["action"], "since": item["first_real"], "person": item["name"],
+                  "first_at": item["first_at"], "last_at": item["at"], "base": item["first_base"]}
+        if item.get("entry_id"):
+            params["entry"] = item["entry_id"]
+        return owner.get("/api/edits/diff", params=params).json()
+
+    d = diff(overview)                                 # 두 번 고친 것을 한 번에 — 첫 수정 직전 ↔ 지금
+    assert d["kind"] == "diff", d
+    ops = [(line["op"], line["text"]) for line in d["lines"] if line["op"] != "same"]
+    assert ("old", "둘째 줄") in ops and ("new", "둘째 줄 고침") in ops
+    assert ("del", "셋째 줄") in ops or ("old", "셋째 줄") in ops
+    assert any(text == "넷째 줄" and op in ("add", "new") for op, text in ops)
+    assert "셋째 줄" in d["before"]
+    d = diff(by[("진행일지 추가", None)])
+    assert d["kind"] == "new" and [e["title"] for e in d["new_entries"]] == ["새 일지 하나", "새 일지 둘"]
+    d = diff(by[("진행일지 수정", a["id"])])
+    ops = [(line["op"], line["text"]) for line in d["lines"] if line["op"] != "same"]
+    assert d["kind"] == "diff" and ("new", "본문 A 고침") in ops and ("add", "셋째 더함") in ops and d["added"] == 1
+    # 팀원 · 읽기 PC 는 볼 수 없다
+    assert member.get("/api/edits/diff", params={"project": pid, "action": "개요 수정"}).status_code == 403
+
+
+def test_leader_sees_changed_retro_lines(team):
+    """305 — 역할 · 회고 수정은 그 사람 줄만 견준다."""
+    member, owner = team["member"], team["owner"]
+    pid = team["mine"]
+    assert member.put(f"/api/projects/{pid}/contributions/가팀원", json={"role": "참여", "did": "현장 데이터 수집"}).status_code == 200
+    assert member.put(f"/api/projects/{pid}/contributions/가팀원", json={"role": "참여", "did": "현장 데이터 수집 · 정제", "result": "불량 12% 감소"}).status_code == 200
+    item = next(i for i in owner.get("/api/edits/recent").json()["items"] if i["action"] == "역할 · 회고 수정")
+    d = owner.get("/api/edits/diff", params={"project": pid, "action": item["action"], "since": item["first_real"], "person": "가팀원",
+                                             "base": item["first_base"]}).json()
+    texts = {(line["op"], line["text"]) for line in d["lines"]}
+    assert d["kind"] == "diff", d
+    # 첫 수정 전에는 그 사람 줄이 비어 있었다 → 두 번 고친 결과가 모두 "더한 줄"
+    assert ("add", "내가 한 일: 현장 데이터 수집 · 정제") in texts and ("add", "결과: 불량 12% 감소") in texts
+    assert not any(op in ("del", "old") for op, _ in texts)

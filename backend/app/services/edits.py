@@ -27,8 +27,18 @@ def _file(at: datetime) -> Path:
 
 def record(name: str, role: str, action: str, project_id: str | None, entry_id: int | None = None) -> None:
     now = clock.now()
+    base = ""
+    if action in ("진행일지 수정", "개요 수정", "역할 · 회고 수정"):
+        try:  # 305 — 이 저장이 남긴 고치기 전 보관본. 못 찾아도 기록은 남긴다
+            from .edit_diff import latest_stamp
+
+            base = latest_stamp(project_id, entry_id)
+        except Exception:  # noqa: BLE001
+            base = ""
+    # real — 이 PC 의 실제 시각(이전 버전 보관본의 이름과 같은 꼴). 305 — 고치기 전 보관본을 찾아 "바뀐 곳" 을 보인다
     line = json.dumps({"at": now.isoformat(timespec="seconds"), "name": name, "role": role, "action": action,
-                       "project_id": project_id, "entry_id": entry_id}, ensure_ascii=False)
+                       "project_id": project_id, "entry_id": entry_id,
+                       "real": datetime.now().strftime("%Y-%m-%d_%H%M%S"), "base": base}, ensure_ascii=False)
     with _lock:
         try:
             path = _file(now)
@@ -71,9 +81,14 @@ def recent(conn: sqlite3.Connection, days: int = 7, role: str | None = "member")
     leader = settings_service.leader_name()
     for item in items:
         last = grouped[-1] if grouped else None
-        if last and (last["name"], last["project_id"], last["action"]) == (item.get("name"), item.get("project_id"), item.get("action")) \
+        # 305 — 같은 일지끼리만 묶는다(다른 일지를 고친 것까지 한 줄이면 "어디가 바뀌었나" 를 짚을 수 없다)
+        if last and (last["name"], last["project_id"], last["action"], last["entry_id"]) == \
+                (item.get("name"), item.get("project_id"), item.get("action"), item.get("entry_id")) \
                 and last["at"][:10] == str(item.get("at", ""))[:10]:
             last["count"] += 1
+            last["first_at"] = item.get("at", "")              # 새 것부터 보므로 묶이는 것은 더 이른 것
+            last["first_real"] = item.get("real") or ""
+            last["first_base"] = item.get("base") or ""
             continue
         project_id = item.get("project_id")
         if project_id and project_id not in titles:
@@ -85,7 +100,11 @@ def recent(conn: sqlite3.Connection, days: int = 7, role: str | None = "member")
             "leader": bool(leader) and item.get("name") == leader,
             "project_id": project_id, "project_title": titles.get(project_id) if project_id else None,
             "entry_id": item.get("entry_id"), "count": 1,
+            # 305 — 이 줄의 첫 수정(그 직전 보관본 ↔ 지금) · 본 것 표시의 열쇠(새로 고치면 at 이 바뀌어 다시 "안 봄")
+            "first_at": item.get("at", ""), "first_real": item.get("real") or "", "first_base": item.get("base") or "",
         })
+    for line in grouped:
+        line["key"] = "|".join(str(line.get(k) or "") for k in ("name", "project_id", "entry_id", "action", "at"))
     return grouped
 
 
