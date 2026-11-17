@@ -7797,6 +7797,53 @@ async function main() {
     }
   });
 
+  await check("도움말 — 검색 사용법: 기본 규칙 표 · 사례 열 · 요령 (304)", async () => {
+    await go("#/help");
+    const box = page.locator("[data-testid=help-search]");
+    await box.waitFor({ timeout: 8000 });
+    equal(await box.locator(".help-table tbody tr").count(), 5, "기본 규칙 다섯");
+    equal(await box.locator(".help-cases dt").count(), 10, "사례 열");
+    expect((await box.innerText()).includes("종류:활동 Python"), "팀원역량 찾기 사례");
+  });
+
+  await check("홈 '팀원이 고친 것' — [바뀐 곳] 미리보기 · 눌러 가면 띠와 바뀐 줄 · 본 것은 흐리게 (305)", async () => {
+    const pid = seeded.projectA;
+    const item = { at: "2026-11-17T09:30:00", name: "가팀원", action: "개요 수정", project_id: pid, project_title: "고친 곳 시험 과제", entry_id: null,
+      count: 2, first_at: "2026-11-17T09:10:00", first_real: "2026-11-17_091000", first_base: "2026-11-17_091000", key: `가팀원|${pid}||개요 수정|${Date.now()}` };
+    const diff = { kind: "diff", added: 1, changed: 1, removed: 0, base_at: "2026-11-17 09:10:00", before: "고치기 전 첫 줄\n둘째", others: [], new_entries: [],
+      lines: [{ op: "same", text: "## 배경" }, { op: "old", text: "고치기 전 첫 줄" }, { op: "new", text: "고친 뒤 첫 줄" }, { op: "add", text: "더한 줄" }] };
+    await page.route("**/api/edits/recent", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ days: 7, items: [item] }) }));
+    await page.route("**/api/edits/diff**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(diff) }));
+    try {
+      await page.evaluate(() => { try { localStorage.removeItem("md-mgmt-edit-seen"); } catch { /* 없음 */ } });
+      await go("#/");
+      await page.reload();
+      const line = page.locator("[data-testid=edit-line]").first();
+      await line.waitFor({ timeout: 8000 });
+      await line.getByRole("button", { name: /바뀐 곳/ }).click();
+      const preview = page.locator("[data-testid=edit-preview]");
+      await preview.waitFor({ timeout: 8000 });
+      expect((await preview.innerText()).includes("더함 1줄 · 고침 1줄") && (await preview.innerText()).includes("고친 뒤 첫 줄"), `미리보기: ${await preview.innerText()}`);
+      equal(await preview.locator(".edit-diff-old").count(), 1, "고치기 전 줄(취소선)");
+      await line.locator("a").first().click();
+      const band = page.locator("[data-testid=edit-band]");
+      await band.waitFor({ timeout: 8000 });
+      expect((await band.innerText()).includes("가팀원") && (await band.innerText()).includes("개요 수정 2번"), `띠: ${await band.innerText()}`);
+      await page.locator("[data-testid=edit-inline-overview]").waitFor({ timeout: 8000 });
+      equal(await page.locator("[data-testid=edit-inline-overview] .edit-diff-add").count(), 1, "개요의 더한 줄");
+      await band.getByRole("button", { name: "고치기 전 전체 보기" }).click();
+      expect((await page.locator("[data-testid=edit-before]").innerText()).includes("고치기 전 첫 줄"), "고치기 전 전체");
+      await band.getByRole("button", { name: "표시 끄기" }).click();
+      equal(await page.locator("[data-testid=edit-inline-overview]").count(), 0, "표시 끄기");
+      await go("#/");
+      await page.locator("[data-testid=edit-line]").first().waitFor({ timeout: 8000 });
+      expect(await page.locator("[data-testid=edit-line]").first().evaluate((el) => el.classList.contains("edit-seen")), "눌러 간 줄은 '확인함'(흐림)");
+    } finally {
+      await page.unroute("**/api/edits/recent");
+      await page.unroute("**/api/edits/diff**");
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

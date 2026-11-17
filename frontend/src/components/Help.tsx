@@ -193,6 +193,66 @@ export default function Help() {
         </div>
       </div>
 
+      {/* 304 — 검색 사용법을 사례로 (254 1 · 2차의 찾는 법) */}
+      <div className="settings-group" id="help-search">
+        <h2 className="settings-group-title">
+          검색 사용법
+        </h2>
+        <div className="card help-search" data-testid="help-search">
+          <p className="hint">
+            화면 맨 위 검색 칸 하나로 과제 · 진행일지 · 보고 · 첨부 · 접수 · 담당과 역할(회고) · 팀원역량 기록을 모두 찾습니다. 어느 화면에서든 <kbd>/</kbd> 를 누르면 검색 칸으로 갑니다.
+          </p>
+          <h3>기본 규칙</h3>
+          <table className="help-table">
+            <thead><tr><th>쓰는 법</th><th>뜻</th><th>예</th></tr></thead>
+            <tbody>
+              <tr><td>낱말 여러 개(띄어 쓰기)</td><td><b>모두 들어간 것</b>만</td><td><code>불량 예측</code></td></tr>
+              <tr><td><code>"구절"</code>(큰따옴표)</td><td>그 순서 그대로 붙어 있는 것</td><td><code>"불량 예측 모델"</code></td></tr>
+              <tr><td><code>-낱말</code></td><td>그 낱말이 든 것은 뺌</td><td><code>불량 -외관</code></td></tr>
+              <tr><td><code>칸:값</code></td><td>칸을 정해서</td><td><code>담당:김서연</code></td></tr>
+              <tr><td>초성(두 글자 이상)</td><td>첫소리로 — 과제명 · 담당 이름</td><td><code>ㄱㅅㅇ</code> → 김서연</td></tr>
+            </tbody>
+          </table>
+          <p className="hint">
+            <b>칸 이름</b> — <code>담당:</code>(= 담당자 · 사람) · <code>태그:</code> · <code>상태:</code>(예정 · 검토중 · 진행중 · 보류 · 완료 · 중단) · <code>연도:</code>(= 해) ·{" "}
+            <code>종류:</code>(과제 · 일지 · 보고 · 첨부 · 접수 · 활동(= 역량 · 교육 · 팀원역량) · 회고(= 역할)).
+            <b> 저절로 되는 것</b> — 띄어쓰기는 달라도 됩니다(<code>공정자동화</code> = 공정 자동화). 역량 사전에 "다른 이름" 을 적어 둔 역량은 그 이름들도 함께 찾습니다(결과 위 "조건:" 줄에 보임).
+          </p>
+          <h3>사례로 보기</h3>
+          <dl className="help-cases">
+            <dt>작년에 불량 관련 과제가 뭐였지?</dt>
+            <dd><code>불량 연도:2025</code> — 2025년 과제 중 "불량" 이 든 것. 제목에 든 것이 위, 본문에만 든 것이 아래(관련도 순)입니다.</dd>
+            <dt>김서연이 지금 하고 있는 과제만</dt>
+            <dd><code>담당:김서연 상태:진행중</code> — 낱말 없이 칸만 써도 됩니다. 칸만 쓰면 <b>과제만</b> 나옵니다(일지 · 보고는 낱말이 있어야 찾습니다).</dd>
+            <dt>불량 예측인데 외관 검사 쪽은 빼고</dt>
+            <dd><code>불량 예측 -외관</code></dd>
+            <dt>"데이터 수집 자동화" 라고 정확히 쓴 곳</dt>
+            <dd><code>"데이터 수집 자동화"</code> — 따옴표가 없으면 세 낱말이 흩어져 있어도 나옵니다.</dd>
+            <dt>이름이 정확히 기억 안 나는 과제 — "스마트 ○○ 플랫폼" 이었나</dt>
+            <dd><code>ㅅㅁㅌ</code> — 제목의 첫소리로 찾습니다. 초성 한 낱말이면 담당자 이름도 첫소리로 찾습니다(<code>ㄱㅅㅇ</code> → 김서연이 맡은 과제).</dd>
+            <dt>올해 누가 Python 교육을 다녀왔지?</dt>
+            <dd><code>종류:활동 Python</code> — 팀원역량 기록(개인 역량 강화 활동)만 나옵니다.</dd>
+            <dt>생산기술회의에 뭘 보고했더라</dt>
+            <dd><code>종류:보고 생산기술회의</code> — 보고 문서만. 보고 대상(회의체 이름)도 찾는 범위에 들어갑니다.</dd>
+            <dt>메모에 "라인 정지" 라고 적었던 일지</dt>
+            <dd><code>종류:일지 "라인 정지" 담당:박지민</code> — 박지민이 맡은 과제의 일지 · 박지민이 쓴 일지에서 찾습니다.</dd>
+            <dt>이 사람이 회고에 뭐라고 썼더라</dt>
+            <dd><code>종류:회고 박지민</code> — 담당과 역할(회고 · 보유 기술)에 적은 것을 찾습니다.</dd>
+            <dt>접수만 받아 놓은 것 중에 품질 관련</dt>
+            <dd><code>종류:접수 품질</code></dd>
+          </dl>
+          <h3>화면에서 쓰는 요령</h3>
+          <ul className="help-tips">
+            <li>검색 칸에 두 글자 이상 치면 아래에 <b>미리보기</b>가 펼쳐집니다 — 눌러 바로 가거나 엔터로 전체 결과를 봅니다.</li>
+            <li>결과 위의 <b>종류 칩</b>(과제 · 일지 · 보고 …)을 누르면 그 갈래만 — <code>종류:</code> 를 쓰는 것과 같습니다.</li>
+            <li>과제는 <b>관련도 순</b>이 기본, 최근 고친 순으로 바꿀 수 있습니다.</li>
+            <li>종류마다 보이는 개수에 한도가 있어 넘치면 "더 있음" 이라고 알립니다 — 칸을 더해 좁히세요.</li>
+            <li>자주 쓰는 조합 — <code>담당:이름 상태:진행중</code>(사람별 진행 과제) · <code>종류:활동 이름</code>(그 사람의 교육 기록) · <code>낱말 연도:해</code>(그해 과제 찾기).</li>
+          </ul>
+          <p className="muted">사례의 이름 · 과제는 지어낸 것입니다.</p>
+        </div>
+      </div>
+
       <div className="settings-group">
         <h2 className="settings-group-title">
           자주 묻는 것
@@ -353,6 +413,7 @@ export default function Help() {
             </dd>
             <dt>검색을 좁히고 싶어요.</dt>
             <dd>
+              위의 <a href="#/help" onClick={(event) => { event.preventDefault(); document.getElementById("help-search")?.scrollIntoView({ behavior: "smooth" }); }}><b>검색 사용법</b></a>에 사례가 있습니다. 요약하면 — 
               낱말을 띄어 쓰면 <b>모두 들어간 것</b>만 나옵니다. <code>"한 구절"</code> 은 붙은 그대로, <code>-낱말</code> 은 뺍니다.
               <code>담당:김민준</code> · <code>태그:품질</code> · <code>상태:진행중</code> · <code>연도:2026</code> · <code>종류:일지</code>(과제 · 일지 · 보고 · 첨부 · 접수 · 역할 · 역량)로
               칸을 정할 수 있습니다. 결과 위의 칩을 누르면 그 갈래만 보이고, 과제는 관련도 순(제목에 든 것이 먼저) · 최근 순을 고릅니다.
