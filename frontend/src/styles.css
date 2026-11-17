@@ -3396,8 +3396,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .update-confirm h3 { margin: 0; }
 .update-choice { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: grid; gap: 10px; margin: 0; }
 .update-choice legend { font-size: var(--fs-sm); font-weight: 600; padding: 0 4px; }
-.update-choice label { display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-sm); line-height: 1.5; }
-.update-choice label input { margin-top: 3px; }
+.update-choice label { display: flex; flex-direction: row; gap: 8px; align-items: flex-start; font-size: var(--fs-sm); line-height: 1.5; margin: 0; }
+.update-choice label input[type=radio] { width: auto; height: auto; min-height: 0; flex: none; margin: 4px 0 0; }
+.update-choice label > span { flex: 1; min-width: 0; }
 .update-choice label.disabled { color: var(--muted); }
 .update-choice .warn-text { display: block; }
 .update-steps li { flex-direction: column; align-items: stretch; }

@@ -7693,6 +7693,41 @@ async function main() {
     equal(await page.locator("[data-testid=update-finished]").count(), 0, "[닫기]");
   });
 
+  await check("업데이트 전 확인 창 — 오늘 백업이 있으면 건너뛰기를 권하고, 백업 단계에 '건너뜀' · 실패면 덮개를 걷고 알림 (301)", async () => {
+    const status = { folder: "C:\\느린나이테\\updates", reachable: true, current: "느린나이테-20261117-v3", configured: "", supervised: true, last: null, history: [], rollback: false,
+      items: [{ name: "느린나이테-20261117-v9", file: "x.zip", size: 16000000, newer: true, current: false, problem: "", has_sha: true }], newest: "느린나이테-20261117-v9" };
+    const checkBody = { enabled: true, reachable: true, directory: "D:\\백업", today: { at: "2026-11-17T09:12", file: "과제이력-백업-20261117-0912.zip" },
+      expected_bytes: 3460000000, free_bytes: 41000000000, enough: true };
+    let posted = null;
+    let jobState = { state: "starting", name: "느린나이테-20261117-v9" };
+    await page.route("**/api/update", (route) => {
+      if (route.request().method() === "GET") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status) });
+      posted = JSON.parse(route.request().postData() || "{}");
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ state: "starting" }) });
+    });
+    await page.route("**/api/update/check", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(checkBody) }));
+    await page.route("**/api/update/job", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(jobState) }));
+    try {
+      await go("#/settings?tab=backup");
+      await page.reload();
+      await page.getByRole("button", { name: "이 판으로 업데이트" }).click();
+      const dialog = page.locator("[data-testid=update-confirm]");
+      await dialog.waitFor({ timeout: 8000 });
+      const text = await dialog.innerText();
+      expect(text.includes("3.2 GB") && text.includes("09:12") && text.includes("권함"), `확인 창: ${text.slice(0, 200)}`);
+      expect(await dialog.getByLabel(/백업 건너뛰고/).isChecked(), "오늘 백업이 있으면 건너뛰기가 골라져 있다");
+      await page.locator("[data-testid=update-go]").click();
+      await page.waitForFunction(() => document.querySelector("[data-step=backup]")?.textContent?.includes("건너뜀"), null, { timeout: 8000 });
+      equal(posted?.backup, false, "건너뛰기로 보냈다");
+      jobState = { state: "error", name: "느린나이테-20261117-v9", error: "시험용 실패" };
+      await page.locator("[data-testid=update-cover]").waitFor({ state: "detached", timeout: 8000 });
+    } finally {
+      await page.unroute("**/api/update");
+      await page.unroute("**/api/update/check");
+      await page.unroute("**/api/update/job");
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
