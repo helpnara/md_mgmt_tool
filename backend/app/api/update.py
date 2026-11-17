@@ -70,7 +70,7 @@ def backup_check() -> dict:
     if last and last.get("ok") and last.get("at"):
         try:
             when = datetime.fromisoformat(str(last["at"]).replace(" ", "T"))
-            if when.date() == datetime.now().date():
+            if when.date() == datetime.now().date():   # 백업 파일 시각 — 실제로 흐른 시각(시험의 고정 오늘 아님)
                 today = {"at": when.isoformat(timespec="minutes"), "file": last.get("file", "")}
         except ValueError:
             today = None

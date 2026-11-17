@@ -13,8 +13,8 @@ from app import clock
 from tests.conftest import FIXED_TODAY
 
 APP = Path(__file__).resolve().parents[1] / "app"
-# 실제로 흐른 시각이 뜻인 곳 — 오류 기록(달마다 파일) · 공유 접속 기록
-REAL_TIME = {"clock.py", "errorlog.py", "share.py"}
+# 실제로 흐른 시각이 뜻인 곳 — 오류 기록(달마다 파일) · 공유 접속 기록 · 업데이트 전 "오늘 만든 백업"(파일 시각, TODO 301)
+REAL_TIME = {"clock.py", "errorlog.py", "share.py", "update.py"}
 
 
 def test_tests_run_on_the_fixed_day():
