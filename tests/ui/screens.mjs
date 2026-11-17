@@ -7695,7 +7695,8 @@ async function main() {
 
   await check("업데이트 전 확인 창 — 오늘 백업이 있으면 건너뛰기를 권하고, 백업 단계에 '건너뜀' · 실패면 덮개를 걷고 알림 (301)", async () => {
     const status = { folder: "C:\\느린나이테\\updates", reachable: true, current: "느린나이테-20261117-v3", configured: "", supervised: true, last: null, history: [], rollback: false,
-      items: [{ name: "느린나이테-20261117-v9", file: "x.zip", size: 16000000, newer: true, current: false, problem: "", has_sha: true }], newest: "느린나이테-20261117-v9" };
+      items: [{ name: "느린나이테-20261117-v9", file: "x.zip", size: 16000000, newer: true, current: false, problem: "", has_sha: true }], newest: "느린나이테-20261117-v9",
+      local: true, usage: { applied: 3, applied_bytes: 48000000, rollback: 2, rollback_bytes: 41000000, keep_applied: 3, keep_rollback: 2 } };
     const checkBody = { enabled: true, reachable: true, directory: "D:\\백업", today: { at: "2026-11-17T09:12", file: "과제이력-백업-20261117-0912.zip" },
       expected_bytes: 3460000000, free_bytes: 41000000000, enough: true };
     let posted = null;
@@ -7710,6 +7711,8 @@ async function main() {
     try {
       await go("#/settings?tab=backup");
       await page.reload();
+      const usage = await page.locator("[data-testid=update-usage]").innerText();   // 302 — 쓰는 공간 한 줄
+      expect(usage.includes("적용됨 3판") && usage.includes("되돌리기 2개") && usage.includes("저절로 정리"), `쓰는 공간: ${usage}`);
       await page.getByRole("button", { name: "이 판으로 업데이트" }).click();
       const dialog = page.locator("[data-testid=update-confirm]");
       await dialog.waitFor({ timeout: 8000 });
