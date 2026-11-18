@@ -1931,6 +1931,10 @@ export interface SuccessionPlan {
 }
 export interface Succession { plans: SuccessionPlan[]; ways: string[]; states: string[]; default_months: number; counts: Record<string, number>; overdue: number }
 export interface TeamReminders { snapshot_due: boolean; year: string; overdue: { id: string; kind: string; name: string; learner: string; due: string }[] }
+/** 309 — 필요 역량 칸의 추천(사전의 역량만, 까닭과 함께) */
+export interface NeedSuggest {
+  suggest: { name: string; axis: string; why: string[] }[];
+}
 export interface Candidates {
   skills: string[];
   missing: string[];

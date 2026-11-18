@@ -451,3 +451,77 @@ def person_shape(name: str, period: str = "3y") -> dict[str, Any]:
     rows = [{"axis": a["axis"], "experiences": a["experiences"], "skills": len(a["skills"]), "names": sorted(a["skills"])} for a in axes.values()]
     return {"person": name, "period": period, "axes": rows, "total_skills": sum(r["skills"] for r in rows),
             "spread": sum(1 for r in rows if r["skills"])}
+
+
+# ── 309 필요 역량 고르기 — 이 과제에 맞을 만한 역량 ─────────────────────────────
+SUGGEST_MAX = 12
+
+
+def need_suggest(conn: sqlite3.Connection, title: str = "", tags: list[str] | None = None,
+                 project_id: str = "", intake_id: str = "") -> dict[str, Any]:
+    """필요 역량 칸의 추천 — 사전의 역량만, 까닭과 함께(점수 없이).
+
+    * 글에 나옴 — 과제(접수) 제목 · 태그 · 본문(개요 · 정의서)에 그 역량 이름이나 같은 말이 있다.
+    * 이 과제의 경험 — 이 과제로 남은 팀원 경험(구조화 · 확정)에 붙은 역량(고칠 때).
+    * 같은 태그 과제 — 태그가 겹치는 다른 과제의 필요 역량과 그 과제 경험의 역량(많이 나온 것부터).
+    """
+    dictionary = settings_service.skill_dictionary()
+    index = skill_rules.index(dictionary)
+    axis_of = {item["name"]: item["axis"] for item in dictionary}
+    tags = [t for t in (tags or []) if t]
+    found: dict[str, dict[str, Any]] = {}
+
+    def add(name: str, why: str, weight: int) -> None:
+        if name not in axis_of:
+            return
+        item = found.setdefault(name, {"name": name, "axis": axis_of[name], "why": [], "weight": 0})
+        if why not in item["why"]:
+            item["why"].append(why)
+        item["weight"] += weight
+
+    # 1) 글에 나옴
+    body = ""
+    if project_id:
+        row = conn.execute("SELECT title, body FROM project WHERE id = ?", (project_id,)).fetchone()
+        if row:
+            body = row["body"] or ""
+            title = title or row["title"] or ""
+            tags = tags or [r["name"] for r in conn.execute(
+                "SELECT t.name FROM project_tag pt JOIN tag t ON t.id = pt.tag_id WHERE pt.project_id = ?", (project_id,))]
+    elif intake_id:
+        row = conn.execute("SELECT title, body, tags FROM intake WHERE id = ?", (intake_id,)).fetchone()
+        if row:
+            body = row["body"] or ""
+            title = title or row["title"] or ""
+    text_key = skill_rules.key(" ".join([title, " ".join(tags), body]))
+    if text_key:
+        for word_key, (_axis, name) in index.items():
+            if len(word_key) >= 2 and word_key in text_key:
+                add(name, "글에 나옴", 3)
+
+    # 2) 이 과제의 경험
+    if project_id:
+        for r in conn.execute(
+                "SELECT s.name FROM experience_skill s JOIN experience e ON e.id = s.experience_id"
+                f" WHERE e.project_id = ? AND e.status IN ({','.join('?' * len(COUNTED))})", (project_id, *COUNTED)):
+            add(index.get(skill_rules.key(r["name"]), ("", r["name"]))[1], "이 과제의 경험", 3)
+
+    # 3) 같은 태그 과제
+    if tags:
+        marks = ",".join("?" * len(tags))
+        others = [r["id"] for r in conn.execute(
+            f"SELECT DISTINCT pt.project_id AS id FROM project_tag pt JOIN tag t ON t.id = pt.tag_id WHERE t.name IN ({marks})"
+            " AND pt.project_id != ?", (*tags, project_id or ""))]
+        if others:
+            pm = ",".join("?" * len(others))
+            for r in conn.execute(f"SELECT need_skills FROM project WHERE id IN ({pm})", others):
+                for raw in (r["need_skills"] or "").split(","):
+                    if raw.strip():
+                        add(index.get(skill_rules.key(raw), ("", raw.strip()))[1], "같은 태그 과제", 1)
+            for r in conn.execute(
+                    "SELECT s.name FROM experience_skill s JOIN experience e ON e.id = s.experience_id"
+                    f" WHERE e.project_id IN ({pm}) AND e.status IN ({','.join('?' * len(COUNTED))})", (*others, *COUNTED)):
+                add(index.get(skill_rules.key(r["name"]), ("", r["name"]))[1], "같은 태그 과제", 1)
+
+    items = sorted(found.values(), key=lambda i: (-i["weight"], i["name"]))[:SUGGEST_MAX]
+    return {"suggest": [{"name": i["name"], "axis": i["axis"], "why": i["why"]} for i in items]}

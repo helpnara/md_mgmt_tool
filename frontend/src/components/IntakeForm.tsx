@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { ClassificationKey, Intake, Meta } from "../types";
+import type { ClassificationKey, Intake, Meta, SkillEntry } from "../types";
 import { useFormUnsaved } from "../unsaved";
 import { confirmDiscard, dateOrderProblem, todayIso } from "../util";
 import {
@@ -18,6 +18,7 @@ import {
   titleProblem,
 } from "../inputRules";
 import TagSuggestions from "./TagSuggestions";
+import NeedSkillPicker from "./NeedSkillPicker";
 
 /**
  * 접수의 칸 (TODO 136) — 등록할 때와 고칠 때 같은 폼이다.
@@ -42,9 +43,9 @@ const PRIORITIES = ["상", "중", "하"];
 export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCancel, onMetaChange = () => undefined }: Props) {
   const creating = !initial?.id;
   // 292 D — 필요 역량 칸의 제안(역량 사전 이름)
-  const [skillNames, setSkillNames] = useState<string[]>([]);
+  const [skillDict, setSkillDict] = useState<SkillEntry[]>([]);
   useEffect(() => {
-    api.experienceSkills().then((d) => setSkillNames(d.dictionary.map((e) => e.name))).catch(() => setSkillNames([]));
+    api.experienceSkills().then((d) => setSkillDict(d.dictionary)).catch(() => setSkillDict([]));
   }, []);
   const [form, setForm] = useState(() => ({
     title: initial?.title ?? "",
@@ -341,11 +342,15 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
           {/* 쓰던 태그 · 모양만 다른 태그는 그 표기로 (TODO 214 U7 · D12) */}
           <TagSuggestions known={meta.tags ?? []} value={form.tags} onPick={(next) => update("tags", next)} />
         </label>
-        <label>
-          필요 역량 <span className="muted">(선택 — 역량 사전)</span>
-          <input value={form.need_skills} onChange={(e) => update("need_skills", e.target.value)} placeholder="예: 데이터 분석, 공정 개선" aria-label="필요 역량" />
-          <TagSuggestions known={skillNames} value={form.need_skills} onPick={(next) => update("need_skills", next)} />
-        </label>
+        {/* 309 — 추천 · 적는 중 맞는 것 · 사전 전체(축별)에서 고르기 */}
+        <div className="need-field">
+          <label>
+            필요 역량 <span className="muted">(선택, 쉼표 구분 — 역량 사전에서 고르면 [후보 보기]가 사람을 찾습니다)</span>
+            <input value={form.need_skills} onChange={(event) => update("need_skills", event.target.value)} placeholder="이름을 적거나 아래에서 고르세요" aria-label="필요 역량" />
+          </label>
+          <NeedSkillPicker value={form.need_skills} onChange={(next) => update("need_skills", next)} dictionary={skillDict}
+            title={form.title} tags={form.tags} intake={initial?.id} />
+        </div>
       </div>
       {creating && (
         <div

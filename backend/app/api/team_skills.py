@@ -148,6 +148,16 @@ def candidates(request: Request, skills: str = "", exclude: str = "", conn=Depen
     return team_plans.candidates(conn, names, rules.split_list(exclude))
 
 
+@router.get("/need-suggest")
+def need_suggest(request: Request, title: str = "", tags: str = "", project: str = "", intake: str = "", conn=Depends(get_db)):
+    """필요 역량 칸의 추천(309) — 글에 나옴 · 이 과제의 경험 · 같은 태그 과제. 사전의 역량만."""
+    from .. import schemas as rules
+    from ..services import team_plans
+
+    _manager(request)
+    return team_plans.need_suggest(conn, title=title, tags=rules.split_list(tags), project_id=project, intake_id=intake)
+
+
 @router.get("/education")
 def education(request: Request, conn=Depends(get_db)):
     from ..services import team_plans

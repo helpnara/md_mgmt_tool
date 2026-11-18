@@ -7932,6 +7932,25 @@ async function main() {
     }
   });
 
+  await check("필요 역량 고르기 (309) — 추천(글에 나옴) · 적는 중 맞는 것 · 사전 전체 축별 · 누르면 넣고 다시 누르면 뺌", async () => {
+    await go("#/projects?new=1");
+    await page.waitForSelector("form .next-id-hint");
+    await page.getByLabel("과제명").fill("수요 예측 모델링 시험");
+    const input = page.getByLabel("필요 역량");
+    await page.locator("[data-testid=need-suggest]").getByRole("button", { name: /예측 모델링/ }).waitFor({ timeout: 8000 });
+    await input.fill("시뮬");
+    await page.locator("[data-testid=need-typing]").getByRole("button", { name: /최적화·시뮬레이션/ }).click();
+    equal(await input.inputValue(), "최적화·시뮬레이션", "적다 만 조각을 고른 이름으로");
+    await page.locator("[data-testid=need-all] summary").click();
+    const dict = (await (await fetch(`${BASE}/api/experiences/skills`)).json()).dictionary.length;
+    equal(await page.locator("[data-testid=need-all] .tag-pick").count(), dict, "사전 전체가 다 보인다");
+    await page.locator("[data-testid=need-all]").getByRole("button", { name: "제조 공정 이해", exact: true }).click();
+    equal(await input.inputValue(), "최적화·시뮬레이션, 제조 공정 이해", "누르면 더함");
+    await page.locator("[data-testid=need-all]").getByRole("button", { name: /최적화·시뮬레이션/ }).click();
+    equal(await input.inputValue(), "제조 공정 이해", "고른 것을 다시 누르면 뺌");
+    await page.locator("form").getByRole("button", { name: "취소" }).click();
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

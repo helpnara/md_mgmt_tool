@@ -4,9 +4,10 @@ from __future__ import annotations
 from tests.test_contributions import team  # noqa: F401
 
 
-def _exp(client, person, title, status="구조화", start="2026-03", skills=(), tools=(), end=""):
+def _exp(client, person, title, status="구조화", start="2026-03", skills=(), tools=(), end="", project=""):
     made = client.post("/api/experiences", json={"person": person, "title": title, "kind": "업무", "start": start, "end": end,
-                                                 "skills": [{"axis": a, "name": n} for a, n in skills], "tools": list(tools)})
+                                                 "skills": [{"axis": a, "name": n} for a, n in skills], "tools": list(tools),
+                                                 **({"project": project} if project else {})})
     assert made.status_code in (200, 201), made.text
     eid = made.json()["id"]
     if status != "초안":

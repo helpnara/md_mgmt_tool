@@ -3523,3 +3523,15 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 /* 화면 머리줄의 주 단추 — 제목 · 설명 오른쪽, 설명 줄 바닥에 맞춤(팀원역량 [기록 추가] 와 같은 자리, TODO 308) */
 .page-head.with-action { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .page-head.with-action > button { flex: none; }
+
+/* 309 필요 역량 고르기 — 한 줄 전체, 추천 · 적는 중 · 사전 전체(축별) */
+.form-row:has(> .need-field) { flex-wrap: wrap; }
+.need-field { flex: 1 1 100%; display: flex; flex-direction: column; min-width: 0; }
+.need-picker { display: flex; flex-direction: column; gap: 2px; }
+.need-picker .need-why { color: var(--muted-strong); font-size: var(--fs-xs); }
+.need-picker .tag-pick.on .need-why { color: inherit; }
+.need-all { margin-top: 6px; font-size: var(--fs-sm); }
+.need-all > summary { cursor: pointer; color: var(--accent-strong); font-size: var(--fs-xs); }
+.need-axis { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; gap: 8px; margin-top: 4px; }
+.need-axis .tag-suggest { margin-top: 0; }
+.need-axis-name { font-size: var(--fs-xs); font-weight: 600; color: var(--muted-strong); }

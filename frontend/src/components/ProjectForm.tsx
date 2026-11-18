@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, projectTitleCheck } from "../api";
-import type { ClassificationInfo, ClassificationKey, Meta, Partner, Project } from "../types";
+import type { ClassificationInfo, ClassificationKey, Meta, Partner, Project, SkillEntry } from "../types";
 import TagSuggestions from "./TagSuggestions";
+import NeedSkillPicker from "./NeedSkillPicker";
 import UnknownOwners from "./UnknownOwners";
 import { useFormUnsaved } from "../unsaved";
 import { confirmDiscard, dateOrderProblem } from "../util";
@@ -83,9 +84,9 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   const [predecessors, setPredecessors] = useState<string[]>(initial?.predecessors ?? []);
   const [predecessorInput, setPredecessorInput] = useState("");
   // 292 D — 필요 역량 칸의 제안(역량 사전 이름)
-  const [skillNames, setSkillNames] = useState<string[]>([]);
+  const [skillDict, setSkillDict] = useState<SkillEntry[]>([]);
   useEffect(() => {
-    api.experienceSkills().then((d) => setSkillNames(d.dictionary.map((e) => e.name))).catch(() => setSkillNames([]));
+    api.experienceSkills().then((d) => setSkillDict(d.dictionary)).catch(() => setSkillDict([]));
   }, []);
   const addPredecessor = (raw: string) => {
     const id = raw.trim().split(/\s+/)[0];
@@ -612,16 +613,15 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           />
         </label>
         {/* 292 D — 필요 역량: 과제 상세의 [후보 보기]가 그 역량 경험이 있는 사람을 찾는다 */}
-        <label>
-          필요 역량 <span className="muted">(선택, 쉼표 구분 — 역량 사전)</span>
-          <input
-            value={form.need_skills}
-            onChange={(event) => update("need_skills", event.target.value)}
-            placeholder="예: 데이터 분석, 공정 개선"
-            aria-label="필요 역량"
-          />
-          <TagSuggestions known={skillNames} value={form.need_skills} onPick={(next) => update("need_skills", next)} />
-        </label>
+        {/* 309 — 추천 · 적는 중 맞는 것 · 사전 전체(축별)에서 고르기 */}
+        <div className="need-field">
+          <label>
+            필요 역량 <span className="muted">(선택, 쉼표 구분 — 역량 사전에서 고르면 [후보 보기]가 사람을 찾습니다)</span>
+            <input value={form.need_skills} onChange={(event) => update("need_skills", event.target.value)} placeholder="이름을 적거나 아래에서 고르세요" aria-label="필요 역량" />
+          </label>
+          <NeedSkillPicker value={form.need_skills} onChange={(next) => update("need_skills", next)} dictionary={skillDict}
+            title={form.title} tags={form.tags} project={initial?.id} />
+        </div>
       </div>
       {/* 번호의 연도는 등록한 날이 아니라 **착수년도**다 (TODO 95).
           적어 두기보다 붙을 번호를 그대로 보여 주는 편이 확실하다. */}

@@ -142,3 +142,22 @@ def test_person_shape_own_only(team):  # noqa: F811
     assert every["리더십"]["skills"] == 1
     assert member.get("/api/growth/shape", params={"person": "나팀원"}).json()["person"] == "가팀원"
     assert viewer.get("/api/growth/shape", params={"person": "가팀원"}).status_code == 403
+
+
+def test_need_suggest_text_experience_and_same_tag(team):  # noqa: F811
+    """309 — 필요 역량 추천: 글에 나옴 · 이 과제의 경험 · 같은 태그 과제. 사전의 역량만, 팀원 PC 는 못 본다."""
+    owner, member, pid = team["owner"], team["member"], team["shared"]
+    owner.patch(f"/api/projects/{pid}", json={"title": "출하 수요 예측 모델링 과제", "tags": ["수요"]})
+    other = owner.post("/api/projects", json={"title": "다른 수요 과제", "tags": ["수요"], "start_date": "2026-01-05"}).json()["id"]
+    owner.patch(f"/api/projects/{other}", json={"need_skills": ["제조 공정 이해", "사전에 없는 말"]})
+    _exp(owner, "가팀원", "요구 정리", "확정", start="2026-02", skills=[("업무", "요구사항 관리")], project=pid)
+    got = owner.get("/api/team-skills/need-suggest", params={"project": pid}).json()["suggest"]
+    by = {s["name"]: s for s in got}
+    assert "글에 나옴" in by["예측 모델링"]["why"]
+    assert "같은 태그 과제" in by["제조 공정 이해"]["why"]
+    assert "사전에 없는 말" not in by
+    assert "이 과제의 경험" in by["요구사항 관리"]["why"]
+    # 새 과제(번호 없음) — 화면이 적은 제목 · 태그로
+    fresh = owner.get("/api/team-skills/need-suggest", params={"title": "예측 모델링 시작", "tags": "수요"}).json()["suggest"]
+    assert {"예측 모델링", "제조 공정 이해"} <= {s["name"] for s in fresh}
+    assert member.get("/api/team-skills/need-suggest", params={"title": "x"}).status_code == 403
