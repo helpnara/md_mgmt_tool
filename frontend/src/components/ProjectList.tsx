@@ -188,9 +188,13 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
         </a>
       )}
       {/* 메뉴마다 같은 머리 — 제목 한 줄 + 설명 한 줄 (TODO 147) */}
-      <div className="page-head">
-        <h1>과제목록</h1>
-        <p className="hint page-desc">과제를 상태·속성·그룹·담당자·연도로 거르고 정렬합니다. 줄을 누르면 과제 상세로 갑니다.</p>
+      <div className="page-head with-action">
+        <div>
+          <h1>과제목록</h1>
+          <p className="hint page-desc">과제를 상태·속성·그룹·담당자·연도로 거르고 정렬합니다. 줄을 누르면 과제 상세로 갑니다.</p>
+        </div>
+        {/* 화면의 주 단추는 머리줄 오른쪽 (TODO 308) */}
+        <button onClick={() => setCreating(true)}>과제 추가</button>
       </div>
       <Dashboard
         refreshKey={refreshKey}
@@ -405,7 +409,6 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           >
             {reindexing ? "읽는 중…" : "다시 읽기"}
           </button>
-          <button onClick={() => setCreating(true)}>과제 추가</button>
         </div>
       </div>
       {/* 첨부가 많으면 몇 분 — 과제 폴더 n / N 을 보인다 (TODO 268) */}

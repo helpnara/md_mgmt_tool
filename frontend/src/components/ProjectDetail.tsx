@@ -803,7 +803,10 @@ export default function ProjectDetail({
                     </li>
                   )}
                 </ul>
-                <div className="form-actions left">
+                <div className="form-actions">
+                  <button className="ghost" onClick={() => setDemotePlan(null)}>
+                    취소
+                  </button>
                   <button
                     disabled={demoting}
                     onClick={async () => {
@@ -820,9 +823,6 @@ export default function ProjectDetail({
                     }}
                   >
                     {demoting ? "되돌리는 중…" : "접수로 되돌리기"}
-                  </button>
-                  <button className="ghost" onClick={() => setDemotePlan(null)}>
-                    취소
                   </button>
                 </div>
               </>
@@ -850,7 +850,23 @@ export default function ProjectDetail({
               <b>하다가 그만둔 과제</b>라면 지우지 말고 상태를 <b>중단</b>으로 두세요 — 요청이 어떻게 끝났는지가
               기록에 남습니다. 삭제는 <b>잘못 만든 과제</b>를 치울 때 씁니다.
             </p>
-            <div className="form-actions left">
+            <div className="form-actions">
+              <button className="ghost" onClick={() => setConfirmingArchive(false)}>
+                취소
+              </button>
+              <button
+                className="ghost danger"
+                onClick={async () => {
+                  try {
+                    await api.archiveProject(project.id);
+                    window.location.hash = backTarget(back).href;
+                  } catch (err) {
+                    notifyError((err as Error).message); // 동작 실패는 알림 (TODO 209 ①)
+                  }
+                }}
+              >
+                그래도 삭제
+              </button>
               {project.status !== "dropped" && (
                 <button
                   onClick={async () => {
@@ -866,22 +882,6 @@ export default function ProjectDetail({
                   중단으로 바꾸기
                 </button>
               )}
-              <button
-                className="ghost danger"
-                onClick={async () => {
-                  try {
-                    await api.archiveProject(project.id);
-                    window.location.hash = backTarget(back).href;
-                  } catch (err) {
-                    notifyError((err as Error).message); // 동작 실패는 알림 (TODO 209 ①)
-                  }
-                }}
-              >
-                그래도 삭제
-              </button>
-              <button className="ghost" onClick={() => setConfirmingArchive(false)}>
-                취소
-              </button>
             </div>
           </div>
         )}

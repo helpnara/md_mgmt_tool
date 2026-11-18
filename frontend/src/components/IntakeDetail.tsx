@@ -611,7 +611,12 @@ function DecisionPanel({
         <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={prompts[kind]} rows={2} />
       </label>
       {error && <p className="error form-error">{error}</p>}
-      <div className="form-actions left">
+      <div className="form-actions">
+        {/* 단추가 꺼진 까닭은 단추 옆에 (TODO 214 U1 · U2) — 단추는 오른쪽(308) */}
+        {why && <span className="hint warn-text decision-why form-warn">{why}</span>}
+        <button className="ghost" onClick={onCancel} disabled={busy}>
+          취소
+        </button>
         <button
           disabled={busy || Boolean(why)}
           title={why ?? undefined}
@@ -629,11 +634,6 @@ function DecisionPanel({
         >
           {STATUS_LINES[kind]}(으)로 정리
         </button>
-        <button className="ghost" onClick={onCancel} disabled={busy}>
-          취소
-        </button>
-        {/* 단추가 꺼진 까닭은 단추 옆에 (TODO 214 U1 · U2) */}
-        {why && <span className="hint warn-text decision-why">{why}</span>}
       </div>
     </div>
   );

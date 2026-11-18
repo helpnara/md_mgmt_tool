@@ -121,7 +121,7 @@ export default function IntakePool({ meta, query, onMetaChange }: Props) {
           ← {backTarget(filters.back).label}
         </a>
       )}
-      <div className="page-head">
+      <div className="page-head with-action">
         <div>
           <h1>접수</h1>
           <p className="hint page-desc">

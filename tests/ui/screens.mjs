@@ -7905,16 +7905,31 @@ async function main() {
     await api.patch(`/api/projects/${pid}`, { need_skills: [] });
   });
 
-  await check("사람별 이력 (307) — 나의 한 해 · 역량 모양 한 줄 두 칸, 맡은 과제 · 개인 역량 강화 활동 두 칸", async () => {
+  await check("사람별 이력 (307 · 308) — 나의 한 해 · 역량 모양 한 줄 두 칸, 맡은 과제 한 칸 · 간격 16px, 개인 역량 강화 활동 두 칸", async () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await go(`#/person/${encodeURIComponent("권경락")}`);
     await page.locator("[data-testid=person-shape]").waitFor({ timeout: 8000 });
     const tops = await page.evaluate(() => [...document.querySelectorAll("[data-testid=person-year-row] > .card")].map((el) => Math.round(el.getBoundingClientRect().top)));
     expect(tops.length === 2 && tops[0] === tops[1], `한 줄: ${tops}`);
-    const cols = await page.evaluate(() => getComputedStyle(document.querySelector(".person-project-list")).gridTemplateColumns.split(" ").length);
-    equal(cols, 2, "맡은 과제 두 칸");
+    // 308 — 맡은 과제는 원래대로 한 칸, 나의 한 해 줄과 다음 카드 사이는 다른 카드 사이와 같은 16px
+    const display = await page.evaluate(() => getComputedStyle(document.querySelector(".person-project-list")).display);
+    equal(display, "flex", "맡은 과제는 한 칸(원래대로)");
+    const gap = await page.evaluate(() => { const row = document.querySelector("[data-testid=person-year-row]"); const next = row.nextElementSibling; return Math.round(next.getBoundingClientRect().top - row.getBoundingClientRect().bottom); });
+    equal(gap, 16, "나의 한 해 줄 ↔ 다음 카드 간격");
     const acts = await page.evaluate(() => { const el = document.querySelector(".person-activity-list"); return el ? getComputedStyle(el).gridTemplateColumns.split(" ").length : 2; });
     equal(acts, 2, "개인 역량 강화 활동 두 칸");
+  });
+
+  await check("화면의 주 단추(파랑)는 머리줄 오른쪽 (308) — 접수 [접수 등록] · 과제목록 [과제 추가]", async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    for (const [hash, name] of [["#/intakes", "접수 등록"], ["#/projects", "과제 추가"]]) {
+      await go(hash);
+      const btn = page.locator(".page-head").getByRole("button", { name, exact: true });
+      await btn.waitFor({ timeout: 8000 });
+      const pos = await btn.evaluate((el) => { const head = el.closest(".page-head").getBoundingClientRect(); const r = el.getBoundingClientRect(); const desc = el.closest(".page-head").querySelector(".page-desc").getBoundingClientRect(); return { right: Math.round(head.right - r.right), bottomGap: Math.round(r.bottom - desc.bottom) }; });
+      expect(pos.right <= 1, `${name} 오른쪽 끝: ${JSON.stringify(pos)}`);
+      expect(Math.abs(pos.bottomGap) <= 12, `${name} 설명 줄과 같은 높이: ${JSON.stringify(pos)}`);
+    }
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");
