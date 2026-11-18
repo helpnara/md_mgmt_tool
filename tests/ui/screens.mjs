@@ -6406,6 +6406,7 @@ async function main() {
       await page.locator('[data-contributions] .contrib-name a', { hasText: "권경락" }).click();
       await page.waitForSelector(".person-history", { timeout: 5000 });
       const item = page.locator(".person-project", { hasText: "회고 시험 과제" });
+      await item.locator(".retro-text li").first().waitFor({ timeout: 8000 });   // 이력이 다 그려진 뒤에 센다
       equal(await item.locator(".retro-more").count(), 0, "이력 화면은 접지 않는다");
       equal(await item.locator(".retro-text li").count(), 12, "이력 화면도 목록");
     });
