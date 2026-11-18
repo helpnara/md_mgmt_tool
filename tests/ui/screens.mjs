@@ -7905,6 +7905,18 @@ async function main() {
     await api.patch(`/api/projects/${pid}`, { need_skills: [] });
   });
 
+  await check("사람별 이력 (307) — 나의 한 해 · 역량 모양 한 줄 두 칸, 맡은 과제 · 개인 역량 강화 활동 두 칸", async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await go(`#/person/${encodeURIComponent("권경락")}`);
+    await page.locator("[data-testid=person-shape]").waitFor({ timeout: 8000 });
+    const tops = await page.evaluate(() => [...document.querySelectorAll("[data-testid=person-year-row] > .card")].map((el) => Math.round(el.getBoundingClientRect().top)));
+    expect(tops.length === 2 && tops[0] === tops[1], `한 줄: ${tops}`);
+    const cols = await page.evaluate(() => getComputedStyle(document.querySelector(".person-project-list")).gridTemplateColumns.split(" ").length);
+    equal(cols, 2, "맡은 과제 두 칸");
+    const acts = await page.evaluate(() => { const el = document.querySelector(".person-activity-list"); return el ? getComputedStyle(el).gridTemplateColumns.split(" ").length : 2; });
+    equal(acts, 2, "개인 역량 강화 활동 두 칸");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
