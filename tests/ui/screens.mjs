@@ -7850,7 +7850,7 @@ async function main() {
     await go("#/skills?tab=team");
     await page.locator("[data-testid=ts-snapshots]").waitFor({ timeout: 10000 });
     const year = String(new Date().getFullYear());
-    page.once("dialog", (d) => d.accept());
+    page.once("dialog", (d) => d.accept().catch(() => {}));
     await page.locator("[data-testid=ts-snapshot-save]").click();
     await page.waitForFunction(() => document.querySelector("[data-testid=ts-snapshot-save]")?.textContent?.includes("다시 남기기"), null, { timeout: 10000 });
     await page.locator("[data-testid=ts-snapshots] .link-button").first().click();

@@ -3526,7 +3526,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 
 /* 309 필요 역량 고르기 — 한 줄 전체, 추천 · 적는 중 · 사전 전체(축별) */
 .form-row:has(> .need-field) { flex-wrap: wrap; }
-.need-field { flex: 1 1 100%; display: flex; flex-direction: column; min-width: 0; }
+.need-field { flex: 1 1 100%; display: flex; flex-direction: column; min-width: 0; padding-bottom: 6px; }
 .need-picker { display: flex; flex-direction: column; gap: 2px; }
 .need-picker .need-why { color: var(--muted-strong); font-size: var(--fs-xs); }
 .need-picker .tag-pick.on .need-why { color: inherit; }

@@ -58,7 +58,7 @@ const routes = [
   ...["", "class", "report", "forms", "backup", "check"].map((t) => [`settings-${t || "basic"}`, `#/settings${t ? `?tab=${t}` : ""}`]),
 ];
 const AUDIT = () => {
-  const vis = (el) => { const s = getComputedStyle(el); if (s.visibility === "hidden" || s.display === "none" || +s.opacity === 0) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const vis = (el) => { if (el.closest("details:not([open]) > :not(summary)")) return false; /* 접힌 <details> 속은 그려지지 않는다(크롬은 자리만 남김) */ const s = getComputedStyle(el); if (s.visibility === "hidden" || s.display === "none" || +s.opacity === 0) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const path = (el) => { const p = []; for (let e = el; e && e !== document.body && p.length < 4; e = e.parentElement) p.unshift(e.tagName.toLowerCase() + (e.className && typeof e.className === "string" ? "." + e.className.trim().split(/\s+/).slice(0, 2).join(".") : "")); return p.join(" > "); };
   const scrollAnc = (el, stop) => { for (let e = el.parentElement; e && e !== stop; e = e.parentElement) { const s = getComputedStyle(e); if (/(auto|scroll|hidden|clip)/.test(s.overflowX + s.overflowY)) return e; } return null; };
   const out = [];
