@@ -9,6 +9,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from .. import who
 from ..deps import get_db
 from ..services import person_history as svc
 
@@ -16,13 +17,23 @@ router = APIRouter(prefix="/api/person-history", tags=["people"])
 
 
 @router.get("/year")
-def year_review(name: str = Query(..., min_length=1, max_length=40), year: str = Query(..., pattern=r"^\d{4}$"),
+def year_review(request: Request, name: str = Query(..., min_length=1, max_length=40), year: str = Query(..., pattern=r"^\d{4}$"),
                 conn: sqlite3.Connection = Depends(get_db)) -> dict:
     """나의 한 해 (TODO 244 A3) — 누구나(이력 화면과 같다). 인정 한 줄 · 면담은 넣지 않는다."""
     name = " ".join(name.split())
     if not name:
         raise HTTPException(status_code=400, detail="사람 이름이 비어 있습니다.")
-    return svc.year_review(conn, name, year)
+    data = svc.year_review(conn, name, year)
+    # 292 C — 육성 목표 한 줄("3개 중 2개 시작"). 팀장과 본인에게만(민감 자료 — 다른 팀원 · 읽기 공유에는 없음)
+    user = who.of(request)
+    if user.manages or (user.role == who.MEMBER and user.name == name):
+        from ..services import team_plans
+
+        found = team_plans.growth(name, year)
+        if found["goals"]:
+            data["growth"] = {"goals": len(found["goals"]), "started": found["started"],
+                              "items": [{"skill": g["skill"], "started": g["started"] or g["mark"] == "이룸", "mark": g["mark"]} for g in found["goals"]]}
+    return data
 
 
 @router.get("")

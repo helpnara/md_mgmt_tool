@@ -67,6 +67,15 @@ def summary(
                 continue
             item.update({"meetings": 0, "last_meeting": None, "meeting_days_since": None, "open_followups": 0,
                          "next_meeting": None, "meeting_due": False})
+    elif who.of(request).manages:
+        # 292 C — 육성 목표(올해) 칸: 목표 수 · 시작한 수. 팀장 화면만(민감 자료)
+        from ..services import team_plans
+
+        counts = team_plans.growth_counts([item["name"] for item in data["people"] if not item.get("left")],
+                                          (year or None) if year and year.isdigit() else None)
+        for item in data["people"]:
+            if item["name"] in counts:
+                item["growth"] = counts[item["name"]]
     return data
 
 

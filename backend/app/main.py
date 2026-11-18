@@ -13,7 +13,7 @@ import anyio
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (mode, team_skills, update, yearcards, activities, attachments, dashboard, drafts, edits, entries, errors, experiences, export, folders, home, intakes,
+from .api import (growth, mode, team_skills, update, yearcards, activities, attachments, dashboard, drafts, edits, entries, errors, experiences, export, folders, home, intakes,
                   linkfix, meetings, meta, people, person_history, projects, reports, restore, roadmap, search,
                   settings, trash, versions)
 from . import mimefix, permissions, readcache, share, who
@@ -475,6 +475,7 @@ app.include_router(restore.router)  # 전체 백업에서 되살리기 (TODO 246
 app.include_router(experiences.router)  # 팀원별 경험 (TODO 257)
 app.include_router(yearcards.router)  # 연말 회고 카드 (TODO 285)
 app.include_router(team_skills.router)  # 팀 역량 · 기술 스택 (TODO 284)
+app.include_router(growth.router)  # 개인 육성 목표 (TODO 292 C)
 app.include_router(mode.router)  # 체험 · 내 자료 (TODO 295)
 app.include_router(update.router)  # 업데이트 (TODO 298)
 
