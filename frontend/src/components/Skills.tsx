@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { Activity, ActivitySummary, Meta } from "../types";
 import { backTarget, personLink, useAddressBar } from "../nav";
+import { GrowthCard } from "./TeamPlans";
 import { leftLabel, splitPeople } from "../people";
 import { isReadonly } from "../readonly";
 import { getMe, isMember } from "../me";
@@ -229,6 +230,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
     cost: summary.people.some((item) => item.cost),
     meeting: meetingsOpen && summary.people.some((item) => item.last_meeting),
     followups: meetingsOpen && summary.people.some((item) => item.open_followups),
+    // 292 C — 육성 목표(올해) — 팀장 화면에만 값이 온다
+    growth: summary.people.some((item) => item.growth),
   };
   const hiddenCols = [
     ...meta.activity_kinds.filter((kindInfo) => !shownKinds.includes(kindInfo)).map((kindInfo) => kindInfo.label),
@@ -643,6 +646,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 {/* 면담 (TODO 182) — 역량 이력과 따로 센다 */}
                 {cols.meeting && <th>마지막 면담</th>}
                 {cols.followups && <th title="면담에서 하기로 하고 아직 닫지 않은 것">하기로 한 것</th>}
+                {cols.growth && <th title="올해 육성 목표 — 시작한 수 / 목표 수(면담 탭에서 적음)">육성 목표</th>}
               </tr>
             </thead>
             <tbody>
@@ -727,6 +731,13 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                     </td>
                   )}
                   {cols.followups && <td className={item.open_followups ? "num" : "zero num"}>{cellCount(item.open_followups)}</td>}
+                  {cols.growth && (
+                    <td className="one-line" data-testid="growth-cell">
+                      {item.leader || item.left ? <span className="muted">{DASH}</span>
+                        : item.growth?.goals ? <span>{item.growth.started} / {item.growth.goals}</span>
+                        : <span className="muted" title="올해 육성 목표가 없습니다 — 면담 탭에서 적습니다">없음</span>}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -754,6 +765,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                 null,
                 ...(cols.meeting ? [null] : []),
                 ...(cols.followups ? [cellCount(sumBy(summary.people, (item) => item.open_followups))] : []),
+                ...(cols.growth ? [null] : []),
               ]}
             />
           </table>
@@ -779,6 +791,10 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             떠난 사람과는 새 면담을 잡지 않는다 (194) — 지난 면담은 그 사람을 고르면 그대로 보인다 ── */}
       {tab === "meetings" && readonly && (
         <p className="hint member-meetings-note">{getMe().name} 님의 면담 기록입니다 — 보기만 됩니다. 고칠 것이 있으면 팀장에게 말해 주세요.</p>
+      )}
+      {/* 292 C — 개인 육성 목표: 사람을 고르면 면담 위에(팀원 PC 는 자기 것을 보기만) */}
+      {tab === "meetings" && meetingsOpen && (readonly ? getMe().name : person) && (
+        <GrowthCard person={readonly ? getMe().name : person} readonly={readonly} />
       )}
       {tab === "meetings" && meetingsOpen && (
       <div className={sidePerson ? "skills-meet-split" : undefined}>

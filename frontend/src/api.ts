@@ -1,4 +1,4 @@
-import type { EditDiff, ModeStatus, UpdateStatus, UpdateCheck, UpdateJob, TeamSkills, TeamSkillTarget, YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
+import type { EditDiff, Growth, GrowthGoal, Snapshot, SnapshotItem, Succession, SuccessionPlan, TeamReminders, ModeStatus, UpdateStatus, UpdateCheck, UpdateJob, TeamSkills, TeamSkillTarget, YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -261,6 +261,17 @@ export const api = {
   switchMode: (body: { mode: "demo" | "mine"; mine_dir?: string; reset?: boolean }) =>
     request<ModeStatus>("/api/mode", { method: "POST", body: JSON.stringify(body) }),
   teamSkills: (period: string, left: boolean) => request<TeamSkills>(`/api/team-skills?period=${period}${left ? "&left=1" : ""}`),
+  // 292 2차 — 해마다 기록 · 승계 계획 · 육성 목표
+  saveSnapshot: (year?: string) => request<SnapshotItem>("/api/team-skills/snapshots", { method: "POST", body: JSON.stringify({ year: year ?? "" }) }),
+  snapshot: (year: string) => request<Snapshot>(`/api/team-skills/snapshots/${year}`),
+  succession: () => request<Succession>("/api/team-skills/succession"),
+  addPlan: (plan: Partial<SuccessionPlan>) => request<SuccessionPlan>("/api/team-skills/succession", { method: "POST", body: JSON.stringify(plan) }),
+  updatePlan: (id: string, plan: Partial<SuccessionPlan>) => request<SuccessionPlan>(`/api/team-skills/succession/${id}`, { method: "PATCH", body: JSON.stringify(plan) }),
+  deletePlan: (id: string) => request<void>(`/api/team-skills/succession/${id}`, { method: "DELETE" }),
+  teamReminders: () => request<TeamReminders>("/api/team-skills/reminders"),
+  growth: (person: string, year?: string) => request<Growth>(`/api/growth?person=${encodeURIComponent(person)}${year ? `&year=${year}` : ""}`),
+  saveGrowth: (person: string, year: string, goals: GrowthGoal[]) =>
+    request<Growth>(`/api/growth/${encodeURIComponent(person)}/${year}`, { method: "PUT", body: JSON.stringify({ goals }) }),
   saveTeamTargets: (targets: { kind: string; name: string; want: number }[]) =>
     request<{ targets: TeamSkillTarget[] }>("/api/team-skills/targets", { method: "PUT", body: JSON.stringify({ targets }) }),
   // 분류 넷의 값 정리 · 역량 이름 바꾸기 (TODO 275)

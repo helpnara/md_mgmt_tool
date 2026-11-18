@@ -95,6 +95,13 @@ export default function YearCard({ name, years }: { name: string; years: string[
             ))}
           </div>
           {review.hours > 0 && <p className="hint">개인 역량 강화 활동 {review.hours}시간 (지난해 {review.last.hours}시간)</p>}
+          {/* 292 C — 육성 목표(면담에서 팀장과 정한 것) */}
+          {review.growth && review.growth.goals > 0 && (
+            <p className="year-line" data-testid="year-growth">
+              <span className="muted">육성 목표</span> {review.growth.goals}개 중 <b>{review.growth.started}개 시작</b> —{" "}
+              {review.growth.items.map((g) => `${g.skill}${g.mark ? `(${g.mark})` : g.started ? "(시작)" : ""}`).join(", ")}
+            </p>
+          )}
           {review.done_projects.length > 0 && (
             <p className="year-line">
               <span className="muted">마친 과제</span>

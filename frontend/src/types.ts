@@ -1054,6 +1054,8 @@ export interface ActivityPerson {
   next_meeting: string | null;
   /** 정한 다음 면담일이 지났거나, 마지막 면담에서 주기가 지났다 */
   meeting_due: boolean;
+  /** 292 C — 올해 육성 목표(팀장 화면만) */
+  growth?: { goals: number; started: number };
 }
 
 export interface ActivitySummary {
@@ -1434,6 +1436,8 @@ export interface YearNumbers {
   hours: number;
 }
 export interface YearReview extends YearNumbers {
+  /** 292 C — 육성 목표 한 줄(팀장 · 본인에게만 온다) */
+  growth?: { goals: number; started: number; items: { skill: string; started: boolean; mark: string }[] };
   name: string;
   year: string;
   last: YearNumbers;
@@ -1867,6 +1871,9 @@ export interface TeamSkills {
     thin: { kind: "역량" | "보유 기술"; name: string; remaining: string }[];
     projects: { id: string; title: string }[];
   }>;
+  /** 292 G — 남긴 기록 · 지난해 기록 ↔ 지금 */
+  snapshots?: SnapshotItem[];
+  snapshot_compare?: SnapshotCompare | null;
 }
 export interface TeamChange {
   new: string[];
@@ -1899,3 +1906,22 @@ export interface UpdateStatus {
   usage?: { applied: number; applied_bytes: number; rollback: number; rollback_bytes: number; keep_applied: number; keep_rollback: number };
 }
 
+
+/** 292 2차 — 해마다 남기는 기록(G) · 육성 목표(C) · 승계 · 짝 계획(B) */
+export interface SnapshotItem { year: string; saved_at: string; auto: boolean }
+export interface SnapshotDiff { new: string[]; lost: string[]; up: { name: string; last: number; this: number }[]; down: { name: string; last: number; this: number }[]; counts: Record<"new" | "lost" | "up" | "down", number> }
+export interface SnapshotCompare {
+  year: string; saved_at: string; auto: boolean;
+  people: { last: number; this: number; joined: string[]; left: string[] };
+  skills: SnapshotDiff; tools: SnapshotDiff;
+  only_one: { last: number; this: number; resolved: string[]; new: string[] };
+}
+export interface Snapshot { year: string; saved_at: string; auto: boolean; by: string; body: string }
+export interface GrowthGoal { skill: string; way: string; note: string; mark: "" | "이룸" | "미룸"; experiences?: number; confirmed?: number; started?: boolean; evidence?: { id: string; title: string; status: string }[] }
+export interface Growth { person: string; year: string; goals: GrowthGoal[]; updated_at: string; by: string; started: number; last_year: { year: string; goals: GrowthGoal[] }; max: number; ways: string[] }
+export interface SuccessionPlan {
+  id: string; kind: "역량" | "보유 기술"; name: string; holders: string[]; learner: string; way: string; due: string; note: string;
+  state: "진행" | "됨" | "그만둠"; made: string; done_at?: string; done_by?: string; evidence?: { id: string; title: string }; overdue?: boolean;
+}
+export interface Succession { plans: SuccessionPlan[]; ways: string[]; states: string[]; default_months: number; counts: Record<string, number>; overdue: number }
+export interface TeamReminders { snapshot_due: boolean; year: string; overdue: { id: string; kind: string; name: string; learner: string; due: string }[] }

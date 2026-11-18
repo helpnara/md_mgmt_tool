@@ -3458,3 +3458,33 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .help-tips { margin: 0; padding-left: 20px; font-size: var(--fs-sm); display: grid; gap: 4px; }
 .help-search code, .help-cases code { white-space: nowrap; }
 @media (max-width: 720px) { .help-cases { grid-template-columns: 1fr; } }
+
+/* 292 2차 — 해마다 기록 · 승계 · 짝 계획 · 육성 목표 */
+.ts-snapshots { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 4px; font-size: var(--fs-sm); }
+.ts-snapshot-view { max-width: 900px; }
+.ts-snapshot-view table { border-collapse: collapse; font-size: var(--fs-sm); margin: 6px 0 12px; }
+.ts-snapshot-view th, .ts-snapshot-view td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+.ts-snap-cmp { border-left: 3px solid var(--accent); padding: 4px 0 4px 10px; margin-bottom: 8px; }
+.ts-snap-note { font-size: var(--fs-xs); margin: 4px 0 0; }
+.ts-risk-item { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }
+.ts-plan-tag { font-size: var(--fs-xs); color: var(--success-700); background: var(--success-50); border-radius: var(--radius-pill); padding: 1px 8px; white-space: nowrap; }
+.ts-plan-tag.overdue { color: var(--warning-700); background: var(--warning-50); }
+.ts-plan-add { font-size: var(--fs-xs); white-space: nowrap; }
+.ts-plan-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 12px; align-items: end; margin: 8px 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+.ts-plan-form label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
+.ts-plan-form .ts-plan-note { grid-column: 1 / -1; }
+.ts-plan-form .form-actions { grid-column: 1 / -1; }
+.ts-plans td { vertical-align: top; }
+.ts-plans .ts-plan-actions { white-space: nowrap; display: flex; gap: 4px; flex-wrap: wrap; }
+.ts-plans tr.ts-plan-overdue td { background: var(--warning-50); }
+.ts-plan-done { color: var(--success-700); }
+.growth-card { border-left: 4px solid var(--success-700); }
+.growth-list { margin: 6px 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--fs-sm); }
+.growth-list li .tag { margin-left: 6px; }
+.growth-started { background: var(--success-50); color: var(--success-700); }
+.growth-done { background: var(--success-100); color: var(--success-800); }
+.growth-evidence { margin-left: 8px; font-size: var(--fs-xs); }
+.growth-form { display: grid; gap: 6px; margin: 6px 0; }
+.growth-row { display: grid; grid-template-columns: minmax(160px, 1.2fr) 100px minmax(160px, 2fr) 110px auto; gap: 6px; align-items: center; }
+@media (max-width: 900px) { .growth-row { grid-template-columns: 1fr 1fr; } }
+.home-team-plans { margin-bottom: 8px; }

@@ -6,6 +6,9 @@ import type { Meta, TeamSkillTarget, TeamSkillTool, TeamSkills as Data } from ".
 import { experienceLink, personLink, projectLink } from "../nav";
 import { axisLabel } from "../util";
 import CopyTableButton from "./CopyTableButton";
+import { PlanTag, SnapshotBar, SnapshotCompareLine, SuccessionCard, useSuccession } from "./TeamPlans";
+import type { PlanSeed } from "./TeamPlans";
+import type { SuccessionPlan } from "../types";
 
 /**
  * 팀 역량 · 기술 스택 (TODO 284 · 290) — 팀원역량 → [팀 역량] 탭(팀장 · 관리자만).
@@ -35,6 +38,9 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
   const [printing, setPrinting] = useState(false);
   // 291 — 인쇄는 질문 카드 여섯 한 장, 근거 자료는 고를 때만
   const [printEvidence, setPrintEvidence] = useState(false);
+  // 292 B — 승계 · 짝 계획(위험 카드의 [계획으로]가 채워 둔 새 계획)
+  const [succession, loadSuccession] = useSuccession();
+  const [seed, setSeed] = useState<PlanSeed | null>(null);
 
   const load = () => api.teamSkills(period, left).then(setData).catch((error: Error) => notifyError(error.message));
   useEffect(() => { void load(); }, [period, left]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -80,9 +86,12 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
           팀장의 질문 여섯 — <b>강점 · 빈 곳 · 위험 · 변화 · 성장 · 할 일</b> — 에 답합니다. 카드마다 답이 먼저, [근거 보기]를 누르면 아래 근거 자료로 갑니다.
           세는 것은 <b>구조화 · 확정 경험</b>, 숫자는 <b>경험 수</b>(수준 · 평가 아님). 변화 · 성장은 늘 올해 · 지난해, 나머지는 <b>범위</b>({periodLabel}). 팀에 나눌 때는 <b>이름 가리기</b>를 켜고 인쇄하세요.
         </p>
+        {/* 292 G — 해마다 남기는 기록 */}
+        {data && <SnapshotBar items={data.snapshots ?? []} year={data.year} onSaved={load} />}
         <p className="ts-notice" data-testid="ts-notice">팀장이 팀의 득과 실을 판단하는 자료입니다 — 평가 · 다른 사람과의 비교에 쓰지 않습니다. 숫자는 경험 수이고, 점(●)은 수준이 아니라 <b>근거가 얼마나 단단한가</b>입니다(●●● 확정 + 정량 결과 · ●● 확정 · ● 구조화만).</p>
       </div>
-      {data && <Body data={data} show={show} interactive meta={meta} onTargets={load} />}
+      {data && <Body data={data} show={show} interactive meta={meta} onTargets={load} plans={succession?.plans ?? []} onPlan={setSeed} />}
+      {data && <SuccessionCard data={succession} people={names} show={show} seed={seed} onSeedUsed={() => setSeed(null)} onChanged={loadSuccession} />}
       {printing && data && createPortal(
         <div className="ts-print-root" aria-hidden>
           <h1 className="ts-print-title">팀 역량 · 기술 스택 — {data.change.last} → {data.change.this} · 범위 {periodLabel}</h1>
@@ -95,8 +104,9 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
   );
 }
 
-function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
+function Body({ data, show, interactive, meta, onTargets, withEvidence, plans = [], onPlan }: {
   data: Data; show: (name: string) => string; interactive: boolean; meta: Meta; onTargets?: () => void; withEvidence?: boolean;
+  plans?: SuccessionPlan[]; onPlan?: (seed: PlanSeed) => void;
 }) {
   const [evidence, setEvidence] = useState(false);
   // 292 A — 떠나면 무엇을 잃나(위험 카드에서 사람을 고른다)
@@ -189,6 +199,8 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
                     <li key={`${x.kind}-${x.name}`}>
                       {chip(x.name, x.kind === "역량" ? "skill" : "tool")}
                       <span className="muted">{x.candidates.length ? `이어받을 후보(같은 ${x.kind === "역량" ? "묶음" : "층"}): ${x.candidates.map(show).join(", ")}` : "이어받을 후보 없음 — 배울 사람을 정해야 합니다"}</span>
+                      {interactive && <PlanTag plans={plans} kind={x.kind} name={x.name} show={show}
+                        onPlan={onPlan && (() => onPlan({ kind: x.kind, name: x.name, holders: [leaving], candidates: x.candidates }))} />}
                     </li>
                   ))}
                   {leave.lost.length > 6 && <li className="muted">외 {leave.lost.length - 6}개 — 근거 자료의 혼자만 가진 것</li>}
@@ -212,7 +224,13 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
           <ul className="ts-bars">
             {r.people.slice(0, 4).map((p) => (
               <li key={p.person}><span className="ts-bar-label">{show(p.person)}</span>
-                <span className="ts-chip-wrap">{p.items.slice(0, 3).map((it) => chip(it.name, it.kind === "역량" ? "skill" : "tool"))}{p.count > 3 && <span className="muted">외 {p.count - 3}</span>}</span></li>
+                <span className="ts-chip-wrap">{p.items.slice(0, 3).map((it) => (
+                  <span key={`${it.kind}-${it.name}`} className="ts-risk-item">
+                    {chip(it.name, it.kind === "역량" ? "skill" : "tool")}
+                    {interactive && <PlanTag plans={plans} kind={it.kind} name={it.name} show={show}
+                      onPlan={onPlan && (() => onPlan({ kind: it.kind as PlanSeed["kind"], name: it.name, holders: [p.person], candidates: data.leave[p.person]?.lost.find((l) => l.name === it.name)?.candidates ?? [] }))} />}
+                  </span>
+                ))}{p.count > 3 && <span className="muted">외 {p.count - 3}</span>}</span></li>
             ))}
           </ul>
           {r.tools.length > 0 && <p className="ts-line">많이 쓰는데 1명뿐 {r.tools.map((t) => chip(t.name, "tool", `${show(t.person)} · ${t.uses}곳`))}</p>}
@@ -222,6 +240,7 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence }: {
 
         <section className="card ts-q" data-testid="ts-q-change">
           <div className="ts-q-head"><span className="ts-tag">변화</span><h3>올해 무엇이 달라졌나 <span className="muted">{ch.last} → {ch.this}</span></h3></div>
+          {interactive && data.snapshot_compare && <SnapshotCompareLine cmp={data.snapshot_compare} chip={chip} show={show} />}
           <p className="ts-answer">새로 생김 <b>{changeTotal("new")}</b> · 늘어남 <b>{changeTotal("up")}</b> · 줄어듦 <b>{changeTotal("down")}</b> · 끊김 <b>{changeTotal("stopped")}</b></p>
           <dl className="ts-change-mini">
             <dt>새로 생김</dt><dd>{[...ch.skills.new.slice(0, 3).map((x) => chip(x, "skill")), ...ch.tools.new.slice(0, 2).map((x) => chip(x, "tool"))]}{changeTotal("new") === 0 && <span className="muted">없음</span>}</dd>

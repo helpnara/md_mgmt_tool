@@ -5,7 +5,7 @@ import { ChartColumn, Compass, FolderTree, Layers, ListChecks, Tags, TrendingUp,
 import IconTitle from "./IconTitle";
 import { api } from "../api";
 import { attempt } from "../notify";
-import type { ActivityBrief, BackupStatus, EditDiff, EditItem, Home as HomeData, RetroDue, HomeSlice, Meta, StatusInfo } from "../types";
+import type { ActivityBrief, BackupStatus, EditDiff, EditItem, TeamReminders, Home as HomeData, RetroDue, HomeSlice, Meta, StatusInfo } from "../types";
 import { listLink, personLink, projectLink, screenLink, useAddressBar } from "../nav";
 import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
@@ -355,6 +355,8 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const drafts = useDrafts();
   // 팀원이 고친 것 — 최근 7일 (TODO 233 ⑥). 팀장만 본다(바깥에는 막혀 있다)
   const [teamEdits, setTeamEdits] = useState<EditItem[]>([]);
+  // 292 G · B — 12월 팀 역량 기록 · 기한 지난 승계 계획(팀장 홈)
+  const [teamReminders, setTeamReminders] = useState<TeamReminders | null>(null);
   // 305 — 줄을 펼쳐 바뀐 곳 미리보기(B) · 본 것 표시(C, 이 브라우저에 기억)
   const [editOpen, setEditOpen] = useState<Record<string, EditDiff | "loading" | "error">>({});
   const [editSeen, setEditSeen] = useState<Set<string>>(() => loadSeen());
@@ -392,6 +394,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
     // 자동 백업 띠는 관리자(서버 PC)만 (TODO 289) — 서버를 돌보는 일은 서버 PC 몫(247), 팀장은 띠를 봐도 고칠 것이 없다
     if (getMe().role === "owner") api.backupStatus().then(setBackup).catch(() => setBackup(null));
     api.recentEdits().then((data) => setTeamEdits(data.items)).catch(() => setTeamEdits([]));
+    api.teamReminders().then(setTeamReminders).catch(() => setTeamReminders(null));
   }, []);
   // 띠가 떠 있으면 1분 뒤 한 번 더 — 서버를 켜자마자 연 홈은 첫 자동 백업(켠 뒤 20초)이 끝나기 전 상태를 보고 있을 수 있다 (TODO 289)
   const backupWarn = backupWarning(backup);
@@ -512,7 +515,8 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   const statClass = (count: number, alert = "") => ["home-stat go", count ? alert : "zero-stat"].filter(Boolean).join(" ");
 
   // ── [할 일] 탭 — 매일 여는 이유 (TODO 232 ①) ─────────────────────────────
-  const scheduleSide = (week.team_upcoming?.items.length ?? 0) > 0 || (week.team_missed?.length ?? 0) > 0 || teamEdits.length > 0;
+  const scheduleSide = (week.team_upcoming?.items.length ?? 0) > 0 || (week.team_missed?.length ?? 0) > 0 || teamEdits.length > 0
+    || Boolean(teamReminders && (teamReminders.snapshot_due || teamReminders.overdue.length > 0));
   const reportSide = retroDue.length > 0 || drafts.length > 0 || week.drafts > 0 || week.stale.length > 0 || week.owner_gaps_total > 0 || week.plans.length > 0;
   const todo = (
     <div className="card home-week">
@@ -623,6 +627,27 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
           </ul>
           {more("missed", week.team_missed!.length)}
         </>
+      )}
+
+      {/* 292 G · B — 팀 역량 할 일 */}
+      {teamReminders && (teamReminders.snapshot_due || teamReminders.overdue.length > 0) && (
+        <div className="home-team-plans" data-testid="home-team-plans">
+          {teamReminders.snapshot_due && (
+            <p className="hint"><b>올해 팀 역량 기록을 남기세요</b> — 12월입니다. 팀원역량 → [팀역량] 위의{" "}
+              <a href={screenLink("skills", { tab: "team" })}>{teamReminders.year}년 기록 남기기</a>. 내년에 "그때 ↔ 지금" 을 견줍니다.</p>
+          )}
+          {teamReminders.overdue.length > 0 && (
+            <>
+              <p className="hint"><b>기한 지난 승계 · 짝 계획 {teamReminders.overdue.length}건</b> — 배울 사람에게 아직 그 경험이 없습니다.</p>
+              <ul className="home-stale">
+                {teamReminders.overdue.slice(0, 5).map((p) => (
+                  <li key={p.id}><span className="due due-warn">{p.due}</span><b>{p.name}</b><span className="muted">{p.kind} → {p.learner}</span>
+                    <a href={screenLink("skills", { tab: "team" })}>계획 보기</a></li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       )}
 
       {/* 팀원이 고친 것 — 최근 7일 (TODO 233 ⑥). 등록한 IP 의 팀원이 담당 과제에서 고친 것 — 같은 날 같은 일은 한 줄로 */}
