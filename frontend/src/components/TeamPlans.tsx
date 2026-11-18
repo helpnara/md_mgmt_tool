@@ -110,8 +110,8 @@ export function PlanTag({ plans, kind, name, show, onPlan }: {
   return <button type="button" className="link-button ts-plan-add" onClick={onPlan}>계획으로</button>;
 }
 
-export function SuccessionCard({ data, people, show, seed, onSeedUsed, onChanged }: {
-  data: Succession | null; people: string[]; show: (n: string) => string; seed: PlanSeed | null; onSeedUsed: () => void; onChanged: () => void;
+export function SuccessionCard({ data, people, leader, show, seed, onSeedUsed, onChanged }: {
+  data: Succession | null; people: string[]; leader?: string; show: (n: string) => string; seed: PlanSeed | null; onSeedUsed: () => void; onChanged: () => void;
 }) {
   const blank: { kind: "역량" | "보유 기술"; name: string; holders: string[]; learner: string; way: string; due: string; note: string } =
     { kind: "역량", name: "", holders: [], learner: "", way: "짝 과제", due: "", note: "" };
@@ -120,7 +120,8 @@ export function SuccessionCard({ data, people, show, seed, onSeedUsed, onChanged
   const [showDone, setShowDone] = useState(false);
   useEffect(() => {
     if (!seed) return;
-    setForm({ ...blank, kind: seed.kind, name: seed.name, holders: seed.holders, learner: seed.candidates[0] ?? "" });
+    // 미리 고르는 배울 사람은 팀원 후보 첫째(팀장은 건너뜀 — 고르려면 목록에서 직접)
+    setForm({ ...blank, kind: seed.kind, name: seed.name, holders: seed.holders, learner: seed.candidates.find((n) => n !== leader) ?? "" });
     setCandidates(seed.candidates);
     onSeedUsed();
     window.setTimeout(() => document.querySelector("[data-testid=ts-succession]")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);

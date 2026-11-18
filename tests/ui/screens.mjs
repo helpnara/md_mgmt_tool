@@ -7846,6 +7846,47 @@ async function main() {
     }
   });
 
+  await check("팀역량 (292 2차) — 기록 남기기 · 보기 · [계획으로] → 계획 저장 → '계획 있음' · 면담 탭 육성 목표 → 사람별 칸", async () => {
+    await go("#/skills?tab=team");
+    await page.locator("[data-testid=ts-snapshots]").waitFor({ timeout: 10000 });
+    const year = String(new Date().getFullYear());
+    page.once("dialog", (d) => d.accept());
+    await page.locator("[data-testid=ts-snapshot-save]").click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=ts-snapshot-save]")?.textContent?.includes("다시 남기기"), null, { timeout: 10000 });
+    await page.locator("[data-testid=ts-snapshots] .link-button").first().click();
+    const view = page.locator("[data-testid=ts-snapshot-view]");
+    await view.waitFor({ timeout: 8000 });
+    expect((await view.innerText()).includes("팀 역량 기록") && (await view.innerText()).includes("역량 — 가진 사람"), "기록 보기");
+    await view.getByRole("button", { name: "닫기" }).click();
+    // [계획으로] — 위험 카드에 단추가 있으면
+    const add = page.locator("[data-testid=ts-q-risk] .ts-plan-add").first();
+    if (await add.count()) {
+      await add.click();
+      const form = page.locator("[data-testid=ts-plan-form]");
+      await form.waitFor({ timeout: 8000 });
+      if (!(await form.getByLabel("배울 사람").inputValue())) {
+        await form.getByLabel("배울 사람").selectOption({ index: 1 });
+      }
+      await page.locator("[data-testid=ts-plan-save]").click();
+      await page.locator("[data-testid=ts-succession] tr[data-plan]").first().waitFor({ timeout: 8000 });
+      await page.locator("[data-testid=ts-q-risk] .ts-plan-tag").first().waitFor({ timeout: 8000 });
+      // 정리 — 시험이 남긴 계획을 지운다
+      const id = await page.locator("[data-testid=ts-succession] tr[data-plan]").first().getAttribute("data-plan");
+      await api.delete(`/api/team-skills/succession/${id}`);
+    }
+    // 육성 목표 — 면담 탭에서 사람을 고르면 카드
+    await go("#/skills?tab=meetings&person=" + encodeURIComponent("권경락"));
+    const card = page.locator("[data-testid=growth-card]");
+    await card.waitFor({ timeout: 8000 });
+    await card.getByRole("button", { name: /목표 적기|고치기/ }).click();
+    await page.getByLabel("목표 1 역량").fill("시험 역량 하나");
+    await page.locator("[data-testid=growth-save]").click();
+    await page.waitForFunction(() => document.querySelector("[data-testid=growth-card]")?.textContent?.includes("1개 중"), null, { timeout: 8000 });
+    await go("#/skills?tab=people");
+    await page.locator("[data-testid=growth-cell]").first().waitFor({ timeout: 8000 });
+    await api.put(`/api/growth/${encodeURIComponent("권경락")}/${year}`, { goals: [] });
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
