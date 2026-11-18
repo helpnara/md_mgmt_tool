@@ -276,6 +276,11 @@ export function GrowthCard({ person, readonly }: { person: string; readonly: boo
               {g.mark ? <span className={`tag ${g.mark === "이룸" ? "growth-done" : ""}`}>{g.mark}</span>
                 : g.started ? <span className="tag growth-started">시작함 · 경험 {g.experiences}{g.confirmed ? ` · 확정 ${g.confirmed}` : ""}</span>
                 : <span className="tag">시작 전</span>}
+              {(g.trained ?? []).length > 0 && (
+                <span className="tag growth-trained" data-testid="growth-trained" title={(g.trained ?? []).map((t) => `${t.date} ${t.title}`).join("\n")}>
+                  교육 다녀옴 · {(g.trained ?? [])[0].date.slice(5)} {(g.trained ?? [])[0].title}{(g.trained ?? []).length > 1 ? ` 외 ${(g.trained ?? []).length - 1}` : ""}
+                </span>
+              )}
               {(g.evidence ?? []).slice(0, 2).map((e) => <a key={e.id} className="growth-evidence" href={experienceLink(e.id)}>{e.title}</a>)}
             </li>
           ))}
@@ -408,13 +413,17 @@ export function PersonShapeCard({ person }: { person: string }) {
           <option value="3y">최근 3년</option><option value="all">전체</option>
         </select>
       </div>
-      <p className="hint">축마다 경험 수(막대)와 가진 역량 가짓수 — 한 축에 깊은지, 여러 축에 넓게 걸쳤는지. 다른 사람과 견주지 않습니다(구조화 · 확정 경험).</p>
+      <p className="hint">축마다 경험 수(막대)와 가진 역량 가짓수 — 한 축에 깊은지, 여러 축에 넓게 걸쳤는지. 다른 사람과 견주지 않습니다(구조화 · 확정 경험). <b>배운 것</b>은 교육 기록의 관련 역량 — 세지 않고 옆에 적습니다.</p>
       <ul className="shape-bars">
         {data.axes.map((a) => (
           <li key={a.axis} title={a.names.join(", ")}>
             <span className="shape-axis">{a.axis}</span>
             <span className="shape-bar"><span style={{ width: `${Math.round((a.experiences / max) * 100)}%` }} /></span>
             <span className="shape-num">경험 {a.experiences} · 역량 {a.skills}</span>
+            {/* 310 C — 배운 것(교육 기록의 관련 역량) — 세지 않고 옆에 옅게 */}
+            {(a.learned ?? []).length > 0 && (
+              <span className="shape-learned" data-testid="shape-learned">배운 것: {(a.learned ?? []).join(", ")}</span>
+            )}
           </li>
         ))}
       </ul>

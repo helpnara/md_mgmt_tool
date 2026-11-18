@@ -988,6 +988,8 @@ export interface HomePlan extends NextPlan {
 export interface Activity {
   /** 관련 역량 (TODO 292 E) */
   skills?: string[];
+  /** 배운 보유 기술 (TODO 310 D) — 기술 스택에는 세지 않는다 */
+  tools?: string[];
   id: number;
   /** 같은 행사를 가리키는 열쇠 — 날짜·구분·제목이 같으면 한 행사다 (TODO 85) */
   event_key: string;
@@ -1352,6 +1354,9 @@ export interface PersonProject {
   no_effect: boolean;
 }
 export interface PersonActivity {
+  /** 310 C · D — 관련 역량 · 배운 보유 기술 */
+  skills?: string[];
+  tools?: string[];
   id: number;
   date: string;
   end_date: string | null;
@@ -1362,7 +1367,10 @@ export interface PersonActivity {
   takeaway: string;
   planned: boolean;
 }
+/** 310 B — 회고는 있는데 경험(구조화 · 확정)이 없는 과제 */
+export interface Unconverted { name?: string; draft: number; none: number; projects: { id: string; title: string; kind: "draft" | "none" }[] }
 export interface PersonHistory {
+  unconverted?: Unconverted;
   name: string;
   in_roster: boolean;
   leader: boolean;
@@ -1831,6 +1839,8 @@ export interface TeamSkillTool {
   uses: { person: string; kind: "project" | "experience"; id: string; title: string }[];
 }
 export interface TeamSkills {
+  /** 310 B */
+  unconverted?: { total: number; people: Unconverted[] };
   period: "3y" | "year" | "all"; year: string; include_left: boolean;
   people: { name: string; left: boolean; leader: boolean }[];
   completeness: {
@@ -1923,7 +1933,7 @@ export interface SnapshotCompare {
   only_one: { last: number; this: number; resolved: string[]; new: string[] };
 }
 export interface Snapshot { year: string; saved_at: string; auto: boolean; by: string; body: string }
-export interface GrowthGoal { skill: string; way: string; note: string; mark: "" | "이룸" | "미룸"; experiences?: number; confirmed?: number; started?: boolean; evidence?: { id: string; title: string; status: string }[] }
+export interface GrowthGoal { skill: string; way: string; note: string; mark: "" | "이룸" | "미룸"; experiences?: number; confirmed?: number; started?: boolean; evidence?: { id: string; title: string; status: string }[]; /** 310 E — 그 해 그 역량 교육을 다녀옴 */ trained?: { date: string; title: string }[] }
 export interface Growth { person: string; year: string; goals: GrowthGoal[]; updated_at: string; by: string; started: number; last_year: { year: string; goals: GrowthGoal[] }; max: number; ways: string[] }
 export interface SuccessionPlan {
   id: string; kind: "역량" | "보유 기술"; name: string; holders: string[]; learner: string; way: string; due: string; note: string;
@@ -1948,4 +1958,4 @@ export interface EducationView {
   unlinked: number;
   days: number;
 }
-export interface PersonShape { person: string; period: string; axes: { axis: string; experiences: number; skills: number; names: string[] }[]; total_skills: number; spread: number }
+export interface PersonShape { person: string; period: string; axes: { axis: string; experiences: number; skills: number; names: string[]; /** 310 C — 배운 것(교육), 세지 않음 */ learned?: string[] }[]; total_skills: number; spread: number }

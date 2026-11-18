@@ -325,7 +325,36 @@ def overview(conn: sqlite3.Connection, period: str = "3y", include_left: bool = 
         **(found := _change_and_insights(this_year, skill_dict, skill_years, tool_years, first_seen, skill_rows, stack, only_one, targets, completeness)),
         **_questions(this_year, names, skill_dict, skill_rows, stack, only_one, targets, found["change"], person_first),
         "leave": _leave_impact(conn, names, skill_rows, stack),
+        "unconverted": unconverted(conn, names),
     }
+
+
+def unconverted(conn: sqlite3.Connection, names: list[str]) -> dict[str, Any]:
+    """310 B — 회고(내가 한 일 · 결과)는 적었는데 구조화 · 확정 경험이 없어 역량 지도에 안 잡히는 과제.
+    초안만 있는 것(정리만 남음)과 경험이 아예 없는 것(초안부터)을 나눠 센다."""
+    if not names:
+        return {"total": 0, "people": []}
+    marks = ",".join("?" * len(names))
+    rows = conn.execute(
+        "SELECT c.name, p.id, p.title FROM project_contribution c JOIN project p ON p.id = c.project_id"
+        f" WHERE c.name IN ({marks}) AND (TRIM(COALESCE(c.did, '')) != '' OR TRIM(COALESCE(c.result, '')) != '')"
+        " ORDER BY p.id DESC", names).fetchall()
+    exp_rows = conn.execute(f"SELECT person, project_id, status FROM experience WHERE person IN ({marks}) AND project_id IS NOT NULL", names)
+    states: dict[tuple[str, str], set[str]] = {}
+    for r in exp_rows:
+        states.setdefault((r["person"], r["project_id"]), set()).add(r["status"])
+    people: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        have = states.get((r["name"], r["id"]), set())
+        if have & set(COUNTED):
+            continue
+        row = people.setdefault(r["name"], {"name": r["name"], "draft": 0, "none": 0, "projects": []})
+        kind = "draft" if have else "none"
+        row[kind] += 1
+        if len(row["projects"]) < 8:
+            row["projects"].append({"id": r["id"], "title": r["title"], "kind": kind})
+    out = sorted(people.values(), key=lambda p: (-(p["draft"] + p["none"]), p["name"]))
+    return {"total": sum(p["draft"] + p["none"] for p in out), "people": out}
 
 
 def _leave_impact(conn: sqlite3.Connection, names: list[str], skill_rows: list, stack: list) -> dict[str, Any]:

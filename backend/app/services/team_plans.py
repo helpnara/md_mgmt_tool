@@ -132,15 +132,35 @@ def _read_goals(name: str, year: str) -> dict[str, Any]:
     return {"goals": goals, "updated_at": str(meta.get("updated_at") or ""), "by": str(meta.get("by") or "")}
 
 
+def _activities_of(name: str) -> list[dict[str, Any]]:
+    """그 사람의 지난 개인 역량 강화 활동(예정 빼고) — 관련 역량 · 배운 보유 기술(310 C · E)."""
+    from ..db import connect
+
+    conn = connect()
+    try:
+        rows = conn.execute("SELECT date, title, kind, skills, tools FROM activity WHERE person = ? AND date <= ? ORDER BY date DESC",
+                            (name, clock.today().isoformat())).fetchall()
+    finally:
+        conn.close()
+    return [{"date": r["date"], "title": r["title"], "kind": r["kind"],
+             "skills": [x.strip() for x in (r["skills"] or "").split(",") if x.strip()],
+             "tools": [x.strip() for x in (r["tools"] or "").split(",") if x.strip()]} for r in rows]
+
+
 def growth(name: str, year: str | None = None) -> dict[str, Any]:
     """그 사람 그 해의 목표 + 저절로 보이는 진행(그 해 경험 · 확정). 지난해 목표도 함께(접어 보임)."""
     year = year or str(clock.today().year)
     stored = _read_goals(name, year)
     goals = []
+    acts = _activities_of(name) if stored["goals"] else []
     for goal in stored["goals"]:
         hits = [h for h in skill_hits(name, "역량", goal["skill"]) if _in_year(h, year)]
+        # 310 E — 그 해 그 역량 교육을 다녀옴(관련 역량이 같은 활동). 경험이 아니므로 "시작함" 으로 치지 않는다
+        want = skill_rules.key(goal["skill"])
+        trained = [{"date": a["date"], "title": a["title"]} for a in acts
+                   if a["date"][:4] == year and any(skill_rules.key(x) == want for x in a["skills"])]
         goals.append({**goal, "experiences": len(hits), "confirmed": sum(1 for h in hits if h["status"] == "확정"),
-                      "started": bool(hits), "evidence": hits[:5]})
+                      "started": bool(hits), "evidence": hits[:5], "trained": trained[:3]})
     last = str(int(year) - 1)
     prev = _read_goals(name, last)["goals"]
     return {"person": name, "year": year, "goals": goals, "updated_at": stored["updated_at"], "by": stored["by"],
@@ -448,7 +468,18 @@ def person_shape(name: str, period: str = "3y") -> dict[str, Any]:
             seen_axes.add(skill["axis"])
         for axis in seen_axes:
             axes[axis]["experiences"] += 1
-    rows = [{"axis": a["axis"], "experiences": a["experiences"], "skills": len(a["skills"]), "names": sorted(a["skills"])} for a in axes.values()]
+    # 310 C — 배운 것(개인 역량 강화 활동의 관련 역량) — 경험 수 · 가짓수에는 넣지 않고 옆에 옅게
+    index = skill_rules.index(skill_dict)
+    learned: dict[str, dict[str, str]] = {axis: {} for axis in skill_rules.AXES}
+    for act in _activities_of(name):
+        if period == "3y" and act["date"][:4] < low:
+            continue
+        for raw in act["skills"]:
+            axis, label = index.get(skill_rules.key(raw), ("", ""))
+            if axis in learned and label not in axes[axis]["skills"] and label not in learned[axis]:
+                learned[axis][label] = act["date"]
+    rows = [{"axis": a["axis"], "experiences": a["experiences"], "skills": len(a["skills"]), "names": sorted(a["skills"]),
+             "learned": sorted(learned[a["axis"]])} for a in axes.values()]
     return {"person": name, "period": period, "axes": rows, "total_skills": sum(r["skills"] for r in rows),
             "spread": sum(1 for r in rows if r["skills"])}
 

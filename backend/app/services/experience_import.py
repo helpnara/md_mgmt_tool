@@ -127,6 +127,8 @@ def record_text(item: dict[str, Any], index: int) -> str:
         lines.append(f"- 맡은 부분: {item['part']}")
     if item.get("skills"):
         lines.append(f"- 보유 기술(도구): {', '.join(item['skills'])}")
+    if item.get("need_skills"):   # 310 A — 팀장이 적은 과제 필요 역량. 태그는 기록에 근거가 있는 것만
+        lines.append(f"- 과제 필요 역량(팀장이 적은 것 — 본인이 실제로 쓴 것만 역량 태그로): {', '.join(item['need_skills'])}")
     if item.get("milestones"):
         lines.append("- 중간 성과:")
         lines += [f"  - {m['date']} {m['text']}" for m in item["milestones"]]

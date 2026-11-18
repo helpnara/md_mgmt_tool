@@ -3535,3 +3535,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .need-axis { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; gap: 8px; margin-top: 4px; }
 .need-axis .tag-suggest { margin-top: 0; }
 .need-axis-name { font-size: var(--fs-xs); font-weight: 600; color: var(--muted-strong); }
+
+/* 310 — 역량 입력 경로 잇기 */
+.ts-unconverted { margin: 10px 0 0; font-size: var(--fs-sm); color: var(--warning-700); }
+.ts-unconverted a { color: var(--accent-strong); }
+.unconverted-note { margin: 8px 0 0; color: var(--warning-700); }
+.act-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; }
+.act-chip { font-size: var(--fs-xs); padding: 1px 8px; border-radius: 999px; border: 1px dashed var(--border); color: var(--muted-strong); background: var(--surface); }
+.act-chip.tool { border-style: solid; background: var(--neutral-50); }
+.shape-learned { grid-column: 2 / -1; font-size: var(--fs-xs); color: var(--muted-strong); margin-top: -2px; }
+.growth-trained { background: var(--neutral-50); color: var(--muted-strong); }

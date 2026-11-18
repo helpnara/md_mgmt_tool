@@ -32,6 +32,8 @@ class ActivityIn(BaseModel):
     tags: list[str] | None = None
     # 관련 역량 (TODO 292 E) — 교육 수요 · 효과
     skills: list[str] | str | None = None
+    # 배운 보유 기술 (TODO 310 D)
+    tools: list[str] | str | None = None
     body: str | None = None
 
     def changes(self) -> dict:

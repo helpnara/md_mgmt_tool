@@ -243,6 +243,8 @@ CREATE TABLE IF NOT EXISTS activity (
   plan_checked TEXT,
   -- 관련 역량 (TODO 292 E) — 역량 사전의 이름, 쉼표로. 교육 수요 · 효과(교육 뒤 그 역량 경험이 생겼나)에 쓴다
   skills TEXT,
+  -- 배운 보유 기술 (TODO 310 D) — 보유 기술 사전 이름, 쉼표로. 기술 스택에는 세지 않는다(표시만)
+  tools TEXT,
   file_mtime REAL
 );
 

@@ -514,6 +514,15 @@ def draft_fields(conn: sqlite3.Connection, person: str, project_id: str) -> dict
     if quants:
         questions.append("과제 효과 금액 중 본인이 기여한 몫은 얼마인가요?")
     role = " · ".join(part for part in (item["role"], item["part"]) if part)
+    # 310 A — 과제 필요 역량을 역량 태그 후보로(초안은 세지 않는다 — 구조화 · 확정할 때 사람이 남길 것만 남긴다)
+    skill_index = skill_rules.index(settings_service.skill_dictionary())
+    need = []
+    for raw in item.get("need_skills") or []:
+        axis, name = skill_index.get(skill_rules.key(raw), ("", ""))
+        if name and all(n["name"] != name for n in need):
+            need.append({"axis": axis, "name": name})
+    if need:
+        questions.append(f"과제 필요 역량({', '.join(n['name'] for n in need)}) 중 본인이 실제로 쓴 것만 역량 태그에 남겨 주세요.")
     return {
         "person": person, "title": item["title"], "project": project_id,
         # 끝 — 담당이 끝났거나 과제가 끝났으면 그날(지금 맡고 있어도 끝난 과제면 끝이 있다), 아니면 진행 중
@@ -523,6 +532,7 @@ def draft_fields(conn: sqlite3.Connection, person: str, project_id: str) -> dict
         "result_qual": "\n".join(results), "open_questions": questions, "quants": quants,
         # 261 — 기술 · 도구는 역량 태그가 아니라 도구 칸으로
         "tools": list(item["skills"]),
+        "skills": need,
         "materials": [f"entry:{entry['id']} {entry['date']} {entry['title']}" for entry in item["star_entries"]],
         "source": "담당",
     }

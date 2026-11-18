@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import TagSuggestions from "./TagSuggestions";
+import NeedSkillPicker from "./NeedSkillPicker";
 import { api } from "../api";
-import type { Activity, Meta } from "../types";
+import type { Activity, Meta, SkillEntry } from "../types";
 import { splitPeople } from "../people";
 import { useFormUnsaved } from "../unsaved";
 import { confirmDiscard, dateOrderProblem, isPlainEnter, todayIso } from "../util";
@@ -51,14 +52,18 @@ export default function ActivityForm({
   const [link, setLink] = useState(activity?.link ?? "");
   // 관련 역량 (TODO 292 E) — 교육 수요 · 효과(교육 뒤 그 역량 경험이 생겼나)
   const [skills, setSkills] = useState((activity?.skills ?? []).join(", "));
-  const [skillNames, setSkillNames] = useState<string[]>([]);
+  const [skillDict, setSkillDict] = useState<SkillEntry[]>([]);
+  // 310 D — 배운 보유 기술(도구)
+  const [tools, setTools] = useState((activity?.tools ?? []).join(", "));
+  const [toolNames, setToolNames] = useState<string[]>([]);
   useEffect(() => {
-    api.experienceSkills().then((d) => setSkillNames(d.dictionary.map((e) => e.name))).catch(() => setSkillNames([]));
+    api.experienceSkills().then((d) => setSkillDict(d.dictionary)).catch(() => setSkillDict([]));
+    api.experienceTools().then((d) => setToolNames(d.dictionary.map((e) => e.name))).catch(() => setToolNames([]));
   }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 쓰다가 떠나면 묻는다 (TODO 162)
-  const snapshot = { person, date, endDate, kind, title, host, place, hours, cost, takeaway, link, skills };
+  const snapshot = { person, date, endDate, kind, title, host, place, hours, cost, takeaway, link, skills, tools };
   useFormUnsaved(`activity-form:${activity?.id ?? "new"}`, snapshot, busy);
   const [initialSnapshot] = useState(() => JSON.stringify(snapshot));
   const dirty = JSON.stringify(snapshot) !== initialSnapshot;
@@ -149,6 +154,7 @@ export default function ActivityForm({
       takeaway: takeaway.trim() || null,
       link: link.trim() || null,
       skills: skills.split(",").map((name) => name.trim()).filter(Boolean),
+      tools: tools.split(",").map((name) => name.trim()).filter(Boolean),
     } as unknown as Partial<Activity>;
     try {
       if (activity) {
@@ -344,10 +350,19 @@ export default function ActivityForm({
         </label>
       </div>
 
+      {/* 309 과 같은 고르기(추천 · 적는 중 · 사전 전체). 관련 역량은 교육 효과 · 육성 목표 · 사람별 "배운 것" 에 쓰인다(310) */}
+      <div className="stack-label need-field">
+        <label>
+          관련 역량 <span className="muted">(선택 — 이 활동으로 키우려는 역량, 역량 사전에서)</span>
+          <input value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="이름을 적거나 아래에서 고르세요" aria-label="관련 역량" />
+        </label>
+        <NeedSkillPicker value={skills} onChange={setSkills} dictionary={skillDict} title={title} />
+      </div>
+
       <label className="stack-label">
-        관련 역량 <span className="muted">(선택 — 이 활동으로 키우려는 역량, 역량 사전에서)</span>
-        <input value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="예: 데이터 분석" aria-label="관련 역량" />
-        <TagSuggestions known={skillNames} value={skills} onPick={setSkills} />
+        배운 보유 기술(도구) <span className="muted">(선택 — 예: PyTorch. 사람별 이력에 보이고, 기술 스택에는 실제로 쓴 뒤에 잡힙니다)</span>
+        <input value={tools} onChange={(event) => setTools(event.target.value)} placeholder="쉼표로 구분" aria-label="배운 보유 기술" />
+        <TagSuggestions known={toolNames} value={tools} onPick={setTools} label="보유 기술 사전" limit={40} />
       </label>
 
       <label className="stack-label">

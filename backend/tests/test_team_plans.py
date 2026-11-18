@@ -161,3 +161,40 @@ def test_need_suggest_text_experience_and_same_tag(team):  # noqa: F811
     fresh = owner.get("/api/team-skills/need-suggest", params={"title": "예측 모델링 시작", "tags": "수요"}).json()["suggest"]
     assert {"예측 모델링", "제조 공정 이해"} <= {s["name"] for s in fresh}
     assert member.get("/api/team-skills/need-suggest", params={"title": "x"}).status_code == 403
+
+
+def test_310_inputs_flow_into_person_competence(team):  # noqa: F811
+    """310 — A 필요 역량 → 경험 정리 기록 · 초안 후보, B 회고만 있는 과제, C 배운 역량, D 배운 보유 기술, E 목표 ↔ 교육."""
+    owner, pid = team["owner"], team["shared"]
+    year = str(clock.today().year)
+    owner.patch(f"/api/projects/{pid}", json={"need_skills": ["예측 모델링", "요구사항 관리"]})
+    owner.put(f"/api/projects/{pid}/contributions/가팀원", json={"role": "주관", "did": "수요 예측 모델", "result": "오차 12% → 7%"})
+    owner.put(f"/api/projects/{pid}/contributions/나팀원", json={"role": "참여", "did": "데이터 정리"})
+    # B — 둘 다 회고는 있는데 경험이 없다
+    unconv = owner.get("/api/team-skills").json()["unconverted"]
+    assert unconv["total"] == 2 and {p["name"] for p in unconv["people"]} == {"가팀원", "나팀원"}
+    # A — 기록에 필요 역량 줄, 초안에 역량 후보 + 물음
+    text = owner.get("/api/experiences/prompt", params={"person": "가팀원", "projects": pid}).json()["text"]
+    assert "과제 필요 역량" in text and "예측 모델링" in text
+    owner.post("/api/experiences/draft", json={"person": "가팀원", "projects": [pid]})
+    draft = owner.get("/api/experiences", params={"person": "가팀원"}).json()
+    eid = (draft.get("items") or draft.get("experiences"))[0]["id"]
+    got = owner.get(f"/api/experiences/{eid}").json()
+    assert {s["name"] for s in got["skills"]} == {"예측 모델링", "요구사항 관리"}
+    assert any("본인이 실제로 쓴 것만" in q for q in got["open_questions"])
+    unconv = owner.get("/api/team-skills").json()["unconverted"]
+    by = {p["name"]: p for p in unconv["people"]}
+    assert by["가팀원"]["draft"] == 1 and by["나팀원"]["none"] == 1        # 초안은 아직 세지 않는다
+    # D · C — 교육 기록의 배운 보유 기술 · 관련 역량 → 이력 칩 · 역량 모양 "배운 것"
+    owner.post("/api/activities", json={"person": "가팀원", "kind": "education", "title": "PyTorch 실습", "date": f"{year}-02-03",
+                                        "skills": ["예측 모델링"], "tools": ["pytorch"]})
+    acts = owner.get("/api/person-history", params={"name": "가팀원"}).json()["activities"]
+    assert acts[0]["skills"] == ["예측 모델링"] and acts[0]["tools"] == ["PyTorch"]       # 사전 이름으로 맞춤
+    assert all(t["name"] != "PyTorch" for layer in owner.get("/api/team-skills").json()["stack"] for t in layer["tools"])  # 스택엔 안 셈
+    shape = owner.get("/api/growth/shape", params={"person": "가팀원"}).json()
+    tech = {r["axis"]: r for r in shape["axes"]}
+    assert "예측 모델링" in tech["기술"]["learned"] and tech["기술"]["skills"] == 0     # 경험으로는 세지 않는다
+    # E — 그 해 그 역량 교육을 다녀옴
+    owner.put(f"/api/growth/가팀원/{year}", json={"goals": [{"skill": "예측 모델링", "way": "교육"}]})
+    goal = owner.get("/api/growth", params={"person": "가팀원", "year": year}).json()["goals"][0]
+    assert goal["trained"] and goal["trained"][0]["title"] == "PyTorch 실습" and goal["started"] is False

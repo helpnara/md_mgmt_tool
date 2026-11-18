@@ -277,10 +277,13 @@ def build(progress: Callable[[int, int, str], None] | None = None) -> dict[str, 
             ("education", "MES 데이터 구조 교육", -15, 4, ["임채원", "김서연"], ["ERP·MES 연계"]), ("seminar", "품질 혁신 공유회", -8, 2, MEMBERS, []),
             ("education", "공정 시뮬레이션 기초", -420, 8, ["최민재", "정하은"], ["최적화·시뮬레이션"]),
             ("education", "PyTorch 실습", 20, 12, ["박지민", "정하은"], []), ("conference", "AI 학회(예정)", 45, 8, ["이준호", "윤성민"], [])]
+    # 310 D — 배운 보유 기술(도구)
+    act_tools = {"현업 데이터 분석 기초": ["Python", "Power BI"], "생성형 AI 활용 과정": ["ChatGPT"], "PyTorch 실습": ["PyTorch"]}
     for kind, title, offset, hours, names, act_skills in acts:
         for name in names:
             call("POST", "/api/activities", json={"person": name, "kind": kind, "title": title, "date": iso(today + timedelta(days=offset)),
-                                                 "hours": hours or None, "host": "사내" if kind == "education" else "외부", "skills": act_skills})
+                                                 "hours": hours or None, "host": "사내" if kind == "education" else "외부", "skills": act_skills,
+                                                 "tools": act_tools.get(title, [])})
     for k, name in enumerate(["김서연", "박지민", "최민재", "조유나"]):
         call("POST", "/api/meetings", json={"person": name, "date": iso(today - timedelta(days=20 + 15 * k)), "kind": kinds[k % len(kinds)],
                                            "summary": "올해 과제 진행과 내년에 키울 역량을 이야기함", "next_date": iso(today + timedelta(days=40 + 7 * k))})

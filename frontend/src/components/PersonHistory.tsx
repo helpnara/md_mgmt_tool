@@ -320,6 +320,20 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
             )}
           </div>
         )}
+        {/* 310 B — 회고는 있는데 경험(구조화 · 확정)이 없으면 역량 지도 · 역량 모양에 잡히지 않는다 */}
+        {data.unconverted && data.unconverted.draft + data.unconverted.none > 0 && (isManager() || (isMember() && getMe().name === data.name)) && (
+          <p className="hint unconverted-note" data-testid="person-unconverted">
+            회고를 적은 과제 중 <b>{data.unconverted.draft + data.unconverted.none}개</b>가 아직 경험으로 정리되지 않아
+            역량 지도 · 역량 모양에 잡히지 않습니다
+            {data.unconverted.draft > 0 && data.unconverted.none > 0
+              ? ` (초안만 ${data.unconverted.draft} · 경험 없음 ${data.unconverted.none})`
+              : data.unconverted.draft > 0 ? " (초안만 있음 — 구조화하면 잡힙니다)" : " (경험 없음 — 초안부터)"}
+            .{" "}
+            <button type="button" className="linkish" onClick={() => document.querySelector("[data-testid=experience-card]")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+              경험 카드로 ↓
+            </button>
+          </p>
+        )}
         <Explain
           id="person-history"
           lead={<>맡았던 과제(지금 · 예전)를 <b>맡기 시작한 해</b>별로 모았습니다. 과제를 골라 <b>[글로 복사]</b> · <b>[표로 복사]</b>로 업무 이력 · 성과를 정리할 수 있습니다.</>}
@@ -523,6 +537,13 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                   {item.host ? ` · ${item.host}` : ""}
                   {item.hours ? ` · ${item.hours}시간` : ""}
                 </span>
+                {/* 310 C · D — 관련 역량 · 배운 보유 기술(배운 것 — 역량 지도 · 스택에는 경험으로 쓴 뒤에 잡힌다) */}
+                {((item.skills?.length ?? 0) > 0 || (item.tools?.length ?? 0) > 0) && (
+                  <span className="act-chips" data-testid="activity-chips">
+                    {(item.skills ?? []).map((name) => <span key={`s-${name}`} className="act-chip" title="관련 역량(배운 것)">{name}</span>)}
+                    {(item.tools ?? []).map((name) => <span key={`t-${name}`} className="act-chip tool" title="배운 보유 기술(도구)">{name}</span>)}
+                  </span>
+                )}
                 {item.takeaway && <span className="person-takeaway">{item.takeaway}</span>}
               </li>
             ))}

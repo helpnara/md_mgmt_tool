@@ -14,6 +14,9 @@ interface Props {
   known: string[];
   value: string;
   onPick: (next: string) => void;
+  /** 칩 줄 앞 이름 · 보일 수 (310 — 보유 기술 사전은 더 많이) */
+  label?: string;
+  limit?: number;
 }
 
 function parse(value: string): string[] {
@@ -25,7 +28,7 @@ function parse(value: string): string[] {
 
 const keyOf = (tag: string) => normalizeTag(tag).toLowerCase().replace(/\s/g, "");
 
-export default function TagSuggestions({ known, value, onPick }: Props) {
+export default function TagSuggestions({ known, value, onPick, label = "쓰던 태그", limit = 12 }: Props) {
   const chosen = parse(value);
   const chosenKeys = new Set(chosen.map(keyOf));
   // 적은 태그 중 이미 쓰는 표기와 모양만 다른 것 — 서버가 그 표기로 합친다
@@ -33,7 +36,7 @@ export default function TagSuggestions({ known, value, onPick }: Props) {
     .map((tag) => ({ tag, as: sameTagAs(tag, known) ?? (normalizeTag(tag) !== tag ? normalizeTag(tag) : null) }))
     .filter((item): item is { tag: string; as: string } => Boolean(item.as) && item.as !== item.tag);
   // 이미 고른 것(모양만 다른 것 포함)은 빼고, 너무 길어지지 않게 앞에서부터 보여 준다.
-  const rest = known.filter((tag) => !chosenKeys.has(keyOf(tag))).slice(0, 12);
+  const rest = known.filter((tag) => !chosenKeys.has(keyOf(tag))).slice(0, limit);
   if (rest.length === 0 && merges.length === 0) return null;
 
   return (
@@ -45,7 +48,7 @@ export default function TagSuggestions({ known, value, onPick }: Props) {
       )}
       {rest.length > 0 && (
         <div className="tag-suggest">
-          <span className="muted">쓰던 태그</span>
+          <span className="muted">{label}</span>
           {rest.map((tag) => (
             <button key={tag} type="button" className="tag-pick" onClick={() => onPick([...chosen, tag].join(", "))}>
               {tag}

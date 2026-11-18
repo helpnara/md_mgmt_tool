@@ -7951,6 +7951,36 @@ async function main() {
     await page.locator("form").getByRole("button", { name: "취소" }).click();
   });
 
+  await check("역량 입력 잇기 (310) — 활동의 관련 역량 · 배운 보유 기술 칩 · 역량 모양 '배운 것' · 목표 '교육 다녀옴' · 안 잡힌 회고 안내", async () => {
+    const who = "권경락";
+    const made = await (await fetch(`${BASE}/api/activities`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ person: who, kind: "education", title: "제약 우회 실습 310", date: "2026-10-01", skills: ["제약 우회"], tools: ["pytorch"] }) })).json();
+    const madeId = (made.ids ?? made.items?.map((x) => x.id) ?? [made.id])[0];
+    await fetch(`${BASE}/api/growth/${encodeURIComponent(who)}/2026`, { method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ goals: [{ skill: "제약 우회", way: "교육" }] }) });
+    try {
+      await go(`#/person/${encodeURIComponent(who)}`);
+      const chips = page.locator("[data-testid=activity-chips]", { hasText: "PyTorch" });
+      await chips.first().waitFor({ timeout: 8000 });
+      expect((await chips.first().innerText()).includes("제약 우회"), "관련 역량 칩");
+      await page.locator("[data-testid=shape-learned]", { hasText: "제약 우회" }).first().waitFor({ timeout: 8000 });
+      const hist = await (await fetch(`${BASE}/api/person-history?name=${encodeURIComponent(who)}`)).json();
+      const pending = (hist.unconverted?.draft ?? 0) + (hist.unconverted?.none ?? 0);
+      equal(await page.locator("[data-testid=person-unconverted]").count(), pending > 0 ? 1 : 0, "안 잡힌 회고 안내(있을 때만)");
+      await go("#/skills?tab=meetings");
+      await page.locator("[data-testid=growth-trained]").first().waitFor({ timeout: 8000 }).catch(() => {});
+      const team = await (await fetch(`${BASE}/api/team-skills`)).json();
+      await go("#/skills?tab=team");
+      await page.locator("[data-testid=ts-summary]").waitFor({ timeout: 10000 });
+      equal(await page.locator("[data-testid=ts-unconverted]").count(), (team.unconverted?.total ?? 0) > 0 ? 1 : 0, "팀역량의 안 잡힌 회고 줄");
+      const goal = (await (await fetch(`${BASE}/api/growth?person=${encodeURIComponent(who)}&year=2026`)).json()).goals[0];
+      expect(goal.trained?.length === 1 && goal.started === false, `목표의 교육 다녀옴(시작함으로 치지 않음): ${JSON.stringify(goal)}`);
+    } finally {
+      await fetch(`${BASE}/api/growth/${encodeURIComponent(who)}/2026`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ goals: [] }) });
+      if (madeId) await fetch(`${BASE}/api/activities/${madeId}`, { method: "DELETE" });
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

@@ -147,6 +147,15 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence, plans = 
           <div className="ts-kpi"><b className={k.target_gaps ? "warn-text" : ""}>{k.target_gaps}</b><span>목표 모자람</span></div>
           <div className="ts-kpi"><b>{k.experiences}</b><span>세는 경험</span></div>
         </div>
+        {/* 310 B — 회고는 적었는데 경험(구조화 · 확정)으로 정리되지 않아 위 숫자에 빠진 것 */}
+        {interactive && (data.unconverted?.total ?? 0) > 0 && (
+          <p className="ts-unconverted" data-testid="ts-unconverted">
+            <b>아직 안 잡힌 회고 {data.unconverted?.total}건</b> — 회고는 적었지만 경험으로 정리되지 않아 위 숫자에 빠져 있습니다:{" "}
+            {(data.unconverted?.people ?? []).map((p, i) => (
+              <span key={p.name}>{i > 0 && " · "}<a href={personLink(p.name ?? "")}>{show(p.name ?? "")} {p.draft + p.none}</a></span>
+            ))}
+          </p>
+        )}
       </section>
 
       <div className="ts-qgrid">

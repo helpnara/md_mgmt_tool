@@ -29,7 +29,7 @@ def _end(row: sqlite3.Row) -> str | None:
 def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
     rows = conn.execute(
         "SELECT c.*, p.title, p.status, p.start_date, p.due_date, p.completed_at, p.outcome,"
-        " p.effect_expected, p.effect_verified, p.no_effect, p.body"
+        " p.effect_expected, p.effect_verified, p.no_effect, p.body, p.need_skills"
         " FROM project_contribution c JOIN project p ON p.id = c.project_id WHERE c.name = ?"
         " ORDER BY COALESCE(c.from_date, p.start_date, substr(p.id, 1, 4) || '-01-01') DESC, p.id DESC",
         (name,),
@@ -44,6 +44,8 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             "role": row["role"] or "", "part": row["part"] or "",
             "did": row["did"] or "", "result": row["result"] or "",
             "skills": rules.split_list(row["skills"]),
+            # 310 A — 과제 필요 역량(팀장이 적은 것) — 경험 정리 기록 · 초안의 역량 후보로
+            "need_skills": rules.split_list(row["need_skills"]),
             "praise": row["praise"] or "", "praise_at": row["praise_at"],
             "milestones": _milestones_of(row["milestones"]),
             "star_entries": contributions.star_entries(conn, row["project_id"]),
@@ -75,9 +77,11 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
     today = clock.today().isoformat()
     activities = [
         {"id": r["id"], "date": r["date"], "end_date": r["end_date"], "kind": r["kind"], "title": r["title"],
-         "host": r["host"], "hours": r["hours"], "takeaway": r["takeaway"] or "", "planned": r["date"] > today}
+         "host": r["host"], "hours": r["hours"], "takeaway": r["takeaway"] or "", "planned": r["date"] > today,
+         # 310 C · D — 관련 역량 · 배운 보유 기술(이력 화면에 칩으로)
+         "skills": rules.split_list(r["skills"]), "tools": rules.split_list(r["tools"])}
         for r in conn.execute(
-            "SELECT id, date, end_date, kind, title, host, hours, takeaway FROM activity WHERE person = ?"
+            "SELECT id, date, end_date, kind, title, host, hours, takeaway, skills, tools FROM activity WHERE person = ?"
             " ORDER BY date DESC, id DESC", (name,))
     ]
     finished = [item for item in projects if item["status"] == "done"]
@@ -90,8 +94,11 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
                   for key, value in sorted(skill_counts.items(), key=lambda pair: (-pair[1], pair[0]))[:12]]
     roster = {person["name"]: person for person in settings_service.people()}
     person = roster.get(name)
+    from .team_skills import unconverted
     return {
         "name": name,
+        # 310 B — 회고는 있는데 구조화 · 확정 경험이 없어 역량 지도에 안 잡히는 과제
+        "unconverted": (unconverted(conn, [name])["people"] or [{"draft": 0, "none": 0, "projects": []}])[0],
         "in_roster": person is not None,
         "leader": settings_service.leader_name() == name,
         "left_on": (person or {}).get("left_on") or None,
