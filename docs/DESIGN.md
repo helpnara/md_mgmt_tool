@@ -548,7 +548,7 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 `body` · `author` · `rel_path` · `file_mtime`. 검색 색인(`search_fts`)에는 넣지 않는다 — 팀장과 그 본인만 보는 기록이라서. 읽기 전용 공유에서는 빈 목록, 등록한 팀원에게는 본인 것만(5.24 · 5.30).
 
 > 표는 모두 열넷이다 — `project` · `intake` · `entry` · `report` · `report_entry` · `attachment` · `project_predecessor` · `project_owner` · `project_partner` · `tag` · `project_tag` ·
-> `entry_tag` · `activity` · `meeting`, 그리고 FTS 가상 표 `search_fts`(`db.py` 가 만든다). 정본은 `backend/app/vault/schema.sql` 이고 판 번호는 `db.py` 의 `SCHEMA_VERSION`(16) 이다.
+> `entry_tag` · `activity` · `meeting`, 그리고 FTS 가상 표 `search_fts`(`db.py` 가 만든다). 정본은 `backend/app/vault/schema.sql` 이고 판 번호는 `db.py` 의 `SCHEMA_VERSION`(2026-11-18 — 25: 교육 기록의 배운 보유 기술) 이다.
 
 ### 4.8 설정 파일 (`vault/settings.json`)
 
@@ -603,6 +603,8 @@ cost: 350000              # 옵션 — 모르면 비운다
 takeaway: 항온 유지 구간을 30분 늘려 볼 것
 link: https://…
 tags: [열처리, 교육]
+skills: [제조 공정 이해]   # 관련 역량 — 역량 사전 이름 (292 E). 교육 효과 · 육성 목표 "교육 다녀옴" · 역량 모양 "배운 것"(310)
+tools: [Minitab]          # 배운 보유 기술(도구) — 보유 기술 사전 이름 (310 D). 기술 스택에는 세지 않는다
 author: 권경락            # 누가 기록했나
 created_at: 2026-05-15T09:12:00+09:00
 updated_at: 2026-05-15T09:12:00+09:00
@@ -1054,7 +1056,7 @@ score = elapsed + unreported_entries × 0.5
 
 ## 6. API 설계
 
-> 2026-11-10 기준 실제 구현 목록이다(끝점 **157개**(2026-11-10 다시 셈 — 그 뒤 246 되살리기 · 257 경험 여섯 · 258 응답 되받기 다섯 · 260 확정 · 사전 여섯 · 262 내보내기 · 정리함 아홉 · 266 백업 작업 여섯 · 268 되살리기 작업 넷 · 진행 하나 · 273 보유 기술 둘 등이 더해졌다 — 2026-11-11 157개) = GET 79 · POST 54 · DELETE 10 · PATCH 8 · PUT 6 — 화면으로 되돌리는 `/{full_path}` 는 빼고 센다).
+> 2026-11-18 기준 실제 구현 목록이다(끝점 **187개**(메서드 × 주소, 2026-11-18 다시 셈 — 화면으로 되돌리는 `/{full_path}` · `/assets` 는 빼고 센다). 2026-11-11 의 157개 뒤로 더한 것과 그 전에 표에서 빠져 있던 것은 이 절 끝 **"2026-11-11 뒤에 더한 끝점"** 표에 모았다. 그 앞 기록: 2026-11-10 다시 셈 — 246 되살리기 · 257 경험 여섯 · 258 응답 되받기 다섯 · 260 확정 · 사전 여섯 · 262 내보내기 · 정리함 아홉 · 266 백업 작업 여섯 · 268 되살리기 작업 넷 · 진행 하나 · 273 보유 기술 둘 → 157개).
 > 초안 단계에서 적어 두었다가 만들지 않은 것(`/api/tags`, `/api/groups`,
 > 보고 단독 내보내기, 첨부 원본 단독 다운로드)은 아래에서 뺐다 —
 > 태그·그룹은 `/api/meta` 하나로 합쳤고, 첨부 원본은 정적 서빙(`/files/...`)이 맡는다.
@@ -1208,6 +1210,37 @@ score = elapsed + unreported_entries × 0.5
 | GET/PUT/DELETE | `/api/drafts/{key}` | 쓰다 만 글 하나 — 열쇠 `entry:new-<과제>` · `entry:<번호>` · `overview:<과제>` · `report:<번호>` · `intake:<접수>`. 없으면 `content: null` |
 | GET/POST | `/api/maintenance/link-fix` | 쌓인 문서의 깨진 첨부 링크 — 세기(아무것도 바꾸지 않는다) / 한 번에 고치기 (116, 5.16) |
 
+**2026-11-11 뒤에 더한 끝점** (2026-11-18 다시 셀 때 위 표에 없던 것 — 기능 순)
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET | `/api/backup/estimate` | 전체 백업 예상 크기 · 남은 공간 (266 · 301) |
+| POST · GET | `/api/backup/jobs` · `/api/backup/jobs/current` · `/api/backup/jobs/{id}/file` | 전체 백업을 작업으로 — 시작 · 지금 진행 · 다 된 zip 받기 (266) |
+| POST | `/api/backup/jobs/{id}/cancel` | 전체 백업 멈추기 (266) |
+| POST · GET | `/api/backup/restore/jobs` · `/api/backup/restore/jobs/current` | 되살리기를 작업으로 — 단계별 진행 (268) |
+| POST | `/api/backup/restore/jobs/{id}/cancel` | 되살리기 멈추기(바꾸기 전 단계까지만) (268) |
+| GET | `/api/running` | 지금 도는 오래 걸리는 일(백업 · 되살리기 · 색인) — 다른 창의 덮개 (268) |
+| POST | `/api/settings/classifications/rename` · GET `…/usage` | 과제 분류 값 이름 바꾸기(쓰는 과제까지) / 값마다 쓰는 과제 수 (276) |
+| POST | `/api/experiences/skills/rename` | 역량 사전의 이름 바꾸기 — 경험 태그도 함께, 옛 이름은 같은 말로 (274) |
+| GET · POST | `/api/experiences/tools` · `/api/experiences/tools/rematch` | 보유 기술(도구) 사전 + 쓰는 수 · 사전에 없는 이름 / 사전에 다시 맞추기 (273 · 274) |
+| GET | `/api/experiences/responses/{사람}/{이름}/summary` | 응답 원문의 실험 요약(값 없이) (258) |
+| POST | `/api/intakes/{id}/logs` | 접수 검토 기록 쓰기(PATCH · DELETE 는 `…/logs/{name}`) |
+| GET · PUT | `/api/yearcards` · `/api/yearcards/cards` · `/api/yearcards/card` | 연말 회고 카드 — 대상 · 해 목록 / 여러 장(인쇄) / 한 장 보기 · 편지 · 칩 저장 (285 ~ 288) |
+| GET | `/api/team-skills` | 팀 역량 — 역량 지도 · 기술 스택 · 혼자만 · 목표 · 변화 · 질문 여섯 · 떠나면 · **안 잡힌 회고**(310 B) (284 · 290 · 291 · 292) |
+| PUT | `/api/team-skills/targets` | 팀 목표 역량 · 보유 기술(사람 수) (284) |
+| GET · POST | `/api/team-skills/snapshots` · `/api/team-skills/snapshots/{해}` | 해마다 남기는 팀 역량 기록 — 목록 · 남기기 / 보기 · 지금과 비교 (292 G) |
+| GET · POST · PATCH · DELETE | `/api/team-skills/succession` · `…/succession/{S-nnn}` | 승계 · 짝 계획 — 목록(기한 지남 · 저절로 "됨") / 만들기 / 고치기 · 됨 · 그만둠 / 지우기 (292 B) |
+| GET | `/api/team-skills/reminders` | 홈 알림 — 기한 지난 계획 · 12월 기록 남기기 (292) |
+| GET | `/api/team-skills/candidates` | `?skills=&exclude=` 필요 역량마다 경험 있는 사람 · 마지막 해 · 맡은 진행 과제 · 키우는 중 · 배우는 중 (292 D) |
+| GET | `/api/team-skills/education` | 교육 수요(목표 모자람 · 교육 경로 목표) · 효과(교육 뒤 1년 안 그 역량 경험) (292 E) |
+| GET | `/api/team-skills/need-suggest` | `?title=&tags=&project=&intake=` 필요 역량 추천 — 글에 나옴 · 이 과제의 경험 · 같은 태그 과제 (309) |
+| GET · PUT | `/api/growth` · `/api/growth/{사람}/{해}` | 개인 육성 목표(팀장 · 본인) — 진행은 경험으로 저절로, **교육 다녀옴**(310 E) (292 C) |
+| GET | `/api/growth/shape` | `?person=&period=` 한 사람의 역량 모양(축 넷 — 경험 수 · 가짓수 · **배운 것**(310 C)) (292 I) |
+| GET | `/api/edits/diff` | 팀원이 고친 곳 — 첫 수정 직전 보관본 ↔ 지금, 줄마다 더함 · 고침 · 지움 (305) |
+| GET · POST | `/api/mode` | 체험 자료 · 내 자료 — 지금 모드 / 바꾸기 · 처음 자료로 되돌리기 (295 · 306) |
+| GET · POST | `/api/update` · `/api/update/check` · `/api/update/job` | 업데이트 폴더의 새 판 목록 · 정리 / 적용 전 확인(백업 · 남은 공간) / 적용 진행 (298 · 300 ~ 302) |
+| POST | `/api/update/rollback` | 이전 판으로 되돌리기 (298) |
+
 ---
 
 ## 7. 기술 스택 및 저장소 구조
@@ -1226,7 +1259,7 @@ score = elapsed + unreported_entries × 0.5
 | 배포 | 오프라인 ZIP — `tools/make_dist.py` 가 `vendor/` wheel 과 빌드된 `frontend/dist` 를 담는다. 받는 쪽은 `setup.bat` → `run.bat` | 사내 PC 는 인터넷이 막혀 있고 Node.js 가 없다(M5.5). 초안의 `uv` · Docker 는 쓰지 않았다 |
 
 > **구현 방식 — FastAPI(JSON API) + 별도 React 화면** (2026-10-02 사용자 질문으로 정리). 파이썬 UI 프레임워크(NiceGUI · Gradio · Reflex)로
-> 전부 쓰는 길, FastAPI + 서버 렌더링(Jinja + HTMX) 길과 견주면 셋째 길이다. 서버는 끝점 111개가 JSON 만 내고, 화면 상태와 주소(`#/…`)는
+> 전부 쓰는 길, FastAPI + 서버 렌더링(Jinja + HTMX) 길과 견주면 셋째 길이다. 서버는 끝점 187개(2026-11-18)가 JSON 만 내고, 화면 상태와 주소(`#/…`)는
 > 브라우저가 든다. 빌드한 `frontend/dist` 를 **저장소에 커밋**하고 FastAPI 가 정적 파일로 함께 내보내므로 사용자 PC 에는 파이썬 하나면 된다.
 > 값은 화면을 고칠 때마다 빌드하고 API 와 화면의 타입(`frontend/src/api.ts` · `types.ts`)을 둘 다 맞춰야 한다는 것, 얻는 것은 사내 AI 플랫폼이나
 > 다른 시스템에 붙일 때 JSON API 만 열면 된다는 것(71-(나) · 113 이 이 길을 전제로 미뤄 둔 것)이다.
