@@ -44,6 +44,9 @@ import { confirmSameTitle } from "./ProjectForm";
 import AttachmentList from "./AttachmentList";
 import IntakeForm from "./IntakeForm";
 import TagSuggestions from "./TagSuggestions";
+import { NeedSkillsLine } from "./TeamPlans";
+import { isReadonly } from "../readonly";
+import { isMember } from "../me";
 import PreviewToggle, { usePreview } from "./PreviewToggle";
 import StatusBadge from "./StatusBadge";
 import VersionPanel from "./VersionPanel";
@@ -179,6 +182,8 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
                 </span>
               ))}
             </div>
+            {/* 292 D — 필요 역량 · [후보 보기] */}
+            <NeedSkillsLine skills={intake.need_skills ?? []} owners={[]} canSee={!isReadonly() && !isMember()} />
             <div className="meta-line muted">
               <span>
                 과제리더 {intake.leader ?? "—"}

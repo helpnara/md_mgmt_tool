@@ -7,7 +7,7 @@ import type { Meta, TeamSkillTarget, TeamSkillTool, TeamSkills as Data } from ".
 import { experienceLink, personLink, projectLink } from "../nav";
 import { axisLabel } from "../util";
 import CopyTableButton from "./CopyTableButton";
-import { PlanTag, SnapshotBar, SnapshotCompareLine, SuccessionCard, useSuccession } from "./TeamPlans";
+import { EducationCard, PlanTag, SnapshotBar, SnapshotCompareLine, SuccessionCard, useSuccession } from "./TeamPlans";
 import type { PlanSeed } from "./TeamPlans";
 import type { SuccessionPlan } from "../types";
 
@@ -92,7 +92,10 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
         <p className="ts-notice" data-testid="ts-notice">팀장이 팀의 득과 실을 판단하는 자료입니다 — 평가 · 다른 사람과의 비교에 쓰지 않습니다. 숫자는 경험 수이고, 점(●)은 수준이 아니라 <b>근거가 얼마나 단단한가</b>입니다(●●● 확정 + 정량 결과 · ●● 확정 · ● 구조화만).</p>
       </div>
       {data && <Body data={data} show={show} interactive meta={meta} onTargets={load} plans={succession?.plans ?? []} onPlan={setSeed}
-        afterQuestions={<SuccessionCard data={succession} people={names} leader={data.people.find((p) => p.leader)?.name} show={show} seed={seed} onSeedUsed={() => setSeed(null)} onChanged={loadSuccession} />} />}
+        afterQuestions={<>
+          <SuccessionCard data={succession} people={names} leader={data.people.find((p) => p.leader)?.name} show={show} seed={seed} onSeedUsed={() => setSeed(null)} onChanged={loadSuccession} />
+          <EducationCard show={show} />
+        </>} />}
       {printing && data && createPortal(
         <div className="ts-print-root" aria-hidden>
           <h1 className="ts-print-title">팀 역량 · 기술 스택 — {data.change.last} → {data.change.this} · 범위 {periodLabel}</h1>

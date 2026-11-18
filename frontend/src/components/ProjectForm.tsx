@@ -82,6 +82,11 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
   // 선행 과제 — 여럿일 수 있다(앞 단계 과제 둘을 이어받는 과제). 칩으로 넣고 뺀다 (TODO 172)
   const [predecessors, setPredecessors] = useState<string[]>(initial?.predecessors ?? []);
   const [predecessorInput, setPredecessorInput] = useState("");
+  // 292 D — 필요 역량 칸의 제안(역량 사전 이름)
+  const [skillNames, setSkillNames] = useState<string[]>([]);
+  useEffect(() => {
+    api.experienceSkills().then((d) => setSkillNames(d.dictionary.map((e) => e.name))).catch(() => setSkillNames([]));
+  }, []);
   const addPredecessor = (raw: string) => {
     const id = raw.trim().split(/\s+/)[0];
     if (!id) return;
@@ -101,6 +106,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
     effect_verified: initial?.effect_verified?.toString() ?? "",
     outcome: initial?.outcome ?? "",
     tags: (initial?.tags ?? []).join(", "),
+    need_skills: (initial?.need_skills ?? []).join(", "),
   });
   /**
    * 유관부서 (TODO 92). 한 줄이 팀 하나이고, 담당자는 그 줄 안에서 쉼표로 적는다.
@@ -289,6 +295,8 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
           .split(",")
           .map((tag) => tag.trim())
           .filter(Boolean),
+        // 필요 역량 (TODO 292 D) — 서버가 사전 이름으로 맞춘다
+        need_skills: form.need_skills.split(",").map((name) => name.trim()).filter(Boolean),
       });
     } catch (err) {
       setError((err as Error).message);
@@ -602,6 +610,17 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
             value={form.tags}
             onPick={(next) => update("tags", next)}
           />
+        </label>
+        {/* 292 D — 필요 역량: 과제 상세의 [후보 보기]가 그 역량 경험이 있는 사람을 찾는다 */}
+        <label>
+          필요 역량 <span className="muted">(선택, 쉼표 구분 — 역량 사전)</span>
+          <input
+            value={form.need_skills}
+            onChange={(event) => update("need_skills", event.target.value)}
+            placeholder="예: 데이터 분석, 공정 개선"
+            aria-label="필요 역량"
+          />
+          <TagSuggestions known={skillNames} value={form.need_skills} onPick={(next) => update("need_skills", next)} />
         </label>
       </div>
       {/* 번호의 연도는 등록한 날이 아니라 **착수년도**다 (TODO 95).

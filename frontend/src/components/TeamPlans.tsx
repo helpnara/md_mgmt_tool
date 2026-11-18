@@ -3,7 +3,7 @@ import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 import { attempt, notifyError } from "../notify";
 import { experienceLink } from "../nav";
-import type { Growth, GrowthGoal, Snapshot, SnapshotCompare, SnapshotItem, Succession, SuccessionPlan } from "../types";
+import type { Candidates, EducationView, PersonShape, Growth, GrowthGoal, Snapshot, SnapshotCompare, SnapshotItem, Succession, SuccessionPlan } from "../types";
 
 /**
  * 292 2차 — 팀장이 "그래서 누구를 · 언제까지 · 어떻게" 를 적고, 나중에 됐는지 보는 칸.
@@ -287,6 +287,137 @@ export function GrowthCard({ person, readonly }: { person: string; readonly: boo
           {showLast && <ul className="growth-list muted">{data.last_year.goals.map((g) => <li key={g.skill}>{g.skill} · {g.way}{g.mark ? ` · ${g.mark}` : ""}</li>)}</ul>}
         </>
       )}
+    </div>
+  );
+}
+
+// ── D 과제 편성 도우미 ────────────────────────────────────────────────────────
+
+/** 과제 · 접수 머리의 "필요 역량" 한 줄 + [후보 보기] — 팀장 화면만(팀원 PC 에는 후보 없음) */
+export function NeedSkillsLine({ skills, owners, canSee }: { skills: string[]; owners: string[]; canSee: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<Candidates | null>(null);
+  if (skills.length === 0) return null;
+  async function toggle() {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    try {
+      setData(await api.candidates(skills));
+    } catch (error) {
+      notifyError((error as Error).message);
+      setOpen(false);
+    }
+  }
+  return (
+    <div className="meta-line need-skills-line" data-testid="need-skills">
+      <span className="muted">필요 역량</span>
+      {skills.map((name) => <span key={name} className="tag need-skill-tag">{name}</span>)}
+      {canSee && <button type="button" className="ghost small" aria-expanded={open} onClick={() => void toggle()}>후보 보기 {open ? "▴" : "▾"}</button>}
+      {open && (
+        <div className="candidates-panel" data-testid="candidates">
+          {!data ? <span className="muted">찾는 중…</span> : data.people.length === 0 ? (
+            <p className="muted">이 역량의 경험(구조화 · 확정)이 있는 사람이 없습니다 — 육성 목표나 승계 · 짝 계획으로 키울 사람을 정해 보세요.</p>
+          ) : (
+            <>
+              <p className="hint">경험이 많은 · 최근인 사람이 위입니다. 숫자는 경험 수(수준 아님), "맡은 진행 과제" 는 바쁜 정도입니다. {data.missing.length > 0 && <b>아무도 없는 역량: {data.missing.join(", ")}</b>}</p>
+              <table className="grid ts-compact candidates-table">
+                <thead><tr><th>사람</th><th>가진 역량({skills.length}개 중)</th><th>맡은 진행 과제</th><th>표시</th></tr></thead>
+                <tbody>
+                  {data.people.map((p) => (
+                    <tr key={p.name} className={owners.includes(p.name) ? "is-owner" : undefined}>
+                      <th scope="row">{p.name}{p.leader && <span className="tag leader-tag">팀장</span>}{owners.includes(p.name) && <span className="tag">담당</span>}</th>
+                      <td>{p.has.length ? p.has.map((h) => <span key={h.skill} className="cand-has">{h.skill} <small className="muted">경험 {h.count} · {h.last || "기간 없음"}</small></span>) : <span className="muted">-</span>}</td>
+                      <td className="num">{p.busy}</td>
+                      <td>{p.growing.length > 0 && <span className="tag growth-started">육성 목표로 키우는 중</span>}{p.learning.length > 0 && <span className="tag">승계 계획의 배울 사람</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── E 교육 수요 · 효과 ────────────────────────────────────────────────────────
+
+export function EducationCard({ show }: { show: (n: string) => string }) {
+  const [data, setData] = useState<EducationView | null>(null);
+  const [openSkill, setOpenSkill] = useState("");
+  useEffect(() => { api.teamEducation().then(setData).catch(() => setData(null)); }, []);
+  if (!data) return null;
+  const late = data.effect.flatMap((e) => e.waiting.filter((w) => w.late).map((w) => ({ ...w, skill: e.skill })));
+  return (
+    <section className="card ts-section" data-testid="ts-education">
+      <div className="card-head"><h3>교육 수요 · 효과 <span className="muted">교육 뒤 {Math.round(data.days / 30)}개월 안에 그 역량 경험이 생겼나</span></h3></div>
+      <p className="hint">개인 역량 강화 활동 기록의 <b>관련 역량</b>으로 셉니다. 경험(구조화 · 확정)에 그 역량이 생기면 "쓰임" — 수준 · 평가가 아닙니다.
+        {data.unlinked > 0 && <> 관련 역량이 빈 교육 <b>{data.unlinked}건</b>은 세지 않았습니다(팀원역량 → [기록]에서 채움).</>}</p>
+      <div className="ts-half">
+        <div className="ts-sub" data-testid="ts-edu-demand">
+          <h4>교육 수요</h4>
+          {data.demand.length === 0 ? <p className="muted">목표가 모자라거나 교육으로 키우기로 한 역량이 없습니다.</p> : (
+            <ul className="ts-edu-list">
+              {data.demand.map((d) => (
+                <li key={d.skill}><b>{d.skill}</b>
+                  {d.gap > 0 && <span className="muted"> · 목표보다 {d.gap}명 모자람</span>}
+                  {d.people.length > 0 && <span className="muted"> · 교육으로 키우기로 함: {d.people.map(show).join(", ")}</span>}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="ts-sub" data-testid="ts-edu-effect">
+          <h4>교육은 쓰였나</h4>
+          {data.effect.length === 0 ? <p className="muted">관련 역량을 적은 교육이 아직 없습니다.</p> : (
+            <ul className="ts-edu-list">
+              {data.effect.map((e) => (
+                <li key={e.skill}>
+                  <button type="button" className="link-button" aria-expanded={openSkill === e.skill} onClick={() => setOpenSkill(openSkill === e.skill ? "" : e.skill)}>
+                    <b>{e.skill}</b></button> — 다녀온 사람 {e.attended.length} 중 <b>{e.used.length}</b>명이 그 뒤 경험
+                  {openSkill === e.skill && (
+                    <ul className="ts-edu-people">
+                      {e.used.map((u) => <li key={u.person}>{show(u.person)} · {u.date} {u.title} → <a href={experienceLink(u.experience.id)}>{u.experience.title}</a></li>)}
+                      {e.waiting.map((w) => <li key={w.person} className={w.late ? "warn-text" : "muted"}>{show(w.person)} · {w.date} {w.title} — {w.late ? "1년 지남 · 아직 안 쓰임" : "아직(1년 안)"}</li>)}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {late.length > 0 && <p className="ts-line"><span className="ts-tag small">할 일</span> 교육 뒤 1년이 지났는데 아직 안 쓰인 {late.length}명 — {late.slice(0, 3).map((w) => `${show(w.person)}(${w.skill})`).join(", ")}{late.length > 3 ? " …" : ""} · 그 역량이 필요한 과제로 연결해 보세요</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── I 사람 모양 ───────────────────────────────────────────────────────────────
+
+export function PersonShapeCard({ person }: { person: string }) {
+  const [period, setPeriod] = useState<"3y" | "all">("3y");
+  const [data, setData] = useState<PersonShape | null>(null);
+  useEffect(() => { api.personShape(person, period).then(setData).catch(() => setData(null)); }, [person, period]);
+  if (!data) return null;
+  const max = Math.max(1, ...data.axes.map((a) => a.experiences));
+  return (
+    <div className="card person-shape" data-testid="person-shape">
+      <div className="card-head">
+        <h3>{person} — 역량 모양 <span className="muted">축 {data.spread}개에 걸침 · 역량 {data.total_skills}가지</span></h3>
+        <select aria-label="모양 범위" value={period} onChange={(e) => setPeriod(e.target.value as "3y" | "all")}>
+          <option value="3y">최근 3년</option><option value="all">전체</option>
+        </select>
+      </div>
+      <p className="hint">축마다 경험 수(막대)와 가진 역량 가짓수 — 한 축에 깊은지, 여러 축에 넓게 걸쳤는지. 다른 사람과 견주지 않습니다(구조화 · 확정 경험).</p>
+      <ul className="shape-bars">
+        {data.axes.map((a) => (
+          <li key={a.axis} title={a.names.join(", ")}>
+            <span className="shape-axis">{a.axis}</span>
+            <span className="shape-bar"><span style={{ width: `${Math.round((a.experiences / max) * 100)}%` }} /></span>
+            <span className="shape-num">경험 {a.experiences} · 역량 {a.skills}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

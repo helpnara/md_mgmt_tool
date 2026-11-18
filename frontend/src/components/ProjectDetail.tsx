@@ -19,6 +19,7 @@ import VersionPanel from "./VersionPanel";
 import ExportMenu from "./ExportMenu";
 import ContributionsCard, { myName } from "./ContributionsCard";
 import { DiffLines, diffCounts, diffQuery } from "./EditChanges";
+import { NeedSkillsLine } from "./TeamPlans";
 import type { ChangeMark } from "./EditChanges";
 import LoadError from "./LoadError";
 import ReportEditor from "./ReportEditor";
@@ -593,6 +594,8 @@ export default function ProjectDetail({
               )}
               <span>최근 업데이트 {formatDate(project.updated_at)}</span>
             </div>
+            {/* 292 D — 필요 역량 · [후보 보기](팀장 화면만) */}
+            <NeedSkillsLine skills={project.need_skills ?? []} owners={project.owners} canSee={!isReadonly() && !isMember()} />
             {/* 이 과제가 온 접수 · 이 과제에 병합된 접수 (TODO 136) — 양쪽 링크의 과제 쪽 끝 */}
             {(project.intakes ?? []).length > 0 && (
               <div className="meta-line intake-line">

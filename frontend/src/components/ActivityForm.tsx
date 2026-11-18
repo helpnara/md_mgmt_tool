@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import TagSuggestions from "./TagSuggestions";
 import { api } from "../api";
 import type { Activity, Meta } from "../types";
 import { splitPeople } from "../people";
@@ -48,10 +49,16 @@ export default function ActivityForm({
   const [cost, setCost] = useState(activity?.cost?.toString() ?? "");
   const [takeaway, setTakeaway] = useState(activity?.takeaway ?? "");
   const [link, setLink] = useState(activity?.link ?? "");
+  // 관련 역량 (TODO 292 E) — 교육 수요 · 효과(교육 뒤 그 역량 경험이 생겼나)
+  const [skills, setSkills] = useState((activity?.skills ?? []).join(", "));
+  const [skillNames, setSkillNames] = useState<string[]>([]);
+  useEffect(() => {
+    api.experienceSkills().then((d) => setSkillNames(d.dictionary.map((e) => e.name))).catch(() => setSkillNames([]));
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 쓰다가 떠나면 묻는다 (TODO 162)
-  const snapshot = { person, date, endDate, kind, title, host, place, hours, cost, takeaway, link };
+  const snapshot = { person, date, endDate, kind, title, host, place, hours, cost, takeaway, link, skills };
   useFormUnsaved(`activity-form:${activity?.id ?? "new"}`, snapshot, busy);
   const [initialSnapshot] = useState(() => JSON.stringify(snapshot));
   const dirty = JSON.stringify(snapshot) !== initialSnapshot;
@@ -141,6 +148,7 @@ export default function ActivityForm({
       cost: cost.trim() === "" ? null : Number(cost.trim().replace(/,/g, "")),
       takeaway: takeaway.trim() || null,
       link: link.trim() || null,
+      skills: skills.split(",").map((name) => name.trim()).filter(Boolean),
     } as unknown as Partial<Activity>;
     try {
       if (activity) {
@@ -335,6 +343,12 @@ export default function ActivityForm({
           />
         </label>
       </div>
+
+      <label className="stack-label">
+        관련 역량 <span className="muted">(선택 — 이 활동으로 키우려는 역량, 역량 사전에서)</span>
+        <input value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="예: 데이터 분석" aria-label="관련 역량" />
+        <TagSuggestions known={skillNames} value={skills} onPick={setSkills} />
+      </label>
 
       <label className="stack-label">
         얻은 것 — 한 줄로

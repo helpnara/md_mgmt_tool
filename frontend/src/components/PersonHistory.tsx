@@ -11,6 +11,7 @@ import Explain from "./Explain";
 import { RetroText } from "./RetroText";
 import { ContributionForm } from "./ContributionsCard";
 import YearCard from "./YearCard";
+import { PersonShapeCard } from "./TeamPlans";
 import type { Project } from "../types";
 import StatusBadge from "./StatusBadge";
 import ExperienceCard, { experienceLink } from "./ExperienceCard";
@@ -341,6 +342,9 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
 
       {/* 나의 한 해 (TODO 244 A3) */}
       <YearCard name={data.name} years={[...years, ...data.activities.map((item) => item.date.slice(0, 4))]} />
+
+      {/* 292 I — 역량 모양(축 넷 · 깊이 · 넓이). 팀장과 본인만 — 다른 사람과 견주지 않는다 */}
+      {(isManager() || (isMember() && getMe().name === data.name)) && <PersonShapeCard person={data.name} />}
 
       <div className="card person-projects">
         <div className="card-head">

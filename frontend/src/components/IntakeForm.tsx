@@ -41,6 +41,11 @@ const PRIORITIES = ["상", "중", "하"];
 
 export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCancel, onMetaChange = () => undefined }: Props) {
   const creating = !initial?.id;
+  // 292 D — 필요 역량 칸의 제안(역량 사전 이름)
+  const [skillNames, setSkillNames] = useState<string[]>([]);
+  useEffect(() => {
+    api.experienceSkills().then((d) => setSkillNames(d.dictionary.map((e) => e.name))).catch(() => setSkillNames([]));
+  }, []);
   const [form, setForm] = useState(() => ({
     title: initial?.title ?? "",
     leader: initial?.leader ?? "",
@@ -52,6 +57,7 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
     priority: initial?.priority ?? "",
     priority_note: initial?.priority_note ?? "",
     tags: (initial?.tags ?? []).join(", "),
+    need_skills: (initial?.need_skills ?? []).join(", "),
   }));
   const [classes, setClasses] = useState<Record<ClassificationKey, string>>(() => ({
     nature: initial?.nature ?? "",
@@ -158,6 +164,8 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
         priority: form.priority || null,
         priority_note: form.priority_note.trim() || null,
         tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+        // 필요 역량 (TODO 292 D) — 승격하면 과제로 옮긴다
+        need_skills: form.need_skills.split(",").map((name) => name.trim()).filter(Boolean),
         nature: classes.nature || null,
         category: classes.category || null,
         delivery: classes.delivery || null,
@@ -332,6 +340,11 @@ export default function IntakeForm({ meta, initial, submitLabel, onSubmit, onCan
           <input value={form.tags} onChange={(e) => update("tags", e.target.value)} placeholder="쉼표로 구분" />
           {/* 쓰던 태그 · 모양만 다른 태그는 그 표기로 (TODO 214 U7 · D12) */}
           <TagSuggestions known={meta.tags ?? []} value={form.tags} onPick={(next) => update("tags", next)} />
+        </label>
+        <label>
+          필요 역량 <span className="muted">(선택 — 역량 사전)</span>
+          <input value={form.need_skills} onChange={(e) => update("need_skills", e.target.value)} placeholder="예: 데이터 분석, 공정 개선" aria-label="필요 역량" />
+          <TagSuggestions known={skillNames} value={form.need_skills} onPick={(next) => update("need_skills", next)} />
         </label>
       </div>
       {creating && (

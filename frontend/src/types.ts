@@ -124,6 +124,8 @@ export interface Partner {
 }
 
 export interface Project {
+  /** 필요 역량 (TODO 292 D) — 과제 편성 도우미 */
+  need_skills?: string[];
   id: string;
   title: string;
   status: string;
@@ -840,6 +842,8 @@ export interface IntakeSummary {
 }
 
 export interface Intake {
+  /** 필요 역량 (TODO 292 D) */
+  need_skills?: string[];
   id: string;
   dir_name: string;
   title: string;
@@ -982,6 +986,8 @@ export interface HomePlan extends NextPlan {
 
 /** 팀원 역량 이력 한 건 (TODO 72). 기록 단위는 **사람**이다. */
 export interface Activity {
+  /** 관련 역량 (TODO 292 E) */
+  skills?: string[];
   id: number;
   /** 같은 행사를 가리키는 열쇠 — 날짜·구분·제목이 같으면 한 행사다 (TODO 85) */
   event_key: string;
@@ -1925,3 +1931,17 @@ export interface SuccessionPlan {
 }
 export interface Succession { plans: SuccessionPlan[]; ways: string[]; states: string[]; default_months: number; counts: Record<string, number>; overdue: number }
 export interface TeamReminders { snapshot_due: boolean; year: string; overdue: { id: string; kind: string; name: string; learner: string; due: string }[] }
+export interface Candidates {
+  skills: string[];
+  missing: string[];
+  people: { name: string; leader: boolean; has: { skill: string; count: number; last: string }[]; growing: string[]; learning: string[]; busy: number; experiences: number; last: string }[];
+}
+export interface EducationView {
+  demand: { skill: string; gap: number; people: string[] }[];
+  effect: { skill: string; courses: string[]; attended: { person: string; date: string; title: string }[];
+    used: { person: string; date: string; title: string; experience: { id: string; title: string } }[];
+    waiting: { person: string; date: string; title: string; late: boolean }[] }[];
+  unlinked: number;
+  days: number;
+}
+export interface PersonShape { person: string; period: string; axes: { axis: string; experiences: number; skills: number; names: string[] }[]; total_skills: number; spread: number }

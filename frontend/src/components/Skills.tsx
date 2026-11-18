@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { Activity, ActivitySummary, Meta } from "../types";
 import { backTarget, personLink, useAddressBar } from "../nav";
-import { GrowthCard } from "./TeamPlans";
+import { GrowthCard, PersonShapeCard } from "./TeamPlans";
 import { leftLabel, splitPeople } from "../people";
 import { isReadonly } from "../readonly";
 import { getMe, isMember } from "../me";
@@ -278,6 +278,8 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           <span className="activity-date">{period(first)}</span>
           <span className="tag">{kindLabel(first.kind)}</span>
           <strong className="activity-title">{first.title}</strong>
+          {/* 292 E — 관련 역량 */}
+          {(first.skills ?? []).map((name) => <span key={name} className="tag need-skill-tag" title="관련 역량">{name}</span>)}
           {/* 한 행사에 여러 명이면 이름을 나란히 세운다. 줄이 사람 수만큼
               늘어나면 "올해 몇 번 갔나"를 눈으로 셀 수 없다 (TODO 85). */}
           {group.map((item) => (
@@ -794,7 +796,11 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
       )}
       {/* 292 C — 개인 육성 목표: 사람을 고르면 면담 위에(팀원 PC 는 자기 것을 보기만) */}
       {tab === "meetings" && meetingsOpen && (readonly ? getMe().name : person) && (
-        <GrowthCard person={readonly ? getMe().name : person} readonly={readonly} />
+        <div className="growth-shape-row">
+          <GrowthCard person={readonly ? getMe().name : person} readonly={readonly} />
+          {/* 292 I — 역량 모양(면담하며 봄) */}
+          <PersonShapeCard person={readonly ? getMe().name : person} />
+        </div>
       )}
       {tab === "meetings" && meetingsOpen && (
       <div className={sidePerson ? "skills-meet-split" : undefined}>
@@ -914,6 +920,12 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                   </div>
                 )}
               </div>
+            )}
+            {/* 292 E — 관련 역량이 빈 교육(팀장 화면) — 채우면 팀역량의 "교육은 쓰였나" 에 듭니다 */}
+            {!readonly && events.some((g) => g[0].kind === "education" && !(g[0].skills ?? []).length) && (
+              <p className="hint" data-testid="unlinked-education">
+                관련 역량이 빈 교육 {events.filter((g) => g[0].kind === "education" && !(g[0].skills ?? []).length).length}건 — [수정]에서 관련 역량을 적으면 팀역량의 <b>교육은 쓰였나</b>에 듭니다.
+              </p>
             )}
             {/* 지난 기록 — 최근 것부터, 달 머리줄 (TODO 227) */}
             {events.length > 0 && (

@@ -3488,3 +3488,22 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .growth-row { display: grid; grid-template-columns: minmax(160px, 1.2fr) 100px minmax(160px, 2fr) 110px auto; gap: 6px; align-items: center; }
 @media (max-width: 900px) { .growth-row { grid-template-columns: 1fr 1fr; } }
 .home-team-plans { margin-bottom: 8px; }
+
+/* 292 3차 — 필요 역량 · 후보 · 교육 수요 · 효과 · 역량 모양 */
+.need-skills-line { flex-wrap: wrap; align-items: center; gap: 6px; }
+.need-skill-tag { background: var(--primary-50); color: var(--accent-strong); }
+.candidates-panel { flex-basis: 100%; margin-top: 6px; }
+.candidates-table td, .candidates-table th { vertical-align: top; text-align: left; }
+.candidates-table tr.is-owner th { color: var(--accent-strong); }
+.cand-has { display: inline-block; margin-right: 10px; }
+.ts-edu-list { margin: 4px 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--fs-sm); }
+.ts-edu-people { margin: 4px 0 6px; padding-left: 16px; font-size: var(--fs-xs); }
+.ts-sub h4 { margin: 0 0 6px; font-size: var(--fs-sm); }
+.growth-shape-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .growth-shape-row { grid-template-columns: 1fr; } }
+.person-shape .card-head select { width: auto; }
+.shape-bars { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.shape-bars li { display: grid; grid-template-columns: 72px 1fr auto; gap: 8px; align-items: center; font-size: var(--fs-sm); }
+.shape-bar { height: 10px; background: var(--neutral-100); border-radius: var(--radius-pill); overflow: hidden; }
+.shape-bar > span { display: block; height: 100%; background: var(--accent); }
+.shape-num { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
