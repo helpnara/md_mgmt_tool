@@ -7887,6 +7887,24 @@ async function main() {
     await api.put(`/api/growth/${encodeURIComponent("권경락")}/${year}`, { goals: [] });
   });
 
+  await check("292 3차 — 과제의 필요 역량 · [후보 보기] · 교육 수요 · 효과 카드 · 역량 모양", async () => {
+    const pid = seeded.projectA;
+    await api.patch(`/api/projects/${pid}`, { need_skills: ["데이터 분석"] });
+    await go(`#/projects/${pid}`);
+    const line = page.locator("[data-testid=need-skills]");
+    await line.waitFor({ timeout: 8000 });
+    expect((await line.innerText()).includes("데이터 분석"), "필요 역량 칩");
+    await line.getByRole("button", { name: /후보 보기/ }).click();
+    await page.locator("[data-testid=candidates]").waitFor({ timeout: 8000 });
+    await page.waitForFunction(() => !document.querySelector("[data-testid=candidates]")?.textContent?.includes("찾는 중"), null, { timeout: 8000 });
+    await go("#/skills?tab=team");
+    await page.locator("[data-testid=ts-education]").waitFor({ timeout: 10000 });
+    await go("#/skills?tab=meetings&person=" + encodeURIComponent("권경락"));
+    await page.locator("[data-testid=person-shape]").waitFor({ timeout: 8000 });
+    equal(await page.locator("[data-testid=person-shape] .shape-bars li").count(), 4, "축 넷");
+    await api.patch(`/api/projects/${pid}`, { need_skills: [] });
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

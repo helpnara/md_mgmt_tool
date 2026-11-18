@@ -3507,3 +3507,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .shape-bar { height: 10px; background: var(--neutral-100); border-radius: var(--radius-pill); overflow: hidden; }
 .shape-bar > span { display: block; height: 100%; background: var(--accent); }
 .shape-num { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.shape-bars li { grid-template-columns: 72px 1fr 120px; }
+.shape-num { text-align: right; }
+[data-testid=ts-education] .ts-sub { margin-top: 0; padding-top: 0; }
