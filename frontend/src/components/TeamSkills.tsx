@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api";
 import { notifyError } from "../notify";
@@ -90,8 +91,8 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
         {data && <SnapshotBar items={data.snapshots ?? []} year={data.year} onSaved={load} />}
         <p className="ts-notice" data-testid="ts-notice">팀장이 팀의 득과 실을 판단하는 자료입니다 — 평가 · 다른 사람과의 비교에 쓰지 않습니다. 숫자는 경험 수이고, 점(●)은 수준이 아니라 <b>근거가 얼마나 단단한가</b>입니다(●●● 확정 + 정량 결과 · ●● 확정 · ● 구조화만).</p>
       </div>
-      {data && <Body data={data} show={show} interactive meta={meta} onTargets={load} plans={succession?.plans ?? []} onPlan={setSeed} />}
-      {data && <SuccessionCard data={succession} people={names} leader={data.people.find((p) => p.leader)?.name} show={show} seed={seed} onSeedUsed={() => setSeed(null)} onChanged={loadSuccession} />}
+      {data && <Body data={data} show={show} interactive meta={meta} onTargets={load} plans={succession?.plans ?? []} onPlan={setSeed}
+        afterQuestions={<SuccessionCard data={succession} people={names} leader={data.people.find((p) => p.leader)?.name} show={show} seed={seed} onSeedUsed={() => setSeed(null)} onChanged={loadSuccession} />} />}
       {printing && data && createPortal(
         <div className="ts-print-root" aria-hidden>
           <h1 className="ts-print-title">팀 역량 · 기술 스택 — {data.change.last} → {data.change.this} · 범위 {periodLabel}</h1>
@@ -104,9 +105,9 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
   );
 }
 
-function Body({ data, show, interactive, meta, onTargets, withEvidence, plans = [], onPlan }: {
+function Body({ data, show, interactive, meta, onTargets, withEvidence, plans = [], onPlan, afterQuestions }: {
   data: Data; show: (name: string) => string; interactive: boolean; meta: Meta; onTargets?: () => void; withEvidence?: boolean;
-  plans?: SuccessionPlan[]; onPlan?: (seed: PlanSeed) => void;
+  plans?: SuccessionPlan[]; onPlan?: (seed: PlanSeed) => void; afterQuestions?: ReactNode;
 }) {
   const [evidence, setEvidence] = useState(false);
   // 292 A — 떠나면 무엇을 잃나(위험 카드에서 사람을 고른다)
@@ -277,6 +278,8 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence, plans = 
         </section>
       </div>
 
+      {/* 292 B — 승계 · 짝 계획: 질문 카드(위험) 바로 아래 */}
+      {interactive && afterQuestions}
       {(interactive || withEvidence) && <details className="card ts-section ts-fold" data-testid="ts-evidence" open={!interactive ? (withEvidence || undefined) : (evidence || undefined)}
         onToggle={(e) => interactive && setEvidence((e.target as HTMLDetailsElement).open)}>
         <summary><b>근거 자료</b> <span className="muted">— 지난해와 비교 · 팀 모양 · 기술 스택 · 혼자만 가진 것 · 목표 · 역량 지도 · 과제 분류 · 처음 나온 해</span></summary>
