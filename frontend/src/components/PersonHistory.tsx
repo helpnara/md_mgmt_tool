@@ -340,11 +340,11 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
         />
       )}
 
-      {/* 나의 한 해 (TODO 244 A3) */}
-      <YearCard name={data.name} years={[...years, ...data.activities.map((item) => item.date.slice(0, 4))]} />
-
-      {/* 292 I — 역량 모양(축 넷 · 깊이 · 넓이). 팀장과 본인만 — 다른 사람과 견주지 않는다 */}
-      {(isManager() || (isMember() && getMe().name === data.name)) && <PersonShapeCard person={data.name} />}
+      {/* 나의 한 해 (TODO 244 A3) · 역량 모양(292 I — 팀장과 본인만) — 307: 한 줄 두 칸 */}
+      <div className={(isManager() || (isMember() && getMe().name === data.name)) ? "person-year-row" : undefined} data-testid="person-year-row">
+        <YearCard name={data.name} years={[...years, ...data.activities.map((item) => item.date.slice(0, 4))]} />
+        {(isManager() || (isMember() && getMe().name === data.name)) && <PersonShapeCard person={data.name} />}
+      </div>
 
       <div className="card person-projects">
         <div className="card-head">
@@ -400,7 +400,7 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
                 {group.items.map((item) => {
                   const effect = item.no_effect ? null : effectText(item.effect_expected, item.effect_verified);
                   return (
-                    <li key={item.id} className={item.current ? "person-project" : "person-project former"} data-project={item.id}>
+                    <li key={item.id} className={`${item.current ? "person-project" : "person-project former"}${editing?.id === item.id ? " editing" : ""}`} data-project={item.id}>
                       <div className="person-project-head">
                         <input
                           type="checkbox"

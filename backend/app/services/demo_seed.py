@@ -124,7 +124,7 @@ def build(progress: Callable[[int, int, str], None] | None = None) -> dict[str, 
 
     # 서버 PC(관리자)로 — 쓰기 권한. 바꾸는 중(297)에도 이 손님만 지나간다
     client = TestClient(app, client=("127.0.0.1", 50295), headers={SEED_HEADER: seed_token()})
-    steps = 9
+    steps = 10
     say = progress or (lambda *_: None)
     today = clock.today()
 
@@ -188,9 +188,11 @@ def build(progress: Callable[[int, int, str], None] | None = None) -> dict[str, 
             patch["effect_verified"] = ver
         if patch:
             call("PATCH", f"/api/projects/{ids[i]}", json=patch)
+    pending_ids: list[str] = []
     for title, leader in PENDING_INTAKES:
-        call("POST", "/api/intakes", json={"title": title, "leader": leader, "received_on": iso(today - timedelta(days=9)),
-                                          "body": f"## 요청 배경\n{title}\n"})
+        made_intake = call("POST", "/api/intakes", json={"title": title, "leader": leader, "received_on": iso(today - timedelta(days=9)),
+                                                         "body": f"## 요청 배경\n{title}\n"})
+        pending_ids.append(made_intake["id"])
 
     # 3 담당과 역할 · 퇴사자 넘김
     say(3, steps, "담당과 역할")
@@ -262,18 +264,23 @@ def build(progress: Callable[[int, int, str], None] | None = None) -> dict[str, 
                 conn.close()
         if n % 5 == 4:
             say(6, steps, f"경험 {n + 1}/20")
+        if n == 11:
+            # 306 · 292 G — 경험이 반쯤 있을 때의 그림을 "지난해 말 기록" 으로(변화 카드의 "기준 지난해 말 기록 ↔ 지금" 이 보이게)
+            call("POST", "/api/team-skills/snapshots", json={"year": str(today.year - 1)})
 
     # 7 교육 · 행사 · 면담
     say(7, steps, "교육 · 면담")
-    acts = [("education", "현업 데이터 분석 기초", -150, 16, MEMBERS[:4]), ("seminar", "AI 비전 사례 세미나", -90, 3, ["박지민", "정하은", "조유나"]),
-            ("conference", "생산기술 학회", -60, 8, ["김서연", "최민재"]), ("education", "생성형 AI 활용 과정", -40, 12, ["윤성민", "조유나", "임채원"]),
-            ("expo", "스마트공장 박람회", -25, 6, ["강태윤", "이준호"]), ("certificate", "데이터 분석 자격", -200, 0, ["이준호"]),
-            ("education", "MES 데이터 구조 교육", -15, 4, ["임채원", "김서연"]), ("seminar", "품질 혁신 공유회", -8, 2, MEMBERS),
-            ("education", "PyTorch 실습", 20, 12, ["박지민", "정하은"]), ("conference", "AI 학회(예정)", 45, 8, ["이준호", "윤성민"])]
-    for kind, title, offset, hours, names in acts:
+    # 306 · 292 E — 교육 넷에 관련 역량(그 뒤 경험이 생긴 사람 · 아직 · 1년 지남이 섞이게)
+    acts = [("education", "현업 데이터 분석 기초", -150, 16, MEMBERS[:4], ["예측 모델링"]), ("seminar", "AI 비전 사례 세미나", -90, 3, ["박지민", "정하은", "조유나"], []),
+            ("conference", "생산기술 학회", -60, 8, ["김서연", "최민재"], []), ("education", "생성형 AI 활용 과정", -40, 12, ["윤성민", "조유나", "임채원"], ["생성형 AI 활용"]),
+            ("expo", "스마트공장 박람회", -25, 6, ["강태윤", "이준호"], []), ("certificate", "데이터 분석 자격", -200, 0, ["이준호"], []),
+            ("education", "MES 데이터 구조 교육", -15, 4, ["임채원", "김서연"], ["ERP·MES 연계"]), ("seminar", "품질 혁신 공유회", -8, 2, MEMBERS, []),
+            ("education", "공정 시뮬레이션 기초", -420, 8, ["최민재", "정하은"], ["최적화·시뮬레이션"]),
+            ("education", "PyTorch 실습", 20, 12, ["박지민", "정하은"], []), ("conference", "AI 학회(예정)", 45, 8, ["이준호", "윤성민"], [])]
+    for kind, title, offset, hours, names, act_skills in acts:
         for name in names:
             call("POST", "/api/activities", json={"person": name, "kind": kind, "title": title, "date": iso(today + timedelta(days=offset)),
-                                                 "hours": hours or None, "host": "사내" if kind == "education" else "외부"})
+                                                 "hours": hours or None, "host": "사내" if kind == "education" else "외부", "skills": act_skills})
     for k, name in enumerate(["김서연", "박지민", "최민재", "조유나"]):
         call("POST", "/api/meetings", json={"person": name, "date": iso(today - timedelta(days=20 + 15 * k)), "kind": kinds[k % len(kinds)],
                                            "summary": "올해 과제 진행과 내년에 키울 역량을 이야기함", "next_date": iso(today + timedelta(days=40 + 7 * k))})
@@ -287,5 +294,31 @@ def build(progress: Callable[[int, int, str], None] | None = None) -> dict[str, 
          json={"message": "올 한 해 전극봉 과제를 끝까지 챙겨 줘서 고마웠어요. 데이터로 길을 내 준 덕분에 팀 전체가 힘을 얻었습니다. 내년에도 함께해요!",
                "headline": "데이터로 길을 낸 한 해", "projects": [ids[0], ids[17]]})
 
-    say(9, steps, "마무리")
+    # 9 · 306 — 292 2 · 3차: 육성 목표(C) · 승계 · 짝 계획(B) · 필요 역량(D)
+    say(9, steps, "육성 목표 · 승계 계획 · 필요 역량")
+    year = str(today.year)
+    goals = {
+        "김서연": [{"skill": "데이터 파이프라인", "way": "과제", "note": "MES 대시보드 과제에서"}, {"skill": "생성형 AI 활용", "way": "교육", "note": "사내 과정 신청"}],
+        "이준호": [{"skill": "예측 모델링", "way": "과제", "note": "", "mark": "이룸"}, {"skill": "AI 인프라·플랫폼", "way": "짝", "note": "강태윤과 짝"}],
+        "박지민": [{"skill": "시계열 분석·이상탐지", "way": "과제", "note": "정비 이력 분석 과제"}, {"skill": "비전 AI 객체탐지", "way": "과제", "mark": "이룸"}],
+        "조유나": [{"skill": "생성형 AI 활용", "way": "교육", "note": ""}, {"skill": "프로세스 표준화", "way": "짝", "note": "정하은과 짝"},
+                  {"skill": "요구사항 관리", "way": "과제", "note": "보고서 도우미 과제"}],
+    }
+    for name, items in goals.items():
+        call("PUT", f"/api/growth/{name}/{year}", json={"goals": items})
+    plans = [
+        {"kind": "역량", "name": "비전 AI 객체탐지", "holders": ["박지민"], "learner": "정하은", "way": "짝 과제", "due": iso(_months(today, 4)), "note": "출하 검사 자동 판정 과제에서 함께"},
+        {"kind": "역량", "name": "ERP·MES 연계", "holders": ["임채원"], "learner": "김서연", "way": "공유 세션", "due": iso(today - timedelta(days=10)), "note": "월 1회 공유 세션"},
+        {"kind": "역량", "name": "제조 공정 이해", "holders": ["김서연", "최민재"], "learner": "윤성민", "way": "짝 과제", "due": iso(_months(today, 2))},
+    ]
+    for plan in plans:
+        call("POST", "/api/team-skills/succession", json=plan)
+    call("GET", "/api/team-skills/succession")          # 배울 사람에게 이미 경험이 있는 계획은 저절로 "됨"
+    for index, need in ((1, ["최적화·시뮬레이션", "제조 공정 이해"]), (7, ["시계열 분석·이상탐지", "예측 모델링"]),
+                        (18, ["비전 AI 객체탐지", "평가 지표 설계·검증"])):
+        call("PATCH", f"/api/projects/{ids[index]}", json={"need_skills": need})
+    if pending_ids:
+        call("PATCH", f"/api/intakes/{pending_ids[0]}", json={"need_skills": ["실패 원인 분석", "데이터 파이프라인"]})
+
+    say(10, steps, "마무리")
     return {"projects": len(ids), "people": len(people), "experiences": len(EXPERIENCES)}

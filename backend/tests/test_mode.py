@@ -46,8 +46,20 @@ def test_first_run_demo_then_mine_and_back(home):
     assert statuses.count("in_progress") == 9 and statuses.count("done") == 8 and statuses.count("on_hold") == 1 and statuses.count("dropped") == 2
     people = owner.get("/api/people").json()["people"]
     assert len([p for p in people if not p.get("left_on")]) == 10 and len([p for p in people if p.get("left_on")]) == 2
-    kpis = owner.get("/api/team-skills").json()["kpis"]
+    view = owner.get("/api/team-skills").json()
+    kpis = view["kpis"]
     assert kpis["experiences"] >= 10 and kpis["skills_held"] >= 10
+    # 306 — 292 2 · 3차 자료: 지난해 기록 · 비교 · 승계 계획 셋(됨 · 기한 지남) · 육성 목표 · 필요 역량 · 교육 관련 역량
+    assert view["snapshot_compare"] and view["snapshot_compare"]["skills"]["counts"]["new"] + view["snapshot_compare"]["skills"]["counts"]["up"] > 0
+    plans = owner.get("/api/team-skills/succession").json()
+    assert len(plans["plans"]) == 3 and plans["counts"]["됨"] >= 1 and plans["overdue"] == 1
+    growth = {p["name"]: p.get("growth") for p in owner.get("/api/activities/summary").json()["people"]}
+    assert growth["조유나"]["goals"] == 3 and growth["이준호"]["started"] >= 1
+    assert sum(1 for p in projects if p.get("need_skills")) == 3
+    edu = owner.get("/api/team-skills/education").json()
+    effect = {e["skill"]: e for e in edu["effect"]}
+    assert effect["예측 모델링"]["used"] and any(w["late"] for w in effect["최적화·시뮬레이션"]["waiting"])
+    assert any(d["skill"] == "생성형 AI 활용" and d["people"] for d in edu["demand"])
     # 체험 중에는 다른 PC 는 막힘(안내 · 모드만 열림), 바꾸기는 서버 PC 만
     assert other.get("/api/projects").status_code == 403 and other.get("/api/mode").status_code == 200
     assert other.post("/api/mode", json={"mode": "mine"}).status_code == 403
