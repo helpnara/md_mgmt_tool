@@ -60,6 +60,7 @@ class IntakeUpdate(BaseModel):
     picked: bool | None = None
     received_on: str | None = None
     tags: list[str] | None = None
+    need_skills: list[str] | str | None = None  # 필요 역량 (TODO 292 D)
     body: str | None = None
 
     def changes(self) -> dict[str, Any]:
@@ -107,6 +108,7 @@ class LogIn(BaseModel):
     title: str | None = None
     body: str | None = None
     tags: list[str] | None = None
+    need_skills: list[str] | str | None = None  # 필요 역량 (TODO 292 D)
     # 편집을 시작할 때 읽어 둔 파일 시각 — 그 사이 밖에서 고쳤으면 덮어쓰지 않는다
     mtime: float | None = None
 
@@ -311,6 +313,10 @@ def get_intake(intake_id: str, conn: sqlite3.Connection = Depends(get_db)) -> di
         data["precheck"] = precheck_service.summarize(meta.get("precheck"))
         # 직접 만든 과제를 되돌린 접수면 그 과제 번호 (TODO 171) — 머리에 한 줄
         data["demoted_from"] = meta.get("demoted_from")
+        # 필요 역량 (TODO 292 D) — 과제 편성 도우미, 승격하면 과제로 옮긴다
+        from .. import schemas as rules
+
+        data["need_skills"] = rules.split_list(meta.get("need_skills"))
         # 이어진 과제가 아직 있는지 — 과제를 지웠으면 링크 대신 그렇다고 말한다
         linked = row["project_id"] or row["merged_into"]
         data["linked_project"] = None

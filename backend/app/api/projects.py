@@ -5,6 +5,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..config import CLASSIFICATION_KEYS, FINISHED_STATUSES, STATUS_KEYS, get_settings
+from .. import schemas as rules
 from ..deps import get_db
 from ..vault.markdown import ExternalChangeError
 from ..vault.paths import FileInUseError
@@ -208,6 +209,8 @@ def _serialize(
         "effect_verified": row["effect_verified"],
         # 금액 아닌 성과 한 줄 (TODO 237 A4)
         "outcome": row["outcome"],
+        # 필요 역량 (TODO 292 D)
+        "need_skills": rules.split_list(row["need_skills"]) if "need_skills" in row.keys() else [],
         "completed_at": row["completed_at"],
         # 별도 보고가 필요 없는 과제 — 보고 대상 후보에서만 빠진다 (TODO 80).
         "no_report": bool(row["no_report"]),

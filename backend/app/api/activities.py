@@ -30,6 +30,8 @@ class ActivityIn(BaseModel):
     takeaway: str | None = None
     link: str | None = None
     tags: list[str] | None = None
+    # 관련 역량 (TODO 292 E) — 교육 수요 · 효과
+    skills: list[str] | str | None = None
     body: str | None = None
 
     def changes(self) -> dict:

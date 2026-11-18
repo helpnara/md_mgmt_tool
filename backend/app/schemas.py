@@ -39,6 +39,7 @@ class ProjectCreate(BaseModel):
     effect_verified: float | None = None
     # 금액 아닌 성과 한 줄 (TODO 237 A4) — "작업 시간 40% 단축" 처럼
     outcome: str | None = None
+    need_skills: list[str] | str | None = None  # 필요 역량 (TODO 292 D)
     # 별도 보고가 필요 없는 과제 (단순 현황 관리). 보고 대상 후보에서만 빠진다.
     no_report: bool = False
     # 효과 금액으로 관리하지 않는 과제 (TODO 125)
@@ -69,6 +70,7 @@ class ProjectUpdate(BaseModel):
     effect_expected: float | None = None
     effect_verified: float | None = None
     outcome: str | None = None
+    need_skills: list[str] | str | None = None  # 필요 역량 (TODO 292 D)
     no_report: bool | None = None
     no_effect: bool | None = None
     tags: list[str] | None = None

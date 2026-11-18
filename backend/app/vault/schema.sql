@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS project (
   effect_verified  REAL,
   -- 금액 아닌 성과 한 줄 (TODO 237 A4) — "작업 시간 40% 단축" 처럼. 효과 금액 옆에 둔다.
   outcome          TEXT,
+  -- 필요 역량 (TODO 292 D) — 역량 사전의 이름, 쉼표로. 과제 편성 도우미가 후보를 찾는다
+  need_skills      TEXT,
   -- 별도 보고가 필요 없는 과제 (단순 현황 관리를 과제로 세운 경우).
   -- 보고 대상 후보에서만 빠진다 — 손으로 보고를 남기는 길은 그대로 열려 있다.
   no_report  INTEGER NOT NULL DEFAULT 0,
@@ -239,6 +241,8 @@ CREATE TABLE IF NOT EXISTS activity (
   updated_at TEXT,
   -- 지난 예정을 홈에서 [다녀옴] 으로 확인한 날 (TODO 231). 비어 있으면 아직 확인하지 않았다
   plan_checked TEXT,
+  -- 관련 역량 (TODO 292 E) — 역량 사전의 이름, 쉼표로. 교육 수요 · 효과(교육 뒤 그 역량 경험이 생겼나)에 쓴다
+  skills TEXT,
   file_mtime REAL
 );
 

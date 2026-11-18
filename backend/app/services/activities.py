@@ -43,7 +43,7 @@ BODY_TEMPLATE = """## 내용
 
 META_ORDER = [
     "person", "date", "end_date", "kind", "title", "host", "place",
-    "hours", "cost", "takeaway", "link", "tags",
+    "hours", "cost", "takeaway", "link", "tags", "skills",
     "author", "created_at", "updated_at",
 ]
 
@@ -149,7 +149,21 @@ def _validate(data: dict[str, Any], stored: dict[str, Any] | None = None) -> dic
         "takeaway": _clean(data.get("takeaway")),
         "link": _clean(data.get("link")),
         "tags": rules.split_list(data.get("tags")),  # 담당자와 같은 쉼표 규칙 (TODO 205)
+        # 관련 역량 (TODO 292 E) — 사전의 이름으로 맞춰 둔다(같은 말 · 대소문자). 사전에 없으면 적은 그대로
+        "skills": _skill_names(data.get("skills")),
     }
+
+
+def _skill_names(value: object) -> list[str]:
+    from ..experience import skills as skill_rules
+
+    index = skill_rules.index(settings_service.skill_dictionary())
+    out: list[str] = []
+    for raw in rules.split_list(value)[:10]:
+        name = index.get(skill_rules.key(raw), ("", raw))[1]
+        if name not in out:
+            out.append(name)
+    return out
 
 
 def warnings(people: list[str]) -> list[str]:
@@ -297,6 +311,7 @@ def _row(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         # 예정 (TODO 221) — 시작일이 오늘보다 뒤. 화면이 딱지를 붙이고 흐리게 둔다
         "planned": row["date"] > clock.today().isoformat(),
         "tags": [],
+        "skills": rules.split_list(row["skills"]) if "skills" in row.keys() else [],
     }
 
 

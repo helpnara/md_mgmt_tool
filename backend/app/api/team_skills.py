@@ -132,3 +132,25 @@ def reminders(request: Request):
     overdue = [p for p in team_plans.plans()["plans"] if p.get("overdue")]
     return {"snapshot_due": snapshot_due, "year": year,
             "overdue": [{"id": p["id"], "kind": p["kind"], "name": p["name"], "learner": p["learner"], "due": p["due"]} for p in overdue]}
+
+
+# ── 292 D 과제 편성 도우미 · E 교육 수요 · 효과 ───────────────────────────────
+@router.get("/candidates")
+def candidates(request: Request, skills: str = "", exclude: str = "", conn=Depends(get_db)):
+    """필요 역량(쉼표)마다 경험이 있는 사람 — 경험 수 · 마지막 해 · 맡은 진행 과제 수 · 키우는 중 · 배우는 중."""
+    from .. import schemas as rules
+    from ..services import team_plans
+
+    _manager(request)
+    names = rules.split_list(skills)
+    if not names:
+        raise HTTPException(status_code=400, detail="필요 역량을 하나 이상 적어 주세요.")
+    return team_plans.candidates(conn, names, rules.split_list(exclude))
+
+
+@router.get("/education")
+def education(request: Request, conn=Depends(get_db)):
+    from ..services import team_plans
+
+    _manager(request)
+    return team_plans.education(conn)

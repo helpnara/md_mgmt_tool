@@ -97,7 +97,7 @@ META_ORDER = [
     "demoted_from",
     # 사전점검 체크리스트 (TODO 155) — 그때의 항목 이름 · 단계 · 점수 · 만점을 함께 적은 스냅샷
     "precheck",
-    "tags", "created_by", "created_at", "updated_at",
+    "tags", "need_skills", "created_by", "created_at", "updated_at",
 ]
 
 REQUEST_FILE = "request.md"
@@ -245,6 +245,10 @@ def _clean_fields(data: dict[str, Any]) -> dict[str, Any]:
         out["picked"] = bool(data.get("picked"))
     if "tags" in data:
         out["tags"] = _tags(data.get("tags"))
+    if "need_skills" in data:   # 필요 역량 (TODO 292 D)
+        from .projects import clean_need_skills
+
+        out["need_skills"] = clean_need_skills(data.get("need_skills"))
     return out
 
 
@@ -978,6 +982,7 @@ def promotion_plan(conn: sqlite3.Connection, intake_id: str) -> dict[str, Any]:
         "effect_request": row["effect_request"],
         **{key: row[key] for key in CLASSIFICATION_KEYS},
         "tags": _tags(doc.meta.get("tags")),
+        "need_skills": list(doc.meta.get("need_skills") or []),   # 292 D — 승격하면 과제로
         "body_preview": mapped["body"],
         "matched_sections": mapped["matched"],
         "leftover_sections": mapped["leftover"],
@@ -1045,6 +1050,7 @@ def promote(
         # 검토한 숫자만 (요청자 추정은 옮기지 않는다)
         "effect_expected": data.get("effect_expected"),
         "tags": _tags(data.get("tags")),
+        "need_skills": data.get("need_skills") or [],
         **{key: data.get(key) for key in CLASSIFICATION_KEYS},
         "intake_id": intake_id,
         "body": mapped["body"],

@@ -460,8 +460,8 @@ def index_project(
         INSERT INTO project(id, dir_name, title, status, type, grp, owner, start_date, due_date,
                             effect_expected, effect_verified, outcome, no_report, no_effect, created_by,
                             completed_at, nature, category, delivery, cost_kind, intake_id,
-                            created_at, updated_at, body, file_mtime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            created_at, updated_at, body, file_mtime, need_skills)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           dir_name=excluded.dir_name, title=excluded.title, status=excluded.status,
           type=excluded.type, grp=excluded.grp, owner=excluded.owner, start_date=excluded.start_date,
@@ -473,7 +473,8 @@ def index_project(
           nature=excluded.nature, category=excluded.category, delivery=excluded.delivery,
           cost_kind=excluded.cost_kind, intake_id=excluded.intake_id,
           created_at=excluded.created_at,
-          updated_at=excluded.updated_at, body=excluded.body, file_mtime=excluded.file_mtime
+          updated_at=excluded.updated_at, body=excluded.body, file_mtime=excluded.file_mtime,
+          need_skills=excluded.need_skills
         """,
         (
             project_id,
@@ -501,6 +502,7 @@ def index_project(
             updated_at,
             doc.body,
             index_md.stat().st_mtime,
+            ", ".join(rules.split_list(doc.meta.get("need_skills"))) or None,  # 필요 역량 (TODO 292 D)
         ),
     )
     _sync_tags(conn, "project_tag", "project_id", project_id, _as_list(doc.meta.get("tags")))
@@ -775,8 +777,8 @@ def index_activities(
             """
             INSERT INTO activity(person, rel_path, date, end_date, kind, title, host, place,
                                  hours, cost, takeaway, link, body, author,
-                                 created_at, updated_at, plan_checked, file_mtime)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 created_at, updated_at, plan_checked, skills, file_mtime)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rel_path) DO UPDATE SET
               person=excluded.person, date=excluded.date, end_date=excluded.end_date,
               kind=excluded.kind,
@@ -784,7 +786,7 @@ def index_activities(
               hours=excluded.hours, cost=excluded.cost, takeaway=excluded.takeaway,
               link=excluded.link, body=excluded.body, author=excluded.author,
               created_at=excluded.created_at, updated_at=excluded.updated_at,
-              plan_checked=excluded.plan_checked, file_mtime=excluded.file_mtime
+              plan_checked=excluded.plan_checked, skills=excluded.skills, file_mtime=excluded.file_mtime
             """,
             (
                 person,
@@ -804,6 +806,7 @@ def index_activities(
                 _as_str(doc.meta.get("created_at")),
                 _as_str(doc.meta.get("updated_at")),
                 _as_str(doc.meta.get("plan_checked")),  # 지난 예정 확인 (TODO 231)
+                ", ".join(rules.split_list(doc.meta.get("skills"))) or None,  # 관련 역량 (TODO 292 E)
                 path.stat().st_mtime,
             ),
         )

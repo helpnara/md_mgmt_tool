@@ -309,3 +309,145 @@ def delete_plan(plan_id: str) -> None:
     if len(left) == len(items):
         raise KeyError(plan_id)
     _write_plans(left)
+
+
+# ── D 과제 편성 도우미 ────────────────────────────────────────────────────────
+
+def candidates(conn: sqlite3.Connection, skills: list[str], exclude: list[str] | None = None) -> dict[str, Any]:
+    """필요 역량마다 경험이 있는 사람 — 경험 수 · 마지막 해 · 지금 맡은 진행 과제 수(바쁜 정도).
+    육성 목표로 키우는 중(C) · 승계 계획의 배울 사람(B) 표시. 점수 · 순위 없이 사실만(292 J)."""
+    from . import team_skills
+
+    view = team_skills.overview(conn, "all")
+    index = skill_rules.index(settings_service.skill_dictionary())
+    wanted = []
+    for raw in skills[:10]:
+        name = index.get(skill_rules.key(raw), ("", raw))[1]
+        if name and name not in wanted:
+            wanted.append(name)
+    rows = {skill_rules.key(r["name"]): r for r in view["skills"]}
+    year = str(clock.today().year)
+    open_plans = [p for p in _read_plans() if p.get("state") == "진행"]
+    exclude = exclude or []
+    people = []
+    for person in view["people"]:
+        name = person["name"]
+        if person.get("left") or name in exclude:
+            continue
+        has, growing, learning = [], [], []
+        for skill in wanted:
+            cell = (rows.get(skill_rules.key(skill)) or {}).get("cells", {}).get(name)
+            if cell:
+                has.append({"skill": skill, "count": cell["count"], "last": cell.get("last") or ""})
+        goals = _read_goals(name, year)["goals"] if name else []
+        growing = [g["skill"] for g in goals if skill_rules.key(g["skill"]) in {skill_rules.key(w) for w in wanted}]
+        learning = [p["name"] for p in open_plans if p["learner"] == name and skill_rules.key(p["name"]) in {skill_rules.key(w) for w in wanted}]
+        if not has and not growing and not learning:
+            continue
+        busy = conn.execute(
+            "SELECT COUNT(*) AS n FROM project_contribution c JOIN project p ON p.id = c.project_id"
+            " WHERE c.name = ? AND c.current = 1 AND p.status = 'in_progress'", (name,)).fetchone()["n"]
+        people.append({"name": name, "leader": bool(person.get("leader")), "has": has, "growing": growing, "learning": learning,
+                       "busy": busy, "experiences": sum(h["count"] for h in has), "last": max((h["last"] for h in has), default="")})
+    people.sort(key=lambda p: (-len(p["has"]), -p["experiences"], -int(p["last"] or 0), p["busy"], p["name"]))
+    return {"skills": wanted, "people": people,
+            "missing": [s for s in wanted if not any(any(h["skill"] == s for h in p["has"]) for p in people)]}
+
+
+# ── E 교육 수요 · 효과 ────────────────────────────────────────────────────────
+
+EFFECT_DAYS = 365
+
+
+def education(conn: sqlite3.Connection) -> dict[str, Any]:
+    """교육 수요(목표 모자람 + 경로가 교육인 시작 전 육성 목표) · 효과(관련 역량이 있는 교육 뒤 1년 안에 그 역량 경험이 생겼나)."""
+    from . import team_skills
+
+    view = team_skills.overview(conn, "3y")
+    year = str(clock.today().year)
+    demand: dict[str, dict[str, Any]] = {}
+    for t in view.get("targets", []):
+        if t.get("kind") == "역량" and t.get("gap"):
+            row = demand.setdefault(t["matched"] or t["name"], {"skill": t["matched"] or t["name"], "gap": 0, "people": []})
+            row["gap"] = max(row["gap"], int(t["gap"]))
+    for person in view["people"]:
+        if person.get("left"):
+            continue
+        for g in _read_goals(person["name"], year)["goals"]:
+            if g["way"] != "교육" or g["mark"]:
+                continue
+            if any(_in_year(h, year) for h in skill_hits(person["name"], "역량", g["skill"])):
+                continue
+            row = demand.setdefault(g["skill"], {"skill": g["skill"], "gap": 0, "people": []})
+            if person["name"] not in row["people"]:
+                row["people"].append(person["name"])
+    today = clock.today()
+    effect: dict[str, dict[str, Any]] = {}
+    unlinked = 0
+    for row in conn.execute("SELECT person, date, title, kind, skills FROM activity WHERE date <= ? ORDER BY date DESC",
+                            (today.isoformat(),)):
+        names = [n.strip() for n in str(row["skills"] or "").split(",") if n.strip()]
+        if not names:
+            if row["kind"] == "education":
+                unlinked += 1
+            continue
+        try:
+            day = date.fromisoformat(row["date"][:10])
+        except ValueError:
+            continue
+        limit = (day + timedelta(days=EFFECT_DAYS)).isoformat()
+        for skill in names:
+            item = effect.setdefault(skill, {"skill": skill, "attended": [], "used": [], "waiting": [], "courses": set()})
+            item["courses"].add(row["title"])
+            hits = [h for h in skill_hits(row["person"], "역량", skill)
+                    if row["date"][:10] <= max((h["end"] or h["start"] or h["created_at"] or "")[:10], h["created_at"][:10]) <= limit]
+            entry = {"person": row["person"], "date": row["date"][:10], "title": row["title"]}
+            if row["person"] in [a["person"] for a in item["attended"]]:
+                continue
+            item["attended"].append(entry)
+            if hits:
+                item["used"].append({**entry, "experience": {"id": hits[0]["id"], "title": hits[0]["title"]}})
+            elif limit < today.isoformat():
+                item["waiting"].append({**entry, "late": True})
+            else:
+                item["waiting"].append({**entry, "late": False})
+    effects = [{**v, "courses": sorted(v["courses"])} for v in effect.values()]
+    effects.sort(key=lambda e: (-len(e["attended"]), e["skill"]))
+    return {"demand": sorted(demand.values(), key=lambda d: (-(d["gap"] + len(d["people"])), d["skill"])),
+            "effect": effects, "unlinked": unlinked, "days": EFFECT_DAYS}
+
+
+# ── I 사람 모양 ───────────────────────────────────────────────────────────────
+
+def person_shape(name: str, period: str = "3y") -> dict[str, Any]:
+    """한 사람의 축 넷 — 경험 수 · 가진 역량 가짓수(구조화 · 확정). 다른 사람과 견주지 않는다."""
+    from . import experiences as exp
+
+    skill_dict = settings_service.skill_dictionary()
+    this_year = clock.today().year
+    low = str(this_year - 2) if period == "3y" else "0000"
+    axes = {axis: {"axis": axis, "experiences": 0, "skills": set()} for axis in skill_rules.AXES}
+    folder = exp.person_dir(name)
+    for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+        try:
+            item = exp.read_file(path)
+        except Exception:  # noqa: BLE001
+            continue
+        if item["status"] not in COUNTED:
+            continue
+        last = (item["end"] or item["start"] or "")[:4]
+        if period == "3y" and last and last < low:
+            continue
+        matched = skill_rules.match([s for s in item["skills"] if isinstance(s, dict)], skill_dict)
+        seen_axes = set()
+        for skill in matched:
+            row = axes.get(skill["axis"])
+            if row is None:
+                continue
+            row["skills"].add(skill["name"])
+            seen_axes.add(skill["axis"])
+        for axis in seen_axes:
+            axes[axis]["experiences"] += 1
+    rows = [{"axis": a["axis"], "experiences": a["experiences"], "skills": len(a["skills"]), "names": sorted(a["skills"])} for a in axes.values()]
+    return {"person": name, "period": period, "axes": rows, "total_skills": sum(r["skills"] for r in rows),
+            "spread": sum(1 for r in rows if r["skills"])}

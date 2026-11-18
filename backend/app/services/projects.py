@@ -96,6 +96,8 @@ META_ORDER = [
     "start_date", "due_date", "completed_at", "effect_expected", "effect_verified",
     # 금액 아닌 성과 한 줄 (TODO 237 A4)
     "outcome",
+    # 필요 역량 (TODO 292 D) — 과제 편성 도우미
+    "need_skills",
     "no_report", "no_effect", "partners",
     # 이 과제가 어느 접수에서 승격됐는가 (TODO 136). 직접 만든 과제는 비어 있다.
     "intake_id",
@@ -304,6 +306,20 @@ def max_sequence(names: list[str], prefix: str) -> int:
     return used
 
 
+def clean_need_skills(value: object) -> list[str]:
+    """필요 역량 (TODO 292 D) — 사전의 이름으로 맞춘다(같은 말 · 대소문자). 사전에 없으면 적은 그대로, 10개까지."""
+    from ..experience import skills as skill_rules
+    from . import settings as settings_service
+
+    index = skill_rules.index(settings_service.skill_dictionary())
+    out: list[str] = []
+    for raw in rules.split_list(value)[:10]:
+        name = index.get(skill_rules.key(raw), ("", raw))[1]
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
 def project_dir(conn: sqlite3.Connection, project_id: str) -> Path:
     row = conn.execute("SELECT dir_name FROM project WHERE id = ?", (project_id,)).fetchone()
     if row is None:
@@ -364,6 +380,7 @@ def create_project(conn: sqlite3.Connection, data: dict[str, Any], warnings: lis
         "effect_expected": effect_expected,
         "effect_verified": effect_verified,
         **({"outcome": outcome} if outcome else {}),
+        **({"need_skills": need} if (need := clean_need_skills(data.get("need_skills"))) else {}),  # 292 D
         # 과제 분류 넷 (TODO 136). 주로 스마트과제에서 쓴다 — 다른 과제는 비어 있어도 된다.
         **{key: normalize_label(data.get(key)) for key in CLASSIFICATION_KEYS},
         # 접수에서 승격된 과제면 그 접수 번호 (TODO 136)
@@ -809,6 +826,8 @@ def update_project(conn: sqlite3.Connection, project_id: str, updates: dict[str,
         updates["completed_at"] = normalize_day(updates["completed_at"])
     if "outcome" in updates:
         updates["outcome"] = contrib.clean_outcome(updates["outcome"])
+    if "need_skills" in updates:
+        updates["need_skills"] = clean_need_skills(updates["need_skills"])
     changes = {k: v for k, v in updates.items() if k in META_ORDER or k == "group"}
     # 담당 기간 (TODO 237 A2) — 담당자가 바뀌면 든 사람은 오늘부터, 빠진 사람은 오늘까지
     if "owners" in changes:

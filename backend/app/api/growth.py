@@ -33,3 +33,16 @@ def put_growth(request: Request, person: str, year: str, goals: list[dict] = Bod
         return svc.save_growth(person, year, goals, by=user.name or "팀장")
     except svc.PlanError as error:
         raise HTTPException(status_code=400, detail=str(error)) from None
+
+
+@router.get("/shape")
+def shape(request: Request, person: str = "", period: str = "3y"):
+    """사람 모양 (TODO 292 I) — 한 사람의 축 넷. 팀장은 누구나, 팀원은 자기 것만(다른 사람과 견주지 않는다)."""
+    user = who.of(request)
+    if not user.manages:
+        if user.role != who.MEMBER or not user.name:
+            raise HTTPException(status_code=403, detail="사람 모양은 팀장과 본인만 봅니다.")
+        person = user.name
+    if not person:
+        raise HTTPException(status_code=400, detail="사람을 고르세요.")
+    return svc.person_shape(person, "all" if period == "all" else "3y")
