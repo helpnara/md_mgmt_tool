@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { attempt } from "../notify";
 import { clockNow, discardQuestion, dropDraft, loadDraft, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
+import { EditingNow } from "../presence";
 import { filesBase, renderMarkdown } from "../markdown";
 import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import { COPY_FAILED } from "../clipboard";
@@ -333,6 +334,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
             }
       }
     >
+      <EditingNow target={editable || (frozen && !readonly) ? draftKey : null} />
       <div className="card-head">
         <h2>
           {report.report_date} 보고

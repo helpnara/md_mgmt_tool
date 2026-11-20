@@ -1961,3 +1961,6 @@ export interface EducationView {
   days: number;
 }
 export interface PersonShape { person: string; period: string; axes: { axis: string; experiences: number; skills: number; names: string[]; /** 310 C — 배운 것(교육), 세지 않음 */ learned?: string[] }[]; total_skills: number; spread: number }
+
+/** 지금 고치는 중 (TODO 317) — 다른 창에서 같은 글을 편집기로 열어 둔 사람 */
+export interface PresencePerson { name: string; minutes: number }

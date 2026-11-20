@@ -123,7 +123,7 @@ export default function IntakePool({ meta, query, onMetaChange }: Props) {
       )}
       <div className="page-head with-action">
         <div>
-          <h1>접수</h1>
+          <h1>과제접수</h1>
           <p className="hint page-desc">
             현업 요청을 받아 검토하고, 착수가 정해지면 <b>과제로 승격</b>합니다. 과제 번호는 승격할 때 붙습니다.
           </p>

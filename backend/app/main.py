@@ -13,7 +13,7 @@ import anyio
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import deps
-from .api import (growth, mode, team_skills, update, yearcards, activities, attachments, dashboard, drafts, edits, entries, errors, experiences, export, folders, home, intakes,
+from .api import (presence, growth, mode, team_skills, update, yearcards, activities, attachments, dashboard, drafts, edits, entries, errors, experiences, export, folders, home, intakes,
                   linkfix, meetings, meta, people, person_history, projects, reports, restore, roadmap, search,
                   settings, trash, versions)
 from . import mimefix, permissions, readcache, share, who
@@ -446,6 +446,7 @@ def validation_message(error: dict) -> str:
 
 
 app.include_router(meta.router)
+app.include_router(presence.router)   # 지금 고치는 중 (TODO 317)
 app.include_router(dashboard.router)
 app.include_router(home.router)
 app.include_router(activities.router)

@@ -329,7 +329,7 @@ export default function App() {
           </a>
           {/* 접수 → 과제 순서 (TODO 136). 팀의 일이 그 순서로 흐른다. */}
           <a href="#/intakes" className={route.name === "intakes" || route.name === "intake" ? "active" : undefined}>
-            접수
+            과제접수
           </a>
           <a href="#/projects" className={route.name === "list" ? "active" : undefined}>
             과제목록

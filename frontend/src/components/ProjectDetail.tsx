@@ -6,6 +6,7 @@ import { attempt, notifyError } from "../notify";
 import { isReadonly } from "../readonly";
 import { canEditEntry, canEditProject, isMember } from "../me";
 import { discardQuestion, dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
+import { EditingNow, PencilBadge, usePresenceList } from "../presence";
 import type { DemotePlan, EditDiff, Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -277,6 +278,8 @@ export default function ProjectDetail({
   // 편집 중에 올린 첨부가 있어도 묻는다. 떠날 때는 지우지 않는다 — 임시 보관이 그 첨부를 가리킨다 (TODO 213 의 남는 것)
   useUnsaved(overviewKey, overviewDirty || (editingOverview && !overviewLedger.empty));
   useDraftKeeper(editingOverview ? overviewKey : null, overviewDraft, overviewDraft === overviewOriginal);
+  // 317 — 이 과제의 글을 지금 다른 창에서 고치는 사람(15초마다)
+  const editingNow = usePresenceList();
   // 남은 임시 보관 — [기록 추가] 옆 · 카드의 "작성 중" 표시가 본다. 다른 창에서 쓴 것도 창으로 돌아오면 다시 읽는다 (TODO 170)
   useDrafts();
 
@@ -1095,6 +1098,7 @@ export default function ProjectDetail({
                 작성 중
               </span>
             )}
+            {!editingOverview && <PencilBadge people={editingNow.get(overviewKey)} />}
           </h2>
           <div className="overview-actions">
             <input
@@ -1161,6 +1165,7 @@ export default function ProjectDetail({
         )}
         {editingOverview ? (
           <>
+            <EditingNow target={overviewKey} />
             <PreviewToggle on={preview} onToggle={togglePreview} />
             <div className={preview ? "split" : "split solo"}>
               <textarea
@@ -1316,6 +1321,7 @@ export default function ProjectDetail({
                   <span className="report-date">{report.report_date}</span>
                   {/* 초안의 본문 · 확정 보고의 지시사항 — 둘 다 같은 열쇠에 남는다 (TODO 207) */}
                   {hasDraft(`report:${report.id}`) && <span className="draft-waiting">작성 중</span>}
+                  <PencilBadge people={editingNow.get(`report:${report.id}`)} />
                   {report.audience ? (
                     <span className="report-audience" title={report.audience}>{report.audience}</span>
                   ) : (
@@ -1473,6 +1479,8 @@ export default function ProjectDetail({
               작성 중이던 기록 있음
             </span>
           )}
+          {/* 317 — 다른 창에서 이 과제에 새 기록을 쓰는 중 */}
+          <PencilBadge people={editingNow.get(`entry:new-${projectId}`)} label="새 기록 쓰는 중" />
           <button onClick={() => setCreatingEntry(true)}>기록 추가</button>
         </div>
       </div>
@@ -1634,6 +1642,7 @@ export default function ProjectDetail({
                       작성 중
                     </span>
                   )}
+                  <PencilBadge people={editingNow.get(`entry:${entry.id}`)} />
                   {/* 팀원은 본인이 쓴 기록만 고치고 지운다 (TODO 233 ③) */}
                   <button data-write data-owner-only={canEditEntry(projectId, entry.author) ? undefined : true} className="ghost" onClick={() => setEditingEntryId(entry.id)}>
                     수정

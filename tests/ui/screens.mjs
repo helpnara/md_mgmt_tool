@@ -3082,14 +3082,14 @@ async function main() {
   console.log("\n[24] 과제 접수 풀 — 등록 · 검토 · 판정 · 승격 (TODO 136)");
 
   let intakeId = null;
-  await check("[접수] 메뉴가 과제목록 앞에 서고 풀이 열린다", async () => {
+  await check("[과제접수] 메뉴가 과제목록 앞에 서고 풀이 열린다 (314 — 접수 → 과제접수)", async () => {
     await go("#/");
     const menu = await page.locator(".app-header nav a").allInnerTexts();
-    const at = menu.findIndex((text) => text.trim() === "접수");
-    expect(at >= 0, `메뉴에 접수가 없다: ${menu.join(" | ")}`);
+    const at = menu.findIndex((text) => text.trim() === "과제접수");
+    expect(at >= 0, `메뉴에 과제접수가 없다: ${menu.join(" | ")}`);
     expect(menu[at + 1]?.trim() === "과제목록", `접수 다음이 과제목록이 아니다: ${menu.join(" | ")}`);
     await go("#/intakes");
-    equal(await page.locator(".intake-pool h1").innerText(), "접수", "화면 제목");
+    equal(await page.locator(".intake-pool h1").innerText(), "과제접수", "화면 제목");
   });
 
   await check("[+ 접수 등록] 으로 만들면 번호가 붙고 상세로 간다", async () => {
@@ -4575,7 +4575,7 @@ async function main() {
       expect(metaIn.readonly === false && metaIn.vault && metaIn.share && metaIn.share.url.startsWith("http://"), "안쪽의 meta: 그대로 + 공유 주소");
       expect((await fetch(inside + "/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "안에서는 된다" }) })).status === 201, "127.0.0.1 은 쓴다");
       // 화면 — 바깥에서
-      for (const [name, hash] of [["홈", "#/"], ["과제목록", "#/projects"], ["과제 상세", `#/projects/${seeded.projectA}`], ["접수", "#/intakes"], ["보고대상", "#/reports"], ["팀원역량", "#/skills"]]) {
+      for (const [name, hash] of [["홈", "#/"], ["과제목록", "#/projects"], ["과제 상세", `#/projects/${seeded.projectA}`], ["과제접수", "#/intakes"], ["보고대상", "#/reports"], ["팀원역량", "#/skills"]]) {
         await page.goto(`${outside}/${hash}`); await page.waitForTimeout(900);
         equal(await page.locator(".readonly-band").count(), 1, `${name}: 읽기 전용 띠`);
         equal(await page.locator('nav a[href="#/settings"]').count(), 0, `${name}: 설정 메뉴 없음`);
@@ -8014,6 +8014,32 @@ async function main() {
     } finally {
       await fetch(`${BASE}/api/yearcards/signed-on`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ year: "2026", signed_on: "" }) });
       await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  });
+
+  await check("지금 고치는 중 (317) — 다른 창에서 진행일지를 고치면 목록 줄에 연필, 같은 글을 열면 편집기 위 경고", async () => {
+    const other = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    try {
+      // 다른 창(B)이 첫 진행일지를 편집기로 연다
+      await other.goto(`${BASE}/#/projects/${seeded.projectA}`); await other.waitForTimeout(1200);
+      await other.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+      await other.locator(".entry-editor").waitFor({ timeout: 8000 });
+      await other.waitForTimeout(800);
+      // 이 창(A) — 과제 화면을 새로 열면 그 줄에 연필
+      await go(`#/projects/${seeded.projectA}`);
+      await page.locator(".timeline .entry").first().locator("[data-testid=pencil-badge]").waitFor({ timeout: 10000 });
+      // A 도 같은 글을 열면 편집기 위에 경고 띠
+      await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+      await page.locator(".entry-editor [data-testid=editing-now]").waitFor({ timeout: 10000 });
+      expect((await page.locator(".entry-editor [data-testid=editing-now]").innerText()).includes("지금 이 글을 고치고"), "경고 글");
+      // B 가 닫으면 A 의 경고가 다음 알림(15초 안)에 사라진다 — 여기서는 서버 목록만 본다
+      await other.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
+      await other.waitForTimeout(800);
+      const left = await api.get(`/api/presence?client=nobody`);
+      expect(left.items.every((i) => i.people.length <= 1), `B 가 떠났다: ${JSON.stringify(left.items)}`);
+      await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
+    } finally {
+      await other.close();
     }
   });
 

@@ -48,6 +48,8 @@ _RULES: list[tuple[str, re.Pattern[str], str]] = [
 ]
 # 쓰다 만 글 — 사람마다 따로 둔다(drafts 가 사람 폴더로 나눈다). 쓰기 기록에는 남기지 않는다
 _DRAFTS = re.compile(r"^/api/drafts(/[^/]+)?$")
+# 지금 고치는 중 알림 (TODO 317) — 메모리에만 두는 알림이라 쓰기 기록에 남기지 않는다
+_PRESENCE = re.compile(r"^/api/presence/(beat|leave)$")
 
 
 @dataclass
@@ -76,7 +78,7 @@ def check(conn: sqlite3.Connection, user: User, method: str, path: str) -> Decis
     """팀원의 쓰기 하나를 판정한다. 팀장 · 읽기는 여기 오지 않는다(미들웨어가 가른다)."""
     if user.role != MEMBER:
         return Decision(False, DENIED)
-    if _DRAFTS.match(path):
+    if _DRAFTS.match(path) or _PRESENCE.match(path):
         return Decision(True, record=False)
     for rule_method, pattern, action in _RULES:
         if method != rule_method:

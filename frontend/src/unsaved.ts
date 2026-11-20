@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { notifyError } from "./notify";
+import { usePresenceBeat } from "./presence";
 
 /**
  * 저장하지 않은 편집 (TODO 162).
@@ -194,6 +195,8 @@ export function dropDraft(key: string): void {
  * 원문과 같아지면 지운다. `content` 는 글 하나든 {date, title, body, tags} 같은 묶음이든 된다.
  */
 export function useDraftKeeper(key: string | null, content: unknown, isOriginal: boolean): void {
+  // 317 — 편집기가 열려 있는 동안 "고치는 중" 을 알린다(같은 열쇠)
+  usePresenceBeat(key);
   const signature = JSON.stringify(content);
   // 이 편집에서 한 번이라도 남겼는가 — 편집기를 막 열어 원문 그대로일 때 지우기를 보내면, 되살리기 전에
   // **남아 있던 글을 지워 버린다.** 지우는 것은 이번에 쓴 뒤 원문으로 되돌린 때만(저장 · 버리기는 dropDraft 가 한다).

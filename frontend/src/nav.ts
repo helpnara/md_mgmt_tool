@@ -37,7 +37,7 @@ const LABELS: Record<string, string> = {
   search: "검색 결과",
   help: "도움말",
   // 과제 접수 풀 (TODO 136)
-  intakes: "접수",
+  intakes: "과제접수",   // 314 — 메뉴 이름과 같게
   // 293 — 이름표가 없어 모두 "과제 목록" 으로 가던 화면
   settings: "설정",
 };
@@ -181,7 +181,7 @@ export function backTarget(back: string | null | undefined): { href: string; lab
   // 사람별 이력에서 온 경우 (TODO 238) — 그 사람의 과제를 열었다가 돌아간다
   if (path.startsWith("person/")) return { href: `#/${back}`, label: "이력" };
   // 접수 상세에서 온 경우 (TODO 136) — 승격된 과제나 병합 대상 과제를 열었다가 돌아간다.
-  if (path.startsWith("intakes/")) return { href: `#/${back}`, label: "접수" };
+  if (path.startsWith("intakes/")) return { href: `#/${back}`, label: "과제접수" };
   // 경험 상세 · 경험 정리에서 온 경우 (TODO 293)
   if (path.startsWith("experience/")) return { href: `#/${back}`, label: "경험" };
   if (path.startsWith("experience-export/") || path.startsWith("experience-import/")) return { href: `#/${back}`, label: "경험 정리" };
@@ -273,7 +273,7 @@ export function useAddressBar(
 /** 메뉴 화면의 브라우저 탭 제목 (TODO 169). 탭 이름과 같다. */
 export const SCREEN_TITLES: Record<string, string> = {
   home: "홈",
-  intakes: "접수",
+  intakes: "과제접수",   // 314
   list: "과제목록",
   reports: "보고대상",
   history: "보고이력",

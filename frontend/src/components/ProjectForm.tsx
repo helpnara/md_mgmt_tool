@@ -484,7 +484,7 @@ export default function ProjectForm({ meta, initial, submitLabel, onSubmit, onCa
       )}
       {creating && form.type === meta.classified_type && (
         <p className="hint intake-hint">
-          스마트과제는 <a href="#/intakes">접수</a>에서 승격해 만들 수도 있습니다 — 접수 번호와 인터뷰 기록이 과제에
+          스마트과제는 <a href="#/intakes">과제접수</a>에서 승격해 만들 수도 있습니다 — 접수 번호와 인터뷰 기록이 과제에
           함께 이어집니다. 급한 건은 여기서 바로 만들어도 됩니다.
         </p>
       )}

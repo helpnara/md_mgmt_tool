@@ -3556,3 +3556,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .pc-person-dense .pc-stats { flex-wrap: nowrap; gap: 1mm; }
 .pc-person-dense .pc-stats span { min-width: 0; padding: 0.6mm 1.1mm; font-size: 6.2pt; white-space: nowrap; }
 .pc-person-dense .pc-stats b { font-size: 9pt; }
+
+/* 317 — 지금 고치는 중: 편집기 위 띠 · 목록 줄의 연필(살짝 굴러가듯 움직임) */
+.editing-now { margin: 0 0 8px; padding: 6px 10px; border-radius: var(--radius); background: var(--warning-50, var(--neutral-50)); border: 1px solid var(--warning-200, var(--border)); color: var(--warning-700); font-size: var(--fs-sm); }
+.pencil-badge { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 8px; border-radius: 999px; font-size: var(--fs-xs); background: var(--warning-50, var(--neutral-50)); color: var(--warning-700); white-space: nowrap; }
+.editing-pencil { display: inline-block; animation: pencil-roll 1.2s ease-in-out infinite; transform-origin: 50% 80%; }
+@keyframes pencil-roll { 0%, 100% { transform: rotate(-12deg) translateX(0); } 50% { transform: rotate(12deg) translateX(2px); } }
+@media (prefers-reduced-motion: reduce) { .editing-pencil { animation: none; } }

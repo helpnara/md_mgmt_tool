@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { attempt, notifyError } from "../notify";
 import { clockNow, discardQuestion, dropDraft, loadDraft, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
+import { EditingNow } from "../presence";
 import { filesBase, renderMarkdown } from "../markdown";
 import VersionPanel from "./VersionPanel";
 import type { Entry } from "../types";
@@ -411,6 +412,7 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
         void handleFiles(Array.from(event.dataTransfer.files));
       }}
     >
+      <EditingNow target={draftKey(projectId, entryId)} />
       <div className="form-row">
         <label>
           날짜

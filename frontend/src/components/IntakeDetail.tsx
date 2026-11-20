@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { EditingNow, PencilBadge, usePresenceList } from "../presence";
 import { renderMarkdown } from "../markdown";
 import { backTarget, projectLink, setPageTitle } from "../nav";
 import LoadError from "./LoadError";
@@ -92,6 +93,8 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
   const [promoting, setPromoting] = useState(false);
   // 남은 임시 보관 — 요청 내용 [수정] 옆 "작성 중" 표시가 본다 (TODO 170)
   useDrafts();
+  // 317 — 다른 창에서 지금 고치는 사람
+  const editingNow = usePresenceList();
   // 홈의 "작성 중이던 글" 에서 왔으면 요청 내용 편집기를 연다 — 한 번만
   const draftOpened = useRef(false);
 
@@ -115,7 +118,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
     if (intake) setPageTitle(`${intake.id} ${intake.title}`);
   }, [intake]);
 
-  const target = back ? backTarget(back) : { href: "#/intakes", label: "접수" };
+  const target = back ? backTarget(back) : { href: "#/intakes", label: "과제접수" };
 
   if (!intake) {
     return (
@@ -429,6 +432,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
                 작성 중
               </span>
             )}
+            {!editingBody && <PencilBadge people={editingNow.get(`intake:${intake.id}`)} />}
           </h2>
           <div className="card-head-actions">
             {open && (
@@ -1044,6 +1048,7 @@ function BodyEditor({
         }
       }}
     >
+      <EditingNow target={draftKey} />
       <MarkdownArea
         field={field}
         intake={intake}
@@ -1135,6 +1140,7 @@ function Logs({
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   useEffect(() => onEditingChange(adding || editing !== null), [adding, editing, onEditingChange]);
+  const editingNow = usePresenceList();   // 317
   // 과제 상세의 수행 이력과 **같은 짜임**이다 (TODO 147) — 머리는 카드 밖, 기록은 한 장씩 카드,
   // [기록 추가]는 주 단추, [수정]·[삭제]는 보통 크기. 2단의 오른쪽이 두 화면에서 같게 읽히게 한다.
   return (
@@ -1149,6 +1155,7 @@ function Logs({
                 작성 중이던 기록 있음
               </span>
             )}
+            <PencilBadge people={editingNow.get(logDraftKey(intake.id))} label="새 기록 쓰는 중" />
             <button onClick={() => setAdding(true)}>기록 추가</button>
           </div>
         )}
@@ -1207,6 +1214,7 @@ function Logs({
                         작성 중
                       </span>
                     )}
+                    <PencilBadge people={editingNow.get(logDraftKey(intake.id, log.name))} />
                     <button data-write className="ghost" onClick={() => setEditing(log.name)}>
                       수정
                     </button>
@@ -1358,6 +1366,7 @@ function LogEditor({
         }
       }}
     >
+      <EditingNow target={draftKey} />
       <div className="form-row">
         <label>
           날짜
