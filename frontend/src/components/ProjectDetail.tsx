@@ -6,7 +6,7 @@ import { attempt, notifyError } from "../notify";
 import { isReadonly } from "../readonly";
 import { canEditEntry, canEditProject, isMember } from "../me";
 import { discardQuestion, dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
-import { EditingNow, PencilBadge, usePresenceList } from "../presence";
+import { EditingNow, PencilBadge, useEditGate, usePresenceList } from "../presence";
 import type { DemotePlan, EditDiff, Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -280,6 +280,8 @@ export default function ProjectDetail({
   useDraftKeeper(editingOverview ? overviewKey : null, overviewDraft, overviewDraft === overviewOriginal);
   // 317 — 이 과제의 글을 지금 다른 창에서 고치는 사람(15초마다)
   const editingNow = usePresenceList();
+  // 318 — 부드러운 잠금: 다른 사람이 먼저 고치는 중이면 [수정]이 읽기 모드 안내를 띄운다
+  const editGate = useEditGate();
   // 남은 임시 보관 — [기록 추가] 옆 · 카드의 "작성 중" 표시가 본다. 다른 창에서 쓴 것도 창으로 돌아오면 다시 읽는다 (TODO 170)
   useDrafts();
 
@@ -1144,13 +1146,14 @@ export default function ProjectDetail({
                   setEditingOverview(false);
                   return;
                 }
-                void startOverviewEdit();
+                void editGate.tryEdit(overviewKey, () => void startOverviewEdit());
               }}
             >
               {editingOverview ? "취소" : "수정"}
             </button>
           </div>
         </div>
+        {editGate.noticeFor(overviewKey)}
         <UploadMeter meter={overviewMeter.meter} />
         {uploadError && <p className="form-error">{uploadError}</p>}
         {showOverviewVersions && (
@@ -1644,7 +1647,7 @@ export default function ProjectDetail({
                   )}
                   <PencilBadge people={editingNow.get(`entry:${entry.id}`)} />
                   {/* 팀원은 본인이 쓴 기록만 고치고 지운다 (TODO 233 ③) */}
-                  <button data-write data-owner-only={canEditEntry(projectId, entry.author) ? undefined : true} className="ghost" onClick={() => setEditingEntryId(entry.id)}>
+                  <button data-write data-owner-only={canEditEntry(projectId, entry.author) ? undefined : true} className="ghost" onClick={() => void editGate.tryEdit(`entry:${entry.id}`, () => setEditingEntryId(entry.id))}>
                     수정
                   </button>
                   <button
@@ -1660,6 +1663,7 @@ export default function ProjectDetail({
                   </button>
                 </div>
               </div>
+              {editGate.noticeFor(`entry:${entry.id}`)}
               {changeOn && change?.kind === "diff" && changed?.entry === entry.id && (
                 <div className="edit-inline" data-testid="edit-inline-entry"><span className="edit-inline-title">바뀐 곳</span><DiffLines lines={change.lines} /></div>
               )}

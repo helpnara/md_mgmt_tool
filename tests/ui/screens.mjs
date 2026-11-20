@@ -8017,7 +8017,7 @@ async function main() {
     }
   });
 
-  await check("지금 고치는 중 (317) — 다른 창에서 진행일지를 고치면 목록 줄에 연필, 같은 글을 열면 편집기 위 경고", async () => {
+  await check("지금 고치는 중 (317 · 318) — 다른 창에서 고치면 목록 줄에 연필, [수정]은 읽기 모드 안내 → [그래도 고치기] 면 편집기 위 경고", async () => {
     const other = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     try {
       // 다른 창(B)이 첫 진행일지를 편집기로 연다
@@ -8028,8 +8028,14 @@ async function main() {
       // 이 창(A) — 과제 화면을 새로 열면 그 줄에 연필
       await go(`#/projects/${seeded.projectA}`);
       await page.locator(".timeline .entry").first().locator("[data-testid=pencil-badge]").waitFor({ timeout: 10000 });
-      // A 도 같은 글을 열면 편집기 위에 경고 띠
+      // 318 — A 가 [수정]을 누르면 편집기 대신 "읽기 모드" 안내(부드러운 잠금) → [그래도 고치기](확인 창은 위의 dialog 처리기가 받음)
       await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+      const notice = page.locator("[data-testid=lock-notice]").first();
+      await notice.waitFor({ timeout: 10000 });
+      expect((await notice.innerText()).includes("읽기 모드로만 볼 수 있습니다"), "읽기 모드 안내");
+      equal(await page.locator(".entry-editor").count(), 0, "편집기는 열리지 않는다");
+      await notice.getByRole("button", { name: "그래도 고치기" }).click();
+      // 열리면 편집기 위에 경고 띠(317)
       await page.locator(".entry-editor [data-testid=editing-now]").waitFor({ timeout: 10000 });
       expect((await page.locator(".entry-editor [data-testid=editing-now]").innerText()).includes("지금 이 글을 고치고"), "경고 글");
       // B 가 닫으면 A 의 경고가 다음 알림(15초 안)에 사라진다 — 여기서는 서버 목록만 본다

@@ -16,6 +16,7 @@ import time
 from typing import Any
 
 TTL = 45.0
+IDLE_RELEASE = 600.0   # 318 — 10분 동안 입력이 없으면 잠금을 내준다(편집기는 열려 있어도)
 MAX_TARGETS = 2000
 
 _lock = threading.Lock()
@@ -31,17 +32,34 @@ def _clean(now: float) -> None:
             del _items[target]
 
 
-def beat(target: str, client: str, name: str) -> list[dict[str, Any]]:
-    """알림 하나 — 이 창이 이 대상을 고치는 중. 같은 대상을 고치는 **다른 창**을 돌려준다."""
+def beat(target: str, client: str, name: str, idle: float = 0.0) -> list[dict[str, Any]]:
+    """알림 하나 — 이 창이 이 대상을 고치는 중. 같은 대상을 고치는 **다른 창**을 돌려준다.
+    `idle` 은 그 편집기에서 마지막으로 입력한 뒤 지난 초(318 — 10분이 넘으면 잠금을 내준다)."""
     now = time.time()
     with _lock:
         _clean(now)
         if target not in _items and len(_items) >= MAX_TARGETS:
             return []
-        row = _items.setdefault(target, {}).setdefault(client, {"name": name, "since": now, "last": now})
+        row = _items.setdefault(target, {}).setdefault(client, {"name": name, "since": now, "last": now, "idle": 0.0})
         row["last"] = now
         row["name"] = name
+        row["idle"] = max(0.0, float(idle or 0))
         return _others(target, client, now)
+
+
+def holder(target: str, client: str = "") -> dict[str, Any] | None:
+    """318 — 이 글을 먼저 연 사람(잠금을 쥔 창). 내 창 · 10분 넘게 입력이 없는 창은 잠금을 쥐지 않는다.
+    부드러운 잠금이다 — 나중 사람은 읽기 모드로 보고, [그래도 고치기]로 열 수 있다(저장 겹침은 409 가 받친다)."""
+    now = time.time()
+    with _lock:
+        _clean(now)
+        rows = sorted((_items.get(target) or {}).items(), key=lambda kv: kv[1]["since"])
+        for c, v in rows:
+            if c == client:
+                return None            # 내가 먼저 열었다
+            if v.get("idle", 0) < IDLE_RELEASE:
+                return {"name": v["name"], "minutes": int((now - v["since"]) // 60), "idle_minutes": int(v.get("idle", 0) // 60)}
+        return None
 
 
 def leave(target: str, client: str) -> None:

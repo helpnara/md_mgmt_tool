@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { EditingNow, PencilBadge, usePresenceList } from "../presence";
+import { EditingNow, PencilBadge, useEditGate, usePresenceList } from "../presence";
 import { renderMarkdown } from "../markdown";
 import { backTarget, projectLink, setPageTitle } from "../nav";
 import LoadError from "./LoadError";
@@ -95,6 +95,8 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
   useDrafts();
   // 317 — 다른 창에서 지금 고치는 사람
   const editingNow = usePresenceList();
+  // 318 — 부드러운 잠금
+  const editGate = useEditGate();
   // 홈의 "작성 중이던 글" 에서 왔으면 요청 내용 편집기를 연다 — 한 번만
   const draftOpened = useRef(false);
 
@@ -445,12 +447,13 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
               </button>
             )}
             {open && !editingBody && (
-              <button data-write className="ghost" onClick={() => setEditingBody(true)}>
+              <button data-write className="ghost" onClick={() => void editGate.tryEdit(`intake:${intake.id}`, () => setEditingBody(true))}>
                 수정
               </button>
             )}
           </div>
         </div>
+        {editGate.noticeFor(`intake:${intake.id}`)}
         {showVersions && open && (
           <VersionPanel
             path={`intakes/${intake.dir_name}/request.md`}
@@ -1141,6 +1144,7 @@ function Logs({
   const [editing, setEditing] = useState<string | null>(null);
   useEffect(() => onEditingChange(adding || editing !== null), [adding, editing, onEditingChange]);
   const editingNow = usePresenceList();   // 317
+  const editGate = useEditGate();         // 318
   // 과제 상세의 수행 이력과 **같은 짜임**이다 (TODO 147) — 머리는 카드 밖, 기록은 한 장씩 카드,
   // [기록 추가]는 주 단추, [수정]·[삭제]는 보통 크기. 2단의 오른쪽이 두 화면에서 같게 읽히게 한다.
   return (
@@ -1215,7 +1219,7 @@ function Logs({
                       </span>
                     )}
                     <PencilBadge people={editingNow.get(logDraftKey(intake.id, log.name))} />
-                    <button data-write className="ghost" onClick={() => setEditing(log.name)}>
+                    <button data-write className="ghost" onClick={() => void editGate.tryEdit(logDraftKey(intake.id, log.name), () => setEditing(log.name))}>
                       수정
                     </button>
                     <button
@@ -1235,6 +1239,7 @@ function Logs({
                   </div>
                 )}
               </div>
+              {editGate.noticeFor(logDraftKey(intake.id, log.name))}
               <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(log.body, `${base}/logs`) }} />
               {/* 이 기록의 첨부만 — 진행일지의 *첨부* 줄과 같은 모양 (TODO 150) */}
               {intake.attachments.some((item) => referencedIn(log.body, item)) && (

@@ -3563,3 +3563,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .editing-pencil { display: inline-block; animation: pencil-roll 1.2s ease-in-out infinite; transform-origin: 50% 80%; }
 @keyframes pencil-roll { 0%, 100% { transform: rotate(-12deg) translateX(0); } 50% { transform: rotate(12deg) translateX(2px); } }
 @media (prefers-reduced-motion: reduce) { .editing-pencil { animation: none; } }
+/* 318 — 부드러운 잠금 안내(읽기 모드) */
+.lock-notice { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; padding: 8px 12px; border-radius: var(--radius); background: var(--warning-50); border: 1px solid var(--warning-200); color: var(--warning-700); font-size: var(--fs-sm); }
+.lock-notice > span:not(.editing-pencil) { flex: 1 1 260px; }
+.lock-notice.free { background: var(--neutral-50); border-color: var(--border); color: var(--text); }

@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/presence", tags=["presence"])
 class BeatIn(BaseModel):
     target: str = Field(min_length=1, max_length=120)
     client: str = Field(min_length=4, max_length=60)
+    idle: float = 0.0          # 318 — 마지막 입력 뒤 지난 초
 
 
 def _name(request: Request) -> str:
@@ -23,7 +24,8 @@ def _name(request: Request) -> str:
 
 @router.post("/beat")
 def beat(payload: BeatIn, request: Request) -> dict:
-    return {"others": svc.beat(payload.target, payload.client, _name(request))}
+    others = svc.beat(payload.target, payload.client, _name(request), payload.idle)
+    return {"others": others, "holder": svc.holder(payload.target, payload.client)}
 
 
 @router.post("/leave", status_code=204)
@@ -34,3 +36,10 @@ def leave(payload: BeatIn) -> None:
 @router.get("")
 def listing(prefix: str = Query("", max_length=120), client: str = Query("", max_length=60)) -> dict:
     return {"items": svc.listing(prefix, client)}
+
+
+@router.get("/lock")
+def lock(target: str = Query(..., min_length=1, max_length=120), client: str = Query("", max_length=60)) -> dict:
+    """318 — [수정]을 누르기 전에: 다른 사람이 먼저 고치는 중인가(부드러운 잠금)."""
+    return {"holder": svc.holder(target, client)}
+

@@ -1,4 +1,4 @@
-import type { PresencePerson, NeedSuggest, Candidates, EducationView, PersonShape, EditDiff, Growth, GrowthGoal, Snapshot, SnapshotItem, Succession, SuccessionPlan, TeamReminders, ModeStatus, UpdateStatus, UpdateCheck, UpdateJob, TeamSkills, TeamSkillTarget, YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
+import type { PresenceHolder, PresencePerson, NeedSuggest, Candidates, EducationView, PersonShape, EditDiff, Growth, GrowthGoal, Snapshot, SnapshotItem, Succession, SuccessionPlan, TeamReminders, ModeStatus, UpdateStatus, UpdateCheck, UpdateJob, TeamSkills, TeamSkillTarget, YearCard, YearCardListing, YearCardLines, ToolDictionary, RestoreJob, RunningTask, DemotePlan, Roadmap, Meeting, MeetingListing, Activity, ActivitySummary, AppSettings, BackupStatus, Dashboard, Home, MonthGrid, DocumentVersion, Entry, ErrorEntry, LinkFixReport, Meta, OpenDraft, Project, RenumberPlan, Report, ReportCandidate, ReportDiff, ReportHistoryItem, SearchResults, SpreadsheetPreview, Person, ProjectTypeRow, TrashItem, YearFix, FolderListing, Intake, IntakeDetail, IntakeListing, PromotionPlan, Partner, Experience, ExperienceListing, ExperiencePrompt, ExperienceResponseFile, ImportDecision, ImportPreview, SkillDictionary, UnknownTag, TagDecision, TagProposal, ExportOptions, ExportResult, ExportLogRow, AnonymizeCandidates, BackupJob, BackupEstimate } from "./types";
 import type { Attachment } from "./upload";
 import type { Contribution, EditItem, Health, Me, MyWork, PersonHistory, RestoreResult, RetroDue, Visitor, YearReview } from "./types";
 import { notifyError } from "./notify";
@@ -243,8 +243,11 @@ export const api = {
   yearCardsSignedAll: (year: string, signed_on: string) =>
     request<{ year: string; signed_default: string; cleared: string[] }>("/api/yearcards/signed-on", { method: "PUT", body: JSON.stringify({ year, signed_on }) }),
   // 지금 고치는 중 (TODO 317)
-  presenceBeat: (target: string, client: string) =>
-    request<{ others: PresencePerson[] }>("/api/presence/beat", { method: "POST", body: JSON.stringify({ target, client }) }),
+  presenceBeat: (target: string, client: string, idle = 0) =>
+    request<{ others: PresencePerson[]; holder: PresenceHolder | null }>("/api/presence/beat", { method: "POST", body: JSON.stringify({ target, client, idle }) }),
+  // 318 — [수정] 앞에서: 먼저 고치는 사람(부드러운 잠금)
+  presenceLock: (target: string, client: string) =>
+    request<{ holder: PresenceHolder | null }>(`/api/presence/lock?target=${encodeURIComponent(target)}&client=${encodeURIComponent(client)}`),
   presenceLeave: (target: string, client: string) =>
     request<void>("/api/presence/leave", { method: "POST", body: JSON.stringify({ target, client }), keepalive: true }),
   presenceList: (client: string) => request<{ items: { target: string; people: PresencePerson[] }[] }>(`/api/presence?client=${encodeURIComponent(client)}`),

@@ -1964,3 +1964,5 @@ export interface PersonShape { person: string; period: string; axes: { axis: str
 
 /** 지금 고치는 중 (TODO 317) — 다른 창에서 같은 글을 편집기로 열어 둔 사람 */
 export interface PresencePerson { name: string; minutes: number }
+/** 318 — 먼저 연 사람(잠금을 쥔 창) */
+export interface PresenceHolder { name: string; minutes: number; idle_minutes: number }
