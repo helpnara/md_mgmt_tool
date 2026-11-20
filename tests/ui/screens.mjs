@@ -1909,7 +1909,7 @@ async function main() {
     await go("#/");
     const names = await page.locator(".nav a").allInnerTexts();
     equal(names.map((name) => name.trim()).join("|"),
-      "홈|접수|과제목록|로드맵|보고대상|보고이력|팀원역량|설정|도움말", "메뉴 이름");
+      "홈|과제접수|과제목록|로드맵|보고대상|보고이력|팀원역량|설정|도움말", "메뉴 이름");
   });
 
   console.log("\n[10] 과제 번호의 연도는 착수년도 (TODO 95)");
