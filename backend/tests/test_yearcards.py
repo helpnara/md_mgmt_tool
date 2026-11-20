@@ -94,3 +94,47 @@ def test_listing_hides_placeholder_names_and_marks_left(team):  # noqa: F811
     names = {p["name"]: p for p in listing}
     assert not {"TBD", "미정 (신규)", "공석", "작년전배"} & set(names)
     assert names["올해퇴사"]["left"] is True and names["올해퇴사"]["left_reason"] == "퇴사" and names["가팀원"]["left"] is False
+
+
+def test_311_colleagues_partners_and_signed_date(team):  # noqa: F811
+    """311 — 숫자 줄의 함께한 동료 · 부서(본인 · TBD 빼고, 같은 사람 · 부서는 한 번), 서명 날짜(카드마다 · 모두 같게)."""
+    owner, pid = team["owner"], team["shared"]
+    owner.patch(f"/api/projects/{pid}", json={"owners": ["가팀원", "나팀원", "TBD"],
+                                             "partners": [{"team": "설비기술팀", "people": "김철수"}, {"team": "품질팀"}]})
+    other = owner.post("/api/projects", json={"title": "둘째 과제", "owners": ["가팀원", "나팀원"], "status": "in_progress",
+                                              "start_date": "2026-04-01", "partners": [{"team": "품질팀"}]}).json()["id"]
+    card = owner.get("/api/yearcards/card", params={"name": "가팀원", "year": "2026"}).json()
+    n = card["numbers"]
+    assert n["colleagues"] == 1 and n["colleague_names"] == ["나팀원"]          # TBD · 본인 빼고, 두 과제에서 한 번
+    assert n["partners"] == 2 and set(n["partner_teams"]) == {"설비기술팀", "품질팀"}
+    assert card["signed_on"] == "" and card["signed_default"] == "2026. 12."
+    saved = owner.put("/api/yearcards/card", params={"name": "가팀원", "year": "2026"},
+                      json={"message": "고마워요", "projects": [pid, other], "signed_on": "2026. 12. 24."}).json()
+    assert saved["signed_on"] == "2026. 12. 24."
+    assert owner.put("/api/yearcards/card", params={"name": "가팀원", "year": "2026"},
+                     json={"signed_on": "가" * 21}).status_code == 400
+    owner.put("/api/yearcards/card", params={"name": "나팀원", "year": "2026"}, json={"message": "수고했어요"})
+    done = owner.put("/api/yearcards/signed-on", json={"year": "2026", "signed_on": "2026년 겨울"}).json()
+    assert done["cleared"] == ["가팀원"] and done["signed_default"] == "2026년 겨울"     # 따로 적은 날짜는 지우고 기본으로
+    for who in ("가팀원", "나팀원", "팀장"):                                              # 저장 안 한 카드도 따른다
+        got = owner.get("/api/yearcards/card", params={"name": who, "year": "2026"}).json()
+        assert got["signed_on"] == "" and got["signed_default"] == "2026년 겨울"
+    owner.put("/api/yearcards/signed-on", json={"year": "2026", "signed_on": ""})
+    assert owner.get("/api/yearcards/card", params={"name": "가팀원", "year": "2026"}).json()["signed_default"] == "2026. 12."
+    assert owner.get("/api/yearcards/card", params={"name": "가팀원", "year": "2026"}).json()["message"] == "고마워요"   # 편지는 그대로
+    assert team["member"].put("/api/yearcards/signed-on", json={"year": "2026", "signed_on": "x"}).status_code == 403
+
+
+def test_311_card_only_title(team):  # noqa: F811
+    """311 — 카드에서만 과제명을 줄인다(원본 과제명 그대로, 같으면 남기지 않음, 40자까지)."""
+    owner, pid = team["owner"], team["shared"]
+    title = owner.get(f"/api/projects/{pid}").json()["title"]
+    saved = owner.put("/api/yearcards/card", params={"name": "가팀원", "year": "2026"},
+                      json={"projects": [pid], "lines": {pid: {"title": ["짧은 이름"]}}}).json()
+    assert saved["picked"][0]["title_card"] == "짧은 이름" and saved["picked"][0]["title"] == title
+    assert owner.get(f"/api/projects/{pid}").json()["title"] == title
+    same = owner.put("/api/yearcards/card", params={"name": "가팀원", "year": "2026"},
+                     json={"projects": [pid], "lines": {pid: {"title": [title]}}}).json()
+    assert same["picked"][0]["title_card"] == title and not same["picked"][0]["edited"]
+    assert owner.put("/api/yearcards/card", params={"name": "가팀원", "year": "2026"},
+                     json={"projects": [pid], "lines": {pid: {"title": ["가" * 41]}}}).status_code == 400

@@ -16,6 +16,8 @@ router = APIRouter(prefix="/api/yearcards", tags=["yearcards"])
 class CardIn(BaseModel):
     message: str = ""
     headline: str = ""
+    # 311 — 서명 줄 날짜(자유 글, 비우면 "{해}. 12.")
+    signed_on: str = ""
     projects: list[str] = Field(default_factory=list)
     # 286 — 카드에서 다듬은 수행 · 결과 줄 {과제: {did: [..], result: [..]}} · 역량 · 보유 기술 3개씩(None 이면 자주 나온 순)
     lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
@@ -57,3 +59,19 @@ def save(payload: CardIn, request: Request, name: str = Query(..., min_length=1,
         return svc.save(conn, name, year, payload.model_dump(), by=who.of(request).name or "")
     except svc.YearCardError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class SignedIn(BaseModel):
+    year: str = Field(pattern=r"^\d{4}$")
+    signed_on: str = ""
+
+
+@router.put("/signed-on")
+def signed_on_all(payload: SignedIn, request: Request) -> dict:
+    """311 — 그 해 저장된 카드 모두에 같은 서명 날짜."""
+    _manager(request)
+    try:
+        return svc.set_signed_all(payload.year, payload.signed_on, by=who.of(request).name or "")
+    except svc.YearCardError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+

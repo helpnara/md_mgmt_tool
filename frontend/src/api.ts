@@ -239,12 +239,15 @@ export const api = {
   // ── 역량 사전 · 정합성 · 확정 (TODO 260) ─────────────
   experienceSkills: () => request<SkillDictionary>("/api/experiences/skills"),
   // 연말 회고 카드 (TODO 285)
+  // 311 — 그 해 모든 카드의 날짜를 같게(해의 기본 날짜 · 카드마다 따로 적은 것은 지움)
+  yearCardsSignedAll: (year: string, signed_on: string) =>
+    request<{ year: string; signed_default: string; cleared: string[] }>("/api/yearcards/signed-on", { method: "PUT", body: JSON.stringify({ year, signed_on }) }),
   yearCards: (year: string) => request<YearCardListing>(`/api/yearcards?year=${year}`),
   yearCard: (name: string, year: string) => request<YearCard>(`/api/yearcards/card?name=${encodeURIComponent(name)}&year=${year}`),
   yearCardsMany: (year: string, names: string[]) =>
     request<{ year: string; cards: YearCard[] }>(`/api/yearcards/cards?year=${year}&names=${encodeURIComponent(names.join(","))}`),
   saveYearCard: (name: string, year: string, body: {
-    message: string; headline: string; projects: string[]; lines: YearCardLines; skills: string[]; tools: string[];
+    message: string; headline: string; projects: string[]; lines: YearCardLines; skills: string[]; tools: string[]; signed_on?: string;
   }) =>
     request<YearCard>(`/api/yearcards/card?name=${encodeURIComponent(name)}&year=${year}`, { method: "PUT", body: JSON.stringify(body) }),
   // 보유 기술 사전 (TODO 273)

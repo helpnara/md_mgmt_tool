@@ -14,15 +14,16 @@ import { useEditedUnsaved } from "../util";
  *
  * 286 — 과제마다 수행 2줄 · 결과 2줄(카드에서만 다듬기 — 원본 과제 · 경험은 그대로), 역량 · 보유 기술(도구). 287 — 개수 제한 없음 · 288 — 떠난 사람은 접고 TBD 같은 자리 이름은 뺀다.
  */
-type Draft = { message: string; headline: string; projects: string[]; lines: YearCardLines; skills: string[]; tools: string[] };
+type Draft = { message: string; headline: string; projects: string[]; lines: YearCardLines; skills: string[]; tools: string[]; signed_on: string };
 
 const LINES = 2;
 const sourceLines = (c: YearCardProject) => ({ did: c.did_lines.slice(0, LINES), result: c.result_lines.slice(0, LINES) });
 
 function draftOf(card: YearCard): Draft {
   const lines: YearCardLines = {};
-  for (const p of card.picked) lines[p.id] = { did: p.did_lines_card ?? sourceLines(p).did, result: p.result_lines_card ?? sourceLines(p).result };
-  return { message: card.message, headline: card.headline, projects: card.chosen, lines, skills: card.skills, tools: card.tools };
+  for (const p of card.picked) lines[p.id] = { did: p.did_lines_card ?? sourceLines(p).did, result: p.result_lines_card ?? sourceLines(p).result,
+    ...(p.title_card && p.title_card !== p.title ? { title: [p.title_card] } : {}) };
+  return { message: card.message, headline: card.headline, projects: card.chosen, lines, skills: card.skills, tools: card.tools, signed_on: card.signed_on ?? "" };
 }
 export default function YearCards() {
   const thisYear = String(new Date().getFullYear());
@@ -30,7 +31,7 @@ export default function YearCards() {
   const [listing, setListing] = useState<YearCardListing | null>(null);
   const [name, setName] = useState("");
   const [card, setCard] = useState<YearCard | null>(null);
-  const [draft, setDraft] = useState<Draft>({ message: "", headline: "", projects: [], lines: {}, skills: [], tools: [] });
+  const [draft, setDraft] = useState<Draft>({ message: "", headline: "", projects: [], lines: {}, skills: [], tools: [], signed_on: "" });
   const [saved, setSaved] = useState(draft);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -60,6 +61,33 @@ export default function YearCards() {
   }, [name, year]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   useEditedUnsaved("yearcards", draft, saved, busy);
+
+  // 311 — 그 해 모든 카드의 날짜를 같게. 지금 카드에 고친 것이 있으면 먼저 저장한다
+  async function signAll() {
+    if (!card) return;
+    const value = draft.signed_on.trim();
+    if (!window.confirm(`${year}년 카드 모두의 날짜를 "${value || `${year}. 12.`}" (으)로 맞춥니다. 카드마다 따로 적은 날짜는 지워집니다(그 뒤 카드마다 다시 고칠 수 있습니다).`)) return;
+    setBusy(true);
+    try {
+      if (dirty) {
+        const lines: YearCardLines = {};
+        for (const id of draft.projects) if (draft.lines[id]) lines[id] = draft.lines[id];
+        await api.saveYearCard(card.name, year, { ...draft, lines, signed_on: "" });
+      }
+      await api.yearCardsSignedAll(year, value);
+      const next = await api.yearCard(card.name, year);
+      setCard(next);
+      const d = draftOf(next);
+      setDraft(d);
+      setSaved(d);
+      setNotice(`${year}년 카드 모두의 날짜를 "${next.signed_default}" (으)로 맞췄습니다.`);
+      window.setTimeout(() => setNotice(""), 3500);
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save() {
     if (!card) return;
@@ -115,6 +143,15 @@ export default function YearCards() {
     list[i] = value;
     return { ...d, lines: { ...d.lines, [id]: { ...now, [key]: list } } };
   });
+  // 311 — 카드에서만 과제명 줄이기(비우면 원래 과제명)
+  const setTitle = (id: string, value: string) => setDraft((d) => {
+    const source = card?.candidates.find((c) => c.id === id);
+    const now = d.lines[id] ?? (source ? sourceLines(source) : { did: [], result: [] });
+    const next = { ...now };
+    if (value) next.title = [value]; else delete next.title;
+    return { ...d, lines: { ...d.lines, [id]: next } };
+  });
+  const cardTitle = (c: YearCardProject) => draft.lines[c.id]?.title?.[0]?.trim() || c.title;
   // 287 — 과제 · 역량 · 보유 기술 개수 제한 없음(넘치면 미리보기가 알린다). 칩 후보는 처음 12개, 나머지는 [더 보기]
   const [moreChips, setMoreChips] = useState<Record<string, boolean>>({});
   // 288 — 떠난 사람(전배 · 퇴사)은 접어 둔다
@@ -129,10 +166,10 @@ export default function YearCards() {
     return own ? { did: clean(own.did), result: clean(own.result) } : sourceLines(c);
   };
   const preview: YearCard | null = card ? {
-    ...card, message: draft.message, headline: draft.headline, skills: draft.skills, tools: draft.tools,
+    ...card, message: draft.message, headline: draft.headline, skills: draft.skills, tools: draft.tools, signed_on: draft.signed_on,
     picked: draft.projects.map((id) => card.candidates.find((c) => c.id === id)).filter(Boolean).map((c) => {
       const lines = cardLines(c!);
-      return { ...c!, did_lines_card: lines.did, result_lines_card: lines.result };
+      return { ...c!, did_lines_card: lines.did, result_lines_card: lines.result, title_card: cardTitle(c!) };
     }),
   } : null;
   // 팀장 본인 카드는 [모두 인쇄] · 준비 수에서 빼고, 목록에서도 고를 수 없다(303)
@@ -192,8 +229,16 @@ export default function YearCards() {
             <label>한 줄 제목 <span className="muted">(선택 — 비우면 "{year}년, 고마웠어요")</span>
               <input value={draft.headline} maxLength={40} placeholder={`${year}년, 고마웠어요`} onChange={(e) => setDraft({ ...draft, headline: e.target.value })} />
             </label>
+            {/* 311 — 서명 줄 날짜(카드마다). 비우면 그 해 기본 날짜 */}
+            <div className="yc-date-row">
+              <label>날짜 <span className="muted">(선택 — 비우면 "{card.signed_default ?? `${year}. 12.`}")</span>
+                <input value={draft.signed_on} maxLength={20} placeholder={card.signed_default ?? `${year}. 12.`} aria-label="카드 날짜"
+                  onChange={(e) => setDraft({ ...draft, signed_on: e.target.value })} />
+              </label>
+              <button type="button" className="ghost" disabled={busy} onClick={() => void signAll()} data-testid="yc-sign-all">모든 카드에 같은 날짜</button>
+            </div>
             <div className="yc-pick">
-              <span className="exp-label">넣을 과제 <span className="muted">— {draft.projects.length}개 고름, 몇 개든 됩니다(넘치면 미리보기 아래에 알림). 마친 과제 · 인정 한 줄이 있는 과제가 위</span></span>
+              <span className="exp-label">넣을 과제 <span className="muted">— {draft.projects.length}개 고름, 몇 개든 됩니다(넘치면 미리보기 아래에 알림). 올해 마친 과제 · 인정 한 줄이 있는 과제가 위</span></span>
               {card.candidates.length === 0 && <p className="muted">{year}년에 맡은 과제가 없습니다.</p>}
               {card.candidates.map((c) => (
                 <label key={c.id} className="check-label yc-candidate">
@@ -208,15 +253,22 @@ export default function YearCards() {
             </div>
             {draft.projects.length > 0 && (
               <div className="yc-lines" data-testid="yc-lines">
-                <span className="exp-label">카드에 나갈 줄 <span className="muted">— 과제마다 수행 2줄 · 결과 2줄. 여기서 고쳐도 원본 과제 · 경험은 그대로입니다(칸을 누르면 원본 줄을 골라 넣을 수 있습니다)</span></span>
+                <span className="exp-label">카드에 나갈 줄 <span className="muted">— 과제마다 과제명(비우면 원래 이름) · 수행 2줄 · 결과 2줄. 여기서 고쳐도 원본 과제 · 경험은 그대로입니다(칸을 누르면 원본 줄을 골라 넣을 수 있습니다)</span></span>
                 {draft.projects.map((id) => {
                   const c = card.candidates.find((x) => x.id === id);
                   if (!c) return null;
                   const now = draft.lines[id] ?? sourceLines(c);
-                  const same = JSON.stringify(cardLines(c)) === JSON.stringify(sourceLines(c));
+                  const same = JSON.stringify(cardLines(c)) === JSON.stringify(sourceLines(c)) && cardTitle(c) === c.title;
                   return (
                     <fieldset key={id} className="yc-line-block" data-project={id}>
                       <legend><b>{c.title}</b>{same ? <span className="muted"> · 원본 그대로</span> : <span className="tag">다듬음</span>}</legend>
+                      <div className="yc-line-row">
+                        <span className="muted yc-line-label">과제명</span>
+                        <div className="yc-line-inputs">
+                          <input aria-label={`${c.title} 카드 과제명`} value={draft.lines[id]?.title?.[0] ?? ""} maxLength={40} placeholder={c.title}
+                            onChange={(e) => setTitle(id, e.target.value)} />
+                        </div>
+                      </div>
                       {(["did", "result"] as const).map((key) => (
                         <div key={key} className="yc-line-row">
                           <span className="muted yc-line-label">{key === "did" ? "수행" : "결과"}</span>
@@ -313,9 +365,10 @@ export function PostCard({ card, onOverflow }: { card: YearCard; onOverflow?: (o
   });
   const n = card.numbers;
   const stats = [
+    // 311 — 응원 카드라 "마친 과제" · "중간 성과" 대신 함께한 동료 · 부서(0 이면 숨김)
     n.projects ? ["함께한 과제", `${n.projects}`] : null,
-    n.done ? ["마친 과제", `${n.done}`] : null,
-    n.milestones ? ["중간 성과", `${n.milestones}`] : null,
+    n.colleagues ? ["함께한 동료", `${n.colleagues}명`] : null,
+    n.partners ? ["함께한 부서", `${n.partners}곳`] : null,
     n.hours ? ["역량 강화", `${n.hours}시간`] : n.activities ? ["역량 강화 활동", `${n.activities}`] : null,   // 303 — 엽서 칸이 좁아 "개인" 은 뺌
   ].filter(Boolean) as string[][];
   return (
@@ -337,7 +390,7 @@ export function PostCard({ card, onOverflow }: { card: YearCard; onOverflow?: (o
             const result = c.result_lines_card ?? c.result_lines.slice(0, 2);
             return (
               <div className="pc-work" key={c.id}>
-                <div className="pc-work-title"><b>{c.title}</b>{c.role && <span className="pc-role"> · {c.role}</span>}</div>
+                <div className="pc-work-title"><b>{c.title_card || c.title}</b>{c.role && <span className="pc-role"> · {c.role}</span>}</div>
                 {did.length > 0 && <ul className="pc-did">{did.map((line, i) => <li key={i}>{line}</li>)}</ul>}
                 {result.length > 0 && <ul className="pc-result">{result.map((line, i) => <li key={i}>{line}</li>)}</ul>}
                 {c.praise && <div className="pc-praise">“{c.praise}”</div>}
@@ -353,7 +406,7 @@ export function PostCard({ card, onOverflow }: { card: YearCard; onOverflow?: (o
         </div>
       )}
       {card.message && <div className="pc-letter">{card.message}</div>}
-      <div className="pc-sign">{card.signer ? `— ${card.signer}` : ""} · {card.year}. 12.</div>
+      <div className="pc-sign">{card.signer ? `— ${card.signer}` : ""} · {card.signed_on || card.signed_default || `${card.year}. 12.`}</div>
     </div>
   );
 }

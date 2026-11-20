@@ -3545,3 +3545,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .act-chip.tool { border-style: solid; background: var(--neutral-50); }
 .shape-learned { grid-column: 2 / -1; font-size: var(--fs-xs); color: var(--muted-strong); margin-top: -2px; }
 .growth-trained { background: var(--neutral-50); color: var(--muted-strong); }
+
+/* 311 — 연말 카드 날짜 칸 */
+.yc-date-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.yc-date-row label { flex: 1 1 200px; }

@@ -170,7 +170,25 @@ def year_review(conn: sqlite3.Connection, name: str, year: str) -> dict[str, Any
             "SELECT COUNT(*) AS n, COALESCE(SUM(hours), 0) AS h FROM activity WHERE person = ? AND substr(date, 1, 4) = ?"
             " AND date <= ?", (name, y, clock.today().isoformat())).fetchone()
         milestones = sum(1 for row in rows for item in _milestones_of(row["milestones"]) if item["date"][:4] == y)
+        # 311 — 함께한 동료 · 부서: 그 해 맡은 과제에서 그 해에 같이 담당한 사람(본인 · TBD 빼고) · 유관부서
+        from .yearcards import is_placeholder
+        active_ids = [row["project_id"] for row in active]
+        amarks = ",".join("?" for _ in active_ids) or "''"
+        colleagues: list[str] = []
+        teams: list[str] = []
+        if active_ids:
+            for other in conn.execute(
+                    "SELECT c.name, c.project_id, c.from_date, c.to_date, p.start_date, p.completed_at, p.status"
+                    f" FROM project_contribution c JOIN project p ON p.id = c.project_id WHERE c.project_id IN ({amarks})",
+                    active_ids):
+                start, end = _span(other)
+                if (other["name"] != name and not is_placeholder(other["name"]) and other["name"] not in colleagues
+                        and start[:4] <= y <= end[:4]):
+                    colleagues.append(other["name"])
+            teams = list(dict.fromkeys(r["team"] for r in conn.execute(
+                f"SELECT team FROM project_partner WHERE project_id IN ({amarks}) ORDER BY position", active_ids) if r["team"].strip()))
         return {"projects": len(active), "done": len(done), "lead": sum(1 for row in active if row["role"] == "주관"),
+                "colleagues": len(colleagues), "partners": len(teams), "_colleague_names": colleagues, "_partner_teams": teams,
                 "entries": entries, "reports": reports, "milestones": milestones,
                 "activities": activity["n"], "hours": round(activity["h"] or 0, 1), "_active": active, "_done": done}
 
@@ -188,4 +206,5 @@ def year_review(conn: sqlite3.Connection, name: str, year: str) -> dict[str, Any
                    for row in sorted(now["_done"], key=lambda r: r["completed_at"] or "")]
     strip = lambda d: {k: v for k, v in d.items() if not k.startswith("_")}  # noqa: E731
     return {"name": name, "year": year, **strip(now), "last": strip(last), "new_skills": seen,
+            "colleague_names": now["_colleague_names"], "partner_teams": now["_partner_teams"],
             "outcomes": outcomes, "done_projects": done_titles}

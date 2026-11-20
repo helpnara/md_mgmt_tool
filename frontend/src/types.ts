@@ -1818,12 +1818,14 @@ export interface ExperienceResponseFile {
 export interface YearCardProject {
   id: string; title: string; status: string; role: string; did: string; result: string; praise: string; done_this_year: boolean;
   /** 286 — 원본 줄(담당과 역할 · 경험)과 카드에 나갈 두 줄 */
-  did_lines: string[]; result_lines: string[]; did_lines_card?: string[]; result_lines_card?: string[]; edited?: boolean; skills: string[];
+  did_lines: string[]; result_lines: string[]; did_lines_card?: string[]; result_lines_card?: string[]; /** 311 */ title_card?: string; edited?: boolean; skills: string[];
 }
-export type YearCardLines = Record<string, { did?: string[]; result?: string[] }>;
+export type YearCardLines = Record<string, { did?: string[]; result?: string[]; /** 311 — 카드에서만 줄인 과제명(한 칸) */ title?: string[] }>;
 export interface YearCard {
   name: string; year: string; leader: boolean;
-  numbers: { projects: number; done: number; milestones: number; activities: number; hours: number; reports: number };
+  numbers: { projects: number; done: number; milestones: number; activities: number; hours: number; reports: number;
+    /** 311 — 함께한 동료 · 부서 */ colleagues?: number; partners?: number; colleague_names?: string[]; partner_teams?: string[] };
+  /** 311 — 서명 줄 날짜(카드마다, 비면 signed_default) */ signed_on?: string; signed_default?: string;
   new_skills: string[]; candidates: YearCardProject[]; picked: YearCardProject[]; chosen: string[];
   skills: string[]; tools: string[]; skill_options: string[]; tool_options: string[];
   message: string; headline: string; updated_at: string; saved: boolean; missing: string[]; signer: string;

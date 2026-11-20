@@ -7981,6 +7981,39 @@ async function main() {
     }
   });
 
+  await check("연말 카드 (311) — 숫자 줄은 함께한 과제 · 동료 · 부서(마친 과제 · 중간 성과 없음), 날짜 칸 · 모든 카드에 같은 날짜", async () => {
+    const made = await api.post("/api/projects", { title: "연말카드 311 과제", owners: ["권경락", "가팀원311"], status: "in_progress", start_date: "2026-03-02",
+      partners: [{ team: "품질팀" }] });
+    try {
+      await go("#/skills?tab=people");
+      await page.locator(".skills-tabs").getByRole("tab", { name: "연말카드" }).click();
+      await page.locator("[data-testid=yc-edit]").waitFor({ timeout: 8000 });
+      await page.locator(".yc-people").getByRole("button", { name: /권경락/ }).click();
+      await page.waitForFunction(() => document.querySelector("[data-testid=yc-edit] h3")?.textContent?.includes("권경락"), null, { timeout: 8000 });
+      const card = page.locator(".yc-preview [data-testid=postcard]");
+      const text = await card.innerText();
+      expect(text.includes("함께한 동료") && text.includes("함께한 부서"), `동료 · 부서 칸: ${text.slice(0, 120)}`);
+      expect(!text.includes("마친 과제") && !text.includes("중간 성과"), "마친 과제 · 중간 성과는 없다");
+      expect(text.includes("2026. 12."), "날짜 기본값");
+      // 과제명 — 카드에서만 줄이기
+      const firstTitle = page.locator("[data-testid=yc-lines] input[aria-label$='카드 과제명']").first();
+      if (await firstTitle.count()) {
+        await firstTitle.fill("짧게 고친 과제명 311");
+        await page.waitForFunction(() => document.querySelector(".yc-preview [data-testid=postcard]")?.textContent?.includes("짧게 고친 과제명 311"), null, { timeout: 4000 });
+        await firstTitle.fill("");
+      }
+      await page.getByLabel("카드 날짜").fill("2026. 12. 24.");
+      await page.waitForFunction(() => document.querySelector(".yc-preview [data-testid=postcard]")?.textContent?.includes("2026. 12. 24."), null, { timeout: 4000 });
+      await page.locator("[data-testid=yc-sign-all]").click();          // 확인 창은 위의 page.on("dialog") 가 받는다
+      await page.waitForFunction(() => document.querySelector("[data-testid=yc-edit]")?.textContent?.includes("모두의 날짜를"), null, { timeout: 8000 });
+      const after = await api.get(`/api/yearcards/card?name=${encodeURIComponent("권경락")}&year=2026`);
+      equal(after.signed_default, "2026. 12. 24.", "해의 기본 날짜");
+    } finally {
+      await fetch(`${BASE}/api/yearcards/signed-on`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ year: "2026", signed_on: "" }) });
+      await fetch(`${BASE}/api/projects/${made.id}/archive`, { method: "POST" });
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

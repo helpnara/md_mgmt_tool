@@ -38,6 +38,8 @@ def is_placeholder(name: str) -> bool:
     return not key or key in PLACEHOLDER_NAMES
 MESSAGE_MAX = 400          # 엽서 한 장에 들어갈 만큼 — 화면이 넘침을 따로 알린다
 HEADLINE_MAX = 40
+TITLE_MAX = 40            # 311 — 카드에서만 줄인 과제명(엽서 한 줄)
+SIGNED_MAX = 20           # 311 — 서명 줄 날짜(자유 글). 비우면 "{해}. 12."
 _YEAR = re.compile(r"^\d{4}$")
 
 
@@ -59,13 +61,13 @@ def card_path(name: str, year: str) -> Path:
 def _stored(name: str, year: str) -> dict[str, Any]:
     path = card_path(name, year)
     if not path.is_file():
-        return {"message": "", "projects": None, "headline": "", "updated_at": "", "lines": {}, "skills": None, "tools": None}
+        return {"message": "", "projects": None, "headline": "", "signed_on": "", "updated_at": "", "lines": {}, "skills": None, "tools": None}
     doc = md.load(path)
     projects = doc.meta.get("projects")
     as_list = lambda value: [str(v) for v in value] if isinstance(value, list) else None  # noqa: E731
     lines = doc.meta.get("lines") if isinstance(doc.meta.get("lines"), dict) else {}
     return {"message": doc.body.strip(), "projects": as_list(projects),
-            "headline": str(doc.meta.get("headline") or ""), "updated_at": str(doc.meta.get("updated_at") or ""),
+            "headline": str(doc.meta.get("headline") or ""), "signed_on": str(doc.meta.get("signed_on") or ""), "updated_at": str(doc.meta.get("updated_at") or ""),
             "lines": {str(k): v for k, v in lines.items() if isinstance(v, dict)},
             "skills": as_list(doc.meta.get("skills")), "tools": as_list(doc.meta.get("tools"))}
 
@@ -162,8 +164,12 @@ def _picked_lines(option: dict[str, Any], edited: dict[str, Any] | None) -> dict
             return [str(v)[:LINE_MAX] for v in value][:LINE_COUNT]
         return source[:LINE_COUNT]
     did, result = pick("did", option["did_lines"]), pick("result", option["result_lines"])
-    return {**option, "did_lines_card": did, "result_lines_card": result,
-            "edited": bool(edited) and (did != option["did_lines"][:LINE_COUNT] or result != option["result_lines"][:LINE_COUNT])}
+    # 311 — 카드에서만 고친 과제명(긴 이름이 두 줄로 밀릴 때). 원본 과제명은 그대로
+    raw_title = (edited or {}).get("title")
+    title = " ".join(str(raw_title[0]).split())[:TITLE_MAX] if isinstance(raw_title, list) and raw_title and str(raw_title[0]).strip() else ""
+    return {**option, "did_lines_card": did, "result_lines_card": result, "title_card": title or option["title"],
+            "edited": bool(edited) and (did != option["did_lines"][:LINE_COUNT] or result != option["result_lines"][:LINE_COUNT]
+                                        or bool(title and title != option["title"]))}
 
 
 def card(conn: sqlite3.Connection, name: str, year: str) -> dict[str, Any]:
@@ -189,13 +195,17 @@ def card(conn: sqlite3.Connection, name: str, year: str) -> dict[str, Any]:
         missing.append("과제 결과")
     return {
         "name": name, "year": year, "leader": bool(roster.get(name, {}).get("leader")),
-        "numbers": {"projects": review["projects"], "done": review["done"], "milestones": review["milestones"],
+        # 311 — 엽서 숫자 줄: 함께한 과제 · 함께한 동료 · 함께한 부서 · 역량 강화("마친 과제" · "중간 성과" 는 뺌 — 평가처럼 읽혀서)
+        "numbers": {"projects": review["projects"], "colleagues": review["colleagues"], "partners": review["partners"],
+                    "colleague_names": review["colleague_names"], "partner_teams": review["partner_teams"],
+                    "done": review["done"], "milestones": review["milestones"],
                     "activities": review["activities"], "hours": review["hours"], "reports": review["reports"]},
         "new_skills": review["new_skills"],
         "skill_options": offer["skills"], "tool_options": offer["tools"],
         "skills": skills, "tools": tools,
         "candidates": options, "picked": picked, "chosen": [c["id"] for c in picked],
-        "message": stored["message"], "headline": stored["headline"], "updated_at": stored["updated_at"],
+        "message": stored["message"], "headline": stored["headline"], "signed_on": stored["signed_on"],
+        "signed_default": signed_default(year), "updated_at": stored["updated_at"],
         "saved": card_path(name, year).is_file(), "missing": missing,
         "signer": settings_service.current_author(None) or "",
     }
@@ -219,6 +229,47 @@ def listing(conn: sqlite3.Connection, year: str) -> dict[str, Any]:
     return {"year": year, "people": people, "message_max": MESSAGE_MAX, "line_count": LINE_COUNT, "line_max": LINE_MAX}
 
 
+def _signed(value: object) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) > SIGNED_MAX:
+        raise YearCardError(f"날짜는 {SIGNED_MAX}자까지입니다.")
+    return text
+
+
+def _year_default_path(year: str) -> Path:
+    return get_settings().vault_dir / "team" / "yearcards" / f"{_check_year(year)}.md"
+
+
+def signed_default(year: str) -> str:
+    """311 — 그 해 카드들의 기본 날짜. [모든 카드에 같은 날짜]로 정하고, 없으면 "{해}. 12."."""
+    path = _year_default_path(year)
+    if path.is_file():
+        value = str(md.load(path).meta.get("signed_on") or "").strip()
+        if value:
+            return value
+    return f"{year}. 12."
+
+
+def set_signed_all(year: str, value: object, by: str = "") -> dict[str, Any]:
+    """311 — 그 해 모든 카드의 날짜를 같게: 해의 기본 날짜로 두고, 카드마다 따로 적은 날짜는 지운다(그 뒤 카드마다 다시 고칠 수 있다).
+    비우면 기본 "{해}. 12." 로. 편지 · 고른 과제는 그대로."""
+    _check_year(year)
+    text = _signed(value)
+    path = _year_default_path(year)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    md.save(path, md.MarkdownDoc({"year": year, "signed_on": text, "updated_at": clock.now().replace(microsecond=0).isoformat(),
+                                  "updated_by": by}, f"# {year} 연말 카드 — 공통 날짜\n"))
+    cleared = []
+    folder = get_settings().people_dir
+    for card_file in sorted(folder.glob(f"*/yearcards/{year}.md")) if folder.is_dir() else []:
+        doc = md.load(card_file)
+        if "signed_on" in doc.meta:
+            doc.meta.pop("signed_on")
+            md.save(card_file, doc)
+            cleared.append(str(doc.meta.get("person") or card_file.parent.parent.name))
+    return {"year": year, "signed_default": signed_default(year), "cleared": cleared}
+
+
 def save(conn: sqlite3.Connection, name: str, year: str, data: dict[str, Any], by: str = "") -> dict[str, Any]:
     _check_year(year)
     name = " ".join((name or "").split())
@@ -230,6 +281,7 @@ def save(conn: sqlite3.Connection, name: str, year: str, data: dict[str, Any], b
     headline = " ".join(str(data.get("headline") or "").split())
     if len(headline) > HEADLINE_MAX:
         raise YearCardError(f"한 줄 제목은 {HEADLINE_MAX}자까지입니다.")
+    signed_on = _signed(data.get("signed_on"))
     options = {c["id"]: c for c in candidates(conn, name, year)}
     projects = [str(p) for p in (data.get("projects") or []) if str(p) in options]
     projects = list(dict.fromkeys(projects))
@@ -249,6 +301,13 @@ def save(conn: sqlite3.Connection, name: str, year: str, data: dict[str, Any], b
             clean_lines = [v for v in clean_lines if v]
             if clean_lines != source[:LINE_COUNT]:
                 keep[key] = clean_lines
+        title_value = edited.get("title")
+        if isinstance(title_value, list) and title_value:
+            title = " ".join(str(title_value[0]).split())
+            if len(title) > TITLE_MAX:
+                raise YearCardError(f"카드의 과제명은 {TITLE_MAX}자까지입니다 — 엽서 한 줄에 들어가게.")
+            if title and title != options[pid]["title"]:
+                keep["title"] = [title]
         if keep:
             lines[pid] = keep
 
@@ -261,6 +320,7 @@ def save(conn: sqlite3.Connection, name: str, year: str, data: dict[str, Any], b
     path = card_path(name, year)
     path.parent.mkdir(parents=True, exist_ok=True)
     meta = {"person": name, "year": year, "headline": headline, "projects": projects,
+            **({"signed_on": signed_on} if signed_on else {}),
             "updated_at": clock.now().replace(microsecond=0).isoformat(), "updated_by": by}
     if lines:
         meta["lines"] = lines
