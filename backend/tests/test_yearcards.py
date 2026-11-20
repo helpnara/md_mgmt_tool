@@ -105,7 +105,7 @@ def test_311_colleagues_partners_and_signed_date(team):  # noqa: F811
                                               "start_date": "2026-04-01", "partners": [{"team": "품질팀"}]}).json()["id"]
     card = owner.get("/api/yearcards/card", params={"name": "가팀원", "year": "2026"}).json()
     n = card["numbers"]
-    assert n["colleagues"] == 1 and n["colleague_names"] == ["나팀원"]          # TBD · 본인 빼고, 두 과제에서 한 번
+    assert n["colleague_names"] == ["나팀원", "김철수"] and n["colleagues"] == 2   # TBD · 본인 빼고, 두 과제에서 한 번 + 유관부서 담당자(312)
     assert n["partners"] == 2 and set(n["partner_teams"]) == {"설비기술팀", "품질팀"}
     assert card["signed_on"] == "" and card["signed_default"] == "2026. 12."
     saved = owner.put("/api/yearcards/card", params={"name": "가팀원", "year": "2026"},
@@ -138,3 +138,15 @@ def test_311_card_only_title(team):  # noqa: F811
     assert same["picked"][0]["title_card"] == title and not same["picked"][0]["edited"]
     assert owner.put("/api/yearcards/card", params={"name": "가팀원", "year": "2026"},
                      json={"projects": [pid], "lines": {pid: {"title": ["가" * 41]}}}).status_code == 400
+
+
+def test_312_partner_people_count_once(team):  # noqa: F811
+    """312 — 유관부서 담당자도 함께한 동료. 여러 과제 · 팀원과 같은 이름은 한 번, 담당자 빈 줄 · 본인 · TBD 는 빼고."""
+    owner, pid = team["owner"], team["shared"]
+    owner.patch(f"/api/projects/{pid}", json={"owners": ["가팀원"], "partners": [
+        {"team": "설비기술팀", "people": "김철수, 박민수, 가팀원"}, {"team": "품질팀"}, {"team": "생산팀", "people": "TBD"}]})
+    owner.post("/api/projects", json={"title": "둘째", "owners": ["가팀원", "나팀원"], "status": "in_progress", "start_date": "2026-05-01",
+                                      "partners": [{"team": "설비기술팀", "people": "김철수"}, {"team": "기획팀", "people": "나팀원"}]})
+    n = owner.get("/api/yearcards/card", params={"name": "가팀원", "year": "2026"}).json()["numbers"]
+    assert sorted(n["colleague_names"]) == ["김철수", "나팀원", "박민수"] and n["colleagues"] == 3
+    assert n["partners"] == 4

@@ -170,7 +170,7 @@ def year_review(conn: sqlite3.Connection, name: str, year: str) -> dict[str, Any
             "SELECT COUNT(*) AS n, COALESCE(SUM(hours), 0) AS h FROM activity WHERE person = ? AND substr(date, 1, 4) = ?"
             " AND date <= ?", (name, y, clock.today().isoformat())).fetchone()
         milestones = sum(1 for row in rows for item in _milestones_of(row["milestones"]) if item["date"][:4] == y)
-        # 311 — 함께한 동료 · 부서: 그 해 맡은 과제에서 그 해에 같이 담당한 사람(본인 · TBD 빼고) · 유관부서
+        # 311 — 함께한 동료 · 부서: 그 해 맡은 과제에서 그 해에 같이 담당한 사람(본인 · TBD 빼고) + 유관부서 담당자(312) · 유관부서
         from .yearcards import is_placeholder
         active_ids = [row["project_id"] for row in active]
         amarks = ",".join("?" for _ in active_ids) or "''"
@@ -185,8 +185,14 @@ def year_review(conn: sqlite3.Connection, name: str, year: str) -> dict[str, Any
                 if (other["name"] != name and not is_placeholder(other["name"]) and other["name"] not in colleagues
                         and start[:4] <= y <= end[:4]):
                     colleagues.append(other["name"])
-            teams = list(dict.fromkeys(r["team"] for r in conn.execute(
-                f"SELECT team FROM project_partner WHERE project_id IN ({amarks}) ORDER BY position", active_ids) if r["team"].strip()))
+            partner_rows = conn.execute(
+                f"SELECT team, person FROM project_partner WHERE project_id IN ({amarks}) ORDER BY position", active_ids).fetchall()
+            teams = list(dict.fromkeys(r["team"] for r in partner_rows if r["team"].strip()))
+            # 312 — 유관부서 담당자도 함께한 동료(기간이 없어 과제를 따른다). 이름으로 한 번만, 담당자를 비운 줄은 사람 수에 넣지 않는다
+            for r in partner_rows:
+                person = " ".join((r["person"] or "").split())
+                if person and person != name and not is_placeholder(person) and person not in colleagues:
+                    colleagues.append(person)
         return {"projects": len(active), "done": len(done), "lead": sum(1 for row in active if row["role"] == "주관"),
                 "colleagues": len(colleagues), "partners": len(teams), "_colleague_names": colleagues, "_partner_teams": teams,
                 "entries": entries, "reports": reports, "milestones": milestones,
