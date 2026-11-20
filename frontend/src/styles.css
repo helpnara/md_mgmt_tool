@@ -3549,3 +3549,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 /* 311 — 연말 카드 날짜 칸 */
 .yc-date-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .yc-date-row label { flex: 1 1 200px; }
+
+/* 311 — 숫자 칸이 넷이면 이름 옆 한 줄에 들어가게 조금 줄인다(두 줄로 접히지 않게) */
+.pc-person-dense { gap: 1.6mm; }
+.pc-person-dense .pc-name { font-size: 12pt; }
+.pc-person-dense .pc-stats { flex-wrap: nowrap; gap: 1mm; }
+.pc-person-dense .pc-stats span { min-width: 0; padding: 0.6mm 1.1mm; font-size: 6.2pt; white-space: nowrap; }
+.pc-person-dense .pc-stats b { font-size: 9pt; }

@@ -7995,6 +7995,9 @@ async function main() {
       expect(text.includes("함께한 동료") && text.includes("함께한 부서"), `동료 · 부서 칸: ${text.slice(0, 120)}`);
       expect(!text.includes("마친 과제") && !text.includes("중간 성과"), "마친 과제 · 중간 성과는 없다");
       expect(text.includes("2026. 12."), "날짜 기본값");
+      // 숫자 칸이 넷이어도 이름 옆 한 줄(두 줄로 접히지 않음)
+      const tops = await page.evaluate(() => [...document.querySelectorAll(".yc-preview .pc-stats span")].map((e) => Math.round(e.getBoundingClientRect().top)));
+      expect(new Set(tops).size <= 1, `숫자 칸 한 줄: ${tops}`);
       // 과제명 — 카드에서만 줄이기
       const firstTitle = page.locator("[data-testid=yc-lines] input[aria-label$='카드 과제명']").first();
       if (await firstTitle.count()) {

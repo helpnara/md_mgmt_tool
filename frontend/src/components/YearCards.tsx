@@ -377,7 +377,7 @@ export function PostCard({ card, onOverflow }: { card: YearCard; onOverflow?: (o
         <span className="pc-year">{card.year}</span>
         <span className="pc-headline">{card.headline || `${card.year}년, 고마웠어요`}</span>
       </div>
-      <div className="pc-person">
+      <div className={stats.length >= 4 ? "pc-person pc-person-dense" : "pc-person"}>
         <div className="pc-name">{card.name} 님</div>
         {stats.length > 0 && (
           <div className="pc-stats">{stats.map(([label, value]) => <span key={label}><b>{value}</b>{label}</span>)}</div>
