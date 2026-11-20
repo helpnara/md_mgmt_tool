@@ -456,7 +456,7 @@ export default function ProjectDetail({
                 있습니다.
                 <br />
                 번호를 일괄로 바꾸면 예전 주소·즐겨찾기는 더 이상 맞지 않습니다.
-                과제 목록에서 이름으로 찾아 주세요.
+                과제목록에서 이름으로 찾아 주세요.
                 <br />
                 탐색기·다른 편집기로 과제 파일을 고쳤다면 <b>파일을 읽지 못했을 수도</b> 있습니다 —
                 [다시 읽기] 를 누르면 무엇이 문제인지 알려 줍니다 (TODO 164).
@@ -482,7 +482,7 @@ export default function ProjectDetail({
               </button>
             )}
             <a className="button-like primary-link" href="#/projects">
-              과제 목록으로
+              과제목록으로
             </a>
           </div>
         </div>
@@ -691,7 +691,7 @@ export default function ProjectDetail({
                   setConfirmingArchive((value) => !value);
                   return;
                 }
-                if (!window.confirm("이 과제를 삭제 보관함으로 옮길까요?\n\n설정 → 삭제 보관함에서 되돌릴 수 있습니다.")) return;
+                if (!window.confirm("이 과제를 삭제 보관함으로 옮길까요?\n\n설정 → [보관과 백업] → 삭제 보관함에서 되돌릴 수 있습니다.")) return;
                 if (!(await attempt(() => api.archiveProject(project.id)))) return;
                 // 보관한 과제는 사라진다. 온 곳이 목록 성격이면 그리로 돌려보낸다.
                 window.location.hash = backTarget(back).href;

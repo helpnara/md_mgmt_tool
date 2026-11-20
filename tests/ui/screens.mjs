@@ -762,7 +762,7 @@ async function main() {
     await go("#/reports");
     await page.locator(".grid tbody tr .plain-link").first().click();
     await page.waitForTimeout(700);
-    equal((await backLabel()).trim(), "← 보고 대상", "뒤로 가기 문구");
+    equal((await backLabel()).trim(), "← 보고대상", "뒤로 가기 문구");
     await page.locator(".back").first().click();
     await page.waitForTimeout(700);
     expect(page.url().includes("#/reports"), `보고 대상으로 안 갔습니다: ${page.url()}`);
@@ -772,7 +772,7 @@ async function main() {
     await go("#/history");
     await page.locator(".history-list a").first().click();
     await page.waitForTimeout(900);
-    equal((await backLabel()).trim(), "← 보고 이력", "뒤로 가기 문구");
+    equal((await backLabel()).trim(), "← 보고이력", "뒤로 가기 문구");
     await page.locator(".back").first().click();
     await page.waitForTimeout(700);
     expect(page.url().includes("#/history"), `보고 이력으로 안 갔습니다: ${page.url()}`);
@@ -792,7 +792,7 @@ async function main() {
     await go("#/projects");
     await page.locator(".grid tbody tr").first().click();
     await page.waitForTimeout(700);
-    equal((await backLabel()).trim(), "← 과제 목록", "뒤로 가기 문구");
+    equal((await backLabel()).trim(), "← 과제목록", "뒤로 가기 문구");
   });
 
   await check("거른 조건이 주소에 남고, 돌아왔을 때 그대로 살아난다", async () => {
@@ -844,7 +844,7 @@ async function main() {
     await page.waitForTimeout(800);
     expect(await page.locator(".report-editor").count() > 0, "보고가 열리지 않았습니다");
 
-    equal((await backLabel()).trim(), "← 보고 대상", "보고를 연 뒤 뒤로 가기");
+    equal((await backLabel()).trim(), "← 보고대상", "보고를 연 뒤 뒤로 가기");
     await page.locator(".back").first().click();
     await page.waitForTimeout(700);
     expect(page.url().includes("#/reports"), `보고 대상으로 안 갔습니다: ${page.url()}`);
@@ -1221,7 +1221,7 @@ async function main() {
     const text = await page.locator("main").innerText();
     expect(text.includes("찾을 수 없습니다"), `안내가 없습니다: ${text.slice(0, 150)}`);
     expect(text.includes("번호가 바뀌었거나"), "번호 변경 안내가 없습니다");
-    await page.getByRole("link", { name: "과제 목록으로" }).click();
+    await page.getByRole("link", { name: "과제목록으로" }).click();
     await page.waitForTimeout(700);
     expect(await page.locator(".grid").count() > 0, "과제 목록으로 가지 않았습니다");
   });
@@ -1560,7 +1560,7 @@ async function main() {
   await check("팀원별 표에 역량 이력 열이 있다", async () => {
     await go("#/?tab=status");
     const heads = await page.locator(".home-members thead th").allInnerTexts();
-    expect(heads.includes("역량 이력"), `열이 없다: ${heads.join("|")}`);
+    expect(heads.includes("역량 강화 활동"), `열이 없다: ${heads.join("|")}`);
   });
 
   await check("홈의 그룹별 표가 세는 수와 목록이 거르는 수가 같다", async () => {
@@ -2957,13 +2957,13 @@ async function main() {
     await go("#/projects");
     await page.locator("table.grid tbody tr").first().click();
     await page.waitForTimeout(900);
-    equal((await page.locator("a.back").first().innerText()).trim(), "← 과제 목록", "목록에서 연 과제");
+    equal((await page.locator("a.back").first().innerText()).trim(), "← 과제목록", "목록에서 연 과제");
   });
 
   await check("홈에서 설정에 들어가면 홈으로 돌아온다", async () => {
     await go("#/settings?back=home");
     equal((await page.locator(".settings a.back").first().innerText()).trim(), "← 홈", "설정의 뒤로");
-    // 메뉴로 들어오면 그리지 않는다 — 다른 메뉴 화면과 같은 규칙 (TODO 153. 전에는 "← 과제 목록" 이 섰다)
+    // 메뉴로 들어오면 그리지 않는다 — 다른 메뉴 화면과 같은 규칙 (TODO 153. 전에는 "← 과제목록" 이 섰다)
     await go("#/settings");
     equal(await page.locator(".settings a.back").count(), 0, "메뉴로 들어간 설정의 뒤로 가기");
   });
@@ -7547,8 +7547,8 @@ async function main() {
     await page.waitForFunction(() => location.hash.startsWith("#/person/"), null, { timeout: 8000 });
     equal(decodeURIComponent(await page.evaluate(() => location.hash)), `#/person/권경락?back=skills`, "이력 — 처음 주소 그대로");
     // 경험 화면의 [← 이력] 이 사라지고 이력 화면이 다 그려질 때까지
-    const ok = await page.waitForFunction(() => [...document.querySelectorAll("a.back")].some((el) => el.textContent.includes("팀원 역량")), null, { timeout: 8000 }).then(() => true).catch(() => false);
-    expect(ok, `이력의 돌아가기는 팀원 역량: ${await page.locator("a.back").allInnerTexts()}`);
+    const ok = await page.waitForFunction(() => [...document.querySelectorAll("a.back")].some((el) => el.textContent.includes("팀원역량")), null, { timeout: 8000 }).then(() => true).catch(() => false);
+    expect(ok, `이력의 돌아가기는 팀원역량: ${await page.locator("a.back").allInnerTexts()}`);
     await go("#/");   // 이력 화면을 떠난 뒤 지운다 — 보고 있는 목록이 막 사라진 파일을 읽지 않게
     await api.delete(`/api/experiences/${made.id}`).catch(() => undefined);
   });

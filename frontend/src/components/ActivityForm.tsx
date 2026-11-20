@@ -362,7 +362,7 @@ export default function ActivityForm({
       <label className="stack-label">
         배운 보유 기술(도구) <span className="muted">(선택 — 예: PyTorch. 사람별 이력에 보이고, 기술 스택에는 실제로 쓴 뒤에 잡힙니다)</span>
         <input value={tools} onChange={(event) => setTools(event.target.value)} placeholder="쉼표로 구분" aria-label="배운 보유 기술" />
-        <TagSuggestions known={toolNames} value={tools} onPick={setTools} label="보유 기술 사전" limit={40} />
+        <TagSuggestions known={toolNames} value={tools} onPick={setTools} label="보유 기술(도구) 사전" limit={40} />
       </label>
 
       <label className="stack-label">
@@ -392,7 +392,7 @@ export default function ActivityForm({
               setBusy(true);
               try {
                 await api.deleteActivity(activity!.id);
-                onDeleted("삭제 보관함으로 옮겼습니다. 설정 → 삭제 보관함에서 되돌릴 수 있습니다.");
+                onDeleted("삭제 보관함으로 옮겼습니다. 설정 → [보관과 백업] → 삭제 보관함에서 되돌릴 수 있습니다.");
               } catch (err) {
                 setError((err as Error).message);
                 setBusy(false);

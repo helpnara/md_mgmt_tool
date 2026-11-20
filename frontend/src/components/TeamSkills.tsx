@@ -587,7 +587,7 @@ function Completeness({ data, show, interactive }: { data: Data; show: (name: st
         <p className="ts-summary">
           {c.unlisted_tools.length > 0 && <>사전에 없는 보유 기술: {c.unlisted_tools.slice(0, 10).join(", ")}{c.unlisted_tools.length > 10 ? " …" : ""} · </>}
           기술 칸이 빈 담당 {c.empty_tool_projects}
-          {interactive && <> · <a href="#/settings?tab=class">설정 → 역량 · 보유 기술 사전</a></>}
+          {interactive && <> · <a href="#/settings?tab=class">설정 → [분류 · 접수] → 역량 사전 · 보유 기술(도구) 사전</a></>}
         </p>
         <div className="table-scroll">
           <table className="grid ts-complete-table ts-compact">

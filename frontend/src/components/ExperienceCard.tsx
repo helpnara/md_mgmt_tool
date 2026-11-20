@@ -190,7 +190,7 @@ export default function ExperienceCard({
             <span className="exp-label">보유 기술(도구)</span>
             {data.tools.map((tool) => (
               <span key={tool.name} className={tool.known ? "exp-chip tool" : "exp-chip tool unknown"}
-                title={`과제 ${tool.projects}건 · 경험 ${tool.experiences}건${tool.last ? ` · 마지막 ${tool.last}년` : ""}${tool.known ? "" : " · 보유 기술 사전에 없음"}`}>
+                title={`과제 ${tool.projects}건 · 경험 ${tool.experiences}건${tool.last ? ` · 마지막 ${tool.last}년` : ""}${tool.known ? "" : " · 보유 기술(도구) 사전에 없음"}`}>
                 {tool.name} <b>{tool.projects + tool.experiences}</b>{tool.last && <span className="muted"> ’{tool.last.slice(2)}</span>}
               </span>
             ))}

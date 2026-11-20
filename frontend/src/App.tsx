@@ -417,7 +417,7 @@ export default function App() {
       {meta.readonly && meInfo.role === "member" ? (
         // 팀원 PC (TODO 233) — 누구로 알아봤는지 · 무엇을 고칠 수 있는지
         <div className="readonly-band member-band" role="status">
-          <b>{meInfo.name}</b> 님으로 접속 — 담당 과제 <b>{meInfo.projects.length}건</b>의 진행일지 · 첨부 · 개요를 고칠 수 있습니다.
+          <b>{meInfo.name}</b> 님으로 접속 — 담당 과제 <b>{meInfo.projects.length}건</b>의 진행일지 · 첨부 · 개요, [담당과 역할]의 내 줄 · 내 경험을 고칠 수 있습니다.
           다른 것은 보기만 됩니다.
           {meInfo.projects.length > 0 && <a href={listLink({ owner: meInfo.name, year: "all" })}>내 과제 보기 →</a>}{" "}
           <a href={personLink(meInfo.name)}>내 이력 →</a>

@@ -819,7 +819,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
                 className="ghost danger"
                 disabled={busy}
                 onClick={async () => {
-                  if (!window.confirm("이 보고 초안을 삭제 보관함으로 옮길까요?\n\n설정 → 삭제 보관함에서 되돌릴 수 있습니다."))
+                  if (!window.confirm("이 보고 초안을 삭제 보관함으로 옮길까요?\n\n설정 → [보관과 백업] → 삭제 보관함에서 되돌릴 수 있습니다."))
                     return;
                   setBusy(true);
                   try {

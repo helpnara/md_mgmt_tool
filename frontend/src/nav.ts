@@ -29,11 +29,12 @@ export const HOME_BACK = "home";
 const LABELS: Record<string, string> = {
   "": "홈",
   [HOME_BACK]: "홈",
-  projects: "과제 목록",
-  reports: "보고 대상",
-  history: "보고 이력",
+  // 313 — 메뉴 이름과 같게(붙여 씀)
+  projects: "과제목록",
+  reports: "보고대상",
+  history: "보고이력",
   roadmap: "로드맵",
-  skills: "팀원 역량",
+  skills: "팀원역량",
   search: "검색 결과",
   help: "도움말",
   // 과제 접수 풀 (TODO 136)
@@ -169,7 +170,7 @@ export function listLink(params: Record<string, string | number | undefined> = {
 export function backTarget(back: string | null | undefined): { href: string; label: string } {
   // 어디서 왔는지 모르면 과제 목록으로 보낸다. 홈이 아니라 목록인 이유는,
   // 과제 상세를 여는 길이 대부분 목록이기 때문이다.
-  if (!back) return { href: "#/projects", label: "과제 목록" };
+  if (!back) return { href: "#/projects", label: "과제목록" };
   const path = back.split("?")[0].replace(/\/$/, "");
   // 홈은 주소가 `#/` 라 이름을 따로 쓴다 (TODO 127). 연도 · 기간이 실려 있으면 그대로 되살린다 (TODO 210 ④)
   if (path === HOME_BACK || path === "") {
@@ -189,7 +190,7 @@ export function backTarget(back: string | null | undefined): { href: string; lab
   if (label === undefined) {
     // 이 도구 안의 주소면 그대로 돌아간다 (TODO 293). 정말 모르는 주소(손으로 고친 것)만 과제 목록으로.
     if (KNOWN_SCREENS.some((prefix) => path === prefix.replace(/\/$/, "") || path.startsWith(prefix))) return { href: `#/${back}`, label: "이전 화면" };
-    return { href: "#/projects", label: "과제 목록" };
+    return { href: "#/projects", label: "과제목록" };
   }
   return { href: `#/${back}`, label };
 }

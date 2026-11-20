@@ -116,7 +116,7 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
       </div>
       <p className="hint">
         무엇을 이야기했고 <b>무엇을 하기로 했는지</b> 남깁니다. 하기로 한 것은 [완료]로 닫을 때까지 보입니다. 이 기록은{" "}
-        <b>통합 검색 · AI 요약 · 내보내기에 들어가지 않고</b>, 역량 이력 수에도 세지 않습니다.
+        <b>통합 검색 · AI 요약 · 내보내기에 들어가지 않고</b>, 개인 역량 강화 활동 수에도 세지 않습니다.
       </p>
 
       {notice.length > 0 && (

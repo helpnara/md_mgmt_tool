@@ -451,7 +451,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           <Explain
             id="skills-intro"
             className="page-desc skills-intro"
-            lead={<>팀원 역량 이력 — 교육·세미나·박람회·학회 참여 이력을 <b>사람 기준</b>으로 쌓습니다. 숫자는 <b>지나간 것만</b> 셉니다.</>}
+            lead={<>개인 역량 강화 활동(교육 · 세미나 · 박람회 · 학회 · 자격 · 인증 등)을 <b>사람 기준</b>으로 쌓고, 팀 역량 · 면담 · 연말카드까지 봅니다. 숫자는 <b>지나간 것만</b> 셉니다.</>}
           >
             한 활동에 여러 명이 가면 사람 수만큼 기록합니다. 앞으로 할 개인 역량 강화 활동도 <b>예정</b>으로 적어 둘 수 있습니다(홈에 다가오는 일정으로 보입니다).
             이 화면의 쓸모는 쌓인 이력을 놓고 <b>내년에 무엇을 하면 좋을지 면담에서 이야기하는 것</b>입니다.
@@ -669,7 +669,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                     </button>
                     {item.leader && <span className="tag leader-tag" title="명부의 팀장 — 면담 대상에서 빠집니다">팀장</span>}
                     {/* 사람별 이력 (TODO 238) — 과제 · 역할 · 회고까지 한 화면 */}
-                    <a className="person-link" href={personLink(item.name)} title={`${item.name} — 맡은 과제 · 역할 · 회고 · 교육 이력`}>이력</a>
+                    <a className="person-link" href={personLink(item.name)} title={`${item.name} — 맡은 과제 · 역할 · 회고 · 개인 역량 강화 활동`}>이력</a>
                     {item.left && (
                       <span className="tag left-tag" title={item.left_on ? `${item.left_on} 부터` : undefined}>
                         {leftLabel(meta, item.name) || "떠남"}

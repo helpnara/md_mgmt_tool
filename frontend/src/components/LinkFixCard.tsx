@@ -100,7 +100,7 @@ export default function LinkFixCard() {
           {report.applied ? (
             <p className="hint notice">
               문서 {report.document_count}건의 링크 {report.link_count}개를 고쳤습니다.
-              {report.document_count > 0 && " 이전 내용은 설정 → 이전 버전에 있습니다."}
+              {report.document_count > 0 && " 이전 내용은 설정 → [보관과 백업] → 이전 버전에 있습니다."}
             </p>
           ) : report.document_count === 0 ? (
             <p className="hint">

@@ -165,7 +165,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
               <span className={`intake-status intake-${intake.status}`}>{intake.status_label}</span>
               {/* 직접 만든 과제를 풀로 되돌린 접수 (TODO 171) — 과제는 삭제 보관함에 있다 */}
               {intake.demoted_from && (
-                <span className="tag demoted-tag" title="과제는 설정 → 삭제 보관함에 있습니다">
+                <span className="tag demoted-tag" title="과제는 설정 → [보관과 백업] → 삭제 보관함에 있습니다">
                   과제 {intake.demoted_from} 에서 되돌림
                 </span>
               )}

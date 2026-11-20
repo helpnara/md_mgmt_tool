@@ -84,7 +84,7 @@ function ReminderGo({ reminder }: { reminder: NonNullable<DashboardData["reminde
   }
   return (
     <a className="reminder-go" href="#/reports">
-      보고 대상 고르러 가기 →
+      보고대상 고르러 가기 →
     </a>
   );
 }

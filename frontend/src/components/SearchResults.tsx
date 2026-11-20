@@ -93,7 +93,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
         /* 잘린 줄 모르면 "이게 전부" 라고 믿게 된다. 흔한 낱말일수록 그렇다. */
         <p className="hint search-cut">
           찾은 것이 많아 <b>일부만 보여 주고 있습니다.</b> 낱말을 더 붙이거나
-          <b> 보고 이력</b>·<b>과제 목록</b>의 조건으로 좁혀 보세요.
+          <b> 보고이력</b>·<b>과제목록</b>의 조건으로 좁혀 보세요.
         </p>
       )}
 

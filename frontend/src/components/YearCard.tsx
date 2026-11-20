@@ -25,7 +25,7 @@ export function yearText(review: YearReview): string {
   const lines = [`■ ${review.year}년 — ${review.name}`];
   lines.push(
     STATS.map((stat) => `${stat.label} ${review[stat.key]}${stat.unit}`).join(" · ") +
-      (review.hours ? ` (교육 ${review.hours}시간)` : ""),
+      (review.hours ? ` (개인 역량 강화 활동 ${review.hours}시간)` : ""),
   );
   if (review.done_projects.length) lines.push(`마친 과제: ${review.done_projects.map((item) => item.title).join(", ")}`);
   if (review.outcomes.length) {

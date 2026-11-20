@@ -316,7 +316,7 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
           ) : (
             <>저장소에서 바로 실행 중입니다 (배포본 아님).</>
           )}
-          {" "}새 배포본을 덮어쓴 뒤에도 이 이름이 그대로면 도구를 껐다 켜고 브라우저를 Ctrl+F5 로 새로고침하세요.
+          {" "}업데이트(또는 덮어쓰기)한 뒤에도 이 이름이 그대로면 도구를 껐다 켜고 브라우저를 Ctrl+F5 로 새로고침하세요.
         </p>
         {/* 읽기 전용 공유 (TODO 192) — 켜져 있으면 주소와 오늘 접속 수, 아니면 켜는 법 */}
         <p className="hint share-line" data-testid="share-line">

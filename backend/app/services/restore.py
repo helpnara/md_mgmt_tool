@@ -200,7 +200,7 @@ def inspect(path: Path, filename: str = "") -> dict[str, Any]:
             entries, rejected, strip = _plan(archive)
             broken = archive.testzip() if path.stat().st_size < 200 * 1024 * 1024 else None
     except zipfile.BadZipFile:
-        raise RestoreError("ZIP 파일이 아니거나 깨져 있습니다. 설정 → [전체 백업 내려받기]로 받은 파일인지 확인해 주세요.")
+        raise RestoreError("ZIP 파일이 아니거나 깨져 있습니다. 설정 → [보관과 백업] → [전체 백업 내려받기]로 받은 파일인지 확인해 주세요.")
     names = [p for _, p in entries]
     tops = {p.parts[0] for p in names}
     if not tops & KNOWN_TOP:

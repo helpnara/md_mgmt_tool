@@ -1118,7 +1118,7 @@ def _undo_promotion(conn: sqlite3.Connection, directory: Path, project_id: str, 
     except Exception:
         return PromotionError(
             f"과제 {project_id} 는 만들었지만 그 뒤 저장에 실패했고 되돌리지도 못했습니다. "
-            f"과제 목록에서 {project_id} 를 확인한 뒤 접수를 정리하세요. (원인: {reason})"
+            f"과제목록에서 {project_id} 를 확인한 뒤 접수를 정리하세요. (원인: {reason})"
         )
 
 

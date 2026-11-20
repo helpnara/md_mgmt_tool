@@ -508,7 +508,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
     ...(memberCols.expected ? [] : ["기대효과"]),
     ...(memberCols.verified ? [] : ["실증효과"]),
     ...(memberCols.reports ? [] : ["보고 횟수"]),
-    ...(memberCols.activities ? [] : ["역량 이력"]),
+    ...(memberCols.activities ? [] : ["역량 강화 활동"]),
     ...(memberCols.last ? [] : ["마지막 보고"]),
   ];
   // 0 인 숫자 칸은 흐리게 — 자리는 그대로 둔다(위치로 기억하므로, TODO 232 B)
@@ -552,7 +552,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         <a
           className={statClass(week.drafts, week.drafts_overdue ? "danger" : "")}
           href={screenLink("reports")}
-          title="보고 대상 화면 맨 위의 [확정을 기다리는 초안] 으로 갑니다"
+          title="보고대상 화면 맨 위의 [확정을 기다리는 초안] 으로 갑니다"
         >
           <span className="home-stat-label">작성 중인 보고</span>
           <strong>{week.drafts}건</strong>
@@ -803,7 +803,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
           {week.drafts > week.draft_items.length && (
             <p className="hint">
               <a href={screenLink("reports")}>
-                나머지 {week.drafts - week.draft_items.length}건도 보고 대상 화면에서 보기 →
+                나머지 {week.drafts - week.draft_items.length}건도 보고대상 화면에서 보기 →
               </a>
             </p>
           )}
@@ -832,7 +832,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
           {week.stale_total > week.stale.length && (
             <p className="hint">
               <a href={screenLink("reports")}>
-                나머지 {week.stale_total - week.stale.length}건도 보고 대상 화면에서 보기 →
+                나머지 {week.stale_total - week.stale.length}건도 보고대상 화면에서 보기 →
               </a>
             </p>
           )}
@@ -1131,7 +1131,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
                     )}
                     {memberCols.reports && <th>보고 횟수</th>}
                     {/* 과제가 아니라 사람에게 쌓인 것. 면담 준비를 한 화면에서 끝내기 위해 여기 세운다 (TODO 89). */}
-                    {memberCols.activities && <th>역량 이력</th>}
+                    {memberCols.activities && <th>역량 강화 활동</th>}
                     {memberCols.last && <th>마지막 보고</th>}
                   </tr>
                 </thead>
@@ -1142,7 +1142,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
                         <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
                         {isLeader(meta, member.name) && <span className="tag leader-tag">팀장</span>}
                         {/* 사람별 이력 (TODO 238) — 이름은 지금처럼 그 사람의 과제 목록, 이 작은 링크가 이력 화면 */}
-                        <a className="person-link" href={personLink(member.name)} title={`${member.name} — 맡은 과제 · 역할 · 회고 · 교육 이력`}>이력</a>
+                        <a className="person-link" href={personLink(member.name)} title={`${member.name} — 맡은 과제 · 역할 · 회고 · 개인 역량 강화 활동`}>이력</a>
                       </td>
                       <td>{member.total || DASH}</td>
                       <StatusCells
@@ -1209,7 +1209,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               }
             >
               <b>효과 금액도 마찬가지로 중복 합산</b>되므로, 팀 합계는 위의 &ldquo;팀 현황&rdquo;에 있는
-              과제 기준 숫자를 쓰십시오. <b>역량 이력</b>은 과제와 무관한 그 해 교육·세미나
+              과제 기준 숫자를 쓰십시오. <b>역량 강화 활동</b>은 과제와 무관한 그 해 교육·세미나
               참여 건수입니다 — 눌러서 그 사람의 이력을 봅니다.
             </Explain>
           </>
@@ -1323,7 +1323,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
         {year !== ALL_YEARS && tab === "status" && (
           <label className="home-period">
             기간
-            <select value={period} onChange={(event) => setPeriod(event.target.value)} title="보고 횟수·완료·역량 이력처럼 날짜가 있는 숫자만 이 기간을 따릅니다. 과제 수는 연도 기준 그대로입니다.">
+            <select value={period} onChange={(event) => setPeriod(event.target.value)} title="보고 횟수·완료·역량 강화 활동처럼 날짜가 있는 숫자만 이 기간을 따릅니다. 과제 수는 연도 기준 그대로입니다.">
               {PERIODS.map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
@@ -1348,7 +1348,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
       />
       {tab === "status" && data.period && (
         <p className="hint home-period-note">
-          <b>{PERIODS.find(([key]) => key === data.period)?.[1]}</b> — 보고 횟수·완료·역량 이력처럼{" "}
+          <b>{PERIODS.find(([key]) => key === data.period)?.[1]}</b> — 보고 횟수·완료·역량 강화 활동처럼{" "}
           <b>날짜가 있는 숫자만</b> 이 기간을 따릅니다. 과제 수·상태별 수는 연도 기준 그대로입니다.
         </p>
       )}

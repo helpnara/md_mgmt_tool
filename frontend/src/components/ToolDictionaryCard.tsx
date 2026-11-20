@@ -68,7 +68,7 @@ export default function ToolDictionaryCard() {
       <CardIntro id="tool-dictionary">
         <b>보유 기술(도구)</b>은 <b>무엇으로 했는가</b>입니다 — 프로그래밍 언어 · 소프트웨어 · 장비 · 플랫폼처럼 이름만으로 “쓸 줄 안다” 가 되는 것.
         회귀 분석 · 실험계획법 같은 <b>분석 기법 · 방법은 역량</b>(왼쪽 역량 사전)에 둡니다. 이 사전에 있는 이름만 보유 기술로 보고 다른 이름은 대표 이름으로 맞추며(파이썬 → Python),
-        저장하면 이미 적힌 경험 · 과제의 것도 다시 맞춥니다. <b>층</b>(언어 · 분석/AI · 시각화 …)은 팀원역량 → [팀 역량]의 기술 스택 줄이 됩니다 — 새 층 이름을 적으면 새 줄이 생깁니다.
+        저장하면 이미 적힌 경험 · 과제의 것도 다시 맞춥니다. <b>층</b>(언어 · 분석/AI · 시각화 …)은 팀원역량 → [팀역량]의 기술 스택 줄이 됩니다 — 새 층 이름을 적으면 새 줄이 생깁니다.
       </CardIntro>
       <DictionaryEditor rows={rows} saved={savedRows} setRows={setRows} usage={(row) => data?.usage[row.origin] ?? 0} itemLabel="보유 기술"
         removable={() => true} axisName="층" axisFree
