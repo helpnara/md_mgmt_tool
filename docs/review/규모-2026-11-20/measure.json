@@ -1,0 +1,81 @@
+{
+ "start_ms": 9095,
+ "api": {},
+ "ui": {
+  "과제목록 올해": {
+   "ms": 1115,
+   "height": 46165,
+   "rows": 606,
+   "nodes": 14279,
+   "heap": 11,
+   "screens": 51
+  },
+  "과제목록 전체": {
+   "ms": 760,
+   "height": 76178,
+   "rows": 1000,
+   "nodes": 23097,
+   "heap": 11,
+   "screens": 85
+  },
+  "과제목록 전체 거르기 한 번": {
+   "ms": 94
+  },
+  "홈": {
+   "ms": 720,
+   "height": 900,
+   "rows": 0,
+   "nodes": 102,
+   "heap": 11,
+   "screens": 1
+  },
+  "보고대상": {
+   "ms": 578,
+   "height": 32836,
+   "rows": 501,
+   "nodes": 9360,
+   "heap": 11,
+   "screens": 36
+  },
+  "보고이력": {
+   "ms": 580,
+   "height": 34665,
+   "rows": 606,
+   "nodes": 9799,
+   "heap": 11,
+   "screens": 39
+  },
+  "로드맵 기본": {
+   "ms": 585,
+   "height": 21726,
+   "rows": 0,
+   "nodes": 7984,
+   "heap": 11,
+   "screens": 24
+  },
+  "로드맵 전체 줄기": {
+   "ms": 584,
+   "height": 25521,
+   "rows": 0,
+   "nodes": 9452,
+   "heap": 11,
+   "screens": 28
+  },
+  "검색": {
+   "ms": 692,
+   "height": 5334,
+   "rows": 0,
+   "nodes": 566,
+   "heap": 11,
+   "screens": 6
+  },
+  "팀원역량 팀역량": {
+   "ms": 921,
+   "height": 1981,
+   "rows": 26,
+   "nodes": 423,
+   "heap": 11,
+   "screens": 2
+  }
+ }
+}
