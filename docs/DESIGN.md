@@ -1253,7 +1253,7 @@ score = elapsed + unreported_entries × 0.5
 | 백엔드 | FastAPI + Uvicorn | 요청 스택. 파일 업로드·정적 서빙·OpenAPI 문서 기본 제공 |
 | DB | SQLite (WAL) + FTS5 | 설치 불필요, 단독 사용에 충분 |
 | 마크다운 파싱 | `python-frontmatter` + `markdown-it-py` | front matter 왕복(round-trip) 보존 |
-| 파일 감시 | ~~`watchdog`~~ — **보류** | 외부 편집은 기동 시 스캔 + [다시 읽기]. 자동 감시는 T22 착수 신호를 기다린다(5.5) |
+| 파일 감시 | ~~`watchdog`~~ — **만들지 않음** | 외부 편집은 기동 시 스캔 + [다시 읽기]. 자동 감시(T22)는 정리(2026-11-21 — [다시 읽기]를 자주 누르지 않음) |
 | 이미지 처리 | `Pillow` | 썸네일 생성 |
 | 엑셀 읽기 | `openpyxl` | 보고용 xlsx 표·삽입 이미지 미리보기 |
 | 프론트엔드 | Vite + React + TypeScript | 에디터/보드 UI 구성 용이 |
