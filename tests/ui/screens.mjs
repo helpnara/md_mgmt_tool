@@ -475,14 +475,19 @@ async function main() {
     expect(await page.locator(".report-editor, .snapshot").count() > 0, `보고가 안 열렸습니다 (${label})`);
   });
 
-  await check("보고가 한 번도 없는 과제도 줄로 선다", async () => {
-    // 한 줄이 통째로 비면 "올해 한 번도 보고하지 않은 과제" 다. 그 사실이 보여야 한다.
+  await check("보고가 한 번도 없는 과제 — 기본은 숨기고 수를 알리며, [보고 있는 과제만]을 끄면 줄로 선다 (316)", async () => {
+    // 한 줄이 통째로 비면 "올해 한 번도 보고하지 않은 과제" 다. 그 사실이 보여야 한다 — 기본은 수(n건 숨김)로, 끄면 줄로.
     await go("#/history");
+    await page.locator(".month-grid").waitFor({ timeout: 8000 });
+    equal(await page.locator(".month-grid tbody tr.quiet-row").count(), 0, "기본은 보고 있는 과제만");
+    expect((await page.locator("[data-testid=month-quiet-count]").innerText()).includes("보고 없는 과제"), "숨긴 수를 알린다");
+    await page.locator("[data-testid=month-only-reported]").uncheck();
     const rows = await page.locator(".month-grid tbody tr").count();
     const projects = (await api.get("/api/projects")).filter((p) => !p.no_report).length;
     expect(rows >= projects, `줄이 모자랍니다 (줄 ${rows}, 올해 과제 ${projects})`);
     expect(await page.locator(".month-grid tbody tr.quiet-row").count() > 0,
       "보고 없는 과제 줄이 없습니다");
+    await page.locator("[data-testid=month-only-reported]").check();
   });
 
   await check("효과 금액은 둘째 자리까지 저장되고, 첫째 자리로 보인다", async () => {
@@ -8047,6 +8052,23 @@ async function main() {
     } finally {
       await other.close();
     }
+  });
+
+  await check("많아질 때 (316 · 315) — 과제목록 머리 고정 · 100줄이 안 되면 [더 보기] 없음 · 로드맵 [3년 · 5년 · 전체]", async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await go("#/projects?year=all");
+    await page.locator(".project-table tbody tr").first().waitFor({ timeout: 8000 });
+    equal(await page.locator(".project-table thead th").first().evaluate((el) => getComputedStyle(el).position), "sticky", "표 머리 고정");
+    const total = (await api.get("/api/projects")).length;
+    equal(await page.locator("[data-testid=list-more]").count(), total > 100 ? 1 : 0, "100줄 넘을 때만 [더 보기]");
+    await go("#/roadmap?state=all");
+    await page.locator(".roadmap-quick").waitFor({ timeout: 8000 });
+    await page.locator(".roadmap-quick").getByRole("button", { name: "3년" }).click();
+    const year = new Date().getFullYear();
+    const [a, b] = await page.locator(".roadmap-range select").evaluateAll((els) => els.map((e) => e.value));
+    expect(Number(a) === year - 1 && Number(b) === year + 1, `3년: ${a} ~ ${b}`);
+    expect(await page.locator(".roadmap-quick button.on", { hasText: "3년" }).count() === 1, "고른 단추 표시");
+    await page.locator(".roadmap-quick").getByRole("button", { name: "전체" }).click();
   });
 
   console.log("\n[4] 화면 오류가 하나도 없었는가");

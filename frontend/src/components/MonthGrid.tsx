@@ -20,6 +20,7 @@ const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 /** 한 칸에 세우는 보고 수. 넘치면 +N 으로 접는다 — 한 칸이 길어지면 그 줄만 키가 커진다. */
 const CELL_LIMIT = 2;
 const OPEN_KEY = "md-mgmt:month-grid";
+const ONLY_KEY = "md-mgmt:month-grid-only-reported";   // 316
 
 /** 그 달의 보고 이력으로 가는 주소. 마지막 날은 달마다 다르므로 계산해서 쓴다. */
 function monthLink(year: string, month: number): string {
@@ -38,6 +39,9 @@ interface Props {
 export default function MonthGrid({ year, from = "", to = "" }: Props) {
   const [grid, setGrid] = useState<GridData | null>(null);
   const [gridOpen, setGridOpen] = useState(() => storageGet(OPEN_KEY) !== "off");
+  // 316 — 기본은 그 해 보고가 있는 과제만(과제가 많으면 600줄이 넘었다). 보고 없는 과제 수는 머리에 남긴다
+  const [onlyReported, setOnlyReported] = useState(() => storageGet(ONLY_KEY) !== "off");
+  useEffect(() => { storageSet(ONLY_KEY, onlyReported ? "on" : "off"); }, [onlyReported]);
   const scroller = useRef<HTMLDivElement>(null);
   // 못 불러오면 조용히 사라지지 않고 한 줄 + [다시 시도] (TODO 209 ③)
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +133,9 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
     months.set(month, [...(months.get(month) ?? []), report]);
   }
 
+  const quietCount = grid.projects.filter((project) => !byProject.has(project.id)).length;
+  const shownProjects = onlyReported ? grid.projects.filter((project) => byProject.has(project.id)) : grid.projects;
+
   return (
     <div className="card month-card wide">
         <div className="card-head">
@@ -141,9 +148,16 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
               </span>
             )}
           </h2>
-          <button className="ghost small" onClick={() => setGridOpen((prev) => !prev)}>
-            {gridOpen ? "접기" : "펼치기"}
-          </button>
+          <span className="month-grid-tools">
+            <label className="check-label" title="끄면 그 해에 걸친 과제를 모두 — 보고가 한 번도 없는 과제도 줄로 섭니다">
+              <input type="checkbox" checked={onlyReported} onChange={(e) => setOnlyReported(e.target.checked)} data-testid="month-only-reported" />
+              보고 있는 과제만
+            </label>
+            {onlyReported && quietCount > 0 && <span className="hint" data-testid="month-quiet-count">· 보고 없는 과제 {quietCount}건 숨김</span>}
+            <button className="ghost small" onClick={() => setGridOpen((prev) => !prev)}>
+              {gridOpen ? "접기" : "펼치기"}
+            </button>
+          </span>
         </div>
         {gridOpen && (
           <>
@@ -158,7 +172,12 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {grid.projects.map((project) => {
+                  {shownProjects.length === 0 && (
+                    <tr>
+                      <td colSpan={13} className="empty">{year}년에 확정한 보고가 아직 없습니다 — [보고 있는 과제만]을 끄면 그 해의 과제를 모두 봅니다.</td>
+                    </tr>
+                  )}
+                  {shownProjects.map((project) => {
                     const mine = byProject.get(project.id) ?? noReports;
                     return (
                       <tr key={project.id} className={mine.size ? undefined : "quiet-row"}>

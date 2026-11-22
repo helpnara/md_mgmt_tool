@@ -5,6 +5,9 @@ import { cellCount, DASH, formatDate, sumBy, useLatest } from "../util";
 import { notifyError } from "../notify";
 import { storageGetJson, storageRemove, storageSet, useScrollMemory } from "../storage";
 import TotalRow from "./TotalRow";
+
+/** 316 — 보고대상 후보는 위 30줄부터 */
+const CANDIDATE_ROWS = 30;
 import { backTarget, projectLink, useAddressBar } from "../nav";
 import SortHeader, { type SortState } from "./SortHeader";
 import LoadError from "./LoadError";
@@ -99,6 +102,9 @@ export default function ReportCandidates({ meta, query }: Props) {
   // 과제를 열었다 돌아오면 보던 자리로 (TODO 210 ③)
   useScrollMemory(loaded !== null);
   const items = loaded === null ? [] : sort === ELAPSED_SORT ? sortByElapsed(loaded, order) : loaded;
+  // 316 — 후보가 많으면 위 30줄만(오래된 순 그대로). 합계는 전체
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? items : items.slice(0, CANDIDATE_ROWS);
 
   // 고른 조건과 주소를 맞춘다. 과제를 열어 보고 돌아와도 그대로다.
   useAddressBar(
@@ -376,7 +382,7 @@ export default function ReportCandidates({ meta, query }: Props) {
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => (
+          {visible.map((item) => (
             <tr key={item.id} className={picks.includes(item.id) ? "picked-row" : undefined}>
               {!readonly && (
                 <td className="pick-col">
@@ -454,6 +460,14 @@ export default function ReportCandidates({ meta, query }: Props) {
             <tr>
               <td colSpan={readonly ? 7 : 8} className="empty">
                 보고 후보가 없습니다.
+              </td>
+            </tr>
+          )}
+          {items.length > visible.length && (
+            <tr className="more-rows" data-testid="candidates-more">
+              <td colSpan={readonly ? 7 : 8}>
+                <span className="muted">위 {visible.length}줄 · 전체 {items.length}건</span>
+                <button type="button" className="ghost small" onClick={() => setShowAll(true)}>나머지 {items.length - visible.length}건 더 보기</button>
               </td>
             </tr>
           )}

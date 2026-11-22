@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { notifyError } from "../notify";
 import type { Meta, Project } from "../types";
@@ -96,6 +96,9 @@ const COLUMN_SORTS: Record<string, { key: string; first?: "asc" | "desc" }> = {
   "최근 업데이트": { key: "updated", first: "desc" },
 };
 
+/** 316 — 과제목록은 100줄씩 그린다(1000개면 85 화면이 됐다) */
+const PAGE_ROWS = 100;
+
 /** 효과 칸의 합계 — 줄과 같은 `기대 → 실증` 모양. 둘 다 0 이면 `-` 하나 (TODO 157 · 158) */
 function effectTotal(expected: number, verified: number): string {
   const [left, right] = [cellEffect(expected), cellEffect(verified)];
@@ -145,6 +148,18 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
 
   useEffect(load, [load]);
   // 과제를 열었다 [← 과제 목록] 으로 오면 보던 자리로 (TODO 210 ③)
+  // 316 — 많으면 100줄씩. 합계 · [표 복사]는 걸러진 전체 그대로. 과제를 열었다 돌아오면 펼친 만큼 그대로(창마다)
+  const shownKey = () => `md-mgmt:list-shown:${window.location.hash}`;
+  const [shown, setShown] = useState(() => Number(storageGet(shownKey(), "session")) || PAGE_ROWS);
+  const firstFilters = useRef(true);
+  useEffect(() => {
+    if (firstFilters.current) { firstFilters.current = false; return; }
+    setShown(PAGE_ROWS);          // 거르기 · 정렬을 바꾸면 처음 100줄부터
+  }, [filters]);
+  const showMore = (n: number) => {
+    setShown(n);
+    storageSet(shownKey(), String(n), "session");
+  };
   useScrollMemory(projects !== null);
 
   // 고른 조건과 주소를 맞춘다. 기본값은 적지 않아 주소가 짧게 유지된다.
@@ -468,7 +483,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((project) => {
+          {rows.slice(0, shown).map((project) => {
             const due = dueLabel(project.due_date, project.status);
             const href = projectLink(project.id);
             return (
@@ -569,6 +584,18 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
             <tr>
               <td colSpan={11} className="empty">
                 과제가 없습니다. [과제 추가]로 시작하세요.
+              </td>
+            </tr>
+          )}
+          {/* 316 — 남은 줄 */}
+          {rows.length > shown && (
+            <tr className="more-rows" data-testid="list-more">
+              <td colSpan={11}>
+                <span className="muted">{shown}줄 보는 중 · 전체 {rows.length}건</span>
+                <button type="button" className="ghost small" onClick={() => showMore(shown + PAGE_ROWS)}>
+                  {Math.min(PAGE_ROWS, rows.length - shown)}줄 더 보기
+                </button>
+                <button type="button" className="ghost small" onClick={() => showMore(rows.length)}>모두 보기</button>
               </td>
             </tr>
           )}

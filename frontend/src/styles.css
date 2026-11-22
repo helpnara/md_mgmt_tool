@@ -3567,3 +3567,18 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .lock-notice { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; padding: 8px 12px; border-radius: var(--radius); background: var(--warning-50); border: 1px solid var(--warning-200); color: var(--warning-700); font-size: var(--fs-sm); }
 .lock-notice > span:not(.editing-pencil) { flex: 1 1 260px; }
 .lock-notice.free { background: var(--neutral-50); border-color: var(--border); color: var(--text); }
+
+/* 316 — 과제목록: 표 머리 고정(아래로 내려도 열 이름이 화면 위, 머리줄 바로 아래) · 100줄씩.
+   넓은 화면에서는 표를 가로 스크롤 상자에 넣지 않는다 — 넣으면 고정이 그 상자 안에서만 먹는다. 좁은 화면(가로로 미는 때)은 고정 없이 */
+@media (min-width: 1100px) {
+  .project-list > .table-scroll { overflow: visible; }
+  .project-table { overflow: clip; }
+  .project-table thead th { position: sticky; top: var(--header-h, 64px); z-index: 3; background: var(--neutral-50); box-shadow: 0 1px 0 var(--border); }
+}
+.more-rows td { text-align: center; padding: 10px; background: var(--neutral-50); }
+.more-rows td > * { margin: 0 6px; }
+.month-grid-tools { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--fs-sm); }
+/* 315 — 로드맵 빠른 기간 · 긴 기간이면 "오늘" 딱지를 해 글자 아래로(겹침 방지) */
+.roadmap-quick { display: inline-flex; gap: 4px; }
+.roadmap-quick button.on { border-color: var(--accent); color: var(--accent-strong); background: var(--primary-50); }
+.rm-today-label.low { top: auto; bottom: -1px; }

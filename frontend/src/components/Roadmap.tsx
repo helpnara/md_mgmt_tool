@@ -50,6 +50,11 @@ function matches(lineage: RoadmapLineage, filters: { state: string; owner: strin
   return true;
 }
 
+/** 315 — 이보다 긴 기간은 처음엔 최근 5년부터 · 해 글자는 한 해 걸러 */
+const LONG_YEARS = 10;
+/** 316 — 살펴볼 것은 위 10건부터 */
+const WARN_ROWS = 10;
+
 export default function Roadmap({ meta, query }: Props) {
   const initial = new URLSearchParams(query);
   // 상태 — 비면 끝나지 않은 줄기(진행 · 예정), all 이면 전부, ended 면 끝난 줄기만
@@ -108,8 +113,12 @@ export default function Roadmap({ meta, query }: Props) {
     }
     return { from: Math.min(...years), to: Math.max(...years) };
   }, [lineages, thisYear]);
-  const fromYear = Number(from) || auto.from;
-  const toYear = Math.max(Number(to) || auto.to, fromYear);
+  // 315 — 줄기가 10년을 넘으면 처음엔 최근 5년(올해 -3 ~ +1)부터. [전체]로 다 본다
+  const longSpan = !from && !to && auto.to - auto.from + 1 > LONG_YEARS;
+  const fromYear = Number(from) || (longSpan ? Math.max(auto.from, thisYear - 3) : auto.from);
+  const toYear = Math.max(Number(to) || (longSpan ? Math.min(auto.to, thisYear + 1) : auto.to), fromYear);
+  const setSpan = (a: number | "", b: number | "") => { setFrom(a === "" ? "" : String(a)); setTo(b === "" ? "" : String(b)); };
+  const spanIs = (a: number, b: number) => fromYear === a && toYear === b;
   const rangeStart = new Date(fromYear, 0, 1).getTime();
   const rangeEnd = new Date(toYear + 1, 0, 1).getTime();
   const span = rangeEnd - rangeStart;
@@ -144,6 +153,7 @@ export default function Roadmap({ meta, query }: Props) {
   }, [focus, data]);
 
   const warnings = lineages.flatMap((lineage) => lineage.warnings.map((item) => ({ lineage, item })));
+  const [allWarnings, setAllWarnings] = useState(false);
   const heavy = warnings.filter((entry) => entry.item.level === "warn");
   const projectCount = lineages.reduce((total, lineage) => total + lineage.projects.filter((item) => !item.missing).length, 0);
   const filtered = Boolean(state || owner || group || q || warn || from || to);
@@ -192,7 +202,7 @@ export default function Roadmap({ meta, query }: Props) {
           <input value={q} onChange={(event) => setQ(event.target.value)} placeholder="과제 번호 · 이름" aria-label="검색어" />
           <span className="roadmap-range">
             <select value={from} onChange={(event) => setFrom(event.target.value)} aria-label="보이는 기간 처음">
-              <option value="">{auto.from}년(자동)</option>
+              <option value="">{fromYear}년(자동)</option>
               {yearChoices.map((year) => (
                 <option key={year} value={year}>
                   {year}년
@@ -201,7 +211,7 @@ export default function Roadmap({ meta, query }: Props) {
             </select>
             ~
             <select value={to} onChange={(event) => setTo(event.target.value)} aria-label="보이는 기간 끝">
-              <option value="">{auto.to}년(자동)</option>
+              <option value="">{toYear}년(자동)</option>
               {yearChoices.map((year) => (
                 <option key={year} value={year}>
                   {year}년
@@ -209,6 +219,13 @@ export default function Roadmap({ meta, query }: Props) {
               ))}
             </select>
           </span>
+          {/* 315 — 빠른 기간 */}
+          <span className="roadmap-quick" role="group" aria-label="보이는 기간 빠르게">
+            <button type="button" className={spanIs(thisYear - 1, thisYear + 1) ? "ghost small on" : "ghost small"} onClick={() => setSpan(thisYear - 1, thisYear + 1)}>3년</button>
+            <button type="button" className={spanIs(thisYear - 2, thisYear + 2) ? "ghost small on" : "ghost small"} onClick={() => setSpan(thisYear - 2, thisYear + 2)}>5년</button>
+            <button type="button" className={spanIs(auto.from, auto.to) ? "ghost small on" : "ghost small"} onClick={() => setSpan(auto.from, auto.to)}>전체</button>
+          </span>
+          {longSpan && <span className="hint" data-testid="roadmap-long-hint">줄기가 {auto.to - auto.from + 1}년에 걸쳐 최근 5년부터 — 다 보려면 [전체]</span>}
           <label className="roadmap-check">
             <input type="checkbox" checked={warn === "1"} onChange={(event) => setWarn(event.target.checked ? "1" : "")} />
             살펴볼 것이 있는 줄기만
@@ -305,10 +322,16 @@ export default function Roadmap({ meta, query }: Props) {
                 {heavy.length > 0 && <span className="warn-text"> — 늦음 · 끊김 {heavy.length}건</span>}
               </summary>
               <ul>
-                {[...heavy, ...warnings.filter((entry) => entry.item.level !== "warn")].map(({ lineage, item }) => (
+                {[...heavy, ...warnings.filter((entry) => entry.item.level !== "warn")].slice(0, allWarnings ? undefined : WARN_ROWS).map(({ lineage, item }) => (
                   <WarningRow key={`${lineage.key}-${item.project_id}-${item.kind}`} lineage={lineage} warning={item} />
                 ))}
               </ul>
+              {/* 316 — 많으면 위 10건(늦음 · 끊김 먼저)만, 그림이 한참 아래로 밀리지 않게 */}
+              {!allWarnings && warnings.length > WARN_ROWS && (
+                <button type="button" className="ghost small" data-testid="roadmap-warn-more" onClick={() => setAllWarnings(true)}>
+                  나머지 {warnings.length - WARN_ROWS}건 더 보기
+                </button>
+              )}
             </details>
           )}
 
@@ -332,9 +355,10 @@ export default function Roadmap({ meta, query }: Props) {
               >
                 <div className="rm-head-label">단계 · 과제 번호</div>
                 <div className="rm-axis" ref={axisRef}>
-                  {years.map((year) => (
+                  {years.map((year, index) => (
                     <div key={year} className={year === thisYear ? "rm-year this-year" : "rm-year"} style={{ width: `${100 / years.length}%` }}>
-                      <span>{year}</span>
+                      {/* 315 — 10년이 넘으면 한 해 걸러 글자(겹침 방지), 올해는 늘 */}
+                      <span>{years.length <= LONG_YEARS || index % 2 === 0 || year === thisYear ? year : ""}</span>
                       {years.length <= 4 && (
                         <div className="rm-quarters">
                           {["1분기", "2분기", "3분기", "4분기"].map((label) => (
@@ -345,7 +369,7 @@ export default function Roadmap({ meta, query }: Props) {
                     </div>
                   ))}
                   {today >= rangeStart && today < rangeEnd && (
-                    <span className="rm-today-label" style={{ left: `${pct(today) * 100}%` }}>
+                    <span className={years.length > 6 ? "rm-today-label low" : "rm-today-label"} style={{ left: `${pct(today) * 100}%` }}>
                       오늘
                     </span>
                   )}
