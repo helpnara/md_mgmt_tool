@@ -3569,8 +3569,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .lock-notice.free { background: var(--neutral-50); border-color: var(--border); color: var(--text); }
 
 /* 316 — 과제목록: 표 머리 고정(아래로 내려도 열 이름이 화면 위, 머리줄 바로 아래) · 100줄씩.
-   넓은 화면에서는 표를 가로 스크롤 상자에 넣지 않는다 — 넣으면 고정이 그 상자 안에서만 먹는다. 좁은 화면(가로로 미는 때)은 고정 없이 */
-@media (min-width: 1100px) {
+   넓은 화면(1400px 이상 — 1366px 은 표가 화면보다 넓어 가로로 밀어야 한다)에서는 표를 가로 스크롤 상자에 넣지 않는다 — 넣으면 고정이 그 상자 안에서만 먹는다. 좁은 화면(가로로 미는 때)은 고정 없이 */
+@media (min-width: 1400px) {
   .project-list > .table-scroll { overflow: visible; }
   .project-table { overflow: clip; }
   .project-table thead th { position: sticky; top: var(--header-h, 64px); z-index: 3; background: var(--neutral-50); box-shadow: 0 1px 0 var(--border); }

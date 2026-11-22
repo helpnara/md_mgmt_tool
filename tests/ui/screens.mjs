@@ -2430,7 +2430,7 @@ async function main() {
     await go("#/history?feedback=open");
     equal(await page.locator(".history-list li").count(), 1, "답하지 않은 지시만");
     equal(await page.locator(".feedback-tag").count(), 1, "지시 표");
-    expect(await page.locator('.check-label input[type="checkbox"]').isChecked(), "체크 상태가 주소를 따른다");
+    expect(await page.getByRole("checkbox", { name: "답하지 않은 지시만" }).isChecked(), "체크 상태가 주소를 따른다");
   });
 
   await check("새 초안이 지시를 맨 위에 물고 오고, [답변함]이면 띠가 사라진다", async () => {
