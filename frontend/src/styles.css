@@ -3582,3 +3582,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .roadmap-quick { display: inline-flex; gap: 4px; }
 .roadmap-quick button.on { border-color: var(--accent); color: var(--accent-strong); background: var(--primary-50); }
 .rm-today-label.low { top: auto; bottom: -1px; }
+/* 319 — 후보 표: 이름 | 띠지(팀장 · 담당) 두 칸, 띠지 사이는 같은 간격 */
+.candidates-table .cand-name { font-weight: 600; white-space: nowrap; }
+.candidates-table .cand-marks { white-space: nowrap; }
+.candidates-table .cand-marks .tag { margin: 0 4px 0 0; }
+.candidates-table .cand-marks .tag:last-child { margin-right: 0; }

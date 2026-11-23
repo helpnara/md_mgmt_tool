@@ -7902,6 +7902,12 @@ async function main() {
     await line.getByRole("button", { name: /후보 보기/ }).click();
     await page.locator("[data-testid=candidates]").waitFor({ timeout: 8000 });
     await page.waitForFunction(() => !document.querySelector("[data-testid=candidates]")?.textContent?.includes("찾는 중"), null, { timeout: 8000 });
+    // 319 — 띠지(팀장 · 담당)는 이름과 다른 칸, 모든 줄에서 같은 왼쪽 자리
+    if (await page.locator(".candidates-table tbody tr").count()) {
+      equal(await page.locator(".candidates-table thead th").nth(1).innerText(), "구분", "구분 열");
+      const lefts = await page.evaluate(() => [...document.querySelectorAll(".candidates-table .cand-marks .tag:first-child")].map((el) => Math.round(el.getBoundingClientRect().left)));
+      expect(new Set(lefts).size <= 1, `띠지 시작 자리가 같다: ${lefts}`);
+    }
     await go("#/skills?tab=team");
     await page.locator("[data-testid=ts-education]").waitFor({ timeout: 10000 });
     await go("#/skills?tab=meetings&person=" + encodeURIComponent("권경락"));
