@@ -326,18 +326,19 @@ export function NeedSkillsLine({ skills, owners, canSee }: { skills: string[]; o
             <>
               <p className="hint">경험이 많은 · 최근인 사람이 위입니다. 숫자는 경험 수(수준 아님), "맡은 진행 과제" 는 바쁜 정도입니다. {data.missing.length > 0 && <b>아무도 없는 역량: {data.missing.join(", ")}</b>}</p>
               <table className="grid ts-compact candidates-table">
-                <thead><tr><th>사람</th><th>구분</th><th>가진 역량({skills.length}개 중)</th><th>맡은 진행 과제</th><th>표시</th></tr></thead>
+                {/* 320 — 구분 · 사람 · 맡은 진행 과제 · 가진 역량 · 역량 키우는 중 */}
+                <thead><tr><th>구분</th><th>사람</th><th className="num">맡은 진행 과제</th><th>가진 역량({skills.length}개 중)</th><th title="올해 육성 목표 · 진행 중인 승계 · 짝 계획(배울 사람)으로 이 역량을 키우는 중">역량 키우는 중</th></tr></thead>
                 <tbody>
                   {data.people.map((p) => (
                     <tr key={p.name} className={owners.includes(p.name) ? "is-owner" : undefined}>
-                      {/* 319 — 이름 | 띠지 두 칸: 띠지가 한 열에 세로로 줄 선다 */}
-                      <td className="cand-name">{p.name}</td>
+                      {/* 319 — 띠지는 한 열에 세로로 줄 선다 */}
                       <td className="cand-marks">
                         {p.leader && <span className="tag leader-tag">팀장</span>}
                         {owners.includes(p.name) && <span className="tag">담당</span>}
                       </td>
-                      <td>{p.has.length ? p.has.map((h) => <span key={h.skill} className="cand-has">{h.skill} <small className="muted">경험 {h.count} · {h.last || "기간 없음"}</small></span>) : <span className="muted">-</span>}</td>
+                      <td className="cand-name">{p.name}</td>
                       <td className="num">{p.busy}</td>
+                      <td>{p.has.length ? p.has.map((h) => <span key={h.skill} className="cand-has">{h.skill} <small className="muted">경험 {h.count} · {h.last || "기간 없음"}</small></span>) : <span className="muted">-</span>}</td>
                       <td>{p.growing.length > 0 && <span className="tag growth-started">육성 목표로 키우는 중</span>}{p.learning.length > 0 && <span className="tag">승계 계획의 배울 사람</span>}</td>
                     </tr>
                   ))}
