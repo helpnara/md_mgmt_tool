@@ -1971,3 +1971,13 @@ export interface PersonShape { person: string; period: string; axes: { axis: str
 export interface PresencePerson { name: string; minutes: number }
 /** 318 — 먼저 연 사람(잠금을 쥔 창) */
 export interface PresenceHolder { name: string; minutes: number; idle_minutes: number }
+
+// ── TODO 325 — 내용 지문으로 부딪힘 보기 ─────────────────────────────────────────
+export interface Project {
+  /** 개요 본문의 지문 — 개요를 고칠 때 [저장] 이 보낸다(과제의 수정 시각 대신) */
+  body_rev?: string;
+}
+export interface Contribution {
+  /** 이 줄의 지문 — 양식을 연 때의 것을 [저장] 이 보낸다 */
+  rev?: string;
+}

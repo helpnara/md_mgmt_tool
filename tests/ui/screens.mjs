@@ -6257,7 +6257,14 @@ async function main() {
         await page.waitForSelector(".contrib-done-note", { timeout: 5000 });
         equal(await page.locator(".contrib-form").evaluate((el) => el.closest("li").dataset.person), leader.name, "양식이 열린 줄");
         expect((await page.locator(".outcome-line").innerText()).includes("작업 시간 40% 단축"), "그 밖의 성과 표시");
-        await page.locator(".contrib-form").getByRole("button", { name: "나중에" }).click();
+        // 325 — 열린 양식에 **바로** 써서 저장해도 내 완료 저장에 걸리지 않는다(예전: "이 글을 연 뒤 … 먼저 고쳤습니다" 409)
+        await page.locator(".contrib-form").getByLabel("맡은 부분").fill("완료 직후 바로 적음");
+        const saving = page.waitForResponse((r) => r.url().includes("/contributions/") && r.request().method() === "PUT", { timeout: 8000 });
+        await page.locator(".contrib-form").getByRole("button", { name: "저장", exact: true }).click();
+        const res = await saving;
+        equal(res.status(), 200, `완료 직후 회고 저장: ${res.status()} ${await res.text()}`);
+        await page.waitForTimeout(600);
+        expect((await page.locator(`[data-person="${leader.name}"]`).innerText()).includes("완료 직후 바로 적음"), "저장된 줄");
       });
       await check("홈 [할 일]의 '회고를 적을 과제' → 누르면 내 줄의 양식 · 저장하면 홈에서 내려간다 (237)", async () => {
         await go("#/");
@@ -8237,6 +8244,31 @@ async function main() {
     } finally {
       await api.put("/api/people", { people: before });
       await page.reload(); await page.waitForTimeout(500);
+    }
+  });
+
+  await check("할 일 체크박스를 빠르게 두 개 눌러도 둘 다 저장된다 — 저장 중에는 다음 것을 받지 않고, 다 읽은 뒤 다시 (325)", async () => {
+    const entry = (await api.get(`/api/projects/${seeded.projectA}/entries`))[0];
+    const original = entry.body;
+    try {
+      await api.patch(`/api/entries/${entry.id}`, { body: `${original}\n- [ ] 첫째 빠른 체크\n- [ ] 둘째 빠른 체크\n` });
+      await go(`#/projects/${seeded.projectA}`);
+      const boxes = page.locator(".timeline .entry").first().locator("input.task-box");
+      await boxes.nth(1).waitFor({ timeout: 8000 });
+      const errors = [];
+      const onResponse = (r) => { if (r.status() === 409) errors.push(r.url()); };
+      page.on("response", onResponse);
+      await boxes.nth(0).click();
+      await boxes.nth(1).click().catch(() => {});   // 저장 중이면 받지 않는다(눌러도 바뀌지 않음)
+      await page.waitForTimeout(1200);
+      await boxes.nth(1).click();
+      await page.waitForTimeout(1200);
+      page.off("response", onResponse);
+      const body = (await api.get(`/api/projects/${seeded.projectA}/entries`)).find((e) => e.id === entry.id).body;
+      expect(body.includes("- [x] 첫째 빠른 체크") && body.includes("- [x] 둘째 빠른 체크"), `저장된 글: ${body}`);
+      equal(errors.length, 0, "409 없음");
+    } finally {
+      await api.patch(`/api/entries/${entry.id}`, { body: original });
     }
   });
 

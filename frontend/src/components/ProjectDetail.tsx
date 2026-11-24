@@ -229,7 +229,7 @@ export default function ProjectDetail({
   const [onlyUnreported, setOnlyUnreported] = useState(false);
   const [highlightEntryId, setHighlightEntryId] = useState<number | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback(() =>
     Promise.all([
       api.getProject(projectId),
       api.listEntries(projectId),
@@ -243,10 +243,10 @@ export default function ProjectDetail({
         setFiles(loadedFiles);
         setReports(loadedReports);
       })
-      .catch((err: Error) => setError(err.message));
-  }, [projectId]);
+      .catch((err: Error) => setError(err.message)),
+  [projectId]);
 
-  useEffect(load, [load]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => setOpenReport(openReportId ?? null), [openReportId]);
   // 보고를 열고 닫고 바꾸면 주소의 `?report=` 도 맞춘다 (TODO 210 ⑥) — 전에는 닫아도 남아 F5 하면 닫은 보고가 다시 열렸다.
   // replaceState 라 history 가 쌓이지 않고 hashchange 도 나지 않는다. 온 곳(back) · 다른 조건은 그대로 둔다.
@@ -290,9 +290,12 @@ export default function ProjectDetail({
   /** 개요 [수정] — 남은 글이 있으면 되살린다 */
   // 개요를 연 때의 최근 수정 시각 (TODO 233 R7) — 그 뒤 다른 사람이 먼저 고쳤으면 [저장] 이 409 로 알린다
   const overviewBase = useRef<string | null>(null);
+  // 325 — 개요를 연 때의 본문 지문. 같은 창에서 일지 · 담당과 역할을 저장해도 개요 글이 그대로면 부딪힘이 아니다
+  const overviewRev = useRef<string | null>(null);
   async function startOverviewEdit() {
     if (!project) return;
     overviewBase.current = project.updated_at ?? null;
+    overviewRev.current = project.body_rev ?? null;
     const original = project.body ?? "";
     const kept = await loadDraft<string>(overviewKey, (content) => content === original);
     setOverviewDraft(typeof kept === "string" ? kept : original);
@@ -321,7 +324,11 @@ export default function ProjectDetail({
     if (!project || savingOverview) return;
     setSavingOverview(true);
     const saved = await attempt(() =>
-      api.updateProject(project.id, { body: overviewDraft, ...(overviewBase.current ? { base_updated_at: overviewBase.current } : {}) }),
+      api.updateProject(project.id, {
+        body: overviewDraft,
+        ...(overviewBase.current ? { base_updated_at: overviewBase.current } : {}),
+        ...(overviewRev.current ? { base_body_rev: overviewRev.current } : {}),
+      }),
     );
     setSavingOverview(false);
     if (!saved) return; // 실패 — 편집기를 열어 둔 채 알림만 (쓰던 글은 그대로 남는다)
@@ -1031,15 +1038,16 @@ export default function ProjectDetail({
             onSubmit={async (payload) => {
               const saved = await api.updateProject(project.id, payload);
               // 완료로 **바뀌는** 순간 — 내가 담당이면 회고 양식을 연다 (TODO 237 A3). 비워 두고 닫아도 된다
-              if (payload.status === "done" && project.status !== "done") {
-                setJustCompleted(true);
-                const me = myName(meta);
-                if (me && saved.owners.includes(me)) setRetroFor(me);
-              }
+              const opening = payload.status === "done" && project.status !== "done";
+              if (opening) setJustCompleted(true);
               // 서버가 막지 않고 알린 것 — 폼이 저장 전에 이미 보인 것(같은 이름 · 효과 · 선행 과제 연도)은 빼고 (TODO 214)
               for (const warning of warningList(saved, FORM_SHOWN_WARNING)) notifyError(`저장했습니다 — ${warning}`);
               setEditingProject(false);
-              load();
+              // 325 — 완료로 **바뀌는** 순간 내 줄의 회고 양식을 연다(TODO 237 A3). 과제를 다시 읽은 **뒤에** 연다 —
+              // 먼저 열면 양식이 저장 전 과제를 기준으로 잡아, 바로 써서 저장하면 내 저장에 내가 걸려 409 였다
+              await load();
+              const me = myName(meta);
+              if (opening && me && saved.owners.includes(me)) setRetroFor(me);
               onMetaChange();
             }}
           />
@@ -1251,10 +1259,13 @@ export default function ProjectDetail({
               <div className="edit-inline" data-testid="edit-inline-overview"><span className="edit-inline-title">바뀐 곳</span><DiffLines lines={change.lines} /></div>
             )}
             <MarkdownBody text={project.body ?? ""} base={base}
-              onToggleTask={canEditProject(project.id) && !isReadonly() ? (next) => {
-                void api.updateProject(project.id, { body: next, ...(project.updated_at ? { base_updated_at: project.updated_at } : {}) })
-                  .then(() => load()).catch((err: Error) => { notifyError(err.message); load(); });
-              } : undefined} />
+              onToggleTask={canEditProject(project.id) && !isReadonly() ? (next) =>
+                api.updateProject(project.id, {
+                  body: next,
+                  ...(project.updated_at ? { base_updated_at: project.updated_at } : {}),
+                  ...(project.body_rev ? { base_body_rev: project.body_rev } : {}),
+                }).then(() => load()).catch((err: Error) => { notifyError(err.message); return load(); })
+              : undefined} />
           </>
         )}
       </div>
@@ -1677,10 +1688,10 @@ export default function ProjectDetail({
               {isOpen(entry, index) && (
                 <div id={`entry-body-${entry.id}`}>
                   <MarkdownBody text={entry.body ?? ""} base={entryBase}
-                    onToggleTask={canEditEntry(projectId, entry.author) && !isReadonly() ? (next) => {
-                      void api.updateEntry(entry.id, { body: next, ...(entry.updated_at ? { base_updated_at: entry.updated_at } : {}) })
-                        .then(() => load()).catch((err: Error) => { notifyError(err.message); load(); });
-                    } : undefined} />
+                    onToggleTask={canEditEntry(projectId, entry.author) && !isReadonly() ? (next) =>
+                      api.updateEntry(entry.id, { body: next, ...(entry.updated_at ? { base_updated_at: entry.updated_at } : {}) })
+                        .then(() => load()).catch((err: Error) => { notifyError(err.message); return load(); })
+                    : undefined} />
                 </div>
               )}
               {isOpen(entry, index) && (filesByEntry.get(entry.id) ?? []).length > 0 && (
@@ -1781,8 +1792,11 @@ async function cleanupOrphans(projectId: string): Promise<{ moved: number; names
 }
 
 /** 마크다운 본문 — 변환은 글이 바뀔 때만 (TODO 212). 개요를 치거나 이 과제에서 찾을 때 기록 100건을 매번 다시 바꾸지 않게. */
-const MarkdownBody = memo(function MarkdownBody({ text, base, onToggleTask }: { text: string; base?: string; onToggleTask?: (next: string) => void }) {
+const MarkdownBody = memo(function MarkdownBody({ text, base, onToggleTask }: { text: string; base?: string; onToggleTask?: (next: string) => Promise<unknown> }) {
   const tasks = Boolean(onToggleTask);
+  // 325 — 저장하고 다시 읽는 동안은 다른 체크박스를 받지 않는다. 받으면 아직 옛 글로 계산해 앞의 체크를 되돌리거나
+  // 옛 수정 시각을 보내 내 저장에 내가 걸렸다(빠르게 두 번 누를 때)
+  const busy = useRef(false);
   const html = useMemo(() => renderMarkdown(text, base, { tasks }), [text, base, tasks]);
   // 321 2단계 — 읽기 화면에서 할 일 체크박스를 누르면 그 줄의 [ ] ↔ [x] 한 글자만 바꿔 저장(부르는 쪽이)
   return (
@@ -1790,9 +1804,11 @@ const MarkdownBody = memo(function MarkdownBody({ text, base, onToggleTask }: { 
       onClick={onToggleTask ? (event) => {
         const box = (event.target as HTMLElement).closest("input.task-box") as HTMLInputElement | null;
         if (!box) return;
+        if (busy.current) { event.preventDefault(); return; }
         const next = toggleTask(text, Number(box.dataset.taskLine));
         if (next === null) { event.preventDefault(); return; }
-        onToggleTask(next);
+        busy.current = true;
+        void onToggleTask(next).finally(() => { busy.current = false; });
       } : undefined} />
   );
 });

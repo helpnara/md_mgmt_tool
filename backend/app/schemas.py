@@ -84,11 +84,14 @@ class ProjectUpdate(BaseModel):
     # 화면이 **연 때의** 최근 수정 시각 (TODO 233 R7). 그 뒤 누가 먼저 고쳤으면 409 — 나중 저장이 말없이 이기지 않게.
     # 보내지 않으면(시험 · 옛 화면) 따지지 않는다
     base_updated_at: str | None = None
+    # 325 — 개요를 연 때의 **본문** 지문(`body_rev`). 보내면 시각 대신 이것으로 본다 — 같은 창에서 일지를 쓰거나
+    # 담당과 역할을 저장해도(과제의 수정 시각이 바뀐다) 개요 글 자체가 그대로면 부딪힌 것이 아니다
+    base_body_rev: str | None = None
 
     def changes(self) -> dict[str, Any]:
         # 보내지 않은 항목만 건너뛴다. 보낸 값이 null 이면 그 항목을 비우겠다는 뜻이다
         # (효과 금액을 지우려면 이 구분이 반드시 필요하다).
-        return self.model_dump(exclude_unset=True, exclude={"base_updated_at"})
+        return self.model_dump(exclude_unset=True, exclude={"base_updated_at", "base_body_rev"})
 
 
 class EntryCreate(BaseModel):
@@ -405,6 +408,9 @@ class ContributionUpdate(BaseModel):
     # 중간 성과 (TODO 243) — [{date, text}], 보내면 통째로 바꾼다
     milestones: list[dict[str, Any]] | None = None
     base_updated_at: str | None = None
+    # 325 — 양식을 연 때의 **그 사람 줄** 지문(`rev`). 보내면 시각 대신 이것으로 본다 — 완료로 바꾸거나 일지를 써서
+    # 과제의 수정 시각이 바뀌어도 그 줄이 그대로면 부딪힌 것이 아니다
+    base_rev: str | None = None
 
     def changes(self) -> dict[str, Any]:
-        return self.model_dump(exclude_unset=True, by_alias=True, exclude={"base_updated_at"})
+        return self.model_dump(exclude_unset=True, by_alias=True, exclude={"base_updated_at", "base_rev"})

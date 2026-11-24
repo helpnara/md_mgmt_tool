@@ -950,6 +950,16 @@ def contributions_of(conn: sqlite3.Connection, project_id: str) -> list[dict[str
     ]
 
 
+CONTRIBUTION_REV_KEYS = ("role", "part", "from", "to", "did", "result", "skills", "praise", "milestones")
+
+
+def contribution_rev(row: dict[str, Any] | None) -> str:
+    """담당과 역할 한 줄의 지문 (TODO 325) — 저장하는 칸만으로. 줄이 없으면 빈 줄의 지문."""
+    from . import conflicts
+
+    return conflicts.rev({key: (row or {}).get(key) for key in CONTRIBUTION_REV_KEYS})
+
+
 def done_summary(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
     """마친 과제 (TODO 244 A4) — 기간(몇 달) · 일지 · 확정 보고 · 담당 · 중간 성과 · 그 밖의 성과 · 실증 효과."""
     row = conn.execute("SELECT * FROM project WHERE id = ?", (project_id,)).fetchone()

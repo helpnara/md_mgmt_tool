@@ -232,6 +232,8 @@ export function ContributionForm({
   const [error, setError] = useState<string | null>(null);
   // 연 때의 수정 시각 — 그 사이 누가 먼저 고쳤으면 409 (TODO 233 R7)
   const base = useRef(project.updated_at);
+  // 325 — 연 때의 **이 줄** 지문. 서버는 이것으로 본다 — 과제의 다른 곳(상태 · 일지)이 바뀐 것은 부딪힘이 아니다
+  const baseRev = useRef(row.rev);
 
   async function save() {
     setBusy(true);
@@ -247,6 +249,7 @@ export function ContributionForm({
         // 팀원은 기간을 보내지 않는다(서버가 막는다 — 팀장이 고친다)
         ...(ownerView ? { from: from || null, to: to || null } : {}),
         ...(base.current ? { base_updated_at: base.current } : {}),
+        ...(baseRev.current ? { base_rev: baseRev.current } : {}),
       });
       onSaved(saved);
     } catch (err) {

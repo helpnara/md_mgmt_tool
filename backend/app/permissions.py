@@ -29,7 +29,7 @@ CONFIRMED_LOCKED = "확정한 경험은 팀장만 고칩니다 — 고칠 곳이
 PROJECT_FIELDS_DENIED = "팀원은 과제 개요 본문만 고칠 수 있습니다 — 상태 · 일정 · 효과 · 담당자 같은 칸은 팀장이 고칩니다."
 
 # 팀원이 PATCH /api/projects/{id} 로 보낼 수 있는 칸
-MEMBER_PROJECT_FIELDS = frozenset({"body", "base_updated_at"})
+MEMBER_PROJECT_FIELDS = frozenset({"body", "base_updated_at", "base_body_rev"})
 
 # (방법, 경로, 이름) — 이름은 쓰기 기록(edits)과 홈 "팀원이 고친 것" 의 말이 된다
 _RULES: list[tuple[str, re.Pattern[str], str]] = [

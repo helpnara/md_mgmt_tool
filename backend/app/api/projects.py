@@ -481,6 +481,7 @@ def get_project(project_id: str, request: Request, conn: sqlite3.Connection = De
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.")
     data = _serialize(conn, row)
     data["body"] = row["body"]
+    data["body_rev"] = conflicts.rev(row["body"] or "")   # 325 — 개요를 연 때의 지문
     data["dir_name"] = row["dir_name"]
     # 개요가 서식 그대로인지 — 화면이 "아직 작성 전" 을 세운다 (TODO 106-B).
     data["overview_blank"] = svc.overview_is_blank(row["body"])
@@ -518,7 +519,10 @@ def get_project(project_id: str, request: Request, conn: sqlite3.Connection = De
     # 다년도 과제의 줄기 — 앞 단계들 · 다음 단계 · 단계 번호 (TODO 172)
     data["lineage"] = svc.lineage(conn, project_id)
     # 담당과 역할 — 사람마다 역할 · 맡은 부분 · 기술 · 도구 · 담당 기간 · 회고 (TODO 237 · 239)
-    data["contributions"] = hide_praise(svc.contributions_of(conn, project_id), who.of(request))
+    contribs = svc.contributions_of(conn, project_id)
+    for item in contribs:
+        item["rev"] = svc.contribution_rev(item)   # 325 — 인정 한 줄을 가리기 전에 잰다
+    data["contributions"] = hide_praise(contribs, who.of(request))
     # 성과 후보 일지 (TODO 243 B3) — 회고 양식 옆에 띄운다
     from .. import contributions as contrib
 
@@ -540,7 +544,12 @@ def update_contribution(
     current = conn.execute("SELECT updated_at FROM project WHERE id = ?", (project_id,)).fetchone()
     if current is None:
         raise HTTPException(status_code=404, detail="과제를 찾을 수 없습니다.")
-    conflicts.check(payload.base_updated_at, current["updated_at"], project_id, None)
+    if payload.base_rev:
+        # 325 — 그 사람 줄이 바뀌었을 때만(과제의 다른 곳이 바뀐 것은 부딪힘이 아니다)
+        row = next((item for item in svc.contributions_of(conn, project_id) if item["name"] == name.strip()), None)
+        conflicts.check_rev(payload.base_rev, svc.contribution_rev(row), payload.base_updated_at, project_id, None)
+    else:
+        conflicts.check(payload.base_updated_at, current["updated_at"], project_id, None)
     try:
         svc.update_contribution(conn, project_id, name.strip(), payload.changes(),
                                 member=user.name if user.role == who.MEMBER else None)
@@ -565,9 +574,13 @@ def update_project(
     # 팀원은 개요 본문만 (TODO 233 ②) — 담당인지는 미들웨어(permissions.check)가 이미 봤다
     if who.of(request).role == who.MEMBER and not permissions.member_fields_ok(changes):
         raise HTTPException(status_code=403, detail=permissions.PROJECT_FIELDS_DENIED)
-    current = conn.execute("SELECT updated_at FROM project WHERE id = ?", (project_id,)).fetchone()
+    current = conn.execute("SELECT updated_at, body FROM project WHERE id = ?", (project_id,)).fetchone()
     if current is not None:
-        conflicts.check(payload.base_updated_at, current["updated_at"], project_id, None)
+        if payload.base_body_rev and "body" in changes:
+            # 325 — 개요 글 자체가 바뀌었을 때만
+            conflicts.check_rev(payload.base_body_rev, conflicts.rev(current["body"] or ""), payload.base_updated_at, project_id, None)
+        else:
+            conflicts.check(payload.base_updated_at, current["updated_at"], project_id, None)
     before = conn.execute("SELECT title FROM project WHERE id = ?", (project_id,)).fetchone()
     try:
         warnings = svc.update_project(conn, project_id, changes) or []

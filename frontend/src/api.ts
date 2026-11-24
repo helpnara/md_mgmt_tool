@@ -211,13 +211,13 @@ export const api = {
     return projectOptionsCache;
   },
   getProject: (id: string) => request<Project>(`/api/projects/${id}`),
-  updateProject: (id: string, payload: Partial<Project> & { base_updated_at?: string }) =>
+  updateProject: (id: string, payload: Partial<Project> & { base_updated_at?: string; base_body_rev?: string }) =>
     invalidating(request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) })),
   /** 담당과 역할 한 사람 줄 (TODO 237) — 보낸 칸만 바뀐다. 팀원은 자기 줄만, 기간은 팀장만 */
   updateContribution: (
     id: string,
     name: string,
-    payload: Partial<Pick<Contribution, "role" | "part" | "from" | "to" | "did" | "result" | "skills" | "praise" | "milestones">> & { base_updated_at?: string },
+    payload: Partial<Pick<Contribution, "role" | "part" | "from" | "to" | "did" | "result" | "skills" | "praise" | "milestones">> & { base_updated_at?: string; base_rev?: string },
   ) =>
     request<Project>(`/api/projects/${encodeURIComponent(id)}/contributions/${encodeURIComponent(name)}`, {
       method: "PUT",
