@@ -93,7 +93,7 @@ export default function MdToolbar({ target }: { target: RefObject<HTMLTextAreaEl
     <div className="md-toolbar" role="toolbar" aria-label="마크다운 서식" data-testid="md-toolbar">
       {btn("B", "굵게 (Ctrl+B)", active.wraps.includes("**"), () => wrap("**"), "md-bold")}
       {btn("I", "기울임 (Ctrl+I)", active.wraps.includes("*"), () => wrap("*"), "md-italic")}
-      {btn("S", "취소선", active.wraps.includes("~~"), () => wrap("~~"), "md-strike")}
+      {btn("S", "줄 긋기 (~~)", active.wraps.includes("~~"), () => wrap("~~"), "md-strike")}
       {btn("</>", "코드", active.wraps.includes("`"), () => wrap("`"))}
       <span className="md-sep" aria-hidden />
       {btn("제목1", "제목 1 (#)", active.line === "h1", () => line("h1"))}
