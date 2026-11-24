@@ -6154,6 +6154,31 @@ async function main() {
         const r = await member.evaluate(async () => (await fetch("/api/backup/restore", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "0".repeat(32) }) })).status);
         equal(r, 403, "되살리기는 서버가 막는다");
       });
+      await check("팀장 PC 에서 명부 편집 — 사람 추가 · 떠난 날 · 빼기 · 저장이 된다 (324)", async () => {
+        await call("PUT", "/api/people", { people: [{ name: "가팀원", ips: ["127.0.0.2"], leader: true }, { name: "나팀원" }, { name: "다팀원" }] });
+        await member.goto(`${outside}/#/settings`); await member.reload(); await member.waitForTimeout(1500);
+        const card = member.locator(".people-table").first();
+        await card.waitFor({ timeout: 8000 });
+        await member.getByRole("button", { name: "+ 사람 추가" }).click();
+        const fresh = member.locator(".people-table tbody tr").last();
+        await fresh.locator("input").filter({ hasNot: member.locator("[type=radio]") }).first().fill("라팀원");
+        await member.locator('tr[data-name="나팀원"] input[type=date]').fill("2026-01-31");
+        await member.locator('tr[data-name="나팀원"] select').selectOption("전배");
+        member.once("dialog", (d) => d.accept().catch(() => {}));
+        await member.locator('tr[data-name="다팀원"]').getByRole("button", { name: "빼기" }).click();
+        await member.waitForTimeout(300);
+        const saving = member.waitForResponse((r) => r.url().endsWith("/api/people") && r.request().method() === "PUT", { timeout: 8000 });
+        await member.getByRole("button", { name: "명부 저장" }).click();
+        const res = await saving;
+        equal(res.status(), 200, `저장 응답: ${res.status()} ${await res.text()}`);
+        const people = (await call("GET", "/api/people")).people;
+        const names = people.map((p) => p.name);
+        expect(names.includes("라팀원"), `추가: ${names}`);
+        expect(!names.includes("다팀원"), `빼기: ${names}`);
+        const na = people.find((p) => p.name === "나팀원");
+        equal([na.left_on, na.left_reason].join(" "), "2026-01-31 전배", "떠난 날 · 사유");
+        expect(people.find((p) => p.name === "가팀원").leader, "팀장 그대로");
+      });
       await check("서버 PC 는 공유 중이면 머리에 '관리자' (247)", async () => {
         const owner = await browser.newPage({ viewport: { width: 1440, height: 900 } });
         try {
@@ -8163,6 +8188,7 @@ async function main() {
     await page.keyboard.type(">>");
     const picks = page.locator("[data-testid=md-picks]");
     await picks.waitFor({ timeout: 8000 });
+    await page.waitForTimeout(300);   // 자리가 모자라 화면을 올린 뒤 다시 잰 자리를 본다
     let a = await area.boundingBox(), l = await picks.boundingBox();
     expect(l.x >= a.x - 1 && l.x + l.width <= a.x + a.width + 1, `편집 칸 폭 안: 칸 ${a.x}~${a.x + a.width}, 목록 ${l.x}~${l.x + l.width}`);
     expect(l.y > a.y + 150, `끝 줄 밑에 뜬다(칸 위 ${a.y}, 목록 위 ${l.y})`);
@@ -8172,6 +8198,7 @@ async function main() {
     await area.evaluate((el) => { el.focus(); el.setSelectionRange(3, 3); });
     await page.keyboard.type(" >>");
     await picks.waitFor({ timeout: 8000 });
+    await page.waitForTimeout(300);
     a = await area.boundingBox(); l = await picks.boundingBox();
     expect(l.y > a.y && l.y < a.y + 90, `첫 줄 바로 밑(칸 위 ${a.y}, 목록 위 ${l.y})`);
     await page.keyboard.press("Escape");
