@@ -8107,6 +8107,46 @@ async function main() {
     await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
   });
 
+  await check("마크다운 2단계 (321) — 읽기 화면 할 일 체크 → 파일에 [x] · >> 로 과제 연결", async () => {
+    const entries = await api.get(`/api/projects/${seeded.projectA}/entries`);
+    const entry = entries[0];
+    const original = entry.body;
+    await api.patch(`/api/entries/${entry.id}`, { body: `${original}\n- [ ] 체크 시험 할 일\n` });
+    await go(`#/projects/${seeded.projectA}`);
+    const box = page.locator(".timeline .entry .markdown input.task-box").first();
+    await box.waitFor({ timeout: 8000 });
+    expect(await box.isEnabled(), "편집 권한이 있으면 누를 수 있다");
+    await box.click();
+    let saved = "";
+    for (let i = 0; i < 20 && !saved.includes("- [x] 체크 시험"); i += 1) {
+      saved = (await api.get(`/api/projects/${seeded.projectA}/entries`)).find((e) => e.id === entry.id).body;
+      if (!saved.includes("- [x] 체크 시험")) await page.waitForTimeout(200);
+    }
+    expect(saved.includes("- [x] 체크 시험 할 일"), `저장된 글: ${saved}`);
+    await api.patch(`/api/entries/${entry.id}`, { body: original });
+    // >> 과제 연결 — 편집 칸에서 >>공정 → 목록 → Enter
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+    const notice = page.locator("[data-testid=lock-notice]");
+    if (await notice.count()) await notice.getByRole("button", { name: "그래도 고치기" }).click();
+    const area = page.locator(".entry-editor textarea").first();
+    await area.waitFor({ timeout: 8000 });
+    const before = await area.inputValue();
+    await area.fill("관련 ");
+    await area.evaluate((el) => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); });
+    await page.keyboard.type(`>>${seeded.projectB}`);
+    await page.locator("[data-testid=md-picks] .md-pick", { hasText: "공정 자동화" }).waitFor({ timeout: 8000 });
+    await page.keyboard.press("Enter");
+    equal(await area.inputValue(), `관련 [공정 자동화](#/projects/${seeded.projectB})`, "링크 넣기");
+    equal(await page.locator("[data-testid=md-picks]").count(), 0, "고르면 목록이 닫힌다");
+    await page.keyboard.type(" >>");
+    await page.locator("[data-testid=md-picks]").waitFor({ timeout: 8000 });
+    await page.keyboard.press("Escape");
+    equal(await page.locator("[data-testid=md-picks]").count(), 0, "Esc 로 닫기");
+    await area.fill(before);
+    await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

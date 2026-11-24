@@ -4,6 +4,7 @@ import { filesBase, renderMarkdown } from "../markdown";
 import { BACK_PARAM, backTarget, currentLocation, intakeBackLink, listLink, projectLink, queryOf, screenLink, setPageTitle } from "../nav";
 import { attempt, notifyError } from "../notify";
 import { isReadonly } from "../readonly";
+import { toggleTask } from "../mdEdit";
 import { canEditEntry, canEditProject, isMember } from "../me";
 import { discardQuestion, dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
 import { EditingNow, PencilBadge, useEditGate, usePresenceList } from "../presence";
@@ -1249,7 +1250,11 @@ export default function ProjectDetail({
             {changeOn && change?.kind === "diff" && changed?.what === "개요 수정" && (
               <div className="edit-inline" data-testid="edit-inline-overview"><span className="edit-inline-title">바뀐 곳</span><DiffLines lines={change.lines} /></div>
             )}
-            <MarkdownBody text={project.body ?? ""} base={base} />
+            <MarkdownBody text={project.body ?? ""} base={base}
+              onToggleTask={canEditProject(project.id) && !isReadonly() ? (next) => {
+                void api.updateProject(project.id, { body: next, ...(project.updated_at ? { base_updated_at: project.updated_at } : {}) })
+                  .then(() => load()).catch((err: Error) => { notifyError(err.message); load(); });
+              } : undefined} />
           </>
         )}
       </div>
@@ -1671,7 +1676,11 @@ export default function ProjectDetail({
               )}
               {isOpen(entry, index) && (
                 <div id={`entry-body-${entry.id}`}>
-                  <MarkdownBody text={entry.body ?? ""} base={entryBase} />
+                  <MarkdownBody text={entry.body ?? ""} base={entryBase}
+                    onToggleTask={canEditEntry(projectId, entry.author) && !isReadonly() ? (next) => {
+                      void api.updateEntry(entry.id, { body: next, ...(entry.updated_at ? { base_updated_at: entry.updated_at } : {}) })
+                        .then(() => load()).catch((err: Error) => { notifyError(err.message); load(); });
+                    } : undefined} />
                 </div>
               )}
               {isOpen(entry, index) && (filesByEntry.get(entry.id) ?? []).length > 0 && (
@@ -1772,9 +1781,20 @@ async function cleanupOrphans(projectId: string): Promise<{ moved: number; names
 }
 
 /** 마크다운 본문 — 변환은 글이 바뀔 때만 (TODO 212). 개요를 치거나 이 과제에서 찾을 때 기록 100건을 매번 다시 바꾸지 않게. */
-const MarkdownBody = memo(function MarkdownBody({ text, base }: { text: string; base?: string }) {
-  const html = useMemo(() => renderMarkdown(text, base), [text, base]);
-  return <div className="markdown" dangerouslySetInnerHTML={{ __html: html }} />;
+const MarkdownBody = memo(function MarkdownBody({ text, base, onToggleTask }: { text: string; base?: string; onToggleTask?: (next: string) => void }) {
+  const tasks = Boolean(onToggleTask);
+  const html = useMemo(() => renderMarkdown(text, base, { tasks }), [text, base, tasks]);
+  // 321 2단계 — 읽기 화면에서 할 일 체크박스를 누르면 그 줄의 [ ] ↔ [x] 한 글자만 바꿔 저장(부르는 쪽이)
+  return (
+    <div className="markdown" dangerouslySetInnerHTML={{ __html: html }}
+      onClick={onToggleTask ? (event) => {
+        const box = (event.target as HTMLElement).closest("input.task-box") as HTMLInputElement | null;
+        if (!box) return;
+        const next = toggleTask(text, Number(box.dataset.taskLine));
+        if (next === null) { event.preventDefault(); return; }
+        onToggleTask(next);
+      } : undefined} />
+  );
 });
 
 /** 단계 칸 머리의 연도 — 그 단계 과제들의 시작 ~ 끝 연도 (TODO 176) */

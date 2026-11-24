@@ -239,3 +239,33 @@ export function activeAt(text: string, caret: number): Active {
   if (inside(/`[^`\n]+`/g)) wraps.push("`");
   return { wraps, line: kind };
 }
+
+// ── 읽기 화면 체크박스 (321 2단계) ───────────────────────────────────────────
+/** 원문 `line` 줄(0 부터)의 할 일 표시 한 글자만 바꾼다 — `[ ]` ↔ `[x]`. 그 줄이 할 일이 아니면 null */
+export function toggleTask(text: string, line: number): string | null {
+  const lines = text.split("\n");
+  const target = lines[line];
+  if (target === undefined) return null;
+  const m = target.match(/^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/);
+  if (!m) return null;
+  const mark = m[2] === " " ? "x" : " ";
+  lines[line] = target.slice(0, m[1].length) + `[${mark}]` + target.slice(m[1].length + 3);
+  return lines.join("\n");
+}
+
+// ── >> 과제 연결 (321 2단계) ─────────────────────────────────────────────────
+/** 커서 바로 앞이 `>>찾을말` 이면 {처음, 찾을말}. 빈칸 · 줄바꿈이 끼면 끝난 것 */
+export function linkQuery(text: string, caret: number): { from: number; query: string } | null {
+  const head = text.slice(Math.max(0, caret - 40), caret);
+  const m = head.match(/>>([^\s>\]\[()]{0,30})$/);
+  if (!m) return null;
+  return { from: caret - m[0].length, query: m[1] };
+}
+
+/** `>>찾을말` 을 과제 링크로 — 파일에는 표준 마크다운 링크만 남는다(`[제목](#/projects/번호)`) */
+export function linkProject(text: string, caret: number, id: string, title: string): Edit | null {
+  const q = linkQuery(text, caret);
+  if (!q) return null;
+  const insert = `[${title.replace(/[[\]]/g, "")}](#/projects/${id})`;
+  return { from: q.from, to: caret, insert, selStart: q.from + insert.length, selEnd: q.from + insert.length };
+}

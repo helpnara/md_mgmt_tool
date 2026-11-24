@@ -92,5 +92,14 @@ eq("고칠 것 없으면 null", md.repairLineBreaks("가\n나"), null);
 eq("커서가 굵게 안", md.activeAt("가 **나다** 라", 5).wraps, ["**"]);
 eq("줄 종류", md.activeAt("- [ ] 할 일", 3).line, "task");
 
+// 321 2단계 — 읽기 화면 체크박스 · `>>` 과제 연결
+eq("할 일 끝냄", md.toggleTask("- [ ] 가\n- [ ] 나", 1), "- [ ] 가\n- [x] 나");
+eq("할 일 되돌림(번호 · 들여쓰기)", md.toggleTask("1. 가\n   2. [X] 나", 1), "1. 가\n   2. [ ] 나");
+eq("할 일 줄이 아니면 null", md.toggleTask("- 가", 0), null);
+eq(">> 찾을말", md.linkQuery("앞 >>V0", 6), { from: 2, query: "V0" });
+eq(">> 빈칸 뒤면 아님", md.linkQuery(">>가 나", 5), null);
+{ const tx = "관련 >>과제|"; const c = tx.indexOf("|"); const t2 = tx.replace("|", "");
+  eq("과제 링크 넣기", show(t2, md.linkProject(t2, c, "P-12", "새 [과제]")), "관련 [새 과제](#/projects/P-12)|"); }
+
 console.log(`\n마크다운 편집 규칙 ${pass}건 통과, ${fail}건 실패`);
 process.exit(fail ? 1 : 0);
