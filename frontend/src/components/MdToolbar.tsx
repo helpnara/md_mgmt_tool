@@ -190,7 +190,7 @@ export default function MdToolbar({ target }: { target: RefObject<HTMLTextAreaEl
     const over = pickPos.top + h - (window.innerHeight - 8);
     if (over > 0) {
       const before = window.scrollY;
-      window.scrollBy(0, over);
+      window.scrollBy(0, Math.ceil(over) + 8);   // 1px 아래 넘침은 반올림으로 안 굴러 위로 가 버렸다
       if (window.scrollY !== before) { place(); return; }   // 올라간 만큼 다시 잰다
       if (pickPos.above - h > 8) { list.style.top = `${pickPos.above - h}px`; return; }
     }
