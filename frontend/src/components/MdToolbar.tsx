@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "../api";
 import {
   type Active, type Edit, type LineKind, type Wrap,
@@ -18,6 +18,33 @@ function projectsOnce(): Promise<Pick[]> {
 }
 
 /**
+ * 322 — 칸 안 커서 자리(칸 왼쪽 위 기준 px). 칸과 똑같이 꾸민 보이지 않는 복제 칸에 커서 앞 글을 넣고
+ * 끝에 표식을 두어 잰다 — 줄바꿈 · 글꼴 · 안쪽 여백이 칸과 같으므로 자리도 같다.
+ */
+const MIRROR_PROPS = [
+  "boxSizing", "width", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+  "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontFamily", "fontSize", "fontWeight", "fontStyle",
+  "letterSpacing", "lineHeight", "textTransform", "wordSpacing", "textIndent", "tabSize", "wordBreak", "overflowWrap",
+] as const;
+export function caretPoint(area: HTMLTextAreaElement, pos: number): { left: number; top: number; height: number } {
+  const css = getComputedStyle(area);
+  const div = document.createElement("div");
+  const st = div.style as unknown as Record<string, string>;
+  for (const key of MIRROR_PROPS) st[key] = (css as unknown as Record<string, string>)[key];
+  st.position = "absolute"; st.visibility = "hidden"; st.top = "0"; st.left = "-9999px";
+  st.whiteSpace = "pre-wrap"; st.overflow = "hidden"; st.height = "auto";
+  div.textContent = area.value.slice(0, pos);
+  const mark = document.createElement("span");
+  mark.textContent = area.value.slice(pos, pos + 1) || ".";
+  div.appendChild(mark);
+  document.body.appendChild(div);
+  const lineHeight = parseFloat(css.lineHeight) || parseFloat(css.fontSize) * 1.4;
+  const point = { left: mark.offsetLeft - area.scrollLeft, top: mark.offsetTop - area.scrollTop, height: lineHeight };
+  div.remove();
+  return point;
+}
+
+/**
  * 마크다운 도구 띠 (TODO 321 1단계) — 글 편집 칸(과제 개요 · 진행일지 · 보고 초안 · 접수 요청 내용 · 검토 기록) 위.
  *
  * 규칙은 `mdEdit.ts`(순수 함수)가 정하고, 여기서는 그 결과를 **`insertText` 한 번**으로 넣는다 —
@@ -31,6 +58,9 @@ export default function MdToolbar({ target }: { target: RefObject<HTMLTextAreaEl
   // `>>찾을말` — 과제 고르기 목록
   const [picks, setPicks] = useState<Pick[] | null>(null);
   const [pickAt, setPickAt] = useState(0);
+  // 목록 자리(화면 기준) — 커서 바로 밑, 모자라면 위. 편집 칸 폭을 넘지 않는다
+  const [pickPos, setPickPos] = useState<{ left: number; top: number; width: number; above: number } | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const apply = (edit: Edit | null) => {
     const area = target.current;
@@ -100,21 +130,33 @@ export default function MdToolbar({ target }: { target: RefObject<HTMLTextAreaEl
       }
     };
     const onMove = () => setActive(activeAt(area.value, area.selectionStart));
+    // 칸을 떠나면 닫는다(목록을 누르는 것은 mousedown 을 막아 칸이 안 떠남)
+    const onBlur = () => setPicks(null);
     const onInput = () => {
       const q = area.selectionStart === area.selectionEnd ? linkQuery(area.value, area.selectionStart) : null;
       if (!q) { setPicks(null); return; }
       void projectsOnce().then((all) => {
         const key = q.query.toLowerCase();
         const found = all.filter((p) => !key || p.id.toLowerCase().includes(key) || p.title.toLowerCase().includes(key)).slice(0, 8);
+        place();
         setPicks(found);
         setPickAt(0);
       });
     };
+    const onScroll = () => { if (pickRef.current) place(); };
+    area.addEventListener("scroll", onScroll);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    area.addEventListener("blur", onBlur);
     area.addEventListener("input", onInput);
     area.addEventListener("keydown", onKey);
     area.addEventListener("keyup", onMove);
     area.addEventListener("click", onMove);
     return () => {
+      area.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+      area.removeEventListener("blur", onBlur);
       area.removeEventListener("input", onInput);
       area.removeEventListener("keydown", onKey);
       area.removeEventListener("keyup", onMove);
@@ -129,6 +171,43 @@ export default function MdToolbar({ target }: { target: RefObject<HTMLTextAreaEl
   pickRef.current = picks;
   const pickIndex = useRef(0);
   pickIndex.current = pickAt;
+  function place() {
+    const area = target.current;
+    if (!area) return;
+    const rect = area.getBoundingClientRect();
+    const caret = caretPoint(area, area.selectionStart);
+    const width = Math.max(200, Math.min(420, rect.width - 8));
+    // 커서가 칸 밖(스크롤로 가려짐)이면 칸 가장자리에 붙인다
+    const y = Math.min(Math.max(caret.top, 0), rect.height - caret.height);
+    const left = Math.min(Math.max(rect.left + caret.left, rect.left + 4), rect.right - width - 4);
+    setPickPos({ left, top: rect.top + y + caret.height + 4, width, above: rect.top + y - 4 });
+  }
+  // 늘 커서 바로 밑에 — 화면 아래에 자리가 없으면 화면을 그만큼 올리고, 더 올릴 수 없을 때만 커서 위로
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list || !pickPos) return;
+    const h = list.offsetHeight;
+    const over = pickPos.top + h - (window.innerHeight - 8);
+    if (over > 0) {
+      const before = window.scrollY;
+      window.scrollBy(0, over);
+      if (window.scrollY !== before) { place(); return; }   // 올라간 만큼 다시 잰다
+      if (pickPos.above - h > 8) { list.style.top = `${pickPos.above - h}px`; return; }
+    }
+    list.style.top = `${pickPos.top}px`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picks, pickPos]);
+  // 고른 줄이 보이게
+  useEffect(() => {
+    // scrollIntoView 는 바깥(화면)까지 굴릴 수 있어 목록 안에서만 맞춘다 — 맨 위 안내 줄은 고정
+    const list = listRef.current;
+    const item = list?.querySelector<HTMLElement>(".md-pick.on");
+    if (!list || !item) return;
+    const head = list.querySelector<HTMLElement>(".md-picks-head")?.offsetHeight ?? 0;
+    if (item.offsetTop - head < list.scrollTop) list.scrollTop = item.offsetTop - head - 6;
+    else if (item.offsetTop + item.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = item.offsetTop + item.offsetHeight - list.clientHeight + 6;
+  }, [pickAt]);
+
   function choose(p: Pick) {
     const area = target.current;
     if (!area) return;
@@ -169,7 +248,9 @@ export default function MdToolbar({ target }: { target: RefObject<HTMLTextAreaEl
         return fixed === null ? null : { from: 0, to: t.length, insert: fixed, selStart: 0, selEnd: 0 };
       }), "md-repair")}
       {picks !== null && (
-        <div className="md-picks" role="listbox" aria-label="과제 연결" data-testid="md-picks">
+        <div className="md-picks" role="listbox" aria-label="과제 연결" data-testid="md-picks" ref={listRef}
+          style={pickPos ? { left: pickPos.left, top: pickPos.top, width: pickPos.width } : undefined}
+          onMouseDown={(event) => event.preventDefault()}>
           <span className="muted md-picks-head">과제 연결 — ↑↓ 고르고 Enter (Esc 닫기)</span>
           {picks.length === 0 && <span className="muted">맞는 과제가 없습니다</span>}
           {picks.map((p, i) => (

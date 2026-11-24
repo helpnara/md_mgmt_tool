@@ -8147,6 +8147,50 @@ async function main() {
     await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
   });
 
+  await check("마크다운 화면 개선 (322) — >> 목록은 편집 칸 폭 안 · 커서 바로 밑 / 긴 할 일 둘째 줄도 글 시작에 맞춤", async () => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+    const notice = page.locator("[data-testid=lock-notice]");
+    if (await notice.count()) await notice.getByRole("button", { name: "그래도 고치기" }).click();
+    const area = page.locator(".entry-editor textarea").first();
+    await area.waitFor({ timeout: 8000 });
+    const before = await area.inputValue();
+    const long = "- [ ] 아주 긴 할 일 " + "길게 ".repeat(80);
+    await area.fill(`첫 줄\n\n${long}\n\n${"줄\n".repeat(8)}끝 `);
+    // 맨 끝에서 >>
+    await area.evaluate((el) => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); });
+    await page.keyboard.type(">>");
+    const picks = page.locator("[data-testid=md-picks]");
+    await picks.waitFor({ timeout: 8000 });
+    let a = await area.boundingBox(), l = await picks.boundingBox();
+    expect(l.x >= a.x - 1 && l.x + l.width <= a.x + a.width + 1, `편집 칸 폭 안: 칸 ${a.x}~${a.x + a.width}, 목록 ${l.x}~${l.x + l.width}`);
+    expect(l.y > a.y + 150, `끝 줄 밑에 뜬다(칸 위 ${a.y}, 목록 위 ${l.y})`);
+    expect(l.y + l.height <= 900, "화면 안");
+    await page.keyboard.press("Escape");
+    // 첫 줄에서 >>
+    await area.evaluate((el) => { el.focus(); el.setSelectionRange(3, 3); });
+    await page.keyboard.type(" >>");
+    await picks.waitFor({ timeout: 8000 });
+    a = await area.boundingBox(); l = await picks.boundingBox();
+    expect(l.y > a.y && l.y < a.y + 90, `첫 줄 바로 밑(칸 위 ${a.y}, 목록 위 ${l.y})`);
+    await page.keyboard.press("Escape");
+    // 긴 할 일의 둘째 줄이 체크박스 밑으로 들어가지 않는다(미리보기)
+    const lines = await page.locator(".entry-editor .preview li.task-item").first().evaluate((li) => {
+      const box = li.querySelector("input.task-box").getBoundingClientRect();
+      const text = [...li.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim()) ?? li.querySelector("p")?.firstChild;
+      const range = document.createRange(); range.selectNodeContents(text);
+      const rects = [...range.getClientRects()];
+      return { box: box.right, first: rects[0].left, second: rects[rects.length - 1].left, count: rects.length, top: [box.top, rects[0].top] };
+    });
+    expect(lines.count > 1, "긴 할 일이 두 줄 넘게");
+    expect(lines.first > lines.box && Math.abs(lines.second - lines.first) < 2, `둘째 줄도 글 시작에: ${JSON.stringify(lines)}`);
+    expect(Math.abs(lines.top[0] - lines.top[1]) < 10, `체크박스와 첫 줄이 같은 줄: ${JSON.stringify(lines.top)}`);
+    await area.fill(before);
+    await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);
