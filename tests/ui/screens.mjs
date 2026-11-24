@@ -6161,7 +6161,7 @@ async function main() {
         await card.waitFor({ timeout: 8000 });
         await member.getByRole("button", { name: "+ 사람 추가" }).click();
         const fresh = member.locator(".people-table tbody tr").last();
-        await fresh.locator("input").filter({ hasNot: member.locator("[type=radio]") }).first().fill("라팀원");
+        await fresh.locator(".name-with-leader input:not([type=radio])").fill("라팀원");
         await member.locator('tr[data-name="나팀원"] input[type=date]').fill("2026-01-31");
         await member.locator('tr[data-name="나팀원"] select').selectOption("전배");
         member.once("dialog", (d) => d.accept().catch(() => {}));
@@ -8183,6 +8183,8 @@ async function main() {
     const before = await area.inputValue();
     const long = "- [ ] 아주 긴 할 일 " + "길게 ".repeat(80);
     await area.fill(`첫 줄\n\n${long}\n\n${"줄\n".repeat(8)}끝 `);
+    // 화면 아래에 굴릴 자리가 있어야 "커서 밑" 을 본다(없으면 커서 위로 뜨는 것이 맞다)
+    await page.evaluate(() => { document.body.style.paddingBottom = "1200px"; });
     // 맨 끝에서 >>
     await area.evaluate((el) => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); });
     await page.keyboard.type(">>");
@@ -8213,6 +8215,7 @@ async function main() {
     expect(lines.count > 1, "긴 할 일이 두 줄 넘게");
     expect(lines.first > lines.box && Math.abs(lines.second - lines.first) < 2, `둘째 줄도 글 시작에: ${JSON.stringify(lines)}`);
     expect(Math.abs(lines.top[0] - lines.top[1]) < 10, `체크박스와 첫 줄이 같은 줄: ${JSON.stringify(lines.top)}`);
+    await page.evaluate(() => { document.body.style.paddingBottom = ""; });
     await area.fill(before);
     await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
     await page.setViewportSize({ width: 1440, height: 900 });
