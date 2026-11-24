@@ -8078,6 +8078,35 @@ async function main() {
     await page.locator(".roadmap-quick").getByRole("button", { name: "전체" }).click();
   });
 
+  await check("마크다운 서식 띠 (321) — 굵게 · Ctrl+Z 한 번 · 목록 Enter 이어 쓰기 · Tab 들여쓰기 · 제목", async () => {
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+    const notice = page.locator("[data-testid=lock-notice]");
+    if (await notice.count()) await notice.getByRole("button", { name: "그래도 고치기" }).click();
+    const area = page.locator(".entry-editor textarea").first();
+    await area.waitFor({ timeout: 8000 });
+    equal(await page.locator(".entry-editor [data-testid=md-toolbar]").count(), 1, "편집 칸 위 서식 띠");
+    const before = await area.inputValue();
+    await area.fill("굵게 만들 글\n1. 첫째");
+    await area.evaluate((el) => { el.focus(); el.setSelectionRange(0, 2); });
+    await page.locator(".entry-editor .md-bold").click();
+    equal((await area.inputValue()).split("\n")[0], "**굵게** 만들 글", "굵게");
+    await page.keyboard.press("Control+z");
+    equal((await area.inputValue()).split("\n")[0], "굵게 만들 글", "Ctrl+Z 한 번");
+    await area.evaluate((el) => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); });
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("둘째");
+    expect((await area.inputValue()).endsWith("1. 첫째\n2. 둘째"), `목록 이어 쓰기: ${await area.inputValue()}`);
+    await page.keyboard.press("Tab");
+    expect((await area.inputValue()).endsWith("1. 첫째\n   1. 둘째"), `Tab 들여쓰기: ${await area.inputValue()}`);
+    await area.evaluate((el) => { el.focus(); el.setSelectionRange(0, 0); });
+    await page.locator(".entry-editor [data-testid=md-toolbar]").getByRole("button", { name: "제목 2 (##)" }).click();
+    expect((await area.inputValue()).startsWith("## 굵게"), "제목 2");
+    // 저장하지 않고 원래대로 돌린 뒤 닫는다
+    await area.fill(before);
+    await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

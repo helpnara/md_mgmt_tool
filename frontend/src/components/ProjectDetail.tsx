@@ -7,6 +7,7 @@ import { isReadonly } from "../readonly";
 import { canEditEntry, canEditProject, isMember } from "../me";
 import { discardQuestion, dropDraft, hasDraft, loadDraft, useDrafts, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
 import { EditingNow, PencilBadge, useEditGate, usePresenceList } from "../presence";
+import MdToolbar from "./MdToolbar";
 import type { DemotePlan, EditDiff, Entry, Meta, Project, Report, YearFix } from "../types";
 import type { Attachment } from "../upload";
 import { formatBytes, uploadAttachment } from "../upload";
@@ -1169,6 +1170,7 @@ export default function ProjectDetail({
         {editingOverview ? (
           <>
             <EditingNow target={overviewKey} />
+            <MdToolbar target={overviewAreaRef} />
             <PreviewToggle on={preview} onToggle={togglePreview} />
             <div className={preview ? "split" : "split solo"}>
               <textarea

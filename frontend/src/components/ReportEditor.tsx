@@ -3,6 +3,7 @@ import { api } from "../api";
 import { attempt } from "../notify";
 import { clockNow, discardQuestion, dropDraft, loadDraft, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
 import { EditingNow } from "../presence";
+import MdToolbar from "./MdToolbar";
 import { filesBase, renderMarkdown } from "../markdown";
 import { copyAsExcelCell, copyAsPlainText, toPlainText } from "../plaintext";
 import { COPY_FAILED } from "../clipboard";
@@ -631,6 +632,7 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
         </>
       ) : (
         <>
+        <MdToolbar target={textareaRef} />
         <PreviewToggle on={preview} onToggle={togglePreview} />
         <div className={preview ? "split" : "split solo"}>
           <textarea

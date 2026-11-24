@@ -3587,3 +3587,16 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-500); 
 .candidates-table .cand-marks { white-space: nowrap; }
 .candidates-table .cand-marks .tag { margin: 0 4px 0 0; }
 .candidates-table .cand-marks .tag:last-child { margin-right: 0; }
+
+/* 321 — 마크다운 도구 띠. [미리보기 접기]와 한 줄에 서게 오른쪽 자리를 비워 두고, 미리보기 단추를 그 자리로 올린다 */
+.md-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0 6px; padding-right: 150px; min-height: 32px; }
+.md-toolbar + .split-head { margin-top: -38px; pointer-events: none; }
+.md-toolbar + .split-head > * { pointer-events: auto; }
+.md-btn { min-width: 32px; height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--fs-sm); line-height: 1; cursor: pointer; }
+.md-btn:hover { background: var(--neutral-50); filter: none; }
+.md-btn.on { background: var(--primary-50); border-color: var(--accent); color: var(--accent-strong); }
+.md-btn.md-bold { font-weight: 800; }
+.md-btn.md-italic { font-style: italic; font-family: Georgia, serif; }
+.md-btn.md-strike { text-decoration: line-through; }
+.md-btn.md-repair { font-size: var(--fs-xs); color: var(--muted-strong); }
+.md-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }

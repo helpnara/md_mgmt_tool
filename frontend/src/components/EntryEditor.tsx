@@ -4,6 +4,7 @@ import { api } from "../api";
 import { attempt, notifyError } from "../notify";
 import { clockNow, discardQuestion, dropDraft, loadDraft, useDraftKeeper, useEditLedger, useUnsaved } from "../unsaved";
 import { EditingNow } from "../presence";
+import MdToolbar from "./MdToolbar";
 import { filesBase, renderMarkdown } from "../markdown";
 import VersionPanel from "./VersionPanel";
 import type { Entry } from "../types";
@@ -489,6 +490,8 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
         </label>
       </div>
 
+      {/* 321 — 마크다운 도구 띠 */}
+      <MdToolbar target={textareaRef} />
       <PreviewToggle on={preview} onToggle={togglePreview} />
 
       <div className={preview ? "split" : "split solo"}>

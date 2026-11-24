@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { EditingNow, PencilBadge, useEditGate, usePresenceList } from "../presence";
+import MdToolbar from "./MdToolbar";
 import { renderMarkdown } from "../markdown";
 import { backTarget, projectLink, setPageTitle } from "../nav";
 import LoadError from "./LoadError";
@@ -901,6 +902,7 @@ function MarkdownArea({
         void handleFiles(Array.from(event.dataTransfer.files));
       }}
     >
+      <MdToolbar target={field.ref} />
       <PreviewToggle on={preview} onToggle={togglePreview} />
       <div className={preview ? "split" : "split solo"}>
         <textarea
