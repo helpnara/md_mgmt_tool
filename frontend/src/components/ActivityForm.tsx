@@ -8,6 +8,7 @@ import { useFormUnsaved } from "../unsaved";
 import { confirmDiscard, dateOrderProblem, isPlainEnter, todayIso } from "../util";
 import { DATE_MAX, DATE_MIN, confirmPeople, dateProblem as dayProblem, daySpan, numberProblem, personNameProblem, warningList } from "../inputRules";
 import { departedNames, freshRoster } from "./roster";
+import { leftOf } from "../people";
 
 /** 비용 상한 (TODO 214 F14) — 서버와 같은 1조 원 */
 const COST_MAX = 1e12;
@@ -225,7 +226,7 @@ export default function ActivityForm({
               title={departed.has(name) ? "명부에서 떠난 사람 — 지난 기록에만" : undefined}
             >
               {name}
-              {departed.has(name) && <span className="departed-tag"> (떠남)</span>}
+              {departed.has(name) && <span className="departed-tag"> ({leftOf(name) || "떠남"})</span>}
             </button>
           ))}
         </div>

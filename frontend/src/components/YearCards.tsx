@@ -207,7 +207,7 @@ export default function YearCards() {
               <button type="button" className={p.name === name ? "yc-person on" : "yc-person"} onClick={() => setName(p.name)}
                 disabled={p.leader} title={p.leader ? "팀장은 연말카드 대상이 아닙니다" : undefined}>
                 <b>{p.name}</b>{p.leader && <span className="tag leader-tag">팀장</span>}
-                {p.left && <span className="tag">{p.left_reason || "떠남"} {p.left_on}</span>}
+                {p.left && <span className="tag left-tag">{p.left_reason || "떠남"} {p.left_on}</span>}
                 {p.leader
                   ? <span className="muted yc-state">카드 대상 아님</span>
                   : <span className={p.missing.length ? "muted yc-state" : "yc-state ok"}>{p.missing.length ? `남음: ${p.missing.join(" · ")}` : "준비 끝 ✓"}</span>}

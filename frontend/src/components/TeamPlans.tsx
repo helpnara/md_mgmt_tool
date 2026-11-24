@@ -4,6 +4,8 @@ import { renderMarkdown } from "../markdown";
 import { attempt, notifyError } from "../notify";
 import { experienceLink } from "../nav";
 import type { Candidates, EducationView, PersonShape, Growth, GrowthGoal, Snapshot, SnapshotCompare, SnapshotItem, Succession, SuccessionPlan } from "../types";
+import LeftTag from "./LeftTag";
+import { isGone } from "../people";
 
 /**
  * 292 2차 — 팀장이 "그래서 누구를 · 언제까지 · 어떻게" 를 적고, 나중에 됐는지 보는 칸.
@@ -144,7 +146,7 @@ export function SuccessionCard({ data, people, leader, show, seed, onSeedUsed, o
   const row = (p: SuccessionPlan) => (
     <tr key={p.id} className={p.overdue ? "ts-plan-overdue" : undefined} data-plan={p.id}>
       <td><span className="ts-tag small">{p.kind}</span> <b>{p.name}</b></td>
-      <td>{p.holders.map(show).join(", ") || "—"} → <b>{show(p.learner)}</b></td>
+      <td>{p.holders.map(show).join(", ") || "—"} → <b>{show(p.learner)}</b><LeftTag name={p.learner} /></td>
       <td>{p.way}{p.note && <div className="muted">{p.note}</div>}</td>
       <td className={p.overdue ? "warn-text" : undefined}>{p.due}{p.overdue && " · 지남"}</td>
       <td>
@@ -185,8 +187,9 @@ export function SuccessionCard({ data, people, leader, show, seed, onSeedUsed, o
           <label>배울 사람
             <select value={form.learner} onChange={(e) => setForm({ ...form, learner: e.target.value })} aria-label="배울 사람">
               <option value="">— 고르세요 —</option>
-              {candidates.length > 0 && <optgroup label="후보(같은 묶음 · 층)">{candidates.map((n) => <option key={`c-${n}`} value={n}>{show(n)}</option>)}</optgroup>}
-              <optgroup label="모두">{people.filter((n) => !form.holders.includes(n)).map((n) => <option key={n} value={n}>{show(n)}</option>)}</optgroup>
+              {/* 323 — 떠난 사람은 새 계획의 배울 사람이 될 수 없다 */}
+              {candidates.filter((n) => !isGone(n)).length > 0 && <optgroup label="후보(같은 묶음 · 층)">{candidates.filter((n) => !isGone(n)).map((n) => <option key={`c-${n}`} value={n}>{show(n)}</option>)}</optgroup>}
+              <optgroup label="모두">{people.filter((n) => !form.holders.includes(n) && !isGone(n)).map((n) => <option key={n} value={n}>{show(n)}</option>)}</optgroup>
             </select>
           </label>
           <label>방법

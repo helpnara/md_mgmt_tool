@@ -101,7 +101,10 @@ def history(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
         "unconverted": (unconverted(conn, [name])["people"] or [{"draft": 0, "none": 0, "projects": []}])[0],
         "in_roster": person is not None,
         "leader": settings_service.leader_name() == name,
+        # 323 — 떠난 날이 지났을 때만(앞날이면 떠날 예정) · 전배 / 퇴사
         "left_on": (person or {}).get("left_on") or None,
+        "left": bool(person) and settings_service.has_left(person),
+        "left_reason": str((person or {}).get("left_reason") or ""),
         "summary": {
             "projects": len(projects),
             "current": sum(1 for item in projects if item["current"] and item["status"] not in ("done", "dropped")),

@@ -99,10 +99,12 @@ def team_people(include_left: bool) -> list[dict[str, Any]]:
     for person in settings_service.people():
         if is_placeholder(person["name"]):
             continue
-        left = bool(person.get("left_on"))
+        # 323 — 떠난 날이 오늘이거나 지났을 때만 떠난 사람(앞날이면 그날까지 지금 사람 — "누가 빠지면 끊기나"에 남는다)
+        left = settings_service.has_left(person)
         if left and not include_left:
             continue
-        out.append({"name": person["name"], "left": left, "leader": bool(person.get("leader"))})
+        out.append({"name": person["name"], "left": left, "leader": bool(person.get("leader")),
+                    "left_reason": str(person.get("left_reason") or "") if left else ""})
     return out
 
 

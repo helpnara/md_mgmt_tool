@@ -960,9 +960,12 @@ def promotion_plan(conn: sqlite3.Connection, intake_id: str) -> dict[str, Any]:
     from .activities import split_people
 
     leaders = split_people(leader)
+    # 323 — 명부에 있지만 떠난 사람은 담당도 유관부서도 아니다(예전에는 "명부에 없는 현업"으로 유관부서 줄에 갔다)
+    gone = {person["name"] for person in settings_service.people() if settings_service.has_left(person)}
+    departed = [name for name in leaders if name in gone]
     in_roster = [name for name in leaders if name in active]
-    outside = [name for name in leaders if name not in active]
-    leader_in_roster = bool(leaders) and not outside
+    outside = [name for name in leaders if name not in active and name not in gone]
+    leader_in_roster = bool(leaders) and not outside and not departed
     owners = in_roster
     partners = [] if not outside and (leaders or not team) else [
         {"team": team or "(소속 미기재)", "people": outside}
@@ -977,6 +980,7 @@ def promotion_plan(conn: sqlite3.Connection, intake_id: str) -> dict[str, Any]:
         "leader": leader,
         "leader_team": team,
         "leader_in_roster": leader_in_roster,
+        "leader_departed": departed,
         "start_date": row["start_date"],
         "due_date": row["due_date"],
         "effect_request": row["effect_request"],

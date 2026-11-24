@@ -16,6 +16,7 @@ import StatusBadge from "./StatusBadge";
 import CopyTableButton from "./CopyTableButton";
 import StageBand from "./StageBand";
 import { REPORT_DRAFT_DAYS, addDays, reportDateProblem, today } from "../inputRules";
+import { withLeftMark } from "../people";
 
 const PICKS_KEY = "md-mgmt:report-picks";
 /** 이만큼 지나면 붉게 — 주간 보고 기준으로 두 주를 넘긴 것. */
@@ -222,9 +223,9 @@ export default function ReportCandidates({ meta, query }: Props) {
           <select value={owner} onChange={(event) => setOwner(event.target.value)}>
             <option value="">담당자 전체</option>
             <option value="none">미지정</option>
-            {meta.owners.map((name) => (
+            {withLeftMark(meta.owners).map(({ name, label }) => (
               <option key={name} value={name}>
-                {name}
+                {label}
               </option>
             ))}
           </select>

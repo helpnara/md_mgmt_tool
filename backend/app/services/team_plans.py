@@ -288,8 +288,13 @@ def plans(conn: sqlite3.Connection | None = None) -> dict[str, Any]:
                 changed = True
     if changed:
         _write_plans(items)
+    from . import settings as settings_service
+
+    gone = {person["name"]: person.get("left_reason") or "떠남" for person in settings_service.left_people()}
     for plan in items:
         plan["overdue"] = plan.get("state") == "진행" and str(plan.get("due") or "") < today
+        # 323 — 배울 사람이 떠났으면 띠지(전배 · 퇴사)를 싣고, 기한 지남 알림에서는 뺀다
+        plan["learner_left"] = gone.get(str(plan.get("learner") or ""), "")
     order = {"진행": 0, "됨": 1, "그만둠": 2}
     items.sort(key=lambda p: (order.get(p.get("state"), 9), str(p.get("due") or ""), p["id"]))
     return {"plans": items, "ways": list(PLAN_WAYS), "states": list(PLAN_STATES), "default_months": DEFAULT_MONTHS,

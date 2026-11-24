@@ -4,6 +4,7 @@ import type { Dashboard as DashboardData, OpenDraft } from "../types";
 import { projectLink } from "../nav";
 import { todayIso, useLatest } from "../util";
 import { storageGet, storageSet } from "../storage";
+import { leftOf } from "../people";
 
 const OPEN_KEY = "md-mgmt:dashboard";
 /** 리마인더를 닫은 날. 같은 날 다시 띄우지 않는다. */
@@ -282,7 +283,7 @@ export default function Dashboard({ refreshKey, filters, onFilter }: Props) {
                     className={`dash-chip type${filters.owner === item.key ? " on" : ""}`}
                     onClick={() => toggle("owner", item.key)}
                   >
-                    {item.label} <b>{item.count}</b>
+                    {item.label}{leftOf(item.key) && <span className="muted"> ({leftOf(item.key)})</span>} <b>{item.count}</b>
                   </button>
                 ))}
                 {hiddenOwners > 0 && (

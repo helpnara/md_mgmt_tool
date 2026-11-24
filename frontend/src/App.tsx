@@ -28,6 +28,7 @@ import SearchPreview from "./components/SearchPreview";
 import { confirmLeave, hasUnsaved, LEAVE_MESSAGE, migrateBrowserDrafts } from "./unsaved";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Toast from "./components/Toast";
+import { setLeftPeople } from "./people";
 
 type Route =
   // 홈이 `#/` 를 쓰고, 과제 목록은 `#/projects` 로 내려간다 (TODO 56).
@@ -315,6 +316,8 @@ export default function App() {
       </div>
     );
   if (!meta) return <div className="app-loading">불러오는 중…</div>;
+  // 323 — 떠난 사람 띠지 · 빼기를 화면 어디서나 같은 목록으로(meta 를 받지 않는 카드도)
+  setLeftPeople(meta.people_left);
 
   return (
     <div className="app">

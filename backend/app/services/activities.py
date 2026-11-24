@@ -537,11 +537,15 @@ def upcoming(conn: sqlite3.Connection, days: int = UPCOMING_DAYS) -> dict:
     rows = conn.execute(
         f"SELECT * FROM activity WHERE ({soon}) OR ({ongoing}) ORDER BY date, person, id"
     ).fetchall()
-    later = conn.execute(
-        f"SELECT COUNT(*) AS n FROM activity WHERE date > DATE(app_today(), '+{int(days)} day')"
-    ).fetchone()["n"]
+    # 323 — 떠난 사람(전배 · 퇴사)의 남은 예정은 팀 일정이 아니다
+    gone = _gone()
+    later = sum(1 for row in conn.execute(
+        f"SELECT person FROM activity WHERE date > DATE(app_today(), '+{int(days)} day')"
+    ).fetchall() if row["person"] not in gone)
     items = []
     for row in rows:
+        if row["person"] in gone:
+            continue
         left = (date_cls.fromisoformat(row["date"]) - today).days
         items.append(_brief(row) | {"days_left": max(left, 0), "ongoing": left < 0})
     return {"days": days, "items": items, "later": later}
@@ -563,7 +567,15 @@ def missed_plans(conn: sqlite3.Connection, days: int = MISSED_DAYS) -> list[dict
         "   AND SUBSTR(COALESCE(updated_at, created_at, ''), 1, 10) < date"
         f" ORDER BY {finished} DESC, person, id"
     ).fetchall()
-    return [_brief(row) for row in rows]
+    gone = _gone()   # 323 — 떠난 사람에게 "다녀왔나" 를 묻지 않는다
+    return [_brief(row) for row in rows if row["person"] not in gone]
+
+
+def _gone() -> set[str]:
+    """떠난 날이 오늘이거나 지난 사람 (TODO 323 — 앞날은 떠날 예정이라 아직 지금 사람)."""
+    from . import settings as settings_service
+
+    return {person["name"] for person in settings_service.left_people()}
 
 
 def check_plan(conn: sqlite3.Connection, activity_id: int) -> str:

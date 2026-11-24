@@ -13,7 +13,7 @@ import Dashboard from "./Dashboard";
 import ProjectBoard from "./ProjectBoard";
 import ProjectForm from "./ProjectForm";
 import CopyTableButton from "./CopyTableButton";
-import { isLeader, leftLabel } from "../people";
+import { isLeader, leftLabel, withLeftMark } from "../people";
 import { TypeBadge, YearStatusBadge, shownStatus } from "./StatusBadge";
 import RunningLine from "./RunningLine";
 import StageBand from "./StageBand";
@@ -259,9 +259,9 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           <select value={filters.owner} onChange={(event) => setFilter("owner", event.target.value)}>
             <option value="">담당자 전체</option>
             <option value="none">미지정</option>
-            {meta.owners.map((name) => (
+            {withLeftMark(meta.owners).map(({ name, label }) => (
               <option key={name} value={name}>
-                {name}
+                {label}
               </option>
             ))}
           </select>

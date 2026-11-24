@@ -5,6 +5,7 @@ import { backTarget, projectLink, useAddressBar } from "../nav";
 import { effectNumber } from "../util";
 import CopyTableButton from "./CopyTableButton";
 import LoadError from "./LoadError";
+import { withLeftMark } from "../people";
 
 /**
  * 다년도 과제 로드맵 (TODO 174).
@@ -183,9 +184,9 @@ export default function Roadmap({ meta, query }: Props) {
           </select>
           <select value={owner} onChange={(event) => setOwner(event.target.value)} aria-label="담당자">
             <option value="">담당자 전체</option>
-            {ownerChoices.map((name) => (
+            {withLeftMark(ownerChoices).map(({ name, label }) => (
               <option key={name} value={name}>
-                {name}
+                {label}
               </option>
             ))}
           </select>

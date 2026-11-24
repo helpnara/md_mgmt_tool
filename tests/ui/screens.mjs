@@ -8218,6 +8218,25 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
+  await check("떠난 사람 띠지 (323) — 홈 팀원별 성과 · 과제목록 담당자 거르기", async () => {
+    const before = (await api.get("/api/people")).people;
+    const owner = (await api.get("/api/projects")).flatMap((p) => p.owners)[0];
+    try {
+      await api.put("/api/people", { people: [...before.filter((p) => p.name !== owner).map((p) => ({ ...p })), { name: owner, left_on: "2026-01-02", left_reason: "퇴사" }] });
+      await page.reload(); await page.waitForTimeout(800);
+      await go("#/?tab=status&year=all");
+      const row = page.locator(".home-member-table tbody tr", { has: page.getByRole("link", { name: owner, exact: true }) }).first();
+      await row.waitFor({ timeout: 8000 });
+      equal((await row.locator(".left-tag").innerText()).trim(), "퇴사", "팀원별 성과의 퇴사 띠지");
+      await go("#/projects?year=all");
+      const label = await page.locator(".filters select").filter({ has: page.locator("option", { hasText: "담당자 전체" }) }).first().locator(`option[value="${owner}"]`).innerText();
+      equal(label.trim(), `${owner} (퇴사)`, "거르기 칸의 떠난 사람 표시");
+    } finally {
+      await api.put("/api/people", { people: before });
+      await page.reload(); await page.waitForTimeout(500);
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

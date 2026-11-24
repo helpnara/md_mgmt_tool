@@ -268,7 +268,10 @@ export default function PersonHistory({ meta, name, back }: { meta: Meta; name: 
         <h1>
           {data.name}
           {data.leader && <span className="tag leader-tag">팀장</span>}
-          {data.left_on && <span className="tag left-tag">떠남 {data.left_on}</span>}
+          {/* 323 — 떠난 날이 지났을 때만 전배 · 퇴사, 앞날이면 떠날 예정 */}
+          {data.left_on && (data.left ?? true)
+            ? <span className="tag left-tag">{data.left_reason || "떠남"} {data.left_on}</span>
+            : data.left_on && <span className="tag">떠날 예정 {data.left_on}</span>}
           <span className="muted person-head-sub"> — 이력</span>
         </h1>
         {/* 273 — 경험 카드가 보이는 화면(팀장 · 본인)에서는 그 카드의 보유 기술 요약(과제 + 경험)이 대신한다 */}

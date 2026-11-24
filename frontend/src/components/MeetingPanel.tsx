@@ -16,6 +16,7 @@ import {
   warningList,
 } from "../inputRules";
 import { departedNames, freshRoster } from "./roster";
+import LeftTag from "./LeftTag";
 
 /** "하기로 한 것" 은 30줄까지 (TODO 214 U6) */
 const FOLLOWUP_MAX = 30;
@@ -154,6 +155,7 @@ export default function MeetingPanel({ meta, person, people, onChanged, onPickPe
                 <button className="linkish" onClick={() => onPickPerson(item.person)}>
                   {item.person}
                 </button>
+                <LeftTag name={item.person} />
                 <span className="muted">{item.date} 면담</span>
                 <span>{item.text}</span>
               </li>

@@ -11,6 +11,8 @@ import { cellCount, cellEffect, DASH, sumBy, useLatest } from "../util";
 import TotalRow from "./TotalRow";
 import IntakeForm from "./IntakeForm";
 import SortHeader, { type SortState } from "./SortHeader";
+import LeftTag from "./LeftTag";
+import { splitPeople } from "../people";
 
 /**
  * 과제 접수 풀 (TODO 136).
@@ -407,6 +409,7 @@ export default function IntakePool({ meta, query, onMetaChange }: Props) {
                     </td>
                     <td className="col-leader">
                       {item.leader ?? <span className="muted">{DASH}</span>}
+                      {splitPeople(item.leader ?? "").map((name) => <LeftTag key={name} name={name} />)}
                       {item.leader_team && <span className="muted"> · {item.leader_team}</span>}
                     </td>
                     <td className="muted col-class">{[item.nature, item.category].filter(Boolean).join(" · ") || DASH}</td>

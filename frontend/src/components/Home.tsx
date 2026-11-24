@@ -19,6 +19,7 @@ import Explain from "./Explain";
 import MyWorkCard from "./MyWorkCard";
 import { changeLinkParams, DiffLines, diffCounts, itemDiffQuery, loadSeen, saveSeen } from "./EditChanges";
 import { getMe, isMember } from "../me";
+import LeftTag from "./LeftTag";
 
 /** 기준 연도 옆의 기간 (TODO 110). 서버 home.py 의 PERIODS 와 같은 열쇠다. */
 const PERIODS: [string, string][] = [
@@ -1141,6 +1142,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
                       <td>
                         <a href={listLink({ owner: member.name, year: yearParam })}>{member.name}</a>
                         {isLeader(meta, member.name) && <span className="tag leader-tag">팀장</span>}
+                        <LeftTag name={member.name} />
                         {/* 사람별 이력 (TODO 238) — 이름은 지금처럼 그 사람의 과제 목록, 이 작은 링크가 이력 화면 */}
                         <a className="person-link" href={personLink(member.name)} title={`${member.name} — 맡은 과제 · 역할 · 회고 · 개인 역량 강화 활동`}>이력</a>
                       </td>

@@ -35,6 +35,7 @@ import { FolderOpen, Gauge, Server, UserPen } from "lucide-react";
 import IconTitle from "./IconTitle";
 import { ModeCard } from "./ModeLayer";
 import { UpdateCard } from "./Update";
+import { isGone } from "../people";
 
 /** 설정 묶음 (TODO 249 ⑤) — "" = 기본. title 은 탭 아래 한 줄 설명이기도 하다 */
 type SettingsTab = "" | "class" | "report" | "forms" | "backup" | "check";
@@ -200,7 +201,8 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
                   </span>
                 )}
                 <datalist id="owner-options">
-                  {meta.owners.map((name) => (
+                  {/* 323 — 작성자는 새 기록에 붙는 이름이라 떠난 사람은 뺀다 */}
+                  {meta.owners.filter((name) => !isGone(name)).map((name) => (
                     <option key={name} value={name} />
                   ))}
                 </datalist>

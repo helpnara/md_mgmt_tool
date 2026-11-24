@@ -6,6 +6,7 @@ import { formatBytes } from "../upload";
 import StatusBadge from "./StatusBadge";
 import StageBand from "./StageBand";
 import LoadError from "./LoadError";
+import LeftTag from "./LeftTag";
 
 /** 검색어와 일치하는 부분을 강조한다 — 낱말이 여럿이면 모두(TODO 254). */
 function Highlight({ text, query }: { text: string; query: string | string[] }) {
@@ -249,6 +250,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
                 <a href={projectLink(item.project_id)}>
                   <span className="project-id">{item.project_id} · {item.project_title}</span>
                   <strong><Highlight text={item.name} query={words} /></strong>
+                  <LeftTag name={item.name} />
                   {item.role && <span className="muted"> {item.role}</span>}
                 </a>
                 <p className="snippet"><Highlight text={item.snippet} query={words} /></p>
@@ -265,7 +267,7 @@ export default function SearchResults({ query, meta, back }: { query: string; me
             {(results.activities ?? []).map((item) => (
               <li key={item.id}>
                 <a href={screenLink(`skills?tab=records&person=${encodeURIComponent(item.person)}`)}>
-                  <span className="project-id">{item.date} · {item.person}{item.host ? ` · ${item.host}` : ""}</span>
+                  <span className="project-id">{item.date} · {item.person}<LeftTag name={item.person} />{item.host ? ` · ${item.host}` : ""}</span>
                   <strong><Highlight text={item.title} query={words} /></strong>
                 </a>
                 {item.snippet && <p className="snippet"><Highlight text={item.snippet} query={words} /></p>}

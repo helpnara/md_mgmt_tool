@@ -129,7 +129,7 @@ def reminders(request: Request):
     today = clock.today()
     year = str(today.year)
     snapshot_due = today.month == 12 and not any(item["year"] == year for item in snaps.listing())
-    overdue = [p for p in team_plans.plans()["plans"] if p.get("overdue")]
+    overdue = [p for p in team_plans.plans()["plans"] if p.get("overdue") and not p.get("learner_left")]   # 323
     return {"snapshot_due": snapshot_due, "year": year,
             "overdue": [{"id": p["id"], "kind": p["kind"], "name": p["name"], "learner": p["learner"], "due": p["due"]} for p in overdue]}
 

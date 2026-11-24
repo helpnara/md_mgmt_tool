@@ -4,6 +4,7 @@ import type { Meta, Project } from "../types";
 import { dueLabel, formatDate, openRowClick } from "../util";
 import { TypeBadge, shownStatus } from "./StatusBadge";
 import StageBand from "./StageBand";
+import LeftTag from "./LeftTag";
 
 interface Props {
   meta: Meta;
@@ -71,7 +72,11 @@ export default function ProjectBoard({ meta, projects, year }: Props) {
                         {project.type && <TypeBadge type={project.type} meta={meta} />}
                         {project.group && <span className="chip">{project.group}</span>}
                         {project.owners.length > 0 && (
-                          <span className="owner-chip">{project.owners.join(", ")}</span>
+                          <span className="owner-chip">
+                            {project.owners.map((name, i) => (
+                              <span key={name}>{i > 0 && ", "}{name}<LeftTag name={name} /></span>
+                            ))}
+                          </span>
                         )}
                         {project.tags.map((tag) => (
                           <span key={tag} className="tag">

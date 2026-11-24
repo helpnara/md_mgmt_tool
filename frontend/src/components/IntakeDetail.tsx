@@ -54,6 +54,8 @@ import StatusBadge from "./StatusBadge";
 import VersionPanel from "./VersionPanel";
 import { UploadMeter } from "./RunningLine";
 import XlsxPreview from "./XlsxPreview";
+import LeftTag from "./LeftTag";
+import { splitPeople } from "../people";
 
 /**
  * 접수 상세 (TODO 136) — 요청 내용 · 첨부 · 인터뷰 기록 · 판정 · 승격.
@@ -193,6 +195,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
             <div className="meta-line muted">
               <span>
                 과제리더 {intake.leader ?? "—"}
+                {splitPeople(intake.leader ?? "").map((name) => <LeftTag key={name} name={name} />)}
                 {intake.leader_team && ` · ${intake.leader_team}`}
               </span>
               <span>접수 {intake.received_on ?? "—"}</span>
@@ -1659,7 +1662,9 @@ function PromoteDialog({
             {plan.leader && (
               <p className="hint">
                 과제리더 <b>{plan.leader}</b>
-                {plan.leader_in_roster
+                {(plan.leader_departed?.length ?? 0) > 0
+                  ? ` — ${plan.leader_departed!.join(", ")} 은(는) 명부에서 떠난 사람이라 담당 · 유관부서 어디에도 넣지 않았습니다. 지금 맡을 담당자를 위에 적어 주세요.`
+                  : plan.leader_in_roster
                   ? "은(는) 담당자 명부에 있어 담당자로 넣었습니다."
                   : "은(는) 명부에 없어(현업) 유관부서 줄로 보냈습니다. 우리 팀 담당자를 위에 적어 주세요."}
               </p>

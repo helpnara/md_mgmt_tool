@@ -16,6 +16,7 @@ import { cellCount, DASH, sumBy, todayIso, useLatest } from "../util";
 import YearCards from "./YearCards";
 import TeamSkills from "./TeamSkills";
 import { isDeparted } from "../inputRules";
+import LeftTag from "./LeftTag";
 
 /**
  * 팀원 역량 이력 (TODO 72).
@@ -285,6 +286,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
           {group.map((item) => (
             <span key={item.id} className="activity-person">
               {item.person}
+              <LeftTag name={item.person} />
             </span>
           ))}
           {shared && <span className="hint activity-count">{group.length}명</span>}
@@ -314,6 +316,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
             {group.map((item) => (
               <span key={item.id} className="activity-person-row">
                 <b>{item.person}</b>
+                <LeftTag name={item.person} />
                 <button data-write
                   className={editingId === item.id ? "ghost small on" : "ghost small"}
                   onClick={() => {

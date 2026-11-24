@@ -223,7 +223,7 @@ def listing(conn: sqlite3.Connection, year: str) -> dict[str, Any]:
             continue
         data = card(conn, person["name"], year)
         # 288 — 떠난 사람(전배 · 퇴사)은 화면이 접어 두고 [모두 인쇄]에서 뺀다
-        people.append({"name": person["name"], "leader": data["leader"], "left_on": left_on, "left": bool(left_on),
+        people.append({"name": person["name"], "leader": data["leader"], "left_on": left_on, "left": settings_service.has_left(person),   # 323 — 앞날(떠날 예정)은 아직 지금 사람
                        "left_reason": str(person.get("left_reason") or ""), "saved": data["saved"],
                        "missing": data["missing"], "picked": len(data["picked"]), "has_message": bool(data["message"])})
     return {"year": year, "people": people, "message_max": MESSAGE_MAX, "line_count": LINE_COUNT, "line_max": LINE_MAX}

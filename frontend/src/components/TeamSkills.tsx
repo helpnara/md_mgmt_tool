@@ -10,6 +10,7 @@ import CopyTableButton from "./CopyTableButton";
 import { EducationCard, PlanTag, SnapshotBar, SnapshotCompareLine, SuccessionCard, useSuccession } from "./TeamPlans";
 import type { PlanSeed } from "./TeamPlans";
 import type { SuccessionPlan } from "../types";
+import LeftTag from "./LeftTag";
 
 /**
  * 팀 역량 · 기술 스택 (TODO 284 · 290) — 팀원역량 → [팀 역량] 탭(팀장 · 관리자만).
@@ -199,7 +200,8 @@ function Body({ data, show, interactive, meta, onTargets, withEvidence, plans = 
             <label className="check-label ts-leave-pick">이 사람이 떠나면
               <select aria-label="떠나면 무엇을 잃나" value={leaving} onChange={(e) => setLeaving(e.target.value)}>
                 <option value="">— 팀 전체 보기 —</option>
-                {data.people.map((p) => <option key={p.name} value={p.name}>{show(p.name)}</option>)}
+                {/* 323 — 이미 떠난 사람은 "떠나면" 을 물을 까닭이 없다 */}
+                {data.people.filter((p) => !p.left).map((p) => <option key={p.name} value={p.name}>{show(p.name)}</option>)}
               </select>
             </label>
           )}
@@ -479,7 +481,7 @@ function Evidence({ data, show, interactive, meta, onTargets }: {
           <div className="table-scroll">
             <table className="grid ts-map ts-compact">
               <thead>
-                <tr><th className="ts-map-name">중분류 · 역량</th>{names.map((n) => <th key={n} className="ts-map-person">{show(n)}</th>)}<th>가진 사람</th></tr>
+                <tr><th className="ts-map-name">중분류 · 역량</th>{names.map((n) => <th key={n} className="ts-map-person">{show(n)}{show(n) === n && <LeftTag name={n} />}</th>)}<th>가진 사람</th></tr>
               </thead>
               <tbody>
                 {groupKeys.map((g) => {
@@ -595,7 +597,7 @@ function Completeness({ data, show, interactive }: { data: Data; show: (name: st
             <tbody>
               {c.people.map((p) => (
                 <tr key={p.name} className={p.확정 + p.구조화 === 0 ? "ts-weak" : undefined}>
-                  <th scope="row">{interactive ? <a href={personLink(p.name)}>{show(p.name)}</a> : show(p.name)}</th>
+                  <th scope="row">{interactive ? <a href={personLink(p.name)}>{show(p.name)}</a> : show(p.name)}{show(p.name) === p.name && <LeftTag name={p.name} />}</th>
                   <td>{p.확정}</td><td>{p.구조화}</td><td>{p.초안}</td><td>{p.unknown_tags || ""}</td><td>{p.empty_tools || ""}</td>
                 </tr>
               ))}

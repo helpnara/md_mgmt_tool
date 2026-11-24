@@ -953,6 +953,8 @@ export interface PromotionPlan {
   leader_team: string;
   /** 과제리더가 명부에 있는가 — 있으면 담당자로, 없으면 유관부서로 간다 */
   leader_in_roster: boolean;
+  /** 323 — 명부에 있지만 떠난 과제리더(담당 · 유관부서 어디에도 넣지 않음) */
+  leader_departed?: string[];
   start_date: string | null;
   due_date: string | null;
   effect_request: number | null;
@@ -1375,6 +1377,9 @@ export interface PersonHistory {
   in_roster: boolean;
   leader: boolean;
   left_on: string | null;
+  /** 323 — 떠난 날이 지났나 · 전배 / 퇴사 */
+  left?: boolean;
+  left_reason?: string;
   summary: {
     projects: number; current: number; lead: number; done: number; retro_written: number; activities: number; entry_only: number;
     /** 확정한 보고에 올라간 내 과제 — 올해 · 지난해 (TODO 242 A1) */
@@ -1844,7 +1849,7 @@ export interface TeamSkills {
   /** 310 B */
   unconverted?: { total: number; people: Unconverted[] };
   period: "3y" | "year" | "all"; year: string; include_left: boolean;
-  people: { name: string; left: boolean; leader: boolean }[];
+  people: { name: string; left: boolean; leader: boolean; left_reason?: string }[];
   completeness: {
     people: { name: string; 초안: number; 구조화: number; 확정: number; unknown_tags: number; empty_tools: number }[];
     unknown_tags: number; unlisted_tools: string[]; no_layer_tools: string[]; empty_tool_projects: number;
