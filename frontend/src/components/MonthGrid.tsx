@@ -17,17 +17,11 @@ import { storageGet, storageSet } from "../storage";
  * 어느 쪽이 이기는지 매번 헷갈린다.
  */
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-/** 한 칸에 세우는 보고 수. 넘치면 +N 으로 접는다 — 한 칸이 길어지면 그 줄만 키가 커진다. */
-const CELL_LIMIT = 2;
+// 326 — 한 칸에 **모두** 세운다. 예전에는 두 건까지만 세우고 +N 으로 접었는데, +N 은 아래 보고 이력 목록의 기간만
+// 그 달로 바꿔(다른 과제 보고까지 섞여) 눌러도 그 과제의 나머지가 그 자리에 보이지 않았다. 한 과제를 한 달에
+// 세 번 넘게 보고하는 일은 드물어, 그 줄만 조금 높아지는 편이 낫다.
 const OPEN_KEY = "md-mgmt:month-grid";
 const ONLY_KEY = "md-mgmt:month-grid-only-reported";   // 316
-
-/** 그 달의 보고 이력으로 가는 주소. 마지막 날은 달마다 다르므로 계산해서 쓴다. */
-function monthLink(year: string, month: number): string {
-  const mm = String(month).padStart(2, "0");
-  const last = new Date(Number(year), month, 0).getDate();
-  return `#/history?from=${year}-${mm}-01&to=${year}-${mm}-${last}`;
-}
 
 interface Props {
   year: string;
@@ -101,11 +95,6 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
   }
 
   /** 기간에 든 것을 앞으로. 나머지 순서는 그대로 둔다 (날짜순). */
-  function order<T extends { date: string }>(reports: T[]): T[] {
-    if (!from && !to) return reports;
-    return [...reports.filter((r) => inRange(r.date)), ...reports.filter((r) => !inRange(r.date))];
-  }
-
   if (error)
     return (
       <p className="inline-load-error month-grid-error" role="alert">
@@ -189,11 +178,9 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
                           </a>
                         </td>
                         {MONTHS.map((month) => {
-                          // 기간에 든 것을 **앞으로 당긴다.** 한 칸에 두 건까지만 세우므로,
-                          // 그대로 두면 정작 찾는 그 한 건이 +N 밑에 숨는 일이 생긴다.
-                          const cell = order(mine.get(month) ?? []);
+                          // 326 — 모두 날짜 순으로(접지 않으므로 기간에 든 것을 앞으로 당길 까닭이 없다)
+                          const cell = [...(mine.get(month) ?? [])].sort((a, b) => a.date.localeCompare(b.date));
                           const hitCount = cell.filter((report) => inRange(report.date)).length;
-                          const hidden = cell.slice(CELL_LIMIT);
                           return (
                             <td
                               key={month}
@@ -202,7 +189,7 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
                                 (hitCount ? " marked" : "")
                               }
                             >
-                              {cell.slice(0, CELL_LIMIT).map((report) => {
+                              {cell.map((report) => {
                                 const hit = inRange(report.date);
                                 return (
                                   <a
@@ -222,19 +209,6 @@ export default function MonthGrid({ year, from = "", to = "" }: Props) {
                                   </a>
                                 );
                               })}
-                              {hidden.length > 0 && (
-                                <a
-                                  className={
-                                    hidden.some((report) => inRange(report.date))
-                                      ? "month-more marked"
-                                      : "month-more"
-                                  }
-                                  href={monthLink(year, month)}
-                                  title="이 달의 보고 이력을 모두 봅니다"
-                                >
-                                  +{hidden.length}
-                                </a>
-                              )}
                             </td>
                           );
                         })}

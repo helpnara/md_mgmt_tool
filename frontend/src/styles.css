@@ -1295,8 +1295,6 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 600; }
   display: block; font-size: var(--fs-xs); color: var(--muted); line-height: 1.25;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 92px;
 }
-.month-more { display: block; font-size: var(--fs-xs); color: var(--accent-strong); text-decoration: none; }
-.month-more:hover { text-decoration: underline; }
 
 /* ── 기간에 든 보고를 붉게 (TODO 93) ───────────────────────────────
    보고 이력의 기간 조건에 든 보고는 표에서도 눈에 띄어야 한다. 표의 칸은 모두
@@ -1317,7 +1315,6 @@ a.bar-col.on .bar-label { color: var(--accent-strong); font-weight: 600; }
 .month-flag { font-size: 8px; vertical-align: 1px; margin-right: 4px; }
 /* 접힌 +N 안에 기간에 든 보고가 남아 있을 때 — 칸 자체는 앞으로 당겨 두므로
    흔한 일은 아니지만, 한 달에 세 건 넘게 보고한 과제에서는 생긴다 */
-.month-more.marked { color: var(--danger-600); font-weight: 600; }
 .month-cell.marked { background: var(--danger-50); }
 /* 머리글 옆의 건수 — 표를 펼치기 전에도 몇 건이 걸렸는지 알 수 있다 */
 .month-marked-count {

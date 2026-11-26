@@ -1815,14 +1815,15 @@ async function main() {
       "견줄 파란 칸이 없습니다 (시험 자료 문제)");
   });
 
-  await check("한 칸이 접혀도 찾는 그 건은 맨 앞에 선다", async () => {
+  await check("한 달에 세 번 넘게 보고해도 칸에 모두 선다 — +N 으로 접지 않는다 (326)", async () => {
     await go("#/history?from=2026-06-19&to=2026-06-19");
     await openGrid();
     const cell = page.locator(".month-grid td.month-cell.marked").first();
-    equal(await cell.locator(".month-hit").count(), 2, "칸에 세운 수");
-    expect((await cell.locator(".month-hit").first().innerText()).includes("06-19"),
-      "찾는 건이 +N 밑에 숨었습니다");
-    equal((await cell.locator(".month-more").innerText()).trim(), "+1", "접힌 수");
+    equal(await cell.locator(".month-hit").count(), 3, "칸에 세운 수(모두)");
+    equal(await cell.locator(".month-more").count(), 0, "+N 없음");
+    const dates = await cell.locator(".month-date").allInnerTexts();
+    equal(JSON.stringify(dates.map((d) => d.replace("●", "").trim())), JSON.stringify([...dates.map((d) => d.replace("●", "").trim())].sort()), "날짜 순");
+    expect(dates.some((d) => d.includes("06-19")), "찾는 건도 칸 안에(붉게)");
   });
 
   await check("기간을 안 걸면 아무것도 표시하지 않는다", async () => {
