@@ -147,6 +147,33 @@ def origin_ok(origin: str | None) -> bool:
     return host.split(".")[0] == socket.gethostname().lower().split(".")[0]
 
 
+# ── 328 — 주소창의 이름(Host)이 이 서버가 아니면 받지 않는다 ─────────────────────────
+# 권한이 "어디서 왔나"(IP)에 붙으므로, 남의 페이지가 자기 이름을 이 PC 의 IP 로 바꿔 치는 방식(DNS 리바인딩)으로
+# 서버 PC 의 브라우저를 거쳐 화면 내용을 읽어 갈 수 있었다(Origin 검사는 쓰기만 본다). 브라우저는 Host 를 바꿔 보낼 수 없다.
+# 받는 이름 — localhost · 이 PC 의 IP · PC 이름(짧은 이름 · 사내 DNS 의 긴 이름). 따로 쓰는 별칭이 있으면
+# 환경 변수 MD_MGMT_ALLOWED_HOSTS(쉼표)로 더한다.
+FOREIGN_HOST = "이 주소로는 열 수 없습니다 — 팀장이 알려 준 주소(http://PC이름:포트)로 접속해 주세요."
+_TEST_HOSTS = frozenset({"testserver", "testclient"})
+
+
+def host_ok(host_header: str | None) -> bool:
+    if not host_header:
+        return True   # HTTP/1.0 · 스크립트 — 브라우저는 늘 보낸다
+    raw = host_header.strip().lower()
+    if raw.startswith("["):
+        host = raw[1:raw.find("]")] if "]" in raw else raw[1:]
+    else:
+        host = raw.rsplit(":", 1)[0] if raw.count(":") == 1 else raw
+    if not host:
+        return False
+    if host in _DEV_ORIGINS or host in _TEST_HOSTS or is_local_host(host):
+        return True
+    extra = {item.strip().lower() for item in os.environ.get("MD_MGMT_ALLOWED_HOSTS", "").split(",") if item.strip()}
+    if host in extra:
+        return True
+    return host.split(".")[0] == socket.gethostname().lower().split(".")[0]
+
+
 def share_url(port: int | None) -> str:
     """팀원에게 알려 줄 주소 — IP 는 바뀔 수 있으니 PC 이름으로."""
     return f"http://{socket.gethostname()}:{port or 8000}"

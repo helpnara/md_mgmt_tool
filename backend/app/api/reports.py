@@ -69,21 +69,18 @@ def search_reports(
     state: str | None = Query(None, pattern="^(frozen|draft)$"),
     # 지시를 받았는데 아직 답하지 않은 보고만 (TODO 107)
     feedback: str | None = Query(None, pattern="^(open)?$"),
-    limit: int = Query(svc.SEARCH_LIMIT, ge=1, le=500),
+    limit: int = Query(svc.SEARCH_LIMIT, ge=1, le=5000),
+    # 330 — 1 이면 {items, total} 로(보고이력 화면이 "최근 n건 / 전체 N건" · [더 보기]). 없으면 예전처럼 목록만
+    with_total: int = Query(0, ge=0, le=1),
     conn: sqlite3.Connection = Depends(get_db),
-) -> list[dict]:
+) -> list[dict] | dict:
     """과제를 가로질러 보고 문서를 찾는다 (피보고자·기간·검색어)."""
-    return svc.search(
-        conn,
-        audience=audience,
-        date_from=date_from,
-        date_to=date_to,
-        query=q,
-        project_id=project_id,
-        state=state,
-        feedback=feedback,
-        limit=limit,
-    )
+    filters = {"audience": audience, "date_from": date_from, "date_to": date_to, "query": q,
+               "project_id": project_id, "state": state, "feedback": feedback}
+    items = svc.search(conn, limit=limit, **filters)
+    if with_total:
+        return {"items": items, "total": svc.search_count(conn, **filters)}
+    return items
 
 
 class FeedbackDone(BaseModel):

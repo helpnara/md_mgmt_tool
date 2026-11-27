@@ -360,3 +360,27 @@ def test_after_update_the_new_run_py_takes_over(install, monkeypatch):
     assert updater.current_version(install) == "느린나이테-20261116-v6"
     (cmd, env), = calls                                                          # 한 번 — 새 고리(서버 아님)
     assert cmd[1] == str(install / "run.py") and "MD_MGMT_CHILD" not in env and "--share" in cmd
+
+
+def test_failure_while_copying_rolls_back_to_the_old_version(install, monkeypatch):
+    """329 — 덮어쓰다 멈추면(잠긴 파일 · 백신) 섞인 채 켜지지 않고 원래 판으로 저절로 돌아간다."""
+    zip_path = _release(install / "updates", "느린나이테-20261120-v1", NEW)
+    real_copy = updater.shutil.copy2
+    calls = {"n": 0}
+
+    def flaky(src, dst, *args, **kwargs):
+        if "_work" in str(src) or updater.WORK_DIR in str(src):
+            calls["n"] += 1
+            if calls["n"] == 2:            # 새 판 두 번째 파일에서 멈춤
+                raise PermissionError("잠긴 파일")
+        return real_copy(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(updater.shutil, "copy2", flaky)
+    with pytest.raises(updater.UpdateError) as caught:
+        updater.apply(install, zip_path, log=lambda *_: None)
+    assert "원래 판" in str(caught.value)
+    for rel, text in OLD.items():
+        assert (install / rel).read_text(encoding="utf-8") == text
+    assert not (install / "backend/new_only.py").exists()
+    assert updater.current_version(install) == "느린나이테-20261110-v1"
+    assert updater.latest_rollback(install) is None   # 반쪽 보관 폴더가 "되돌릴 판" 으로 남지 않는다

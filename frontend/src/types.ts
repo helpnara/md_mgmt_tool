@@ -801,6 +801,8 @@ export interface Home {
     /** 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 건수는 **과제 수** 다 */
     owner_gaps: OwnerGap[];
     owner_gaps_total: number;
+    /** 334 — 답하지 않은 지시사항(오래된 것 먼저, 앞 몇 건) */
+    feedback_open?: OpenFeedback;
     /** 앞으로 days 일 안의 팀원 역량 예정 · 그 뒤 건수 (TODO 221) */
     team_upcoming?: { days: number; items: ActivityBrief[]; later: number };
     /** 예정으로 적었는데 날짜가 지나고 손대지 않은 것 — 2주 동안 (TODO 221) */
@@ -1484,6 +1486,8 @@ export interface PersonProject {
 }
 export interface MyWork {
   recent_done?: { id: string; title: string; completed_at: string }[];
+  /** 334 — 내 과제에 받은 지시 중 아직 답하지 않은 것 */
+  feedback_open?: OpenFeedback;
 }
 
 /** 전체 백업 ZIP 살펴보기 (TODO 246) */
@@ -1980,4 +1984,10 @@ export interface Project {
 export interface Contribution {
   /** 이 줄의 지문 — 양식을 연 때의 것을 [저장] 이 보낸다 */
   rev?: string;
+}
+
+/** 334 — 답하지 않은 지시사항 */
+export interface OpenFeedback {
+  total: number;
+  items: { id: number; project_id: string; project_title: string; report_date: string; audience: string; feedback: string }[];
 }

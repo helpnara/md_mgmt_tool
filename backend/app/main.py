@@ -212,6 +212,9 @@ async def readonly_share(request: Request, call_next):
     request.state.readonly = not user.manages
     path = request.url.path
     writing = request.method not in share.SAFE_METHODS
+    # 328 — 주소창의 이름이 이 서버가 아니면 읽기도 받지 않는다(DNS 리바인딩)
+    if not share.host_ok(request.headers.get("host")):
+        return JSONResponse({"detail": share.FOREIGN_HOST}, status_code=403)
     if writing and not share.origin_ok(request.headers.get("origin")):
         return JSONResponse({"detail": share.FOREIGN_ORIGIN}, status_code=403)
     # 297 — 체험 · 내 자료로 바꾸는 동안에는 자료를 읽거나 쓰지 않는다(폴더 · 색인이 바뀌는 중) — 오류 대신 "바꾸는 중"

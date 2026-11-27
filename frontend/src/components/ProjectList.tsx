@@ -175,6 +175,11 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
 
   const setFilter = (key: string, value: string) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
+  // 331 — 거른 조건이 하나라도 있나(정렬 · 돌아갈 곳은 조건이 아니다). [조건 지우기]와 빈 목록 안내가 본다
+  const narrowed = (Object.keys(DEFAULT_FILTERS) as (keyof typeof DEFAULT_FILTERS)[])
+    .some((key) => !["sort", "order", "back"].includes(key) && filters[key] !== DEFAULT_FILTERS[key]);
+  const clearFilters = () =>
+    setFilters((prev) => ({ ...DEFAULT_FILTERS, sort: prev.sort, order: prev.order, back: prev.back }));
 
   // 정렬 선택 상자와 열 머리글이 같은 값을 본다 — 둘이 따로 놀면 무엇이 이기는지 헷갈린다.
   const sortState: SortState | null = filters.order
@@ -366,6 +371,11 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
             <option value="created">생성순</option>
             <option value="title">이름순</option>
           </select>
+          {narrowed && (
+            <button type="button" className="ghost small" onClick={clearFilters} data-testid="list-clear">
+              조건 지우기
+            </button>
+          )}
         </div>
         <div className="toolbar-actions">
           <div className="view-switch">
@@ -583,7 +593,15 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           {rows.length === 0 && (
             <tr>
               <td colSpan={11} className="empty">
-                과제가 없습니다. [과제 추가]로 시작하세요.
+                {/* 331 — 거른 탓이면 그렇다고 말하고 그 자리에서 풀게 한다(예전: "과제가 없습니다"로 과제가 없는 줄 알았다) */}
+                {narrowed ? (
+                  <>
+                    조건에 맞는 과제가 없습니다.{" "}
+                    <button type="button" className="ghost small" onClick={clearFilters}>조건 지우기</button>
+                  </>
+                ) : (
+                  "과제가 없습니다. [과제 추가]로 시작하세요."
+                )}
               </td>
             </tr>
           )}

@@ -22,6 +22,7 @@ import TagSuggestions from "./TagSuggestions";
 /** 성과 후보 일지의 예약 태그 (TODO 243) — 서버 `contributions.STAR_TAG` 와 같다 */
 export const STAR_TAG = "★성과";
 import { DATE_MIN, LIMITS, dateProblem, lengthHint, titleProblem, today, warningList } from "../inputRules";
+import InlineRetry from "./InlineRetry";
 
 const AUTOSAVE_DELAY_MS = 10_000;
 const AUTOSAVE_PREF_KEY = "md-mgmt:autosave";
@@ -145,8 +146,11 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
   // 진행일지는 logs/ 안에 있으므로 첨부 링크(../assets/…)의 기준도 logs/ 다.
   const base = filesBase(dirName, "logs");
 
+  // 333 — 못 불러오면 "첨부 0건"으로 보이지 않게 그 자리에 알린다(다시 올리거나 사라진 줄 알았다)
+  const [attachError, setAttachError] = useState<string | null>(null);
   const refreshAttachments = useCallback((id: number) => {
-    api.listEntryAttachments(id).then(setAttachments).catch(() => undefined);
+    api.listEntryAttachments(id).then((rows) => { setAttachments(rows); setAttachError(null); })
+      .catch((err: Error) => setAttachError(err.message));
   }, []);
 
   useEffect(() => {
@@ -574,8 +578,9 @@ export default function EntryEditor({ projectId, knownTags = [], dirName, initia
       )}
 
       <div className="attachment-panel">
+        {attachError && entryId && <InlineRetry what="첨부 목록" message={attachError} onRetry={() => refreshAttachments(entryId)} />}
         <div className="card-head">
-          <h3>첨부 ({attachments.length})</h3>
+          <h3>첨부 ({attachError ? "?" : attachments.length})</h3>
           <div className="attach-actions">
             <span className="hint">이미지는 Ctrl+V, 파일은 끌어다 놓아도 됩니다.</span>
             <button className="attach-button" onClick={() => fileInputRef.current?.click()}>

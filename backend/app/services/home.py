@@ -584,6 +584,8 @@ def summary(conn: sqlite3.Connection, year: str | None = None, period: str | Non
             # 떠난 담당자가 남아 있는 끝나지 않은 과제 (TODO 122). 건수는 **과제 수**다.
             "owner_gaps": owner_gaps,
             "owner_gaps_total": owner_gaps_total,
+            # 334 — 답하지 않은 지시사항(보고이력에서 거르기를 켜야만 보이던 것)
+            "feedback_open": reports_service.open_feedback_list(conn),
             # 다가오는 팀원 일정 · 지난 예정 확인 (TODO 221) — 역량 기록의 예정
             "team_upcoming": activities_service.upcoming(conn),
             "team_missed": activities_service.missed_plans(conn),

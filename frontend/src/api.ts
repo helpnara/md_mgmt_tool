@@ -56,6 +56,11 @@ export function errorText(status: number, body: unknown): string {
   return `요청에 실패했습니다 (${status}).`;
 }
 
+/** 333 — 권한이 없어 받지 못한 것인가(그런 카드는 지금처럼 조용히 숨긴다) */
+export function isForbidden(error: unknown): boolean {
+  return (error as { status?: number } | null)?.status === 403;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -72,7 +77,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (response.status === 503 && (response.headers.get("x-update") === "applying" || String(body?.detail ?? "").includes("업데이트를 적용하는 중"))) {
       window.dispatchEvent(new Event("server-updating"));
     }
-    throw new Error(errorText(response.status, body));
+    const error = new Error(errorText(response.status, body)) as Error & { status?: number };
+    error.status = response.status;   // 333 — 권한(403)으로 숨기는 카드와 못 불러온 카드를 가린다
+    throw error;
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
@@ -482,6 +489,16 @@ export const api = {
     }
     const query = params.toString();
     return request<ReportHistoryItem[]>(`/api/reports${query ? `?${query}` : ""}`);
+  },
+  /** 330 — 보고이력 화면: 최근 `limit` 건과 조건에 맞는 전체 수 */
+  searchReportsPage: (filters: Record<string, string>, limit: number) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    params.set("limit", String(limit));
+    params.set("with_total", "1");
+    return request<{ items: ReportHistoryItem[]; total: number }>(`/api/reports?${params.toString()}`);
   },
   /**
    * 폴더 고르기 (TODO 97) — 브라우저는 고른 폴더의 실제 경로를 주지 않으므로

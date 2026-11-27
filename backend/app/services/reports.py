@@ -191,6 +191,28 @@ def open_feedback(conn: sqlite3.Connection, project_id: str) -> list[sqlite3.Row
     ).fetchall()
 
 
+def open_feedback_list(conn: sqlite3.Connection, project_ids: list[str] | None = None, limit: int = 5) -> dict[str, Any]:
+    """334 — 답하지 않은 지시사항, 팀 전체(또는 그 과제들). 오래된 것 먼저 · 건수는 자르기 전 수.
+    예전에는 보고이력에서 거르기를 켜야만 보였다 — 홈 · 팀원 내 할 일에 세운다."""
+    # 보고이력의 "답하지 않은 지시만" 거르기와 같은 조건 — 두 곳의 건수가 늘 같다
+    where = ("r.frozen_at IS NOT NULL AND r.feedback IS NOT NULL AND TRIM(r.feedback) <> ''"
+             " AND (r.feedback_done IS NULL OR r.feedback_done = '')")
+    params: list[Any] = []
+    if project_ids is not None:
+        if not project_ids:
+            return {"total": 0, "items": []}
+        where += f" AND r.project_id IN ({','.join('?' * len(project_ids))})"
+        params += project_ids
+    rows = conn.execute(
+        "SELECT r.id, r.project_id, p.title AS project_title, r.report_date, r.audience, r.feedback"
+        " FROM report r JOIN project p ON p.id = r.project_id"
+        f" WHERE {where} ORDER BY r.report_date, r.id", params).fetchall()
+    return {"total": len(rows), "items": [
+        {"id": row["id"], "project_id": row["project_id"], "project_title": row["project_title"],
+         "report_date": row["report_date"], "audience": row["audience"] or "", "feedback": str(row["feedback"]).strip()}
+        for row in rows[:limit]]}
+
+
 def _feedback_head(pending: list[sqlite3.Row]) -> str:
     """초안 맨 위에 붙는 '지난 보고 지시사항' 절. 없으면 빈 문자열."""
     if not pending:
@@ -645,6 +667,29 @@ def search(
     본문은 담지 않는다 — 목록에서 쓸 일이 없고, 보고가 쌓이면 응답만 무거워진다.
     대신 검색어에 걸린 자리를 알 수 있게 짧은 발췌를 붙인다.
     """
+    where, params = _search_where(audience=audience, date_from=date_from, date_to=date_to, query=query,
+                                  project_id=project_id, state=state, feedback=feedback)
+    return _search_rows(conn, where, params, limit, query)
+
+
+def search_count(conn: sqlite3.Connection, **filters: Any) -> int:
+    """조건에 맞는 보고의 **전체** 수 (TODO 330) — 목록은 최근 몇 건만 보이므로 "전체 N건" 을 따로 센다."""
+    where, params = _search_where(**filters)
+    return conn.execute(
+        "SELECT COUNT(*) FROM report r JOIN project p ON p.id = r.project_id"
+        f" WHERE {' AND '.join(where)}", params).fetchone()[0]
+
+
+def _search_where(
+    *,
+    audience: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    query: str | None = None,
+    project_id: str | None = None,
+    state: str | None = None,
+    feedback: str | None = None,
+) -> tuple[list[str], list[Any]]:
     where = ["1=1"]
     params: list[Any] = []
 
@@ -676,7 +721,10 @@ def search(
             " OR LOWER(p.title) LIKE '%' || LOWER(?) || '%')"
         )
         params.extend([query, query, query])
+    return where, params
 
+
+def _search_rows(conn: sqlite3.Connection, where: list[str], params: list[Any], limit: int, query: str | None) -> list[dict]:
     rows = conn.execute(
         "SELECT r.*, p.title AS project_title, p.dir_name AS project_dir,"
         "       p.status AS project_status, p.type AS project_type"

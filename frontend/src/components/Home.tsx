@@ -518,7 +518,7 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
   // ── [할 일] 탭 — 매일 여는 이유 (TODO 232 ①) ─────────────────────────────
   const scheduleSide = (week.team_upcoming?.items.length ?? 0) > 0 || (week.team_missed?.length ?? 0) > 0 || teamEdits.length > 0
     || Boolean(teamReminders && (teamReminders.snapshot_due || teamReminders.overdue.length > 0));
-  const reportSide = retroDue.length > 0 || drafts.length > 0 || week.drafts > 0 || week.stale.length > 0 || week.owner_gaps_total > 0 || week.plans.length > 0;
+  const reportSide = retroDue.length > 0 || drafts.length > 0 || week.drafts > 0 || week.stale.length > 0 || week.owner_gaps_total > 0 || week.plans.length > 0 || (week.feedback_open?.total ?? 0) > 0;
   const todo = (
     <div className="card home-week">
       <IconTitle icon={ListChecks}>
@@ -837,6 +837,25 @@ export default function Home({ meta, onMetaChange, query = "" }: { meta: Meta; o
               </a>
             </p>
           )}
+        </>
+      )}
+      {/* 334 — 답하지 않은 지시사항. 예전에는 보고이력에서 [답하지 않은 지시만]을 켜야만 보였다 */}
+      {(week.feedback_open?.total ?? 0) > 0 && (
+        <>
+          <p className="hint">
+            <b>답하지 않은 지시사항 {week.feedback_open!.total}건</b> — 보고 뒤 받은 지시입니다. 답했으면 그 보고에서 [답변함].{" "}
+            <a href={screenLink("history", { feedback: "open" })}>보고이력에서 모두 보기 →</a>
+          </p>
+          <ul className="home-stale home-feedback" data-testid="home-feedback">
+            {lines("feedback", week.feedback_open!.items).map((item) => (
+              <li key={item.id}>
+                <span className="due">{item.report_date}</span>
+                <a href={projectLink(item.project_id, { report: item.id })} title="그 보고 열기">{item.project_title}</a>
+                <span className="muted feedback-text">{item.audience ? `${item.audience} · ` : ""}{item.feedback}</span>
+              </li>
+            ))}
+          </ul>
+          {more("feedback", week.feedback_open!.items.length)}
         </>
       )}
       {/* 떠난 담당자가 그대로 남아 있는 끝나지 않은 과제 (TODO 122).

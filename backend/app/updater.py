@@ -407,20 +407,37 @@ def apply(root: Path, zip_path: Path, log=print, progress=_noop) -> dict[str, An
     old_files = _program_files(root)
     # ① 보관 — 지금 판의 프로그램 파일 전부(되돌리기는 이것으로 그대로 돌아간다)
     keep = updates / ROLLBACK_DIR / f"{old}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    for rel in _each(old_files, "keep", progress):
-        target = keep / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(root / rel, target)
-    (keep / "_files.json").write_text(json.dumps({"from": old, "to": zip_path.stem, "old": old_files, "new": new_files},
-                                                 ensure_ascii=False), encoding="utf-8")
+    try:
+        for rel in _each(old_files, "keep", progress):
+            target = keep / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / rel, target)
+        (keep / "_files.json").write_text(json.dumps({"from": old, "to": zip_path.stem, "old": old_files, "new": new_files},
+                                                     ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        # 329 — 보관하다 멈췄으면 아직 아무것도 덮어쓰지 않았다. 반쪽 보관 폴더가 "되돌릴 판" 으로 잡히지 않게 지운다
+        shutil.rmtree(keep, ignore_errors=True)
+        shutil.rmtree(work, ignore_errors=True)
+        raise
     log(f"  지금 판({old}) 의 프로그램 파일 {len(old_files)}개를 보관했습니다: {keep}")
     # ② 덮어쓰기 · ③ 새 판에 없는 파일 지우기
-    for rel in _each(new_files, "copy", progress):
-        source = new_root / rel
-        if source.is_file():
-            target = root / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+    try:
+        for rel in _each(new_files, "copy", progress):
+            source = new_root / rel
+            if source.is_file():
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+    except Exception as exc:
+        # 329 — 덮어쓰다 멈추면(백신 · 잠긴 파일) 옛 판 · 새 판이 섞인 채 켜졌다. 보관한 지금 판으로 **저절로 되돌린다**
+        log(f"  [오류] 새 판 파일을 덮어쓰다 멈췄습니다 — 원래 판({old})으로 되돌립니다. ({type(exc).__name__}: {exc})")
+        problems = _restore_kept(root, keep, old_files, new_files)
+        shutil.rmtree(work, ignore_errors=True)
+        if problems:
+            raise UpdateError(f"업데이트 중 실패해 원래 판으로 되돌리다가 {len(problems)}개 파일을 되돌리지 못했습니다 "
+                              f"(보관 폴더 {keep} 에 그대로 있습니다): {', '.join(problems[:5])}") from exc
+        shutil.rmtree(keep, ignore_errors=True)
+        raise UpdateError(f"업데이트 중 실패해 원래 판({old})으로 되돌렸습니다 — {type(exc).__name__}: {exc}") from exc
     progress("clean")
     removed = [rel for rel in old_files if rel not in set(new_files)]
     for rel in removed:
@@ -452,6 +469,26 @@ def apply(root: Path, zip_path: Path, log=print, progress=_noop) -> dict[str, An
               "leftover": leftover + cleaned["errors"], "cleaned": cleaned["removed"]}
     log(f"  {zip_path.stem} 를 적용했습니다 — 파일 {len(new_files)}개, 지운 파일 {len(removed)}개")
     return result
+
+
+def _restore_kept(root: Path, keep: Path, old_files: list[str], new_files: list[str]) -> list[str]:
+    """보관한 지금 판으로 되돌리고, 새 판에만 있던 파일은 지운다(329). 되돌리지 못한 파일 이름을 돌려준다."""
+    problems: list[str] = []
+    for rel in old_files:
+        try:
+            target = root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(keep / rel, target)
+        except OSError:
+            problems.append(rel)
+    old_set = set(old_files)
+    for rel in new_files:
+        if rel not in old_set:
+            try:
+                (root / rel).unlink(missing_ok=True)
+            except OSError:
+                problems.append(rel)
+    return problems
 
 
 def _differs(a: Path, b: Path) -> bool:

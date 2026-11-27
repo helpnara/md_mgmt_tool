@@ -77,5 +77,9 @@ def my_work(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
             " WHERE c.name = ? AND p.status = 'done' AND p.completed_at >= DATE(app_today(), '-30 day')"
             " ORDER BY p.completed_at DESC, p.id DESC", (name,))
     ]
+    # 334 — 내 과제에 받은 지시 중 아직 답하지 않은 것
+    from . import reports as reports_service
+
+    feedback = reports_service.open_feedback_list(conn, [item["id"] for item in projects], limit=10)
     return {"projects": projects, "retro_due": retro_due(conn, name), "praises": praises, "stale_days": STALE_DAYS,
-            "recent_done": recent_done}
+            "recent_done": recent_done, "feedback_open": feedback}

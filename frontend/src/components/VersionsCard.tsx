@@ -4,6 +4,7 @@ import { formatBytes } from "../upload";
 import CardIntro from "./CardIntro";
 import { History } from "lucide-react";
 import IconTitle from "./IconTitle";
+import InlineRetry from "./InlineRetry";
 
 /**
  * 이전 버전 보관 현황.
@@ -20,9 +21,13 @@ export default function VersionsCard() {
     keep_days: number;
   } | null>(null);
 
-  useEffect(() => {
-    api.versionsOverview().then(setData).catch(() => setData(null));
-  }, []);
+  // 333 — 못 불러오면 "불러오는 중…" 에 멈춰 있지 않게
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const load = () => {
+    api.versionsOverview().then((d) => { setData(d); setLoadError(null); })
+      .catch((err: Error) => { setData(null); setLoadError(err.message); });
+  };
+  useEffect(load, []);
 
   return (
     <div className="card">
@@ -33,7 +38,9 @@ export default function VersionsCard() {
         <br />
         삭제 보관함이 <i>지웠을 때</i>를 막아 준다면, 이쪽은 <i>잘못 고쳤을 때</i>를 막습니다.
       </CardIntro>
-      {data === null ? (
+      {loadError ? (
+        <InlineRetry what="이전 버전 현황" message={loadError} onRetry={load} />
+      ) : data === null ? (
         <p className="hint">불러오는 중…</p>
       ) : data.versions === 0 ? (
         <p className="hint">아직 보관된 이전 버전이 없습니다.</p>

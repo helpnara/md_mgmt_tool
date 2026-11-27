@@ -86,6 +86,24 @@ export default function MyWorkCard({ meta }: { meta: Meta }) {
         </ul>
       )}
 
+      {/* 334 — 내 과제에 받은 지시 중 아직 답하지 않은 것 */}
+      {(work.feedback_open?.total ?? 0) > 0 && (
+        <>
+          <p className="hint">
+            <b>답하지 않은 지시사항 {work.feedback_open!.total}건</b> — 내 과제 보고에 받은 지시입니다. 다음 일지 · 보고에 반영해 주세요.
+          </p>
+          <ul className="home-stale my-feedback" data-testid="my-feedback">
+            {work.feedback_open!.items.map((item) => (
+              <li key={item.id}>
+                <span className="due">{item.report_date}</span>
+                <a href={projectLink(item.project_id, { report: item.id })}>{item.project_title}</a>
+                <span className="muted feedback-text">{item.feedback}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       {/* 최근 마친 내 과제 (TODO 244 A4) — 끝난 지 30일 안 */}
       {(work.recent_done?.length ?? 0) > 0 && (
         <>

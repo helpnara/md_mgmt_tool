@@ -455,3 +455,17 @@ def test_a_draft_is_still_freely_deletable(client):
     project = make_project(client)
     report = make_report(client, project["id"], report_date="2026-09-01")
     assert client.delete(f"/api/reports/{report['id']}").status_code == 204
+
+
+def test_history_page_reports_the_total_beyond_the_limit(client):
+    """330 — 보고이력은 최근 n건만 보이므로 조건에 맞는 전체 수를 함께 준다(예전: 200건에서 말없이 잘림)."""
+    project = make_project(client, "많은 보고")
+    for day in range(1, 6):
+        make_report(client, project["id"], report_date=f"2026-03-0{day}")
+    page = client.get("/api/reports", params={"limit": 2, "with_total": 1}).json()
+    assert page["total"] == 5 and [item["report_date"] for item in page["items"]] == ["2026-03-05", "2026-03-04"]
+    # 조건도 전체 수에 그대로
+    narrowed = client.get("/api/reports", params={"limit": 1, "with_total": 1, "from": "2026-03-03"}).json()
+    assert narrowed["total"] == 3 and len(narrowed["items"]) == 1
+    # 예전 모양(목록만)도 그대로
+    assert isinstance(client.get("/api/reports", params={"limit": 2}).json(), list)

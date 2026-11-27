@@ -22,6 +22,7 @@ import AiPromptPanel from "./AiPromptPanel";
 import ReportDiff from "./ReportDiff";
 import VersionPanel from "./VersionPanel";
 import { REPORT_DRAFT_DAYS, REPORT_FREEZE_AHEAD_DAYS, addDays, reportDateProblem, today } from "../inputRules";
+import InlineRetry from "./InlineRetry";
 
 interface UploadState {
   key: string;
@@ -103,8 +104,11 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       ? `보고일(${effectiveDate})이 오늘보다 ${REPORT_FREEZE_AHEAD_DAYS}일 넘게 뒤라 아직 확정할 수 없습니다 — 보고한 뒤 확정합니다.`
       : null;
 
+  // 333 — 못 불러오면 "보고 자료 0건"으로 보이지 않게
+  const [attachError, setAttachError] = useState<string | null>(null);
   const refresh = useCallback(() => {
-    api.listReportAttachments(report.id).then(setAttachments).catch(() => undefined);
+    api.listReportAttachments(report.id).then((rows) => { setAttachments(rows); setAttachError(null); })
+      .catch((err: Error) => setAttachError(err.message));
   }, [report.id]);
 
   useEffect(refresh, [refresh]);
@@ -721,8 +725,9 @@ export default function ReportEditor({ report, dirName, audiences, onChanged, on
       )}
 
       <div className="attachment-panel">
+        {attachError && <InlineRetry what="보고 자료 목록" message={attachError} onRetry={refresh} />}
         <div className="card-head">
-          <h3>보고 자료 ({attachments.length})</h3>
+          <h3>보고 자료 ({attachError ? "?" : attachments.length})</h3>
           {editable && (
             <div className="attach-actions">
               <span className="hint">엑셀·이미지를 끌어다 놓아도 됩니다.</span>

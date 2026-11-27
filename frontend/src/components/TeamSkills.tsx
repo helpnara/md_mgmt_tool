@@ -11,6 +11,7 @@ import { EducationCard, PlanTag, SnapshotBar, SnapshotCompareLine, SuccessionCar
 import type { PlanSeed } from "./TeamPlans";
 import type { SuccessionPlan } from "../types";
 import LeftTag from "./LeftTag";
+import InlineRetry from "./InlineRetry";
 
 /**
  * 팀 역량 · 기술 스택 (TODO 284 · 290) — 팀원역량 → [팀 역량] 탭(팀장 · 관리자만).
@@ -41,7 +42,7 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
   // 291 — 인쇄는 질문 카드 여섯 한 장, 근거 자료는 고를 때만
   const [printEvidence, setPrintEvidence] = useState(false);
   // 292 B — 승계 · 짝 계획(위험 카드의 [계획으로]가 채워 둔 새 계획)
-  const [succession, loadSuccession] = useSuccession();
+  const [succession, loadSuccession, successionError] = useSuccession();
   const [seed, setSeed] = useState<PlanSeed | null>(null);
 
   const load = () => api.teamSkills(period, left).then(setData).catch((error: Error) => notifyError(error.message));
@@ -94,6 +95,7 @@ export default function TeamSkills({ meta }: { meta: Meta }) {
       </div>
       {data && <Body data={data} show={show} interactive meta={meta} onTargets={load} plans={succession?.plans ?? []} onPlan={setSeed}
         afterQuestions={<>
+          {successionError && <InlineRetry what="승계 · 짝 계획" message={successionError} onRetry={loadSuccession} />}
           <SuccessionCard data={succession} people={names} leader={data.people.find((p) => p.leader)?.name} show={show} seed={seed} onSeedUsed={() => setSeed(null)} onChanged={loadSuccession} />
           <EducationCard show={show} />
         </>} />}

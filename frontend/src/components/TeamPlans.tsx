@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, isForbidden } from "../api";
 import { renderMarkdown } from "../markdown";
 import { attempt, notifyError } from "../notify";
 import { experienceLink } from "../nav";
 import type { Candidates, EducationView, PersonShape, Growth, GrowthGoal, Snapshot, SnapshotCompare, SnapshotItem, Succession, SuccessionPlan } from "../types";
 import LeftTag from "./LeftTag";
 import { isGone } from "../people";
+import InlineRetry from "./InlineRetry";
 
 /**
  * 292 2차 — 팀장이 "그래서 누구를 · 언제까지 · 어떻게" 를 적고, 나중에 됐는지 보는 칸.
@@ -95,11 +96,16 @@ export function SnapshotCompareLine({ cmp, chip, show }: {
 
 export interface PlanSeed { kind: "역량" | "보유 기술"; name: string; holders: string[]; candidates: string[] }
 
-export function useSuccession(): [Succession | null, () => void] {
+export function useSuccession(): [Succession | null, () => void, string | null] {
   const [data, setData] = useState<Succession | null>(null);
-  const load = () => { api.succession().then(setData).catch(() => setData(null)); };
+  // 333 — 못 불러오면 카드가 말없이 사라지지 않게 그 까닭을 돌려준다(권한이 없는 것은 그대로 숨김)
+  const [error, setError] = useState<string | null>(null);
+  const load = () => {
+    api.succession().then((d) => { setData(d); setError(null); })
+      .catch((err: Error) => { setData(null); setError(isForbidden(err) ? null : err.message); });
+  };
   useEffect(load, []);
-  return [data, load];
+  return [data, load, error];
 }
 
 /** 위험 줄 옆 — 진행 중인 계획이 있으면 "계획 있음 · 이준호 · 2027-06", 없으면 [계획으로] */
@@ -230,9 +236,13 @@ export function GrowthCard({ person, readonly }: { person: string; readonly: boo
     api.experienceSkills().then((d) => setSkillNames(d.dictionary.map((e) => e.name))).catch(() => undefined);
   }, [draft, skillNames.length]);
   const [showLast, setShowLast] = useState(false);
-  const load = () => { api.growth(person).then(setData).catch(() => setData(null)); };
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const load = () => {
+    api.growth(person).then((d) => { setData(d); setLoadError(null); })
+      .catch((err: Error) => { setData(null); setLoadError(isForbidden(err) ? null : err.message); });
+  };
   useEffect(() => { setDraft(null); load(); }, [person]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!data) return null;
+  if (!data) return loadError ? <InlineRetry what="육성 목표" message={loadError} onRetry={load} /> : null;
   async function save() {
     if (!draft || !data) return;
     const goals = draft.filter((g) => g.skill.trim()).map(({ skill, way, note, mark }) => ({ skill, way, note, mark }));
@@ -360,8 +370,13 @@ export function NeedSkillsLine({ skills, owners, canSee }: { skills: string[]; o
 export function EducationCard({ show }: { show: (n: string) => string }) {
   const [data, setData] = useState<EducationView | null>(null);
   const [openSkill, setOpenSkill] = useState("");
-  useEffect(() => { api.teamEducation().then(setData).catch(() => setData(null)); }, []);
-  if (!data) return null;
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const load = () => {
+    api.teamEducation().then((d) => { setData(d); setLoadError(null); })
+      .catch((err: Error) => { setData(null); setLoadError(isForbidden(err) ? null : err.message); });
+  };
+  useEffect(load, []);
+  if (!data) return loadError ? <InlineRetry what="교육 수요 · 효과" message={loadError} onRetry={load} /> : null;
   const late = data.effect.flatMap((e) => e.waiting.filter((w) => w.late).map((w) => ({ ...w, skill: e.skill })));
   return (
     <section className="card ts-section" data-testid="ts-education">
@@ -411,8 +426,13 @@ export function EducationCard({ show }: { show: (n: string) => string }) {
 export function PersonShapeCard({ person }: { person: string }) {
   const [period, setPeriod] = useState<"3y" | "all">("3y");
   const [data, setData] = useState<PersonShape | null>(null);
-  useEffect(() => { api.personShape(person, period).then(setData).catch(() => setData(null)); }, [person, period]);
-  if (!data) return null;
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const load = () => {
+    api.personShape(person, period).then((d) => { setData(d); setLoadError(null); })
+      .catch((err: Error) => { setData(null); setLoadError(isForbidden(err) ? null : err.message); });
+  };
+  useEffect(load, [person, period]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!data) return loadError ? <InlineRetry what="역량 모양" message={loadError} onRetry={load} /> : null;
   const max = Math.max(1, ...data.axes.map((a) => a.experiences));
   return (
     <div className="card person-shape" data-testid="person-shape">

@@ -49,10 +49,20 @@ def record(name: str, role: str, action: str, project_id: str | None, entry_id: 
             pass  # 기록에 실패해도 쓰기를 막지 않는다
 
 
+def _months_between(start: datetime, end: datetime) -> list[str]:
+    """시작 달부터 끝 달까지 모든 달 — 327: 예전에는 시작 · 끝 두 달만 읽어 60일(3월 1일 → 1 · 2월)처럼
+    가운데 달 · 해 넘김의 쓰기가 "팀원이 고친 것" 에서 빠졌다."""
+    year, month = start.year, start.month
+    out = []
+    while (year, month) <= (end.year, end.month):
+        out.append(f"{year:04d}-{month:02d}")
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return out
+
+
 def _lines(since: datetime) -> list[dict[str, Any]]:
-    months = {since.strftime("%Y-%m"), clock.now().strftime("%Y-%m")}
     out: list[dict[str, Any]] = []
-    for month in sorted(months):
+    for month in _months_between(since, clock.now()):
         path = get_settings().logs_dir / f"edits-{month}.jsonl"
         try:
             text = path.read_text(encoding="utf-8")

@@ -8273,6 +8273,48 @@ async function main() {
     }
   });
 
+  await check("1번 묶음 (331 · 332 · 333 · 334) — 빈 목록 [조건 지우기] · 진행일지 말 · 첨부 못 불러옴 알림 · 홈 지시사항", async () => {
+    // 331 — 맞는 것이 없으면 "조건에 맞는 과제가 없습니다" + [조건 지우기]
+    await go("#/projects?year=all&q=&tag=%EC%97%86%EB%8A%94%ED%83%9C%EA%B7%B8xyz");
+    await page.locator(".project-table").waitFor({ timeout: 8000 });
+    const empty = page.locator(".project-table td.empty");
+    expect((await empty.innerText()).includes("조건에 맞는 과제가 없습니다"), `빈 목록 안내: ${await empty.innerText()}`);
+    await empty.getByRole("button", { name: "조건 지우기" }).click();
+    await page.waitForTimeout(800);
+    expect(await page.locator(".project-table tbody tr").count() > 1, "조건을 지우면 다시 보인다");
+    // 332 — 과제 상세는 "진행일지"
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".timeline").waitFor({ timeout: 8000 });
+    equal(await page.getByText("수행 이력", { exact: false }).count(), 0, "수행 이력이라는 말 없음");
+    // 333 — 첨부 목록을 못 불러오면 "0건"이 아니라 알림 + [다시 시도]
+    const retry = page.locator(".entry-editor [data-testid=inline-retry]");
+    await expectingFailures(["/attachments"], async () => {
+      await page.route("**/api/entries/*/attachments", (route) => route.request().method() === "GET" ? route.fulfill({ status: 500, body: "{}" }) : route.continue());
+      await page.locator(".timeline .entry").first().getByRole("button", { name: "수정" }).click();
+      const notice = page.locator("[data-testid=lock-notice]");
+      if (await notice.count()) await notice.getByRole("button", { name: "그래도 고치기" }).click();
+      await retry.waitFor({ timeout: 8000 });
+      expect((await retry.innerText()).includes("첨부 목록을 불러오지 못했습니다"), "첨부 못 불러옴 알림");
+      await page.unroute("**/api/entries/*/attachments");
+    });
+    await retry.getByRole("button", { name: "다시 시도" }).click();
+    await page.waitForTimeout(800);
+    equal(await page.locator(".entry-editor [data-testid=inline-retry]").count(), 0, "다시 시도하면 사라짐");
+    await page.locator(".entry-editor").getByRole("button", { name: "닫기", exact: true }).click();
+    // 334 — 홈에 답하지 않은 지시사항
+    const report = await api.post(`/api/projects/${seeded.projectB}/reports/draft`, { report_date: "2026-08-03" });
+    await api.post(`/api/reports/${report.id}/freeze`);
+    await api.patch(`/api/reports/${report.id}`, { feedback: "현장 의견을 받아 올 것(334)" });
+    try {
+      await go("#/");
+      const box = page.locator("[data-testid=home-feedback]");
+      await box.waitFor({ timeout: 8000 });
+      expect((await box.innerText()).includes("현장 의견을 받아 올 것(334)"), `홈 지시사항: ${await box.innerText()}`);
+    } finally {
+      await api.post(`/api/reports/${report.id}/feedback-done`, { done: true });
+    }
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

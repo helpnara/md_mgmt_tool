@@ -948,7 +948,7 @@ export default function ProjectDetail({
 
         <dl className="summary-bar">
           <div>
-            <dt>수행 이력</dt>
+            <dt>진행일지</dt>
             <dd>{project.entry_count}건</dd>
           </div>
           <div>
@@ -1470,7 +1470,7 @@ export default function ProjectDetail({
 
       <div className="card-head timeline-head">
         <h2>
-          수행 이력 ({entries.length}건)
+          진행일지 ({entries.length}건)
           {needle && <span className="muted"> · 찾은 것 {visibleEntries.length}건</span>}
           {onlyUnreported && !needle && (
             <button className="linkish small" onClick={() => setOnlyUnreported(false)}>

@@ -7,6 +7,9 @@ import MonthGrid from "./MonthGrid";
 import { useLatest } from "../util";
 import { DATE_MAX, DATE_MIN, orderProblem } from "../inputRules";
 
+/** 330 — 한 번에 보이는 보고 수. 넘으면 [더 보기]로 200건씩 */
+const HISTORY_PAGE = 200;
+
 /**
  * 보고 이력 찾기.
  *
@@ -35,6 +38,9 @@ export default function ReportHistory({ meta, query }: Props) {
   // 조건을 바꿔도 주소에 남아 있어야 한다.
   const [back] = useState(() => initial.get("back") ?? "");
   const [items, setItems] = useState<ReportHistoryItem[] | null>(null);
+  // 330 — 최근 몇 건까지 보이나 · 조건에 맞는 전체 수. 예전에는 200건에서 말없이 잘려 "보고 200건" 이 전체처럼 보였다
+  const [limit, setLimit] = useState(HISTORY_PAGE);
+  const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 조건 · 검색어를 빨리 바꾸면 앞 요청이 늦게 올 수 있다 — 마지막 것만 (TODO 210 ①)
@@ -42,14 +48,17 @@ export default function ReportHistory({ meta, query }: Props) {
   const load = useCallback(() => {
     const mine = latest();
     api
-      .searchReports({ audience, from, to, q, state, feedback })
-      .then((rows) => {
+      .searchReportsPage({ audience, from, to, q, state, feedback }, limit)
+      .then((page) => {
         if (!mine()) return;
-        setItems(rows);
+        setItems(page.items);
+        setTotal(page.total);
         setError(null);
       })
       .catch((err: Error) => mine() && setError(err.message));
-  }, [audience, from, to, q, state, feedback, latest]);
+  }, [audience, from, to, q, state, feedback, limit, latest]);
+  // 조건이 바뀌면 다시 처음 200건부터
+  useEffect(() => setLimit(HISTORY_PAGE), [audience, from, to, q, state, feedback]);
 
   // 조건을 고르는 대로 바로 반영한다. 다만 검색어는 타자를 멈춘 뒤에 — 글자마다 부르면 낭비다.
   useEffect(() => {
@@ -92,7 +101,9 @@ export default function ReportHistory({ meta, query }: Props) {
           <h2>찾을 조건</h2>
           {items && (
             <span className="hint">
-              {filtered ? `조건에 맞는 보고 ${items.length}건` : `보고 ${items.length}건`}
+              {total !== null && total > items.length
+                ? `${filtered ? "조건에 맞는 보고" : "보고"} 전체 ${total}건 중 최근 ${items.length}건`
+                : filtered ? `조건에 맞는 보고 ${items.length}건` : `보고 ${items.length}건`}
             </span>
           )}
         </div>
@@ -216,6 +227,15 @@ export default function ReportHistory({ meta, query }: Props) {
           </li>
         ))}
       </ol>
+      {/* 330 — 남은 보고. 더 보면 200건씩(조건이 바뀌면 처음으로) */}
+      {items && total !== null && total > items.length && (
+        <p className="history-more" data-testid="history-more">
+          <span className="muted">최근 {items.length}건을 보이고 있습니다 — 남은 {total - items.length}건</span>{" "}
+          <button type="button" className="ghost small" onClick={() => setLimit((n) => n + HISTORY_PAGE)}>
+            {Math.min(HISTORY_PAGE, total - items.length)}건 더 보기
+          </button>
+        </p>
+      )}
     </section>
   );
 }
