@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { notifyError } from "../notify";
 import type { Meta, Project } from "../types";
-import { cellCount, cellEffect, DASH, dueLabel, EFFECT_UNIT, openRowClick, sumBy, useLatest } from "../util";
+import { cellCount, cellEffect, DASH, daysUntil, dueLabel, EFFECT_UNIT, openRowClick, sinceText, sumBy, useLatest } from "../util";
 import { storageGet, storageSet, useScrollMemory } from "../storage";
 import TotalRow from "./TotalRow";
 import ProblemsBanner from "./ProblemsBanner";
@@ -42,6 +42,8 @@ const DEFAULT_FILTERS = {
   effect: "", no_effect: "",
   // 과제 분류 넷 (TODO 136) · 접수에서 승격된 과제만/직접 만든 과제만
   nature: "", category: "", delivery: "", cost_kind: "", from_intake: "",
+  // 339 — 과제 번호 · 이름 찾기(본문은 보지 않는다 — 내용 찾기는 위의 전체 검색)
+  find: "",
   // 어디서 왔는지 (TODO 127). 거르는 조건이 아니라 **돌아갈 곳**이다 — 서버로 보내지 않고,
   // 조건을 바꿔도 주소에 남아 있어야 한다(그래야 거르다가도 홈으로 돌아간다).
   back: "",
@@ -94,6 +96,8 @@ const COLUMN_SORTS: Record<string, { key: string; first?: "asc" | "desc" }> = {
   효과: { key: "effect", first: "desc" },
   기록: { key: "entries", first: "desc" },
   "최근 업데이트": { key: "updated", first: "desc" },
+  // 338 — "보고 경과일순" 일 때만 서는 칸
+  "마지막 보고": { key: "reported" },
 };
 
 /** 316 — 과제목록은 100줄씩 그린다(1000개면 85 화면이 됐다) */
@@ -173,6 +177,17 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
     (params) => setFilters(readFilters(params)),
   );
 
+  // 339 — 찾기 칸은 치는 대로 바로 부르지 않고 멈춘 뒤에(주소 · 목록이 글자마다 바뀌지 않게)
+  const [findText, setFindText] = useState(filters.find);
+  useEffect(() => setFindText(filters.find), [filters.find]);
+  useEffect(() => {
+    if (findText === filters.find) return;
+    const timer = window.setTimeout(() => setFilters((prev) => ({ ...prev, find: findText.trim() })), 300);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findText]);
+  // 338 — 보고 경과일순일 때 "마지막 보고" 칸
+  const reportedSort = filters.sort === "reported";
   const setFilter = (key: string, value: string) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
   // 331 — 거른 조건이 하나라도 있나(정렬 · 돌아갈 곳은 조건이 아니다). [조건 지우기]와 빈 목록 안내가 본다
@@ -224,6 +239,15 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
 
       <div className="toolbar">
         <div className="filters">
+          <input
+            type="search"
+            className="list-find"
+            placeholder="과제 번호 · 이름"
+            aria-label="과제 번호 · 이름으로 찾기"
+            value={findText}
+            onChange={(event) => setFindText(event.target.value)}
+            data-testid="list-find"
+          />
           <select value={filters.status} onChange={(event) => setFilter("status", event.target.value)}>
             <option value="">상태 전체</option>
             {meta.statuses.map((status) => (
@@ -489,6 +513,8 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
               </span>
             </SortHeader>
             <SortHeader {...header("기록", "one-line num")}>기록</SortHeader>
+            {/* 338 — 보고 경과일순이면 그 기준(마지막 보고 · 경과)을 표에 보인다. 예전에는 왜 그 순서인지 보이지 않았다 */}
+            {reportedSort && <SortHeader {...header("마지막 보고", "one-line")}>마지막 보고</SortHeader>}
             <SortHeader {...header("최근 업데이트", "one-line")}>최근 업데이트</SortHeader>
           </tr>
         </thead>
@@ -586,13 +612,14 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
                   })()}
                 </td>
                 <td className="one-line num">{cellCount(project.entry_count, "건")}</td>
+                {reportedSort && <td className="one-line" data-testid="last-report-cell">{lastReportCell(project)}</td>}
                 <td className="one-line">{project.updated_at ? project.updated_at.slice(0, 10) : DASH}</td>
               </tr>
             );
           })}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={11} className="empty">
+              <td colSpan={reportedSort ? 12 : 11} className="empty">
                 {/* 331 — 거른 탓이면 그렇다고 말하고 그 자리에서 풀게 한다(예전: "과제가 없습니다"로 과제가 없는 줄 알았다) */}
                 {narrowed ? (
                   <>
@@ -608,7 +635,7 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
           {/* 316 — 남은 줄 */}
           {rows.length > shown && (
             <tr className="more-rows" data-testid="list-more">
-              <td colSpan={11}>
+              <td colSpan={reportedSort ? 12 : 11}>
                 <span className="muted">{shown}줄 보는 중 · 전체 {rows.length}건</span>
                 <button type="button" className="ghost small" onClick={() => showMore(shown + PAGE_ROWS)}>
                   {Math.min(PAGE_ROWS, rows.length - shown)}줄 더 보기
@@ -650,4 +677,14 @@ export default function ProjectList({ meta, onMetaChange, query }: Props) {
       )}
     </section>
   );
+}
+
+/** 338 — "2026-10-02 · D+45" · 한 번도 안 했으면 "미보고 · 시작 D+N" */
+function lastReportCell(project: Project) {
+  const base = project.last_reported_at ?? project.start_date ?? null;
+  const days = base ? Math.max(0, -(daysUntil(base) ?? 0)) : null;
+  if (project.last_reported_at) {
+    return <span title={`D+${days}`}>{project.last_reported_at.slice(0, 10)} · {sinceText(days)}</span>;
+  }
+  return <span className="muted" title={days !== null ? `시작부터 D+${days}` : undefined}>미보고{days !== null ? ` · 시작 ${sinceText(days)}` : ""}</span>;
 }

@@ -7,7 +7,7 @@ import { api } from "../api";
 import { attempt } from "../notify";
 import type { ActivityBrief, BackupStatus, EditDiff, EditItem, TeamReminders, Home as HomeData, RetroDue, HomeSlice, Meta, StatusInfo } from "../types";
 import { listLink, personLink, projectLink, screenLink, useAddressBar } from "../nav";
-import { cellEffect, DASH, effectNumber, sumBy, useLatest } from "../util";
+import { cellEffect, DASH, effectNumber, sinceText, sumBy, useLatest } from "../util";
 import LoadError from "./LoadError";
 import CopyTableButton from "./CopyTableButton";
 import TotalRow from "./TotalRow";
@@ -152,11 +152,6 @@ function MoreLines({ rest, open, onToggle, unit = "건" }: { rest: number; open:
 /** 카드 제목의 아이콘 (TODO 252) — 속성 = 딱지들 · 그룹 = 겹 · 성격 = 나침반 · 분류 = 폴더 나무 */
 const SLICE_ICONS = { type: Tags, group: Layers, nature: Compass, category: FolderTree } as const;
 
-/** 1년을 넘긴 경과일은 "D+1368" 보다 "3년 넘음" 이 읽힌다 (TODO 232 H). 정확한 날수는 마우스를 올리면 */
-function sinceText(days: number | null): string {
-  if (days === null) return "D+?";
-  return days >= 365 ? `${Math.floor(days / 365)}년 넘음` : `D+${days}`;
-}
 
 /** 그룹 표는 자유 입력이라 길어질 수 있다. 이만큼만 세우고 나머지는 접는다. */
 const SLICE_LIMIT = 8;

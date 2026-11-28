@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { listLink, personLink, projectLink } from "../nav";
-import type { Meta, MyWork } from "../types";
+import type { Meta, MyWork, MyWorkProject } from "../types";
 import StatusBadge from "./StatusBadge";
 
 /**
@@ -53,6 +53,10 @@ export default function MyWorkCard({ meta }: { meta: Meta }) {
 
       <p className="hint">
         <b>내 진행 과제 {work.projects.length}건</b> — 지금 담당인 끝나지 않은 과제. 진행중인데 일지가 {work.stale_days}일 넘게 없으면 알려 드립니다.
+        {/* 337 — 팀장이 보고 초안을 쓰기 전에 일지를 채울 수 있게 */}
+        {work.next_report_date && (
+          <> 다음 보고일은 <b data-testid="my-next-report">{nextReportText(work.next_report_date)}</b> — 그 전에 보고할 내용을 일지에 남겨 주세요.</>
+        )}
       </p>
       {work.projects.length === 0 ? (
         <p className="muted">지금 맡은 진행 과제가 없습니다.</p>
@@ -67,6 +71,7 @@ export default function MyWorkCard({ meta }: { meta: Meta }) {
               <span className="muted my-last-entry">
                 {item.last_entry ? `마지막 일지 ${item.days_since_entry === 0 ? "오늘" : `${item.days_since_entry}일 전`}` : "일지 없음"}
               </span>
+              <span className="muted my-report-state" data-testid="my-report-state">{reportStateText(item.report)}</span>
               {dueText(item.days_left) && (
                 <span className={item.days_left !== null && item.days_left < 0 ? "due due-danger" : item.days_left !== null && item.days_left <= 7 ? "due due-warn" : "due"}>
                   {dueText(item.days_left)}
@@ -142,4 +147,24 @@ export default function MyWorkCard({ meta }: { meta: Meta }) {
       </p>
     </div>
   );
+}
+
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** 337 — "12월 1일(화)" · 오늘이면 "오늘" */
+function nextReportText(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  const today = new Date();
+  const same = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+  const text = `${d.getMonth() + 1}월 ${d.getDate()}일(${WEEKDAYS[d.getDay()]})`;
+  return same ? `오늘 ${text}` : text;
+}
+
+/** 337 — 과제 줄의 보고 상태 한 마디 */
+function reportStateText(report: MyWorkProject["report"]): string {
+  if (report === null) return "보고 불필요";
+  if (!report) return "";
+  const after = report.unreported_entries > 0 ? ` · 보고 뒤 일지 ${report.unreported_entries}건` : " · 보고 뒤 일지 없음";
+  if (report.never_reported) return `아직 보고 안 함${after}`;
+  return `마지막 보고 ${report.days_since_report ?? "?"}일 전${after}`;
 }

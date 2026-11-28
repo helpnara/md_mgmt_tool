@@ -177,6 +177,7 @@ FIELD_LABELS: dict[str, str] = {
     "backup_every_hours": "백업 주기(시간)",
     "backup_skip_assets": "백업에서 첨부 빼기",
     "intake_stale_days": "묵힘 기준일",
+    "attach_max_mb": "첨부 최대 크기(MB)",
     "meeting_cycle_days": "면담 주기",
     "meeting_kinds": "면담 구분",
     "classifications": "분류 목록",

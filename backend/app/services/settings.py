@@ -59,6 +59,8 @@ DEFAULTS: dict[str, Any] = {
     "intake_template": "",
     # 접수 후 이 날수가 지나도 판정이 없으면 홈에 알린다. 요청자에게 가장 나쁜 것은 답이 없는 것이다.
     "intake_stale_days": 14,
+    # 335 — 첨부 한 개의 최대 크기(MB). 넘으면 올리기 전에 거절한다 — 수 GB 파일 하나로 서버 PC 가 멈추지 않게
+    "attach_max_mb": 2048,
     # 접수 사전점검 체크리스트 (TODO 155). **null 이면 기본 목록**(사용자가 준 다섯 분류 · 열 항목).
     # [{"group": "필요성", "item": "…", "choices": [["근거 명확", 10], …]}, …]
     "precheck_items": None,
@@ -98,7 +100,7 @@ def _path():
 _NULLABLE_SHAPES: dict[str, type] = {"project_types": list, "classifications": dict, "precheck_items": list,
                                       "meeting_kinds": list, "skill_dictionary": list, "tool_dictionary": list,
                                       "anonymize_rules": dict}
-_POSITIVE_KEYS = ("backup_keep", "backup_every_hours", "intake_stale_days", "meeting_cycle_days")
+_POSITIVE_KEYS = ("backup_keep", "backup_every_hours", "intake_stale_days", "meeting_cycle_days", "attach_max_mb")
 _ZERO_OK_KEYS = ("backup_keep_weekly", "backup_keep_monthly")
 
 # 마지막으로 읽을 때 기본값으로 바꾼 열쇠 — 설정 화면이 알린다.
@@ -207,7 +209,7 @@ def save(updates: dict[str, Any]) -> dict[str, Any]:
             current[key] = validate_project_types(updates[key])
         elif key == "classifications":
             current[key] = validate_classifications(updates[key])
-        elif key in ("intake_stale_days", "meeting_cycle_days"):
+        elif key in ("intake_stale_days", "meeting_cycle_days", "attach_max_mb"):
             current[key] = _positive_int(key, updates[key])
         elif key == "meeting_kinds":
             current[key] = validate_meeting_kinds(updates[key])
@@ -553,6 +555,14 @@ def intake_template() -> str:
     return str(load()["intake_template"]).strip() or intakes.DEFAULT_TEMPLATE
 
 
+def attach_max_bytes() -> int:
+    """335 — 첨부 한 개의 최대 크기(바이트)."""
+    try:
+        return max(1, int(load()["attach_max_mb"])) * 1024 * 1024
+    except (TypeError, ValueError):
+        return int(DEFAULTS["attach_max_mb"]) * 1024 * 1024
+
+
 def intake_stale_days() -> int:
     try:
         return max(1, int(load()["intake_stale_days"]))
@@ -790,6 +800,7 @@ LABELS = {
     "backup_keep_monthly": "달 단위로 남길 백업 수",
     "backup_every_hours": "백업 주기(시간)",
     "intake_stale_days": "묵힘 기준일",
+    "attach_max_mb": "첨부 최대 크기(MB)",
     "meeting_cycle_days": "면담 주기(일)",
     "effect_confirm_over": "효과 금액 확인 기준(억원/년)",
 }

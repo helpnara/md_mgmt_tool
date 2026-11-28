@@ -145,6 +145,15 @@ export default function ReportHistory({ meta, query }: Props) {
             />
             {periodProblem && <span className="field-error history-period-error">{periodProblem}</span>}
           </label>
+          {/* 342 — 자주 거는 기간 */}
+          <div className="history-quick" role="group" aria-label="빠른 기간">
+            {quickRanges().map((range) => (
+              <button key={range.label} type="button" className={from === range.from && to === range.to ? "ghost small on" : "ghost small"}
+                onClick={() => { setFrom(range.from); setTo(range.to); }}>
+                {range.label}
+              </button>
+            ))}
+          </div>
           <label>
             검색어
             <input
@@ -158,8 +167,9 @@ export default function ReportHistory({ meta, query }: Props) {
             상태
             <select value={state} onChange={(event) => setState(event.target.value)}>
               <option value="">전체</option>
-              <option value="frozen">확정된 보고</option>
-              <option value="draft">작성 중인 초안</option>
+              {/* 342 — 줄 표시와 같은 한 쌍의 말(전: 거르기 "확정된 보고 / 작성 중인 초안" ↔ 줄 "보고 완료 / 작성 중") */}
+              <option value="frozen">확정</option>
+              <option value="draft">작성 중</option>
             </select>
           </label>
           <label className="check-label">
@@ -220,7 +230,7 @@ export default function ReportHistory({ meta, query }: Props) {
                 {item.audience && <span className="history-audience">{item.audience}</span>}
                 {item.feedback_open && <span className="tag feedback-tag">지시 답 안 함</span>}
                 <span className="muted">
-                  {item.frozen ? "보고 완료" : "작성 중"} · 진행일지 {item.entry_count}건
+                  {item.frozen ? "확정" : "작성 중"} · 진행일지 {item.entry_count}건
                 </span>
               </span>
             </a>
@@ -238,4 +248,19 @@ export default function ReportHistory({ meta, query }: Props) {
       )}
     </section>
   );
+}
+
+/** 342 — [이번 달] · [지난달] 빠른 기간 */
+function quickRanges(): { label: string; from: string; to: string }[] {
+  const now = new Date();
+  const span = (year: number, month: number) => {
+    const mm = String(month + 1).padStart(2, "0");
+    const last = new Date(year, month + 1, 0).getDate();
+    return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(last).padStart(2, "0")}` };
+  };
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return [
+    { label: "이번 달", ...span(now.getFullYear(), now.getMonth()) },
+    { label: "지난달", ...span(prev.getFullYear(), prev.getMonth()) },
+  ];
 }

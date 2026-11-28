@@ -24,6 +24,15 @@ const FINISHED_STATUSES = new Set(["done", "dropped"]);
  * 이미 끝난 과제(완료·중단)에는 띄우지 않는다. 그래야 진짜 늦은 과제가 눈에 띈다.
  * 보류는 멈춰 있을 뿐 끝난 것이 아니라서 그대로 경고한다.
  */
+/**
+ * 1년을 넘긴 경과일은 "D+1368" 보다 "3년 넘음" 이 읽힌다 (TODO 232 H · 343 — 홈에만 있던 것을 모든 화면에).
+ * 정확한 날수는 부르는 쪽이 title(마우스를 올리면)로 함께 둔다.
+ */
+export function sinceText(days: number | null | undefined): string {
+  if (days === null || days === undefined) return "D+?";
+  return days >= 365 ? `${Math.floor(days / 365)}년 넘음` : `D+${days}`;
+}
+
 export function dueLabel(
   due: string | null | undefined,
   status?: string,
@@ -31,7 +40,7 @@ export function dueLabel(
   const days = daysUntil(due);
   if (days === null) return null;
   if (status && FINISHED_STATUSES.has(status)) return null;
-  if (days < 0) return { text: `D+${-days} 초과`, tone: "danger" };
+  if (days < 0) return { text: -days >= 365 ? `${sinceText(-days)} 초과` : `D+${-days} 초과`, tone: "danger" };
   if (days === 0) return { text: "D-day", tone: "danger" };
   if (days <= 7) return { text: `D-${days}`, tone: "warn" };
   return { text: `D-${days}`, tone: "muted" };

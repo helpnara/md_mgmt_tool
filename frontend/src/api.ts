@@ -305,6 +305,13 @@ export const api = {
     request<{ field: string; old: string; new: string; merged: boolean; projects: number; intakes: number }>("/api/settings/classifications/rename", {
       method: "POST", body: JSON.stringify({ field, old, new: next }),
     }),
+  // 341 — 그룹 · 과제 태그 이름 바꾸기 · 합치기
+  labelUsage: () =>
+    request<{ usage: Record<"group" | "tag", { value: string; projects: number }[]> }>("/api/settings/labels/usage"),
+  renameLabel: (kind: "group" | "tag", old: string, next: string) =>
+    request<{ kind: string; old: string; new: string; merged: boolean; projects: number }>("/api/settings/labels/rename", {
+      method: "POST", body: JSON.stringify({ kind, old, new: next }),
+    }),
   renameSkillTags: (source: { axis: string; name: string }, target: { axis: string; name: string }) =>
     request<{ changed: string[] }>("/api/experiences/skills/rename", { method: "POST", body: JSON.stringify({ source, target }) }),
   rematchTools: () => request<{ changed: string[] }>("/api/experiences/tools/rematch", { method: "POST" }),

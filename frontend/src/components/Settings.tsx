@@ -36,6 +36,8 @@ import IconTitle from "./IconTitle";
 import { ModeCard } from "./ModeLayer";
 import { UpdateCard } from "./Update";
 import { isGone } from "../people";
+import AttachLimitCard from "./AttachLimitCard";
+import LabelValuesCard from "./LabelValuesCard";
 
 /** 설정 묶음 (TODO 249 ⑤) — "" = 기본. title 은 탭 아래 한 줄 설명이기도 하다 */
 type SettingsTab = "" | "class" | "report" | "forms" | "backup" | "check";
@@ -239,6 +241,8 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
       {tab === "class" && (
         <div className="settings-grid">
           <IntakeSettingsCard meta={meta} onSaved={onSaved} />
+          {/* 341 — 그룹 · 과제 태그 이름 바꾸기 · 합치기 */}
+          <LabelValuesCard onChanged={onSaved} />
           {/* 역량 태그 정리함 (TODO 262 · 282 H — 사전 카드 위로: 정리할 것이 먼저 보이게) */}
           <SkillCleanupCard />
           {/* 역량 사전 (TODO 260) — 경험의 역량 태그를 맞추는 표 */}
@@ -296,6 +300,8 @@ export default function Settings({ meta, onSaved, back, query = "" }: { meta: Me
 
           {/* 전체 백업 — 만들기 진행 · 받기 (TODO 266). 첨부가 GB 단위면 문서만 먼저(202 · 197 ③) */}
           <BackupDownloadCard />
+          {/* 335 — 첨부 최대 크기 */}
+          <AttachLimitCard />
 
           {/* 키가 비슷한 것끼리 한 줄 — 자동 백업 · 이전 버전 / 되살리기 · 삭제 보관함 */}
           {isAdmin() && <BackupCard />}

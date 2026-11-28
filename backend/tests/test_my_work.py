@@ -104,3 +104,16 @@ def test_milestones_and_star_entries(team):  # noqa: F811
     assert len(mine["milestones"]) == 2 and mine["star_entries"][0]["title"] == "시범 결과"
     text = owner.get(f"/api/projects/{pid}/export?format=md").text
     assert "  - 중간 성과:\n    - 2026-03-31 1분기: 데이터 정제 끝\n    - 2026-06-30 상반기" in text
+
+
+def test_my_work_shows_next_report_day_and_report_state(team):  # noqa: F811
+    """337 — 팀원 내 할 일에 다음 보고일 · 과제마다 마지막 보고 뒤 며칠 · 보고 뒤 쓴 일지 수 · 보고 불필요."""
+    owner, member, pid = team["owner"], team["member"], team["shared"]
+    member.post(f"/api/projects/{pid}/entries", json={"date": "2026-10-19", "title": "보고 전 일지"})
+    work = member.get("/api/projects/my-work").json()
+    assert work["next_report_date"] >= "2026-10-20"
+    shared = next(item for item in work["projects"] if item["id"] == pid)
+    assert shared["report"]["never_reported"] is True and shared["report"]["unreported_entries"] == 1
+    owner.patch(f"/api/projects/{pid}", json={"no_report": True})
+    shared = next(item for item in member.get("/api/projects/my-work").json()["projects"] if item["id"] == pid)
+    assert shared["report"] is None   # 보고 불필요

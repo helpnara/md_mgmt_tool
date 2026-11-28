@@ -3612,3 +3612,8 @@ input.task-box { position: absolute; left: 0; top: 0.3em; width: 14px; height: 1
 input.task-box:disabled { cursor: default; }
 /* 330 — 보고이력 남은 보고 */
 .history-more { display: flex; align-items: center; gap: 8px; justify-content: center; margin: 12px 0 4px; }
+/* 339 — 과제목록 번호 · 이름 찾기 */
+.filters .list-find { width: 180px; flex: 0 0 auto; }
+/* 342 — 보고이력 빠른 기간 */
+.history-quick { display: flex; gap: 4px; align-items: flex-end; padding-bottom: 2px; }
+.history-quick .on { background: var(--primary-50); border-color: var(--accent); }

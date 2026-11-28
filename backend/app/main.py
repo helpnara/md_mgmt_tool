@@ -18,6 +18,7 @@ from .api import (presence, growth, mode, team_skills, update, yearcards, activi
                   settings, trash, versions)
 from . import mimefix, permissions, readcache, share, who
 from .db import connect
+from .services import attachments as attachments_service
 from .services import edits as edits_service
 from .services import errorlog
 from .services import settings as settings_service
@@ -215,6 +216,26 @@ async def readonly_share(request: Request, call_next):
     # 328 — 주소창의 이름이 이 서버가 아니면 읽기도 받지 않는다(DNS 리바인딩)
     if not share.host_ok(request.headers.get("host")):
         return JSONResponse({"detail": share.FOREIGN_HOST}, status_code=403)
+    # 335 — 첨부 올리기: 최대 크기를 넘으면 받기 전에 거절하고, 받는 동안의 임시 파일은 데이터 폴더 드라이브에
+    # (예전: 웹 틀이 시스템 임시 폴더 C: 에 먼저 써서, 큰 파일 하나로 서버 PC 의 C: 가 찼다)
+    if writing and request.method == "POST" and path.endswith("/attachments"):
+        from .services import attachments as attach_service
+        from .services import settings as settings_service
+        from .services import workspace
+
+        limit = settings_service.attach_max_bytes()
+        try:
+            declared = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            declared = 0
+        if declared > limit + 1024 * 1024:   # 폼의 머리 몫으로 1MB 를 더 봐준다
+            return JSONResponse({"detail": attach_service.too_large_message(limit)}, status_code=413)
+        try:
+            import tempfile
+
+            tempfile.tempdir = str(workspace.work_dir("upload"))
+        except OSError:
+            pass
     if writing and not share.origin_ok(request.headers.get("origin")):
         return JSONResponse({"detail": share.FOREIGN_ORIGIN}, status_code=403)
     # 297 — 체험 · 내 자료로 바꾸는 동안에는 자료를 읽거나 쓰지 않는다(폴더 · 색인이 바뀌는 중) — 오류 대신 "바꾸는 중"
@@ -345,6 +366,11 @@ def _file_error_response(request: Request, status: int, detail: str, exc: Except
         action=f"{request.method} {request.url.path}", status=status, error=type(exc).__name__, detail=detail
     )
     return JSONResponse(status_code=status, content={"detail": detail})
+
+
+@app.exception_handler(attachments_service.TooLargeError)
+async def too_large(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=413)
 
 
 @app.exception_handler(FileInUseError)

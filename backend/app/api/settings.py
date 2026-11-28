@@ -38,6 +38,7 @@ class SettingsUpdate(BaseModel):
     classifications: dict[str, list[str] | str] | None = None
     intake_template: str | None = None
     intake_stale_days: int | None = None
+    attach_max_mb: int | None = None   # 335
     # 사전점검 (TODO 155) — 항목은 설정 칸의 글(한 줄에 하나) 또는 목록, 기준은 [착수 권장, 보완 필요]
     precheck_items: list[dict] | str | None = None
     precheck_thresholds: list[int] | None = None
@@ -292,6 +293,32 @@ def classification_rename(payload: ClassRename, conn: sqlite3.Connection = Depen
 
     try:
         return classify.rename(conn, payload.field, payload.old, payload.new)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── 그룹 · 과제 태그 이름 바꾸기 · 합치기 (TODO 341) ─────────────────────────────
+class LabelRename(BaseModel):
+    kind: str
+    old: str
+    new: str
+
+
+@router.get("/labels/usage")
+def label_usage(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """그룹 · 과제 태그마다 쓰는 과제 수."""
+    from ..services import labels
+
+    return {"usage": labels.usage(conn)}
+
+
+@router.post("/labels/rename")
+def label_rename(payload: LabelRename, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """그룹 · 과제 태그 이름 바꾸기 — 쓰는 과제 파일을 함께. 새 이름을 이미 쓰면 합친다."""
+    from ..services import labels
+
+    try:
+        return labels.rename(conn, payload.kind, payload.old, payload.new)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

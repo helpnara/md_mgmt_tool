@@ -12,7 +12,7 @@ import MeetingPanel from "./MeetingPanel";
 import TotalRow from "./TotalRow";
 import ViewTabs from "./ViewTabs";
 import Explain from "./Explain";
-import { cellCount, DASH, sumBy, todayIso, useLatest } from "../util";
+import { cellCount, DASH, sinceText, sumBy, todayIso, useLatest } from "../util";
 import YearCards from "./YearCards";
 import TeamSkills from "./TeamSkills";
 import { isDeparted } from "../inputRules";
@@ -606,7 +606,7 @@ export default function Skills({ meta, query }: { meta: Meta; query: string }) {
                   <span className="muted">{item.last_date ? ` 마지막 활동 ${item.last_date}` : " 역량 기록 없음"}</span>
                 )}
                 {item.meeting_due && (
-                  <span className="due due-warn"> 면담 {item.meeting_days_since !== null ? `D+${item.meeting_days_since}` : ""}</span>
+                  <span className="due due-warn"> 면담 {item.meeting_days_since !== null ? sinceText(item.meeting_days_since) : ""}</span>
                 )}
               </button>
             ))}

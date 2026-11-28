@@ -8315,6 +8315,46 @@ async function main() {
     }
   });
 
+  await check("2번 묶음 (335 · 338 · 339 · 340 · 341 · 342) — 첨부 최대 크기 · 마지막 보고 칸 · 번호 · 이름 찾기 · 머리 숫자 · 그룹 태그 정리 · 빠른 기간", async () => {
+    // 339 — 번호 · 이름 찾기
+    await go("#/projects?year=all");
+    await page.locator(".project-table tbody tr").first().waitFor({ timeout: 8000 });
+    await page.locator("[data-testid=list-find]").fill("고강도");
+    await page.waitForTimeout(900);
+    const titles = await page.locator(".project-table tbody tr .col-title").allInnerTexts();
+    expect(titles.length >= 1 && titles.every((t) => t.includes("고강도")), `찾기: ${titles}`);
+    expect(page.url().includes("find="), "주소에 남는다");
+    await page.locator("[data-testid=list-find]").fill("");
+    await page.waitForTimeout(700);
+    // 338 — 보고 경과일순이면 "마지막 보고" 칸
+    equal(await page.locator("[data-testid=last-report-cell]").count(), 0, "다른 정렬에는 없다");
+    await page.locator(".filters select").filter({ has: page.locator("option[value=reported]") }).selectOption("reported");
+    await page.locator("[data-testid=last-report-cell]").first().waitFor({ timeout: 8000 });
+    expect(/D\+|미보고|년 넘음/.test(await page.locator("[data-testid=last-report-cell]").first().innerText()), "마지막 보고 칸의 내용");
+    // 340 — 머리 숫자를 누르면 그 부분으로
+    await go(`#/projects/${seeded.projectA}`);
+    await page.locator(".timeline").waitFor({ timeout: 8000 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.locator(".summary-bar").getByRole("button", { name: /건$/ }).first().click();
+    await page.waitForTimeout(900);
+    expect(await page.evaluate(() => window.scrollY) > 50, "눌러서 내려감");
+    // 342 — 보고이력 [이번 달]
+    await go("#/history");
+    await page.locator(".history-quick").getByRole("button", { name: "이번 달" }).click();
+    await page.waitForTimeout(500);
+    const month = new Date().toISOString().slice(0, 7);
+    expect(page.url().includes(`from=${month}-01`), `이번 달 기간: ${page.url()}`);
+    // 335 · 341 — 설정 카드
+    await go("#/settings?tab=backup");
+    const limit = page.locator("[data-testid=attach-limit-card] input");
+    await limit.waitFor({ timeout: 8000 });
+    equal(await limit.inputValue(), "2048", "첨부 최대 크기 기본 2GB");
+    await go("#/settings?tab=class");
+    const labels = page.locator("[data-testid=label-values]");
+    await labels.waitFor({ timeout: 8000 });
+    expect((await labels.innerText()).includes("그룹") && (await labels.innerText()).includes("과제 태그"), "그룹 · 태그 정리 카드");
+  });
+
   console.log("\n[4] 화면 오류가 하나도 없었는가");
   await check("전체를 도는 동안 화면 오류가 없다", () => {
     equal(pageErrors.length, 0, `화면 오류: ${JSON.stringify(pageErrors.slice(0, 5), null, 1)}`);

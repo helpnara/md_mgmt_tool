@@ -7,7 +7,7 @@ import { useScrollMemory } from "../storage";
 import { uploadAttachment } from "../upload";
 import { backTarget, screenLink, useAddressBar } from "../nav";
 import type { Intake, IntakeListing, Meta } from "../types";
-import { cellCount, cellEffect, DASH, sumBy, useLatest } from "../util";
+import { cellCount, cellEffect, DASH, sinceText, sumBy, useLatest } from "../util";
 import TotalRow from "./TotalRow";
 import IntakeForm from "./IntakeForm";
 import SortHeader, { type SortState } from "./SortHeader";
@@ -437,7 +437,7 @@ export default function IntakePool({ meta, query, onMetaChange }: Props) {
                     </td>
                     <td className="one-line muted">{item.received_on ?? DASH}</td>
                     <td className={`num ${item.stale ? "due-danger" : "muted"}`}>
-                      {item.in_pool && item.age_days !== null ? `D+${item.age_days}` : DASH}
+                      {item.in_pool && item.age_days !== null ? sinceText(item.age_days) : DASH}
                     </td>
                     <td className="num muted">{cellCount(item.log_count)}</td>
                     <td className="num muted">{cellEffect(item.effect_request)}</td>

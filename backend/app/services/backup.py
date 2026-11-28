@@ -18,7 +18,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -141,6 +141,9 @@ def _last(state: dict[str, Any], files: list[Path]) -> dict[str, Any] | None:
         at = datetime.fromisoformat(str(state.get("at"))) if state.get("at") else None
     except ValueError:
         at = None
+    if (state.get("ok") and at is not None and any(path.name == state.get("file") for path in files)
+            and (newest is None or newest <= at + timedelta(seconds=2))):
+        return state   # 336 — 그 기록이 가장 새 백업이면 기록 그대로(빠진 파일 수 등이 함께 간다)
     if newest and (at is None or newest > at):
         return {"at": newest.isoformat(timespec="seconds"), "ok": True, "reason": "file", "file": files[-1].name}
     return state or None
@@ -283,8 +286,15 @@ def _run_locked(reason: str) -> dict[str, Any]:
 
     # `.part` 에 흘려 쓰고(메모리에 올리지 않는다 — TODO 202 ⑬) 다 쓴 뒤에만 `.zip` 으로 바꾼다 (⑤).
     # 어떤 예외든(MemoryError 포함) 조각을 지우고 실패를 기록한다 — 설정 화면이 그것을 보여 준다.
+    stats: dict[str, int] = {}
     try:
-        write_backup_all(part, assets=not skip_assets, progress=running.phase("zip 만들기"))  # 화면 진행(TODO 268)
+        write_backup_all(part, assets=not skip_assets, progress=running.phase("zip 만들기"), stats=stats)  # 화면 진행(TODO 268)
+        if stats.get("skipped"):
+            # 336 — 백업하는 동안 옮겨진 파일(번호 바꾸기 · 되살리기)이 빠졌다. 한 번 더 훑어 다시 쓴다
+            _discard(part)
+            stats = {}
+            write_backup_all(part, assets=not skip_assets, progress=running.phase("zip 다시 만들기"), stats=stats)
+        _verify_zip(part, stats.get("files", 0))
         os.replace(part, target)
     except Exception as exc:
         _discard(part)
@@ -310,8 +320,22 @@ def _run_locked(reason: str) -> dict[str, Any]:
                              "reason": reason, "file": target.name, "bytes": size}
     if skip_assets:
         state["skip_assets"] = True
+    if stats.get("skipped"):
+        # 336 — 다시 써도 빠진 것이 있으면 "성공" 만 남기지 않고 몇 개인지 남긴다(설정 화면이 보인다)
+        state["skipped"] = stats["skipped"]
     _write_state(state)
-    return {"file": target.name, "bytes": size, "directory": str(target_dir), "skip_assets": skip_assets}
+    return {"file": target.name, "bytes": size, "directory": str(target_dir), "skip_assets": skip_assets,
+            "skipped": stats.get("skipped", 0)}
+
+
+def _verify_zip(path: Path, expected: int) -> None:
+    """336 — 다 쓴 zip 을 다시 열어 담은 수가 맞는지 본다(목차만 읽어 빠르다). 어긋나면 실패로."""
+    import zipfile
+
+    with zipfile.ZipFile(path) as archive:
+        found = len(archive.namelist())
+    if expected and found != expected:
+        raise OSError(f"백업 zip 을 다시 열어 보니 담은 파일 수가 다릅니다({found} / {expected}).")
 
 
 def _discard(part: Path) -> None:

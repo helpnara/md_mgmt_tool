@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Meta, OpenDraft, ReportCandidate } from "../types";
-import { cellCount, DASH, formatDate, sumBy, useLatest } from "../util";
+import { cellCount, DASH, formatDate, sinceText, sumBy, useLatest } from "../util";
 import { notifyError } from "../notify";
 import { storageGetJson, storageRemove, storageSet, useScrollMemory } from "../storage";
 import TotalRow from "./TotalRow";
@@ -445,7 +445,7 @@ export default function ReportCandidates({ meta, query }: Props) {
                   DASH
                 ) : (
                   <span className={item.days_since_report >= LATE_DAYS ? "due due-danger" : "due"}>
-                    D+{item.days_since_report}
+                    <span title={`D+${item.days_since_report}`}>{sinceText(item.days_since_report)}</span>
                   </span>
                 )}
               </td>

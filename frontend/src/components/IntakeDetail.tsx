@@ -23,7 +23,7 @@ import { type PasteOffer, handleEditorPaste } from "../table";
 import { placeImages } from "../pasteImages";
 import type { IntakeAttachment, IntakeDetail as Detail, IntakeLog, Meta, Project, PromotionPlan } from "../types";
 import { type Attachment, uploadAttachment } from "../upload";
-import { dateOrderProblem, effectNumber, todayIso, useEscape } from "../util";
+import { dateOrderProblem, effectNumber, sinceText, todayIso, useEscape } from "../util";
 import {
   DATE_MAX,
   DATE_MIN,
@@ -311,7 +311,7 @@ export default function IntakeDetail({ intakeId, meta, back, onMetaChange, openD
           <div>
             <dt>경과</dt>
             <dd className={open && intake.stale ? "danger" : undefined}>
-              {open && intake.age_days !== null ? `D+${intake.age_days}` : "—"}
+              {open && intake.age_days !== null ? sinceText(intake.age_days) : "—"}
             </dd>
           </div>
           <div>

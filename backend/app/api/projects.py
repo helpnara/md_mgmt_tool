@@ -265,6 +265,8 @@ def list_projects(
     owner: str | None = None,
     partner: str | None = None,
     q: str | None = None,
+    # 339 — 과제목록의 "과제 번호 · 이름" 칸: 번호 · 제목에만(본문까지 보는 q 와 다르다)
+    find: str | None = Query(None, max_length=100),
     due: str | None = None,
     # 연도 — 수행기간이 그 해와 겹치는 과제 (TODO 181). 비우면 전체. 상태 · 효과 거르기도 **그 해 기준**이 된다.
     year: str | None = Query(None, pattern=r"^(\d{4})?$"),
@@ -373,6 +375,9 @@ def list_projects(
         # 홈의 done_unverified 와 같은 조건 — 그 해에 끝낸 과제 중 실증 미입력 (181: 그 해의 상태)
         # 효과 관리 안 함은 뺀다 — 홈의 done_unverified 가 빼고 세므로 눌렀을 때 같은 수여야 한다 (TODO 214 · 5.8)
         where.append("p.y_status = 'done' AND p.no_effect = 0 AND (p.effect_verified IS NULL OR p.effect_verified <= 0)")
+    if find and find.strip():
+        where.append("(LOWER(p.id) LIKE '%' || LOWER(?) || '%' OR LOWER(p.title) LIKE '%' || LOWER(?) || '%')")
+        params.extend([find.strip(), find.strip()])
     if q and q.strip():
         # 과제 본문뿐 아니라 진행일지·첨부 파일명에 걸려도 그 과제를 남긴다.
         matched = search_svc.project_ids_matching(conn, q.strip())

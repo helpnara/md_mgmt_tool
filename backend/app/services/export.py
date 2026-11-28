@@ -405,7 +405,8 @@ class BackupCancelled(Exception):
     """진행 표시의 [그만두기] (TODO 266)."""
 
 
-def write_backup_all(destination: Path | BinaryIO, assets: bool = True, progress=None) -> int:
+def write_backup_all(destination: Path | BinaryIO, assets: bool = True, progress=None,
+                     stats: dict[str, int] | None = None) -> int:
     """vault 전체 zip 을 **디스크로 흘려 쓴다** (TODO 202 ⑬) — 메모리에 통째로 올리지 않는다.
 
     첨부가 GB 면 예전 방식(BytesIO)은 MemoryError 로 자동 백업이 한 번도 성공하지 못했다.
@@ -429,16 +430,21 @@ def write_backup_all(destination: Path | BinaryIO, assets: bool = True, progress
     total = sum(sizes)
     done = 0
     count = 0
+    skipped = 0
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
         for index, ((path, name), size) in enumerate(zip(files, sizes), start=1):
             try:
                 archive.write(path, name)
             except FileNotFoundError:
-                continue  # 훑은 뒤 사라진 파일 (저장 도중의 이름 바꾸기 등) — 건너뛴다 (TODO 202 ㉜)
+                # 훑은 뒤 사라진 파일 (저장 도중의 이름 바꾸기 등) — 건너뛴다 (TODO 202 ㉜). 336 — 몇 개인지 센다
+                skipped += 1
+                continue
             count += 1
             done += size
             if progress is not None and progress(index, len(files), done, total) is False:
                 raise BackupCancelled()
+    if stats is not None:
+        stats.update({"files": count, "skipped": skipped})
     return count
 
 

@@ -221,7 +221,12 @@ export default function BackupCard() {
         <p className="hint">
           마지막 시도 {status.last.at}{" "}
           {status.last.ok ? (
-            <span className="backup-ok">성공 · {status.last.file}</span>
+            <span className="backup-ok">
+              성공 · {status.last.file}
+              {(status.last.skipped ?? 0) > 0 && (
+                <span className="form-warn"> · 백업하는 동안 옮겨진 파일 {status.last.skipped}개가 빠졌습니다 — 다음 백업이 다시 담습니다</span>
+              )}
+            </span>
           ) : (
             <span className="backup-fail">실패 · {status.last.error}</span>
           )}

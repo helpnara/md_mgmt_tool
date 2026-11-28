@@ -62,8 +62,19 @@ def guess_mime(name: str, fallback: str | None) -> str:
     return mimetypes.guess_type(name)[0] or "application/octet-stream"
 
 
+class TooLargeError(ValueError):
+    """335 — 첨부 최대 크기를 넘었다(끝점이 413 으로)."""
+
+
+def too_large_message(limit: int) -> str:
+    return f"첨부 한 개는 {limit // (1024 * 1024):,}MB 까지입니다 — 설정 › 기본의 [첨부 최대 크기]에서 바꿀 수 있습니다."
+
+
 def _stream_to_temp(source: BinaryIO, directory: Path) -> tuple[Path, str, int]:
     """청크로 임시 파일에 쓰면서 같은 패스에 sha256과 크기를 계산한다."""
+    from . import settings as settings_service
+
+    limit = settings_service.attach_max_bytes()
     directory.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256()
     size = 0
@@ -77,9 +88,11 @@ def _stream_to_temp(source: BinaryIO, directory: Path) -> tuple[Path, str, int]:
                     break
                 if shutil.disk_usage(directory).free < MIN_FREE_BYTES:
                     raise OSError("디스크 여유 공간이 부족합니다.")
+                size += len(chunk)
+                if size > limit:   # 335 — 크기를 미리 안 알린 요청도 넘는 순간 멈춘다
+                    raise TooLargeError(too_large_message(limit))
                 target.write(chunk)
                 digest.update(chunk)
-                size += len(chunk)
     except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise

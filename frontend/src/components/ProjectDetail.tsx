@@ -15,7 +15,7 @@ import { formatBytes, uploadAttachment } from "../upload";
 import PasteOfferBar from "./PasteOffer";
 import { type PasteOffer, handleEditorPaste, spliceAtCaret } from "../table";
 import { placeImages } from "../pasteImages";
-import { todayIso, daysUntil, dueLabel, effectText, EFFECT_UNIT, formatDate, formatDateTime, periodText, scrollEditorIntoView } from "../util";
+import { daysUntil, dueLabel, EFFECT_UNIT, effectText, formatDate, formatDateTime, periodText, scrollEditorIntoView, sinceText, todayIso } from "../util";
 import AttachmentList from "./AttachmentList";
 import EntryEditor from "./EntryEditor";
 import VersionPanel from "./VersionPanel";
@@ -949,7 +949,7 @@ export default function ProjectDetail({
         <dl className="summary-bar">
           <div>
             <dt>진행일지</dt>
-            <dd>{project.entry_count}건</dd>
+            <dd><button type="button" className="linkish" onClick={() => jumpTo("detail-entries")} title="진행일지로 내려가기">{project.entry_count}건</button></dd>
           </div>
           <div>
             <dt>미보고</dt>
@@ -969,7 +969,7 @@ export default function ProjectDetail({
           </div>
           <div>
             <dt>보고 이력</dt>
-            <dd>{project.report_count ?? 0}건</dd>
+            <dd><button type="button" className="linkish" onClick={() => jumpTo("detail-reports")} title="보고 이력으로 내려가기">{project.report_count ?? 0}건</button></dd>
           </div>
           <div>
             <dt>마지막 보고</dt>
@@ -977,7 +977,7 @@ export default function ProjectDetail({
               {project.last_reported_at ? (
                 <>
                   {formatDate(project.last_reported_at)}
-                  {sinceLastReport !== null && <span className="muted"> · D+{sinceLastReport}</span>}
+                  {sinceLastReport !== null && <span className="muted" title={`D+${sinceLastReport}`}> · {sinceText(sinceLastReport)}</span>}
                 </>
               ) : (
                 <span className="muted">없음</span>
@@ -1022,7 +1022,7 @@ export default function ProjectDetail({
           <div>
             <dt>첨부</dt>
             <dd>
-              {project.attachment_count ?? 0}건
+              <button type="button" className="linkish" onClick={() => jumpTo("detail-files")} title="첨부 자료로 내려가기">{project.attachment_count ?? 0}건</button>
               <span className="muted"> · {formatBytes(project.attachment_bytes ?? 0)}</span>
             </dd>
           </div>
@@ -1281,7 +1281,7 @@ export default function ProjectDetail({
       />
 
       {/* 보고는 팀장의 일 (TODO 233 ④) — 팀원이 담당 과제를 고칠 때도 이 칸은 읽기 전용 그대로 */}
-      <div className="card reports-card readonly-zone">
+      <div className="card reports-card readonly-zone" id="detail-reports">
         <div className="card-head">
           <h2>
             보고 이력 {reports.length}건
@@ -1412,7 +1412,7 @@ export default function ProjectDetail({
       )}
 
       {/* 첨부 자료 묶음 — 정리 · 지우기는 팀장 (233). 팀원은 기록 · 개요 편집기 안에서 붙이고 뗀다 */}
-      <div className="card readonly-zone">
+      <div className="card readonly-zone" id="detail-files">
         <div className="card-head">
           <h2>
             첨부 자료 {files.items.length}건 · {formatBytes(files.total_bytes)}
@@ -1468,7 +1468,7 @@ export default function ProjectDetail({
       </div>
       <div className="detail-right">
 
-      <div className="card-head timeline-head">
+      <div className="card-head timeline-head" id="detail-entries">
         <h2>
           진행일지 ({entries.length}건)
           {needle && <span className="muted"> · 찾은 것 {visibleEntries.length}건</span>}
@@ -1824,4 +1824,13 @@ function stageYears(items: { start_date?: string | null; end_date?: string | nul
   const first = Math.min(...years);
   const last = Math.max(...years);
   return first === last ? String(first) : `${first}~${String(last).slice(2)}`;
+}
+
+/** 340 — 머리 숫자를 누르면 그 부분으로(주소는 #/… 라 링크 대신 굴린다). 머리가 고정이라 그만큼 띄운다 */
+function jumpTo(id: string) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  const header = document.querySelector(".app-header") as HTMLElement | null;
+  const top = target.getBoundingClientRect().top + window.scrollY - (header?.offsetHeight ?? 0) - 12;
+  window.scrollTo({ top, behavior: "smooth" });
 }

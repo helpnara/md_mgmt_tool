@@ -81,5 +81,14 @@ def my_work(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
     from . import reports as reports_service
 
     feedback = reports_service.open_feedback_list(conn, [item["id"] for item in projects], limit=10)
+    # 337 — 다음 보고일 · 과제마다 마지막 보고 뒤 며칠 · 보고 뒤 쓴 일지 수. 팀장이 초안을 쓰기 전에 일지를 채우게
+    report_info = {row["id"]: row for row in reports_service.candidates(conn, include_inactive=True)}
+    for item in projects:
+        info = report_info.get(item["id"])
+        item["report"] = None if info is None else {
+            "last_reported_at": info["last_reported_at"], "days_since_report": info["days_since_report"],
+            "unreported_entries": info["unreported_entries"], "never_reported": info["never_reported"],
+        }   # None 이면 "보고 불필요" 로 정한 과제
     return {"projects": projects, "retro_due": retro_due(conn, name), "praises": praises, "stale_days": STALE_DAYS,
-            "recent_done": recent_done, "feedback_open": feedback}
+            "recent_done": recent_done, "feedback_open": feedback,
+            "next_report_date": reports_service.default_report_date()}

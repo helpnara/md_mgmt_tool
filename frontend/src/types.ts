@@ -427,6 +427,8 @@ export interface AppSettings {
   report_weekday: number;
   /** 자동 백업 폴더. 비면 꺼진 것이다. */
   backup_dir: string;
+  /** 335 — 첨부 한 개의 최대 크기(MB), 기본 2048 */
+  attach_max_mb?: number;
   /** 업데이트 폴더 (TODO 298) — 비우면 설치 폴더의 updates */
   update_dir?: string;
   backup_keep: number;
@@ -708,7 +710,8 @@ export interface BackupStatus {
   /** 가장 오래된 백업의 날짜 — 되돌릴 수 있는 범위 */
   oldest: string | null;
   recent: { name: string; size_bytes: number; at: string }[];
-  last: { at: string; ok: boolean; file?: string; error?: string } | null;
+  /** 336 — skipped: 백업하는 동안 옮겨져 다시 써도 빠진 파일 수 */
+  last: { at: string; ok: boolean; file?: string; error?: string; skipped?: number } | null;
 }
 
 /** 홈(첫 화면) 집계 (TODO 56). 연도 기준이 둘이라는 점은 home.py 주석 참고. */
@@ -1436,6 +1439,8 @@ export interface MyWorkProject {
   days_since_entry: number | null;
   /** 진행중 · 검토중인데 마지막 일지가 stale_days 를 넘었다 */
   stale: boolean;
+  /** 337 — 마지막 보고 뒤 며칠 · 보고 뒤 쓴 일지 수. null 이면 "보고 불필요" 로 정한 과제 */
+  report?: { last_reported_at: string | null; days_since_report: number | null; unreported_entries: number; never_reported: boolean } | null;
 }
 export interface MyWork {
   name: string;
@@ -1443,6 +1448,8 @@ export interface MyWork {
   retro_due: { id: string; title: string; completed_at: string }[];
   praises: { project_id: string; title: string; praise: string; praise_at: string | null; new: boolean }[];
   stale_days: number;
+  /** 337 — 다음 보고 예정일(설정의 보고 요일) */
+  next_report_date?: string;
 }
 
 // ── TODO 244 — 나의 한 해 · 마친 과제 · STAR 의 상황 · 과제 ─────────────────────────

@@ -135,3 +135,15 @@ def test_owner_and_partner_and_audience_lists_still_come_from_the_data(client):
     assert data["partner_people"] == ["김철수"]
     # 아직 보고가 없으면 피보고자 목록도 비어 있다.
     assert data["audiences"] == []
+
+
+def test_find_matches_number_and_title_only(client):
+    """339 — 과제목록 "과제 번호 · 이름" 칸은 번호 · 제목만 본다(본문은 보지 않는다)."""
+    a = client.post("/api/projects", json={"title": "압연 온도 예측", "status": "in_progress", "body": "냉각수"}).json()
+    client.post("/api/projects", json={"title": "냉각수 절감", "status": "in_progress"})
+    by_title = [p["id"] for p in client.get("/api/projects", params={"find": "온도", "year": ""}).json()]
+    assert by_title == [a["id"]]
+    by_id = [p["id"] for p in client.get("/api/projects", params={"find": a["id"][-3:], "year": ""}).json()]
+    assert a["id"] in by_id
+    body_only = [p["title"] for p in client.get("/api/projects", params={"find": "냉각수", "year": ""}).json()]
+    assert body_only == ["냉각수 절감"]

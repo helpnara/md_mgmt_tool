@@ -253,3 +253,31 @@ def test_last_backup_is_the_later_of_record_and_newest_zip(client, tmp_path):
     (logs / "backup-state.json").write_text('{"at": "2026-11-15T09:00:00", "ok": false, "reason": "auto", "error": "x"}', encoding="utf-8")
     last = client.get("/api/settings/backup/status").json()["last"]
     assert last["ok"] is False and last["at"].startswith("2026-11-15")
+
+
+def test_a_file_vanishing_mid_backup_is_retried_and_counted(client, tmp_path, monkeypatch):
+    """336 — 백업하는 동안 파일이 사라지면(번호 바꾸기 · 되살리기) 한 번 다시 훑어 쓰고, 그래도 빠지면 수를 남긴다."""
+    make(client, "사라지는 과제")
+    target = tmp_path / "백업"
+    target.mkdir()
+    use_folder(client, target)
+    real_write = zipfile.ZipFile.write
+    calls = {"n": 0}
+
+    def flaky(self, filename, arcname=None, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise FileNotFoundError(filename)
+        return real_write(self, filename, arcname, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, "write", flaky)
+    result = client.post("/api/settings/backup/run").json()
+    assert result["skipped"] == 0          # 다시 쓴 번에는 모두 담겼다
+    monkeypatch.setattr(zipfile.ZipFile, "write", lambda self, filename, arcname=None, *a, **k:
+                        (_ for _ in ()).throw(FileNotFoundError(filename)) if "index.md" in str(arcname) else real_write(self, filename, arcname, *a, **k))
+    for old in target.glob("*.zip"):   # 같은 분에 두 번 만들면 이름이 "-2" 가 된다 — 시험에서만 생기는 일이라 앞 것을 치운다
+        old.unlink()
+    again = client.post("/api/settings/backup/run").json()
+    assert again["skipped"] >= 1
+    last = client.get("/api/settings/backup/status").json()["last"]
+    assert last.get("skipped") == again["skipped"], (last, again)
